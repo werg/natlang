@@ -8859,3 +8859,62 @@ wrapper only); field-by-field record readouts under `auto` (they keep the bare v
 form beyond 5ff07638 and
 e15b20a8; C-reasoned after the T=1 change (its result moves: reasoning is now sampled); whether the stale `lfm-latest`
 profile should be refreshed to sft-v6 (left as is: B14's arms are defined on it).
+
+## 2026-11-23 16:30 Reference engine: memory-bounded admission, busy-tolerant supervision; lfm-latest = sft-v9; B14 triage rerun
+
+**Observations (B14, DECISIONS "B14 flagship benchmark harness").** The Python reference engine OOMed at its CUDA cap
+(9 GB policy server, 4 concurrent `natlang call`s: 10 OOMs in 7 min, all 74-92 MiB allocations with 8.0-8.3 GB
+allocated), and `natlang serve` killed it after one 10 s health timeout (14:27). Every `natlang call` then found no
+answer at the port and launched its own duplicate server (two ledger launchers for the same unit, the queue head at
+18.9 GB for 35 min), which left arm D's driver stalled on old code. Stopped: `d-driver.sh` (PID 860045),
+`bench-prepd-8`, the stale queued `natlang-native-dc95f29dd5a0-18471` claim.
+
+**Fixes (41fa2c044, a2ecee97f; default on, opt-out `--unbounded-admission`).**
+- Admission (`serve/engine.py`): queued requests wait in a FIFO and join the batch only while the running batch's
+  worst-case KV (bytes per token measured from finished prefills' caches, buffer headroom included, x prompt + remaining
+  allowance clamped to the context), the largest measured prefill workspace and the prefix cache's unspent budget fit
+  both the `--memory-gb` cap and the device's free memory, minus a 10% watermark; the oldest always runs; cancelled
+  waiters leave the queue. An OOM prefill that produced nothing is requeued as a fresh sequence (same request and seed)
+  while others run, and fails alone. Metrics: waiting, deferrals, OOM requeues, measured bytes/token and workspace.
+  Engine parity: llama-server admits by fixed slots, SGLang by its KV pool, wllama serves one sequence; only the
+  reference engine was unbounded.
+- Supervision: `natlang serve` ends only when the port stops listening (TCP connect; the kernel completes the
+  handshake for a process too busy to answer); an unanswered /health logs "busy" and keeps serving. A command that finds
+  a listening but unanswering server at its port waits instead of launching a duplicate; `natlang status` says `busy`.
+  Same flaw on the managed llama-server path: the shared supervisor counted an unanswered `/slots` as idle (could stop a
+  busy server once leases lapsed) and an acquirer that saw a live record fail /health started a second server; both
+  fixed. SGLang is not launched by `natlang serve` (`serveCommand` requires `managedNative`; `nativeServerCommand` always
+  runs `natlang_neuralese.serve`), so it has no such supervisor.
+- `natlang build`/`check` of a program outside a checkout resolves `@natlang/node/std` to the CLI's declarations (the
+  bench's copy of triage failed TS2307 after it began importing `escalate`/`semanticRepair`).
+- Health route: it never touched the engine (shown by a test with a blocked engine thread). The stall's root cause is
+  not established; under the rerun's load the probe answered 1,206/1,206 within 0.57 s (max), with 0 deferrals and 0
+  OOM requeues at concurrency 4 (7 active sequences peak, 4.4 GB allocated, 153.6 KB/token measured).
+
+**lfm-latest = sft-v9 (coordinator).** `ops/current-policy.json` now names sft-v9 (e15b20a86f1c, ops/ei/sft-v9/sft):
+held-v3 verdict neutral vs its start sft-v7 (+0.59 pts, p 0.85), +10.9 pts vs base (p 0.0005), adopted by the driver
+(`stages/verdict.done`); the sft-v6 pointer is kept as `current-policy.sft-v6.json`. `natlang setup --native lfm-latest`
+refreshed `lfm-latest` and `lfm-latest-gguf` (q8_0 44fca2f0); the setup removed the 5ff07638 pin, archived first to
+`/mnt/external/dgx-moved-20261123/native-pins/` (identical). sft-v9 has no compact actor view (it lacks a resumable
+native source); its server loads the full checkpoint.
+
+**B14 triage rerun** (program after 8e586c02e, pin 5fdccb128, WORK `/home/werg/data/semantic-fp-bench/triage-20261123b`,
+`examples/triage/bench/results/2026-11-23.json` regenerated; 28 held units):
+
+| arm | pass | vs A (CI, p) | p50 / p95 latency | $ / 100 units |
+|---|---|---|---|---|
+| A Luna loop (2 samples) | 55/56 = 0.982 | | 1.9 / 2.7 s | 0.006 |
+| B program on Luna (2 samples) | 56/56 = 1.000 | +1.8 [0, +5.4], p 1.0 | 2.9 / 29 s | 0.048 |
+| C program on sft-v9, reasoned | 27/28 = 0.964 | -1.8 [-10.7, +5.4], p 1.0 | 142 / 765 s | 1.38 (49.5 GPU-s/unit) |
+| C program on sft-v9, instant | 22/28 = 0.786 | -19.6 [-35.7, -7.1], p 0.0025 | 26 / 496 s | 0.67 (24.2 GPU-s/unit) |
+| D sft-v9 + specialize/tune + escalate | not measured yet | | | |
+
+Arm C is sft-v9, not base LFM3 (the first reading's "base" was 5ff07638). No arm beats A. C-instant's failures are 6
+labels and 1 urgency; not investigated here (instant readout owner). Arm D: `WORK/driver.sh` runs prepare-d (record,
+specialize, tune at 24 GB) and both D modes on sft-v9 once the policy server's ledger claim (18.9 GB, learned) is
+admitted, then writes `WORK/results-ABCD.json`.
+
+**Not checked:** the original health stall's cause (no py-spy capture of a stalled server; the 14:27 kill came after
+OOM storms); admission under a load that actually defers (the bench's concurrency 4 never filled the 10 GB cap);
+memory-bounded admission on a CPU device (bounded only on CUDA); the llama-server fixes against a real llama-server
+under load (fake-server tests only).

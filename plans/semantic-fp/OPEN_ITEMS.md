@@ -10,12 +10,9 @@ An item leaves the register when its fix lands on main. A finding reported by an
 |---|---|
 | B10 four-engine smoke, fork pin move to b12088 (reasoned decisions on llama-server and wllama), ENGINE_PARITY rows | B10 agent |
 | Decision option scoring under the standard tokenization only. The model may generate another split (`"`,`spam`,`"` vs `"sp`,`am`). Sum both tokenizations per option on all four engines and the learner (8b34839ab) | B10 agent, after the fork release |
-| `lfm-latest` profile served the stale checkpoint 5ff07638; refresh to sft-v9, update `ops/current-policy.json`, rerun bench arm C | engine/bench agent |
 | Tuple `prefixItems` constrained decoding on all four engines | tuple-parity agent |
 | M2 migrator: one shared `stepKind`/`instructionsOf` in std, `migrate.nl` replaced by a TypeScript driver, P1/P2 measurements, pairs dataset | M2 agent |
-| Benchmark arm D (specialize, tune, escalate) | armed driver `semantic-fp-bench/triage-20261123/d-driver.sh` |
-| Benchmark: rerun arms A–C on the triage program after 8e586c02e | engine/bench agent (2026-11-23 15:00) |
-| Python reference engine: unbounded batching runs the GPU out of memory, and an unresponsive health check under load lets `natlang serve` kill it | engine/bench agent (2026-11-23 15:00) |
+| Benchmark arm D on sft-v9 (specialize, tune, escalate); then regenerate `examples/triage/bench/results/2026-11-23.json` with D | armed driver `semantic-fp-bench/triage-20261123b/driver.sh` (waits for the policy server's 18.9 GB ledger claim); the coordinator commits its `results-ABCD.json` |
 | Memetic layout fix (c64d250b2) on a real actor | queued unit `memverify-dgx3`, then the round 1 health report |
 | held-v4 sft-v6 reference measurement | Pop unit `popheld-hv4-sft-v6`; the coordinator appends the result to DECISIONS |
 | Remove the legacy `expert_iteration.py cycle` mode once aei1's round 1 has a held verdict (AGENTS.md: async-drive replaces cycle) | coordinator, after the r0001 verdict |

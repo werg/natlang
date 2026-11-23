@@ -4,8 +4,8 @@
  "date": "2026-11-23",
  "code": {
   "schema": "natlang.code-provenance/1",
-  "git_commit": "19844f4d758bce27a93f4a7045c513f3dce8fca3",
-  "dirty": true
+  "git_commit": "5fdccb128776878d4bcad816fededf774395a145",
+  "dirty": false
  },
  "split": "held",
  "held_units": 28,
@@ -34,10 +34,10 @@
    "profile": {
     "concurrency": 4,
     "native": {
-     "sha256": "5ff07638bbedba7c8ec506f763ce5fb7511c7755ce8c045ef764bca00ddc1d6a",
+     "sha256": "e15b20a86f1c7f3d37adf3a45ca87e3fa90596466dbc5e662e5a43a6fb28f7c2",
      "source": "lfm-latest",
      "step": 0,
-     "checkpoint": "/home/werg/natlang/.natlang/packages/native-models/5ff07638bbedba7c8ec506f763ce5fb7511c7755ce8c045ef764bca00ddc1d6a.pt"
+     "checkpoint": "/home/werg/natlang/.natlang/packages/native-models/e15b20a86f1c7f3d37adf3a45ca87e3fa90596466dbc5e662e5a43a6fb28f7c2.pt"
     }
    },
    "specialization": "off",
@@ -48,15 +48,15 @@
     "escalate": "bench-frontier",
     "concurrency": 4,
     "native": {
-     "sha256": "dc95f29dd5a04e08c5cfc45a403c4d01b43676f6d5710c0f085d7941e9cbef45",
-     "source": "/home/werg/data/lfm3-rl-dgx-20261029/ops/current-policy.json",
+     "sha256": "e15b20a86f1c7f3d37adf3a45ca87e3fa90596466dbc5e662e5a43a6fb28f7c2",
+     "source": "lfm-latest",
      "step": 0,
-     "checkpoint": "/home/werg/data/semantic-fp-bench/dev-19844f4d758b/.natlang/packages/native-models/dc95f29dd5a04e08c5cfc45a403c4d01b43676f6d5710c0f085d7941e9cbef45.pt"
+     "checkpoint": "/home/werg/natlang/.natlang/packages/native-models/e15b20a86f1c7f3d37adf3a45ca87e3fa90596466dbc5e662e5a43a6fb28f7c2.pt"
     }
    },
    "specialization": "on (state from prepare-d)",
    "escalate": "bench-frontier",
-   "prepare": ""
+   "prepare": null
   },
   "modes": {
    "reasoned": "readout: decision reasons first (default decisionSamples)",
@@ -92,13 +92,13 @@
     "summary_within_60": 1.0
    },
    "latency_ms": {
-    "p50": 2095,
-    "p95": 3821
+    "p50": 1914,
+    "p95": 2732
    },
    "tokens_per_100_units": {
     "frontier": {
      "prompt": 45479,
-     "completion": 3571,
+     "completion": 3573,
      "cached": 0
     },
     "local": {
@@ -207,7 +207,7 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 16,
+      "summary_words": 23,
       "summary_within_60": true
      },
      "error": null,
@@ -216,12 +216,183 @@
       "by_label": {
        "technical": 1
       },
-      "summary": "A site-wide 502 outage is preventing all customers from accessing the service and needs immediate attention."
+      "summary": "The site has been returning 502 errors to everyone since 10:40, blocking all customers from accessing it; this widespread outage needs immediate attention."
      }
     },
     {
      "id": "triage-1debfc3100b5",
      "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 24,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 1,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "The site is returning 502 Bad Gateway errors for everyone, preventing customers from reaching the service since 10:40; this widespread outage needs immediate attention."
+     }
+    },
+    {
+     "id": "triage-2089e03f559c",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-2089e03f559c",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-243f45d91c7c",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-243f45d91c7c",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-2802a7620659",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-2802a7620659",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-32fed69d55f0",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-32fed69d55f0",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-3b93114dc67b",
+     "sample": 0,
      "passed": true,
      "checks": {
       "label": true,
@@ -235,178 +406,7 @@
       "by_label": {
        "technical": 1
       },
-      "summary": "The entire site has returned 502 Bad Gateway errors since 10:40, preventing all customers from accessing it; this widespread outage needs immediate attention."
-     }
-    },
-    {
-     "id": "triage-2089e03f559c",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-2089e03f559c",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-243f45d91c7c",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-243f45d91c7c",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-2802a7620659",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-2802a7620659",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-32fed69d55f0",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-32fed69d55f0",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-3b93114dc67b",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 26,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "The live API price feed has frozen, leaving the trading desk quoting stale prices. This may cause immediate financial losses and needs attention within the hour."
+      "summary": "The live API price feed has frozen, leaving traders quoting stale prices. This is a time-critical trading disruption with potential immediate financial losses."
      }
     },
     {
@@ -416,7 +416,7 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 26,
+      "summary_words": 27,
       "summary_within_60": true
      },
      "error": null,
@@ -425,7 +425,7 @@
       "by_label": {
        "technical": 1
       },
-      "summary": "The live price feed API has frozen, leaving traders quoting stale prices. This is an active trading disruption with potential financial losses and needs immediate attention."
+      "summary": "The live API price feed has been frozen for 20 minutes, causing traders to quote stale prices and risking immediate financial losses; investigate and restore it urgently."
      }
     },
     {
@@ -545,6 +545,25 @@
     {
      "id": "triage-68af3742c2ce",
      "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-68af3742c2ce",
+     "sample": 1,
      "passed": false,
      "checks": {
       "label": false,
@@ -562,25 +581,6 @@
      }
     },
     {
-     "id": "triage-68af3742c2ce",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
      "id": "triage-6bd9d05cb524",
      "sample": 0,
      "passed": true,
@@ -1005,7 +1005,7 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 32,
+      "summary_words": 27,
       "summary_within_60": true
      },
      "error": null,
@@ -1014,7 +1014,7 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "A customer was charged for 900 seats instead of 9, and new charges are appearing every few minutes; this ongoing billing error is causing money to be lost and needs immediate attention."
+      "summary": "A customer was charged for 900 seats instead of 9, and charges are continuing to appear every few minutes, creating ongoing financial loss that needs immediate attention."
      }
     },
     {
@@ -1024,7 +1024,7 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 32,
+      "summary_words": 26,
       "summary_within_60": true
      },
      "error": null,
@@ -1033,7 +1033,7 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "An account was charged for 900 seats instead of 9, and additional charges are appearing every few minutes. This ongoing erroneous billing is actively losing money and needs attention within the hour."
+      "summary": "A customer was charged for 900 seats instead of 9, with additional charges appearing every few minutes. This ongoing billing loss needs attention within the hour."
      }
     },
     {
@@ -1081,7 +1081,7 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 23,
+      "summary_words": 22,
       "summary_within_60": true
      },
      "error": null,
@@ -1090,7 +1090,7 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "The company card is being charged repeatedly\u201440 charges of $299 in one hour, with charges continuing. This ongoing financial loss needs immediate attention."
+      "summary": "Repeated $299 charges\u201440 in the last hour\u2014are continuing on a company card, causing immediate financial loss; stop the charges and investigate urgently."
      }
     },
     {
@@ -1100,7 +1100,7 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 25,
+      "summary_words": 24,
       "summary_within_60": true
      },
      "error": null,
@@ -1109,7 +1109,7 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "Repeated charges of $299 have hit a company card 40 times in an hour and are continuing, creating immediate financial loss; stop the charges urgently."
+      "summary": "Repeated $299 charges have hit the company card 40 times in one hour and are continuing, causing immediate financial loss; stop the charges now."
      }
     },
     {
@@ -1206,14 +1206,14 @@
     "summary_within_60": 1.0
    },
    "latency_ms": {
-    "p50": 3155,
-    "p95": 19804
+    "p50": 2939,
+    "p95": 29016
    },
    "tokens_per_100_units": {
     "frontier": {
-     "prompt": 384889,
-     "completion": 5852,
-     "cached": 232000
+     "prompt": 541984,
+     "completion": 8855,
+     "cached": 119314
     },
     "local": {
      "prompt": 0,
@@ -1222,13 +1222,13 @@
     }
    },
    "usd_per_100_units": {
-    "frontier_list_price": 0.02053,
+    "frontier_list_price": 0.04789,
     "local_gpu": 0.0,
-    "total": 0.02053
+    "total": 0.04789
    },
    "local_gpu_seconds_per_unit": 0.0,
    "local_request_seconds_per_unit": 0.0,
-   "nl_calls": 109,
+   "nl_calls": 52,
    "crisp_served_share": 0.0,
    "local_resolved_share": 0.0,
    "escalation_share": null,
@@ -1321,196 +1321,6 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 27,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "The most severe issue is a site-wide outage: the site has returned 502 Bad Gateway errors for everyone since 10:40, leaving customers unable to reach the service."
-     }
-    },
-    {
-     "id": "triage-1debfc3100b5",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 28,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "The most severe problem is a site-wide outage: the site has been returning 502 Bad Gateway errors for everyone since 10:40, leaving customers unable to reach the service."
-     }
-    },
-    {
-     "id": "triage-2089e03f559c",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-2089e03f559c",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-243f45d91c7c",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-243f45d91c7c",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-2802a7620659",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-2802a7620659",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-32fed69d55f0",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-32fed69d55f0",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-3b93114dc67b",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
       "summary_words": 24,
       "summary_within_60": true
      },
@@ -1520,7 +1330,197 @@
       "by_label": {
        "technical": 1
       },
-      "summary": "The most severe issue is that the API\u2019s live price feed has been frozen for 20 minutes, leaving the trading desk quoting stale prices."
+      "summary": "The most severe issue is a site-wide outage: customers have been unable to reach the site since 10:40 because it returns 502 Bad Gateway."
+     }
+    },
+    {
+     "id": "triage-1debfc3100b5",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 27,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 1,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "The most severe problem is a site-wide outage: the site has been returning 502 Bad Gateway errors for everyone since 10:40, preventing all customers from accessing it."
+     }
+    },
+    {
+     "id": "triage-2089e03f559c",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-2089e03f559c",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-243f45d91c7c",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-243f45d91c7c",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-2802a7620659",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-2802a7620659",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-32fed69d55f0",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-32fed69d55f0",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-3b93114dc67b",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 12,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 1,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "The live API price feed has frozen, leaving traders quoting stale prices."
      }
     },
     {
@@ -1539,7 +1539,7 @@
       "by_label": {
        "technical": 1
       },
-      "summary": "The most severe problem is that the live price feed from the API has frozen, leaving traders quoting stale prices."
+      "summary": "Our trading desk's live price feed from your API froze 20 minutes ago and every trader is quoting stale prices."
      }
     },
     {
@@ -2114,82 +2114,6 @@
     },
     {
      "id": "triage-d25b825cb1e4",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 21,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Repeated, rapidly recurring charges are being made to the card, which was charged for 900 seats instead of the 9 intended."
-     }
-    },
-    {
-     "id": "triage-d25b825cb1e4",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 20,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "A severe billing issue is causing charges for 900 seats instead of 9, with new charges appearing every few minutes."
-     }
-    },
-    {
-     "id": "triage-d655bb738958",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-d655bb738958",
-     "sample": 1,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-f72204ee63ee",
      "sample": 0,
      "passed": true,
      "checks": {
@@ -2204,7 +2128,83 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "The most severe problem is repeated billing: the system has charged the company card 40 times in the last hour for $299 each, and the charges are continuing."
+      "summary": "The most severe issue is a billing error: the customer was charged for 900 seats instead of 9, and reports that new charges continue appearing every few minutes."
+     }
+    },
+    {
+     "id": "triage-d25b825cb1e4",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 19,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 1,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "A billing error charged for 900 seats instead of 9, with new charges continuing to appear every few minutes."
+     }
+    },
+    {
+     "id": "triage-d655bb738958",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-d655bb738958",
+     "sample": 1,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-f72204ee63ee",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 19,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 1,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "The company reports 40 card charges of $299 each in the past hour, and says the charges are continuing."
      }
     },
     {
@@ -2214,7 +2214,7 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 41,
+      "summary_words": 19,
       "summary_within_60": true
      },
      "error": null,
@@ -2223,7 +2223,7 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "The most severe issue is an apparent runaway billing failure: the system has charged the company card 40 times in one hour at $299 each, and the charges are still continuing. The customer urgently requests that the charges be stopped immediately."
+      "summary": "The company card was charged 40 times in the last hour for $299 each, and the charges are continuing."
      }
     },
     {
@@ -2319,25 +2319,25 @@
     "unit_sign_p": 1.0,
     "beats": false
    },
-   "cost_ratio_vs_A": 3.243
+   "cost_ratio_vs_A": 7.566
   },
   "C-reasoned": {
    "units": 28,
    "runs": 28,
-   "errors": 1,
-   "pass_rate": 0.9286,
+   "errors": 0,
+   "pass_rate": 0.9643,
    "pass_rate_ci95_unit_bootstrap": [
-    0.8214,
+    0.8929,
     1.0
    ],
    "check_rates": {
-    "label": 0.9286,
-    "urgent": 0.9643,
+    "label": 0.9643,
+    "urgent": 1.0,
     "summary_within_60": 1.0
    },
    "latency_ms": {
-    "p50": 102891,
-    "p95": 811863
+    "p50": 141687,
+    "p95": 765005
    },
    "tokens_per_100_units": {
     "frontier": {
@@ -2346,24 +2346,24 @@
      "cached": 0
     },
     "local": {
-     "prompt": 713679,
-     "completion": 203554,
+     "prompt": 412029,
+     "completion": 178196,
      "cached": 0
     }
    },
    "usd_per_100_units": {
     "frontier_list_price": 0.0,
-    "local_gpu": 3.28155,
-    "total": 3.28155
+    "local_gpu": 1.37632,
+    "total": 1.37632
    },
-   "local_gpu_seconds_per_unit": 118.136,
-   "local_request_seconds_per_unit": 536.112,
-   "nl_calls": 52,
+   "local_gpu_seconds_per_unit": 49.548,
+   "local_request_seconds_per_unit": 555.751,
+   "nl_calls": 23,
    "crisp_served_share": 0.0,
    "local_resolved_share": 1.0,
    "escalation_share": null,
    "safety": {
-    "schema_violation": 1,
+    "schema_violation": 0,
     "unverified_commits": "n/a (no commits in this app)",
     "injection_escapes": "n/a (no untrusted boundary in this app)"
    },
@@ -2408,101 +2408,6 @@
     },
     {
      "id": "triage-1debfc3100b5",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 35,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "The whole site returns a 502 Bad Gateway error for everyone since 10:40, which means our customers cannot reach us at all; this site-wide outage is the most severe problem and it affects every ticket."
-     }
-    },
-    {
-     "id": "triage-2089e03f559c",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-243f45d91c7c",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-2802a7620659",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-32fed69d55f0",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-3b93114dc67b",
      "sample": 0,
      "passed": true,
      "checks": {
@@ -2517,554 +2422,83 @@
       "by_label": {
        "technical": 1
       },
-      "summary": "The trading desk's live price feed from the API froze for 20 minutes, causing every trader to quote stale prices; this is the most severe problem affecting the tickets."
-     }
-    },
-    {
-     "id": "triage-4d015ab8e18e",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-51b1bf92b4c9",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-57275d74c62c",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-68af3742c2ce",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-6bd9d05cb524",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-7b773c307849",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-9719895bd5f7",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-97ea66d0a9b8",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-9fa12534f819",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-9fbf30dd0656",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-a3b459121582",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-a840fae27920",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-a96bd5d14494",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-ad3904d6dcb7",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-b8e2dfb26e79",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-d25b825cb1e4",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 36,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "The most severe problem is that the card was charged for 900 seats instead of 9 a few minutes ago, and new charges are appearing every few minutes, indicating a massive overcharge and continuous unauthorized activity."
-     }
-    },
-    {
-     "id": "triage-d655bb738958",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    },
-    {
-     "id": "triage-f72204ee63ee",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 48,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "The most severe issue is that the system has charged the company card 40 times in the last hour, $299 each, for a total of $11,960, and the charges keep coming without stopping, which suggests an urgent fraudulent or unauthorized spamming of transactions that must be halted immediately."
-     }
-    },
-    {
-     "id": "triage-f861fab279d8",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": false,
-      "urgent": false
-     },
-     "error": "exit timeout: natlang: model native via external (profile bench-base)",
-     "output": null
-    },
-    {
-     "id": "triage-fa80160ac415",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 3,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 0,
-      "by_label": {
-       "spam": 1
-      },
-      "summary": "Nothing urgent today."
-     }
-    }
-   ],
-   "infra_errors_excluded": 0,
-   "vs_A": {
-    "tasks": 28,
-    "first_rate": 0.9821,
-    "second_rate": 0.9286,
-    "delta": -0.0536,
-    "ci95_task_bootstrap": [
-     -0.1786,
-     0.0357
-    ],
-    "permutation_p": 0.5572,
-    "units_only_reference_better": 2,
-    "units_only_this_better": 1,
-    "unit_sign_p": 1.0,
-    "beats": false
-   },
-   "cost_ratio_vs_A": 518.412
-  },
-  "C-instant": {
-   "units": 28,
-   "runs": 28,
-   "errors": 5,
-   "pass_rate": 0.1429,
-   "pass_rate_ci95_unit_bootstrap": [
-    0.0357,
-    0.2857
-   ],
-   "check_rates": {
-    "label": 0.5714,
-    "urgent": 0.1429,
-    "summary_within_60": 1.0
-   },
-   "latency_ms": {
-    "p50": 743242,
-    "p95": 1666590
-   },
-   "tokens_per_100_units": {
-    "frontier": {
-     "prompt": 0,
-     "completion": 0,
-     "cached": 0
-    },
-    "local": {
-     "prompt": 3652143,
-     "completion": 510429,
-     "cached": 0
-    }
-   },
-   "usd_per_100_units": {
-    "frontier_list_price": 0.0,
-    "local_gpu": 7.93513,
-    "total": 7.93513
-   },
-   "local_gpu_seconds_per_unit": 285.665,
-   "local_request_seconds_per_unit": 859.474,
-   "nl_calls": 86,
-   "crisp_served_share": 0.0,
-   "local_resolved_share": 1.0,
-   "escalation_share": null,
-   "safety": {
-    "schema_violation": 5,
-    "unverified_commits": "n/a (no commits in this app)",
-    "injection_escapes": "n/a (no untrusted boundary in this app)"
-   },
-   "per_unit": [
-    {
-     "id": "triage-02bf7fc5e7ab",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": true,
-      "urgent": false,
-      "summary_words": 49,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Across the tickets, the most severe problem is that the card on file must be changed to a new company Visa ending in 4410; the existing card details are outdated and could expose the account to fraud or unauthorized use, making this the highest-priority issue that requires immediate correction."
-     }
-    },
-    {
-     "id": "triage-040ddb1e8d34",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": false,
-      "urgent": false
-     },
-     "error": "exit timeout: natlang: model native via external (profile bench-base)",
-     "output": null
-    },
-    {
-     "id": "triage-1debfc3100b5",
-     "sample": 0,
-     "passed": true,
-     "checks": {
-      "label": true,
-      "urgent": true,
-      "summary_words": 39,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "The most severe problem is that the entire site is returning a 502 Bad Gateway error for everyone since 10:40, which means all customers cannot reach us at all; this widespread outage is the primary issue affecting every ticket."
+      "summary": "The most severe problem is that the entire site has been returning a 502 Bad Gateway error for everyone since 10:40, which means customers cannot reach us at all."
      }
     },
     {
      "id": "triage-2089e03f559c",
      "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": false,
-      "urgent": false
-     },
-     "error": "exit timeout: natlang: model native via external (profile bench-base)",
-     "output": null
-    },
-    {
-     "id": "triage-243f45d91c7c",
-     "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
       "label": true,
-      "urgent": false,
-      "summary_words": 52,
+      "urgent": true,
+      "summary_words": 3,
       "summary_within_60": true
      },
      "error": null,
      "output": {
-      "urgent": 1,
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-243f45d91c7c",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
       "by_label": {
        "billing": 1
       },
-      "summary": "The most severe problem is that the payment link for invoice INV-7012 has expired and must be resent; this is the only ticket reporting an expired link, and no other tickets indicate a failure or missing information, so the immediate issue is the need to reissue the payment link for that invoice."
+      "summary": "Nothing urgent today."
      }
     },
     {
      "id": "triage-2802a7620659",
      "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
-      "label": false,
-      "urgent": false
-     },
-     "error": "exit timeout: natlang: model native via external (profile bench-base)",
-     "output": null
-    },
-    {
-     "id": "triage-32fed69d55f0",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": false,
-      "urgent": false,
-      "summary_words": 60,
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
       "summary_within_60": true
      },
      "error": null,
      "output": {
-      "urgent": 1,
+      "urgent": 0,
       "by_label": {
-       "billing": 1
+       "spam": 1
       },
-      "summary": "The most severe problem is that the ticket advertises a \"miracle supplement\" that claims to make someone lose 20 pounds in just two weeks, an unsubstantiated and potentially dangerous claim; doctors are already critical of this \"trick\", indicating the supplement may be harmful or fraudulent and could lead to serious health risks such as malnutrition, heart issues, or false hope."
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-32fed69d55f0",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
      }
     },
     {
@@ -3083,36 +2517,302 @@
       "by_label": {
        "technical": 1
       },
-      "summary": "The most severe problem is that the trading desk's live price feed from the API froze for 20 minutes, causing every trader to quote stale prices."
+      "summary": "The most severe problem is that the trading desk's live price feed from your API froze 20 minutes ago, causing every trader to quote stale prices."
      }
     },
     {
      "id": "triage-4d015ab8e18e",
      "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
       "label": true,
-      "urgent": false,
-      "summary_words": 54,
+      "urgent": true,
+      "summary_words": 3,
       "summary_within_60": true
      },
      "error": null,
      "output": {
-      "urgent": 1,
+      "urgent": 0,
       "by_label": {
        "billing": 1
       },
-      "summary": "The most severe problem is that an accountant is asking whether your prices include sales tax for customers in Texas, which raises a critical question about tax inclusion for that region and could lead to incorrect billing, customer confusion, and compliance risks; this issue is unresolved as no answer is provided in the tickets."
+      "summary": "Nothing urgent today."
      }
     },
     {
      "id": "triage-51b1bf92b4c9",
      "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
       "label": true,
-      "urgent": false,
-      "summary_words": 51,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-57275d74c62c",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-68af3742c2ce",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-6bd9d05cb524",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-7b773c307849",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-9719895bd5f7",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-97ea66d0a9b8",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-9fa12534f819",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-9fbf30dd0656",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-a3b459121582",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-a840fae27920",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-a96bd5d14494",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-ad3904d6dcb7",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-b8e2dfb26e79",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-d25b825cb1e4",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 31,
       "summary_within_60": true
      },
      "error": null,
@@ -3121,35 +2821,35 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "The most severe problem is that the ticket asks for a W\u20119 or tax form to be sent so the vendor can be added and the invoice paid; without this form the vendor cannot be recognized and the invoice cannot be paid, which blocks the entire vendor onboarding and payment process."
+      "summary": "The most severe problem is that the card was charged for 900 seats instead of 9, and new charges are appearing every few minutes, indicating an overcharge and repeated billing errors."
      }
     },
     {
-     "id": "triage-57275d74c62c",
+     "id": "triage-d655bb738958",
      "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
       "label": true,
-      "urgent": false,
-      "summary_words": 50,
+      "urgent": true,
+      "summary_words": 3,
       "summary_within_60": true
      },
      "error": null,
      "output": {
-      "urgent": 1,
+      "urgent": 0,
       "by_label": {
        "technical": 1
       },
-      "summary": "The most severe problem is that the help article about API rate limits links to a page that returns a 404 error, meaning the link is broken and users cannot access the rate limits information; this broken link is the only issue across the tickets and therefore the top priority."
+      "summary": "Nothing urgent today."
      }
     },
     {
-     "id": "triage-68af3742c2ce",
+     "id": "triage-f72204ee63ee",
      "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
-      "label": false,
-      "urgent": false,
+      "label": true,
+      "urgent": true,
       "summary_words": 40,
       "summary_within_60": true
      },
@@ -3159,15 +2859,518 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "The most severe problem across the tickets is that printing an invoice from the browser cuts off the last line of the page, which truncates the document and leaves the final line missing, making the invoice incomplete and potentially misleading."
+      "summary": "The most severe issue across the tickets is that the system has charged the company card 40 times in the last hour, $299 each, and the charges keep coming; this rapid, unauthorized spending is urgent and must be halted immediately."
+     }
+    },
+    {
+     "id": "triage-f861fab279d8",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-fa80160ac415",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    }
+   ],
+   "infra_errors_excluded": 0,
+   "vs_A": {
+    "tasks": 28,
+    "first_rate": 0.9821,
+    "second_rate": 0.9643,
+    "delta": -0.0179,
+    "ci95_task_bootstrap": [
+     -0.1071,
+     0.0536
+    ],
+    "permutation_p": 1.0,
+    "units_only_reference_better": 1,
+    "units_only_this_better": 1,
+    "unit_sign_p": 1.0,
+    "beats": false
+   },
+   "cost_ratio_vs_A": 217.428
+  },
+  "C-instant": {
+   "units": 28,
+   "runs": 28,
+   "errors": 0,
+   "pass_rate": 0.7857,
+   "pass_rate_ci95_unit_bootstrap": [
+    0.6429,
+    0.9286
+   ],
+   "check_rates": {
+    "label": 0.7857,
+    "urgent": 0.9643,
+    "summary_within_60": 1.0
+   },
+   "latency_ms": {
+    "p50": 26487,
+    "p95": 496032
+   },
+   "tokens_per_100_units": {
+    "frontier": {
+     "prompt": 0,
+     "completion": 0,
+     "cached": 0
+    },
+    "local": {
+     "prompt": 160907,
+     "completion": 21400,
+     "cached": 0
+    }
+   },
+   "usd_per_100_units": {
+    "frontier_list_price": 0.0,
+    "local_gpu": 0.67129,
+    "total": 0.67129
+   },
+   "local_gpu_seconds_per_unit": 24.167,
+   "local_request_seconds_per_unit": 86.682,
+   "nl_calls": 28,
+   "crisp_served_share": 0.0,
+   "local_resolved_share": 1.0,
+   "escalation_share": null,
+   "safety": {
+    "schema_violation": 0,
+    "unverified_commits": "n/a (no commits in this app)",
+    "injection_escapes": "n/a (no untrusted boundary in this app)"
+   },
+   "per_unit": [
+    {
+     "id": "triage-02bf7fc5e7ab",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-040ddb1e8d34",
+     "sample": 0,
+     "passed": false,
+     "checks": {
+      "label": false,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-1debfc3100b5",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 31,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 1,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "The most severe problem is that the entire site has been returning a 502 Bad Gateway error for everyone since 10:40, which has left all customers unable to reach the site."
+     }
+    },
+    {
+     "id": "triage-2089e03f559c",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-243f45d91c7c",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-2802a7620659",
+     "sample": 0,
+     "passed": false,
+     "checks": {
+      "label": false,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-32fed69d55f0",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-3b93114dc67b",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 26,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 1,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "The most severe problem is that the trading desk's live price feed from your API froze 20 minutes ago, so every trader is quoting stale prices."
+     }
+    },
+    {
+     "id": "triage-4d015ab8e18e",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-51b1bf92b4c9",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-57275d74c62c",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-68af3742c2ce",
+     "sample": 0,
+     "passed": false,
+     "checks": {
+      "label": false,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
      }
     },
     {
      "id": "triage-6bd9d05cb524",
      "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
       "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-7b773c307849",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-9719895bd5f7",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-97ea66d0a9b8",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-9fa12534f819",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-9fbf30dd0656",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "technical": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-a3b459121582",
+     "sample": 0,
+     "passed": false,
+     "checks": {
+      "label": false,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-a840fae27920",
+     "sample": 0,
+     "passed": false,
+     "checks": {
+      "label": false,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-a96bd5d14494",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "billing": 1
+      },
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-ad3904d6dcb7",
+     "sample": 0,
+     "passed": false,
+     "checks": {
+      "label": false,
       "urgent": false,
       "summary_words": 44,
       "summary_within_60": true
@@ -3178,190 +3381,27 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "The most severe problem is that the ticket requests a volume\u2011priced quote for 200 seats without giving product, event, or pricing\u2011tier info needed to assess discounts or capacity, rendering it ambiguous and unquoteable; thus, missing context and an unanswerable volume\u2011pricing inquiry are top issues."
-     }
-    },
-    {
-     "id": "triage-7b773c307849",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": true,
-      "urgent": false,
-      "summary_words": 48,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "The most severe problem across the tickets is that the 'Remember this device' checkbox has no effect on my work laptop; it appears to be ineffective or misconfigured, so the device reminder does not trigger or register on this laptop, leaving the user without the intended security prompt."
-     }
-    },
-    {
-     "id": "triage-9719895bd5f7",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": true,
-      "urgent": false,
-      "summary_words": 43,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "The most severe problem is that the company's legal name, Northwind Traders GmbH, is missing from all invoices; tickets request that it be added to every invoice, which is a critical compliance and branding issue that could lead to legal and contractual errors."
-     }
-    },
-    {
-     "id": "triage-97ea66d0a9b8",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": false,
-      "urgent": false,
-      "summary_words": 53,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "The most severe problem is the ticket\u2019s claim that the AI chatbot can increase sales tenfold, an exaggerated and unsubstantiated promise that could mislead customers into expecting unrealistic results; it is followed by a deceptive offer of a free trial that requires no credit card, which may constitute a fraudulent or misleading promotion."
-     }
-    },
-    {
-     "id": "triage-9fa12534f819",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": true,
-      "urgent": false,
-      "summary_words": 55,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "The most severe problem is that the activity log shows time zones in UTC even though the user's account is set to Berlin time, so all timestamps are displayed in the wrong zone; this time\u2011zone mismatch across the tickets causes events to appear at incorrect local times and creates confusion about their order and relevance."
-     }
-    },
-    {
-     "id": "triage-9fbf30dd0656",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": true,
-      "urgent": false,
-      "summary_words": 53,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "technical": 1
-      },
-      "summary": "The most severe problem is that the progress bar for file uploads intermittently jumps back to zero even though the upload ultimately completes successfully, causing users to believe the upload failed or to lose track of the upload status; this unexpected reset disrupts the user experience and misleads them about the upload's completion."
-     }
-    },
-    {
-     "id": "triage-a3b459121582",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": false,
-      "urgent": false,
-      "summary_words": 47,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "Most severe: the ticket asks for wholesale ergonomic office chairs at factory prices with a minimum order of 20 units, which is likely unavailable or financially prohibitive; secondarily, the phrasing \"Need office chairs?\" is vague and indicates a low-priority, unclear need rather than a concrete purchase request."
-     }
-    },
-    {
-     "id": "triage-a840fae27920",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": false,
-      "urgent": false,
-      "summary_words": 50,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "The most severe problem is that the ticket is a promotional message rather than a genuine issue\u2014\"Refinance your mortgage at the lowest rates of the year. Pre-approval in 5 minutes.\"\u2014it lacks a real problem statement, misleads the user into a quick refinance without proper verification, and could cause financial harm."
-     }
-    },
-    {
-     "id": "triage-a96bd5d14494",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": true,
-      "urgent": false,
-      "summary_words": 58,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "The most severe issue is that a ticket requests a credit note for a seat that was removed in February, implying the seat was taken away without proper cancellation or refund, which could result in an unaccounted charge or loss of service; this is the primary problem across the tickets, and no other tickets present more urgent concerns."
-     }
-    },
-    {
-     "id": "triage-ad3904d6dcb7",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": false,
-      "urgent": false,
-      "summary_words": 46,
-      "summary_within_60": true
-     },
-     "error": null,
-     "output": {
-      "urgent": 1,
-      "by_label": {
-       "billing": 1
-      },
-      "summary": "The most severe problem is that the ticket advertises fast loans with no credit check and promises that money will be in your account within one hour; this fraudulent, high-risk offer poses immediate financial danger, potential debt, and identity theft, making it the top priority issue."
+      "summary": "The most severe problem is that fast loans are being issued without any credit check, allowing borrowers to take on debt instantly and receive money in their accounts within an hour; this unchecked, high-pressure lending exposes vulnerable individuals to predatory debt and financial ruin."
      }
     },
     {
      "id": "triage-b8e2dfb26e79",
      "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
-      "label": false,
-      "urgent": false
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
      },
-     "error": "exit timeout: natlang: model native via external (profile bench-base)",
-     "output": null
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
+     }
     },
     {
      "id": "triage-d25b825cb1e4",
@@ -3370,7 +3410,7 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 36,
+      "summary_words": 38,
       "summary_within_60": true
      },
      "error": null,
@@ -3379,26 +3419,26 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "The most severe problem is that the card was charged for 900 seats instead of 9 a few minutes ago, and new charges are appearing every few minutes, indicating a massive overcharge and continuous unauthorized activity."
+      "summary": "Across the tickets, the most severe problem is that the card was charged for 900 seats instead of 9 a few minutes ago, and new charges are appearing every few minutes, indicating an overcharge and repeated billing errors."
      }
     },
     {
      "id": "triage-d655bb738958",
      "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
       "label": true,
-      "urgent": false,
-      "summary_words": 48,
+      "urgent": true,
+      "summary_words": 3,
       "summary_within_60": true
      },
      "error": null,
      "output": {
-      "urgent": 1,
+      "urgent": 0,
       "by_label": {
        "technical": 1
       },
-      "summary": "The most severe problem is that exported PDFs use a different font from the one shown on screen; this font mismatch causes the exported documents to display an incorrect typeface, leading to visual inconsistency and potential confusion for readers, and it is the primary issue affecting the tickets."
+      "summary": "Nothing urgent today."
      }
     },
     {
@@ -3408,7 +3448,7 @@
      "checks": {
       "label": true,
       "urgent": true,
-      "summary_words": 48,
+      "summary_words": 35,
       "summary_within_60": true
      },
      "error": null,
@@ -3417,37 +3457,45 @@
       "by_label": {
        "billing": 1
       },
-      "summary": "The most severe issue is that the system has charged the company card 40 times in the last hour, $299 each, for a total of $11,960, and the charges keep coming without stopping, which suggests an urgent fraudulent or unauthorized spamming of transactions that must be halted immediately."
+      "summary": "The most severe problem is that the system has charged the company's company card 40 times in the last hour, $299 each, and the charges keep coming; this rapid, unauthorized spending must be stopped immediately."
      }
     },
     {
      "id": "triage-f861fab279d8",
      "sample": 0,
-     "passed": false,
+     "passed": true,
      "checks": {
-      "label": false,
-      "urgent": false
-     },
-     "error": "exit timeout: natlang: model native via external (profile bench-base)",
-     "output": null
-    },
-    {
-     "id": "triage-fa80160ac415",
-     "sample": 0,
-     "passed": false,
-     "checks": {
-      "label": false,
-      "urgent": false,
-      "summary_words": 48,
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
       "summary_within_60": true
      },
      "error": null,
      "output": {
-      "urgent": 1,
+      "urgent": 0,
       "by_label": {
-       "billing": 1
+       "technical": 1
       },
-      "summary": "The most severe problem is that the ticket claims an anti-aging cream erases wrinkles overnight and offers a \"buy two, get one free\" promotion, which is a false, deceptive advertising that could mislead consumers and constitute a fraudulent pricing scheme by promising unrealistic results and an unfair deal."
+      "summary": "Nothing urgent today."
+     }
+    },
+    {
+     "id": "triage-fa80160ac415",
+     "sample": 0,
+     "passed": true,
+     "checks": {
+      "label": true,
+      "urgent": true,
+      "summary_words": 3,
+      "summary_within_60": true
+     },
+     "error": null,
+     "output": {
+      "urgent": 0,
+      "by_label": {
+       "spam": 1
+      },
+      "summary": "Nothing urgent today."
      }
     }
    ],
@@ -3455,20 +3503,21 @@
    "vs_A": {
     "tasks": 28,
     "first_rate": 0.9821,
-    "second_rate": 0.1429,
-    "delta": -0.8393,
+    "second_rate": 0.7857,
+    "delta": -0.1964,
     "ci95_task_bootstrap": [
-     -0.9643,
-     -0.6964
+     -0.3571,
+     -0.0714
     ],
-    "permutation_p": 0.0001,
-    "units_only_reference_better": 24,
+    "permutation_p": 0.0025,
+    "units_only_reference_better": 6,
     "units_only_this_better": 0,
-    "unit_sign_p": 0.0,
+    "unit_sign_p": 0.0312,
     "beats": false
    },
-   "cost_ratio_vs_A": 1253.575
+   "cost_ratio_vs_A": 106.049
   }
  },
- "reading": "Arms A, B, C measured on the 28 held units (A, B 2 samples; C 1); arm D not yet measured: its policy server waits behind the memory ledger's queue head (aei1-r0001-build, 24 GB). Quality: the frontier arms are at ceiling (A 55/56, B 56/56); the program on base LFM3 with reasoned decisions is not distinguishable from A at n=28 (C-reasoned 26/28, -5.4 pts, CI [-17.9, +3.6], p 0.56), while instant decisions collapse (C-instant 4/28, -84 pts, p 0.0001: base's instant readout picks the first option, P(urgent)=0.89-0.91 on every ticket). Cost and latency: Luna wins by orders of magnitude on this hardware: A /bin/bash.006 and B /bin/bash.021 per 100 units at list price, p50 2.1 s / 3.2 s; C-reasoned 118 busy GPU-seconds per unit (.28 per 100 at $1/GPU-hour) and p50 103 s, measured on the Python reference engine on a GB10 shared with a 128-slot collection actor (~15 decode tokens/s), dominated by the summary's tool loop (4-5k-token prompts, several turns) and 4 reasoning samples per decision. Nothing was crisp-served (specialization off in B, C). No arm beats A."
+ "reading": "Rerun on the post-8e586c02e triage program (pin 5fdccb128: memory-bounded reference engine, busy-tolerant natlang serve, auto instant reply form b1340c3e7). Arm C runs sft-v9 (e15b20a86f1c, the current adopted policy), not base LFM3: the first 2026-11-23 reading's 'base' was the stale lfm-latest checkpoint 5ff07638. No arm beats A; the Luna arms sit at ceiling. C-reasoned 27/28 (-1.8 pts vs A, p 1.0) at ~50 busy GPU-s/unit; C-instant 22/28 (-19.6 pts, p 0.0025; 6 label errors, 1 urgency error). Arm D (sft-v9 + specialize/tune + escalate) was still queued when this file was written; its driver writes WORK/results-ABCD.json.",
+ "work": "/home/werg/data/semantic-fp-bench/triage-20261123b"
 }
