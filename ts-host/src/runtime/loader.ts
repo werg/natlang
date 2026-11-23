@@ -546,24 +546,24 @@ function readManifestExports(dir: string, files: SourceFiles, fileName: 'natlang
   } catch { return undefined; }
 }
 
-function exportTargetString(entry: unknown): string | undefined {
+function exportTargetString(entry: unknown, conditions: readonly string[] = ['natlang', 'import', 'default']): string | undefined {
   if (typeof entry === 'string') return entry;
   if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
     const record = entry as Record<string, unknown>;
-    for (const key of ['natlang', 'import', 'default'])
+    for (const key of conditions)
       if (typeof record[key] === 'string') return record[key] as string;
   }
   return undefined;
 }
 
-function matchExportTarget(exportsMap: Record<string, unknown>, key: string): string | undefined {
-  if (Object.hasOwn(exportsMap, key)) return exportTargetString(exportsMap[key]);
+export function packageExportTarget(exportsMap: Record<string, unknown>, key: string, conditions?: readonly string[]): string | undefined {
+  if (Object.hasOwn(exportsMap, key)) return exportTargetString(exportsMap[key], conditions);
   for (const [pattern, rawTarget] of Object.entries(exportsMap)) {
     const star = pattern.indexOf('*');
     if (star < 0 || pattern.indexOf('*', star + 1) >= 0) continue;
     const prefix = pattern.slice(0, star), suffix = pattern.slice(star + 1);
     if (!key.startsWith(prefix) || !key.endsWith(suffix) || key.length < prefix.length + suffix.length) continue;
-    const target = exportTargetString(rawTarget);
+    const target = exportTargetString(rawTarget, conditions);
     if (target) return target.replace('*', key.slice(prefix.length, key.length - suffix.length));
   }
   return undefined;
@@ -601,9 +601,9 @@ function resolvePackageExport(specifier: string, root: string, files: SourceFile
   // 1. Current package's natlang.json exports (direct key, self-package name, or ./subpath).
   const rootManifest = readManifestExports(root, files, 'natlang.json');
   if (rootManifest?.exports) {
-    const mapped = matchExportTarget(rootManifest.exports, specifier)
-      ?? (rootManifest.name === pkgName ? matchExportTarget(rootManifest.exports, subpath) : undefined)
-      ?? (!scoped ? matchExportTarget(rootManifest.exports, `./${specifier}`) : undefined);
+    const mapped = packageExportTarget(rootManifest.exports, specifier)
+      ?? (rootManifest.name === pkgName ? packageExportTarget(rootManifest.exports, subpath) : undefined)
+      ?? (!scoped ? packageExportTarget(rootManifest.exports, `./${specifier}`) : undefined);
     if (mapped) return resolveMapped(root, mapped);
     if (rootManifest.name === pkgName) return { error: `package ${pkgName} does not export ${JSON.stringify(subpath)}` };
   }
@@ -616,7 +616,7 @@ function resolvePackageExport(specifier: string, root: string, files: SourceFile
       const pkgManifest = nlManifest?.exports ? nlManifest : readManifestExports(pkgDir, files, 'package.json');
       const exportsMap = nlManifest?.exports ?? pkgManifest?.exports;
       if (exportsMap) {
-        const mapped = matchExportTarget(exportsMap, subpath);
+        const mapped = packageExportTarget(exportsMap, subpath);
         if (mapped) return resolveMapped(pkgDir, mapped);
         if (nlManifest) return { error: `package ${pkgName} does not export ${JSON.stringify(subpath)}` };
       } else if (nlManifest) {

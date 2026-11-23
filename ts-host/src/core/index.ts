@@ -38,3 +38,7 @@ export type { Type as NatlangType } from '../native/types.js';
 export { expandType } from '../native/expand-type.js';
 export type { ExpandedType } from '../native/expand-type.js';
 export { ONCE_EFFECTS } from '../native/effects.js';
+
+// Static workspace linking uses the same parser and explicit export selection as the compiler.
+export { rewriteTypeModuleSpecifiers } from '../compiler/type-module-links.js';
+export { packageExportTarget } from '../runtime/loader.js';

@@ -93,3 +93,5 @@ export * as gepa from './gepa/index.js';
 
 export { nativeStateWritePort, nativeStateRuntimeOptions, nativeTextOperation, type NativeClientOptions, type NativeSourceCapture, type NativeTextResult } from './model/native-state-client.js';
 export { archiveNativeTensorArtifact, restoreNativeTensorArtifacts } from './neuralese/native-tensor-client.js';
+export { rewriteTypeModuleSpecifiers } from './compiler/type-module-links.js';
+export { packageExportTarget } from './runtime/loader.js';
