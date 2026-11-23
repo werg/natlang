@@ -93,6 +93,8 @@ def verified_training_scope(verification, records, root):
     if (verification['status'] != 'partial' or not isinstance(scope, dict) or
             scope.get('schema') != 'natlang.training-scope/1'):
         raise ValueError('invalid partial live training scope')
+    if scope.get('assessor'):
+        bound_file(scope['assessor'], root)
     original = json.loads(bound_file(scope['original_outcome'], root).read_text())
     if original.get('passed') is not False:
         raise ValueError('partial recovery must preserve the original failed outcome')

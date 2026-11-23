@@ -18,6 +18,7 @@ import live_teacher_sources as live
 root=Path(sys.argv[1]);kind=sys.argv[2]
 if kind.startswith('partial'):
  path,spec,verification=partial_fixture(root)
+ if kind=='partial-assessor':verification['training_scope']['assessor']=artifact(root,'assessor-source.json',{'code':'native byte comparison'})
  if kind=='partial-error':
   child=json.loads((root/'child.json').read_text());child['record']['outcome']='error'
   spec['calls'][1]=artifact(root,'child.json',child)
@@ -79,7 +80,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial-error',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1]]) {
+for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {
@@ -171,4 +172,11 @@ for(const mutation of ['actual-result','native-evidence','completion-status'])te
   }
   await assert.rejects(verifyObservedWorkspaceEvidence(row));
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('partial original assessor bytes remain independently bound',async()=>{
+ const {root,row}=await fixture('partial-assessor');
+ try{await writeFile(join(root,row.outcome.training_scope.assessor.path),'changed assessor source');
+  await assert.rejects(verifyObservedWorkspaceEvidence(row),/artifact changed/);
+ }finally{await rm(root,{recursive:true,force:true})}
 });

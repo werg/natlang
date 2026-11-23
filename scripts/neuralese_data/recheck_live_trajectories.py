@@ -89,6 +89,12 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
         shutil.copyfile(packet_path, raw)
         original_binding = bind(out, 'original-outcome.json', packet['result'])
         assessment_binding = bind(out, 'reassessment.json', assessment)
+        assessor_binding = None
+        if assessment.get('assessor'):
+            source = bound_file(assessment['assessor'], Path(assessment_path).parent)
+            target = out / 'assessor-source.mjs'
+            shutil.copyfile(source, target)
+            assessor_binding = {'path': target.name, 'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
         completed_original_binding = None
         if completed_proof is not None:
             original_proof_bytes = proof_path.read_bytes()
@@ -124,7 +130,7 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
                         'root_call_ids': roots, 'calls': [call['summary'] for call in calls],
                         **({'reassessment': {'original_outcome': original_binding, 'assessment': assessment_binding}} if completed_proof is not None else
                            {'training_scope': {'schema': 'natlang.training-scope/1', 'original_outcome': original_binding,
-                                              'invocations': invocation_scope}})}
+                                              'invocations': invocation_scope, **({'assessor': assessor_binding} if assessor_binding else {})}})}
         spec = {'schema': 'natlang.live-teacher-task/1', 'id': task['taskId'], 'family': task['family'],
                 'split': 'train', 'source_namespace': task['taskId'].rsplit(':', 1)[0],
                 'source_ids': [task['taskId']], 'source_groups': task['sourceGroups'],

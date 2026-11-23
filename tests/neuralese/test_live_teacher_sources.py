@@ -667,3 +667,14 @@ def test_completed_reassessment_preserves_original_failure_and_binds_all_checker
     with pytest.raises(ValueError, match='exact original whole outcome'):
         recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
                          root / 'catalog.jsonl', root / 'held.json', tmp_path / 'forged')
+
+
+def test_partial_reassessment_binds_retained_assessor_source(tmp_path):
+    path, spec, verification = partial_fixture(tmp_path)
+    verification['training_scope']['assessor'] = artifact(tmp_path, 'assessor-source.json', {'code': 'native byte comparison'})
+    spec['verification'] = artifact(tmp_path, 'verification.json', verification)
+    path.write_text(json.dumps(spec))
+    assert len(live.load_episode(path)['turns']) == 1
+    (tmp_path / 'assessor-source.json').write_text('changed assessor source')
+    with pytest.raises(ValueError, match='artifact changed'):
+        live.load_episode(path)

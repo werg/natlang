@@ -85,6 +85,7 @@ async function trainingScope(receipt, row, root) {
       JSON.parse(await readBound(scope.original_outcome, root)).passed !== false ||
       !Array.isArray(scope.invocations) || !scope.invocations.length)
     throw new Error('invalid independent partial training scope');
+  if(scope.assessor)await readBound(scope.assessor,root);
   const selected = new Map();
   for (const invocation of scope.invocations) {
     if (typeof invocation.call_id !== 'string' || selected.has(invocation.call_id) ||
