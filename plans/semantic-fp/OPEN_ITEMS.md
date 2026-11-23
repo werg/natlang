@@ -159,6 +159,8 @@ Brief E covered only the Neuralese-free capabilities. Open:
 
 ## Operations
 
+- **aei1 remote collector runs old code:** `aei1-collect-v0000-remote0` was started at 19:15 on 2026-11-23 from pin 108cd84. Its ts-host lacks 98651c669, so against an actor serving the read-back fix it throws `neuralese-native-grad-invalid` on in-context reads. Replace it with a collector at the driver pin at the round boundary, or when the A100 actor is served again after round 1's SFT. Owner: coordinator.
+- **aei1 driver controller owned by the Vibestudio session since 22:41 on 2026-11-23:** `resume-semantic-reader-owner.py` replaced the coordinator's driver with the same argv (pin bdf4c8721, variants on), with controller code from 97e82bcd5 on origin/main and `--data-repo`/`--fill-repo` at its reader pin. The coordinator accepted this: the code contains the hand-back. Its unit is `aei1-drive-reader-v14-final-20261123`. Coordinate before restarting it.
 - **aei1 round 1 -> 2 boundary checklist (coordinator, about 06:00 on 2026-11-24):**
   1. Move the driver to a pin at or after 78fb05054: read-back fix, decision-budget fix, memetic leak fix, Colab-via-Drive.
   2. Re-enable Neuralese variants once the L4 actor runs the read-back fix (rollout agent, 2026-11-23 21:45).
