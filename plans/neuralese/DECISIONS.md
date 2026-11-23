@@ -7974,6 +7974,64 @@ types.
 - **Measurement.** Base (5ff07638) and current policy (sft-v6, dc95f29d) on the DGX series: `ops/held-v4/runs/`
   (`measure.sh`: held pin afa009657912, since d3ad57fb21db was removed before the run started; 4 samples, 16 slots, medium and resumable). It starts only when no other held
   measurement holds the held-priority claim. Results are appended below when complete.
+- **Superseded before it ran (2026-11-23 08:10).** The base run failed at preparation (06:39): `--all-rows` keeps the
+  set's dev/confirmation splits and the student-root transform refused non-train rows; the sft-v6 waiter never
+  started. Both are replaced by measurements of the second manifest (next entry).
+
+## 2026-11-23 08:10 held-v4 second manifest: 252 tasks (c09720e1) with .in(context), refinements, ensures:, recursion, std and function types; four runtime gaps closed
+
+- **Runtime gaps from B1** (all on main, b3c7acc80/fd81de7e8):
+  - *Helper refinements* (`refinement-undecided`, kept hv4-untr-008/012 out). Cause: B1 qualified on a runtime
+    (e8dbf721e) that predates the collector judge fix 4cfc91199 (`agentDriver`, the 05:00 entry); on main both tasks
+    smoke-pass, and with `NATLANG_COLLECTOR_REFINEMENT_JUDGE=0` both fail again. New tests judge a helper's refined
+    result in every shape (record field, array elements, inline nl, TS helper over a refined `.nl`; scorer and `holds`
+    child; true and false): 16/16 fail with the opt-out (fa4d066b1).
+  - *`Context` in eval*: eval now has `NatlangContext` (the package's `Context`; the name keeps program types named
+    Context free): `fn.in(NatlangContext.empty().with({ policy }))`. `read_code("NatlangContext")` documents it; the
+    built-ins line of every opening names it (one word; `NATLANG_PROMPT_REVISION=2026-11-22` keeps the old line;
+    MODEL_FACING_CHANGES). Found on the way and fixed: eval's `refine` wrapper dropped `{ context }`, and a context kept
+    records built in another realm by reference instead of snapshotting them (fd52c73d1).
+  - *`ensures:` and `.nl` helpers with `=> Promise<R>` function types* (parameter and result): both already work through
+    the collector on main; tests added (b986a73bc).
+  - *Found by the refinement author:* `refine<Is<T, "p">>(value)` failed with `refinement-predicate-invalid` in eval and
+    in callable-folder TypeScript (only project builds lowered the type argument). One text lowering
+    (`lower.ts lowerTypedRefinementText`) now serves both (5d8057737). Not changed, deliberately: a TS helper's
+    declared `Promise<Is<...>>` result is not judged at runtime (crisp code gets an `Is` only through `refine`/`assume`;
+    a runtime re-judgment without the call's context broke relational refinements, so the change was reverted).
+  - *Held measurement*: `held_eval measure` takes held rows of any split (`task_roots.student_root_row(held=True)`;
+    rollouts that may train keep the train-only guard) (498fdd7c3). Lint: `refinement_contract` counts `refine(` in
+    scripts, std checks accept a type argument, new tags `ensures_contract`/`structural_recursion`.
+  - Also fixed: `std-converge` test counted scorer calls, which the reasoned readout (fc842c0f9) multiplies (b3c7acc80).
+- **New families** (six Opus authors, `ops/held-v4/authoring/BRIEF-2.md`, 16 tasks each from 11-14 programs, empty
+  groups, qualified on `qual-runtime-2`): `sfp_context_lens` (7 bind in eval with `NatlangContext`, 9 in TS helpers),
+  `sfp_refinement_contract`, `sfp_ensures_contract`, `sfp_structural_recursion`, `sfp_std_combinators`
+  (semanticRepair, fixedPoint, semanticMerge, proposeAndVerify; 3 merge tasks use the merge.mjs verifier, 4 are folder
+  tasks), `sfp_function_types`. All six PASS qualification. Independent Sonnet blind solves (packets only) agreed on
+  96/96; 10 tasks the solver flagged with two defensible readings were dropped anyway (`source/dropped.json`,
+  round 2). hv4-untr-008/012 requalified (groups emptied) and rejoin.
+- **Requalification of the whole authored stratum** on `qual-runtime-3` (b3c7acc80): 192/192 references admitted,
+  889 wrong answers all rejected, 192/192 smoke replays.
+- **Set** (`ops/held-v4/manifest.json` sha c09720e1, registry `held-v4-set-2`, role `held-eval-semantic-fp`,
+  supersedes `held-v4-set`, whose files moved to `ops/held-v4/v1/`): 252 tasks = 192 authored + 60 brief gates.
+  Strata: context_lens 15, refinement_contract 15, structural_recursion 15, ensures_contract 13, std_combinators 14,
+  function_types 14, untrusted_contract 13, semantic_convergence 14, folder_transaction 14, library_discovery 14,
+  decision_calibrated 13, inline_lambda 13, neuralese_pipeline 13, higher_order_policy 12, design-brief gates 60.
+  Construct tags: refinement_contract 30, higher_order 26, inline_nl 25, nl_with_context 19, context_lens 15,
+  structural_recursion 15, ensures_contract 13, std combinators 14 (semantic_repair 4, propose_and_verify 4,
+  fixed_point 3, semantic_merge 3). Levels 0: 6, 1: 97, 2: 80, 3: 69.
+- **Separation.** Exposure recollected (`exposure-v2`): `held_eval verify` 0 id / 0 group overlap against the exposure
+  collection (43,844 ids, 60,729 groups) and against every row of the 21 pool files (37,798 ids, 62,221 groups).
+  Against all grpo pools plus the admitted authored pool (42,559 rows, sfp1/sfp2 included): 0 shared instructions,
+  programs or functional programs. `training_exclusion_ids` names all 252 held rows; over the current pools it
+  excludes 1,554 rows (held-v3 included).
+- **Measurement** (replaces B1's queue, same settings: DGX series, 4 samples, 16 slots, 32 GB, medium, resumable):
+  base (5ff07638) then sft-v6 (dc95f29d), driver `heldv4x-measure-driver` (`ops/held-v4/runs/measure-both.sh`, pin
+  `ops/held-v4/pin-fd81de7e8f4e`, removed by the driver when both finish). Queued behind aei1's collection at
+  08:10. Results are appended below when complete.
+- **Not done / not checked.** No model has run the new tasks (pass rates unknown). The 100 rubric workflows and the 2
+  reserved apps are still outside held-v4. `branch_and_select` has no task. The inline `nl.with<T>` built inside a
+  callable-folder TS factory shows its parameter as `unknown` (an author's report; not investigated). B1's 104 rows
+  keep their `invented:` groups. The kit (sections 2/6, the first-round example line) still shows `invented:` groups.
 
 ## 2026-11-23 B16: `natlang:learning` conformance runs end to end on the Python native engine (semantic-FP WS8 N1)
 
