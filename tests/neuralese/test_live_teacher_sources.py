@@ -827,3 +827,20 @@ def test_original_review_rejection_is_bound_separately_from_native_success(tmp_p
     proof={'evidence':[{**artifact(tmp_path,'original-review.json',review),'role':'original-rejected-review'}]}
     if mutation=='missing':proof['evidence']=[]
     assert live.verify_original_rejection(packet,proof,tmp_path) is (mutation is None)
+
+@pytest.mark.parametrize('mutation',[None,'hash','call','ordinal','score','definition','duplicate'])
+def test_exact_generation_quality_review_is_conservative_and_source_bound(tmp_path,mutation):
+    _,spec,detail,_=fixture(tmp_path)
+    item={'call_id':detail['record']['call_id'],'ordinal':0,'definition':copy.deepcopy(detail['record']['definition']),
+          'call_sha256':spec['calls'][0]['sha256'],'reason':'The exact retained decision uses an unsupported premise.'}
+    if mutation=='hash':item['call_sha256']='0'*64
+    if mutation=='call':item['call_id']='absent'
+    if mutation=='ordinal':item['ordinal']=99
+    if mutation=='score':item['ordinal']=1
+    if mutation=='definition':item['definition']['name']='foreign'
+    proof={'decisionReview':{'schema':'natlang.live-decision-review/1','excluded':[item,item] if mutation=='duplicate' else [item]}}
+    if mutation is None:
+        assert live.declared_decision_exclusions([proof],[(spec['calls'][0],detail)])=={('call-one',0):item}
+    else:
+        with pytest.raises(ValueError,match='decision review'):
+            live.declared_decision_exclusions([proof],[(spec['calls'][0],detail)])
