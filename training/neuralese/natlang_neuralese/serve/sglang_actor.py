@@ -1499,6 +1499,18 @@ class SglangEngine(Engine):
                **({'source_occurrence': source_occurrence} if source_occurrence else {})}
         derivation = {'state_derivation': block.derivation} if block.derivation is not None else {}
         capture = capture_enabled(seq)
+        if not (seq.request.native_state_modes or {}).get(block_id) and self.text_write_in_context(block_id) \
+                and self._sglang_exact(block):
+            # A text-written state: its exact tokens inline in this call's context, no consume markers
+            # (`Engine.text_write_in_context`, `_native_consume_text_in_context`).
+            tokens = [int(token) for token in block.token_ids]
+            ids.extend(tokens)
+            seq.native_own_position += len(tokens)
+            if capture and tokens:
+                seq.native_rl_prompt.append({'kind': 'tokens', 'token_ids': tokens, 'producing': [False] * len(tokens)})
+            seq.native_imports.append({'id': block_id, 'mode': TEXT_IN_CONTEXT_MODE, **derivation,
+                                       'observed_native_state_id': block_id, **use})
+            return
         opening, closing = int(self.role_tokens.consume_open), int(self.role_tokens.consume_close)
         ids.append(opening)
         seq.native_own_position += 1
@@ -1517,16 +1529,7 @@ class SglangEngine(Engine):
                                                       layout=self._sglang_layout)
             except (ValueError, NativeAdapterError) as error:
                 raise RequestError('neuralese-native-state-mode', str(error)) from error
-        if receipt is None and request_mode is None and self.text_write_in_context(block_id) and self._sglang_exact(block):
-            # A text-written state: its exact tokens in this call's context (`Engine.text_write_in_context`).
-            tokens = [int(token) for token in block.token_ids]
-            ids.extend(tokens)
-            seq.native_own_position += len(tokens)
-            if capture and tokens:
-                seq.native_rl_prompt.append({'kind': 'tokens', 'token_ids': tokens, 'producing': [False] * len(tokens)})
-            mode = TEXT_IN_CONTEXT_MODE
-            observed = {'observed_native_state_id': block_id}
-        elif receipt is not None or self._sglang_exact(block):
+        if receipt is not None or self._sglang_exact(block):
             count = len(block.token_ids)
             if count:   # an empty state imports nothing; a count-0 span made the scheduler raise and die (2026-11-10)
                 seq.sglang_imports.append({'path': str(block.path), 'start': len(ids), 'count': count})
