@@ -1112,8 +1112,8 @@ def replay_episode(args, server, episode, env):
               'siblings_resolved': True,   # reworded/drifted matches chose the closest opening (ReplayEpisode.closest)
               'system_changed': sum(1 for e in replay.log if e.get('system_same') is False),
               'tools_changed': sum(1 for e in replay.log if e.get('tools_same') is False),
-              **({'memetic': memetic_outcome} if memetic else {}),
-              'log': replay.log[:64]}
+              'log': replay.log[:64],
+              **({'memetic': memetic_outcome} if memetic else {})}
     # exact: every recorded call served to the same visible history, its opening message at most reworded by the runtime
     matched = {k: v for k, v in kinds.items() if k != 'scoring-declined'}
     record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and set(matched) <= {'exact', 'reworded'}

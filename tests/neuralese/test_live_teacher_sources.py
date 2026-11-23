@@ -606,3 +606,75 @@ def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp
     assert len(chains) == int(retain_prior_action)
     assert all('terminal-id' not in json.dumps(chain) for chain in chains)
 
+
+
+def test_completed_reassessment_preserves_original_failure_and_binds_all_checker_evidence(tmp_path, monkeypatch):
+    import recheck_live_trajectories as recovery
+    root = tmp_path / 'original'
+    root.mkdir()
+    path, spec, detail, verification = fixture(root)
+    interaction = open_goal(detail, spec, verification)
+    detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    original_proof = {'goal': interaction['goal'], 'checks': {'native_state': True, 'old_oracle': False}}
+    packet = {'test': {'name': 'draft'}, 'result': {'passed': False}, 'execution': {'diagnostics': {
+        'openGoalVerification': original_proof, 'natlangTeacher': {'programPath': interaction['program'],
+            'calls': [detail], 'rootCallIds': ['call-one'], 'report': {'value': 'actual'}}}}}
+    original = artifact(root, 'original.json', packet)
+    artifact(root, 'pins.json', {'repositories': {'natlang': {'git_commit': 'a' * 40, 'dirty': False}},
+                                'instance': 'owned-instance', 'run_id': 'run'})
+    artifact(root, 'catalog.jsonl', {'scenario': 'draft', 'taskId': 'live-draft', 'family': 'draft',
+                                   'split': 'train', 'sourceGroups': ['drafts']})
+    checker = artifact(root, 'checker.json', {'implementation': 'independent crisp verifier'})
+    evidence = artifact(root, 'native-witness.json', {'state': 'actual native state'})
+    proof = {'schema': 'natlang.live-outcome-reassessment/1', 'task_id': 'live-draft',
+             'original_sha256': original['sha256'], 'goal': interaction['goal'], 'entry': None,
+             'actualResult': {'value': 'actual'}, 'passed': True,
+             'checks': {'native_state': True, 'old_oracle': True}, 'rationale': 'Recomputed corrected outcome.',
+             'checker_sources': [checker], 'evidence': [evidence]}
+    completed = artifact(root, 'completed.json', proof)
+    assessment = {'schema': 'natlang.live-reassessment/1', 'task_id': 'live-draft',
+                  'original_sha256': original['sha256'], 'rationale': proof['rationale'],
+                  'completed_outcome': completed}
+    artifact(root, 'assessment.json', assessment)
+    monkeypatch.setattr(recovery, 'held_closure', lambda _: {})
+    monkeypatch.setattr(recovery, 'held_hit', lambda *_: False)
+    out = tmp_path / 'completed'
+    recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
+                     root / 'catalog.jsonl', root / 'held.json', out)
+    episode = live.load_episode(out / 'manifest.json')
+    assert episode['trajectory_ir']['outcome']['task_completed'] is True
+    assert episode['trajectory_ir']['outcome']['status'] == 'passed'
+    assert json.loads((out / 'original-outcome.json').read_text()) == {'passed': False}
+    output_spec = json.loads((out / 'manifest.json').read_text())
+    original_binding = output_spec['calls'][0]
+    original_call_bytes = (out / original_binding['path']).read_bytes()
+    forged_call = json.loads(original_call_bytes)
+    forged_call['events'].append({'kind': 'unrelated-forged-native-observation'})
+    output_spec['calls'][0] = artifact(out, original_binding['path'], forged_call)
+    (out / 'manifest.json').write_text(json.dumps(output_spec))
+    with pytest.raises(ValueError, match='exact original application call graph'):
+        live.load_episode(out / 'manifest.json')
+    (out / original_binding['path']).write_bytes(original_call_bytes)
+    output_spec['calls'][0] = original_binding
+    (out / 'manifest.json').write_text(json.dumps(output_spec))
+    copied = json.loads((out / 'workspace.json').read_text())['proof']
+    (out / copied['evidence'][0]['path']).write_text('tampered native witness')
+    with pytest.raises(ValueError, match='artifact changed'):
+        live.load_episode(out / 'manifest.json')
+    proof['actualResult'] = {'value': 'invented'}
+    assessment['completed_outcome'] = artifact(root, 'completed.json', proof)
+    artifact(root, 'assessment.json', assessment)
+    with pytest.raises(ValueError, match='exact original whole outcome'):
+        recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
+                         root / 'catalog.jsonl', root / 'held.json', tmp_path / 'forged')
+
+
+def test_partial_reassessment_binds_retained_assessor_source(tmp_path):
+    path, spec, verification = partial_fixture(tmp_path)
+    verification['training_scope']['assessor'] = artifact(tmp_path, 'assessor-source.json', {'code': 'native byte comparison'})
+    spec['verification'] = artifact(tmp_path, 'verification.json', verification)
+    path.write_text(json.dumps(spec))
+    assert len(live.load_episode(path)['turns']) == 1
+    (tmp_path / 'assessor-source.json').write_text('changed assessor source')
+    with pytest.raises(ValueError, match='artifact changed'):
+        live.load_episode(path)

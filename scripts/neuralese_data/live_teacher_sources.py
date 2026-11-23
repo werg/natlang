@@ -1,5 +1,6 @@
 """Admission of observed live Natlang work; effects are verified, never called portable replays."""
 import hashlib
+import gzip
 import json
 import math
 import re
@@ -92,6 +93,8 @@ def verified_training_scope(verification, records, root):
     if (verification['status'] != 'partial' or not isinstance(scope, dict) or
             scope.get('schema') != 'natlang.training-scope/1'):
         raise ValueError('invalid partial live training scope')
+    if scope.get('assessor'):
+        bound_file(scope['assessor'], root)
     original = json.loads(bound_file(scope['original_outcome'], root).read_text())
     if original.get('passed') is not False:
         raise ValueError('partial recovery must preserve the original failed outcome')
@@ -129,6 +132,57 @@ def bound_file(binding, root):
     if sha256_file_hex(path) != binding.get('sha256'):
         raise ValueError(f'live source artifact changed: {path}')
     return path
+
+
+def verify_completed_reassessment(verification, spec, root):
+    """Bind a later whole-outcome verdict to immutable original execution and checker evidence."""
+    reassessment = verification.get('reassessment')
+    if reassessment is None:
+        return
+    if verification.get('status') != 'passed' or verification.get('training_scope') is not None:
+        raise ValueError('completed reassessment cannot relabel a partial training scope')
+    original = json.loads(bound_file(reassessment['original_outcome'], root).read_text())
+    assessment = json.loads(bound_file(reassessment['assessment'], root).read_text())
+    validator = json.loads(bound_file(verification['validator'], root).read_text())
+    packet_path = bound_file(validator['original_packet'], root)
+    packet_bytes = packet_path.read_bytes()
+    packet = json.loads(gzip.decompress(packet_bytes) if packet_path.suffix == '.gz' else packet_bytes)
+    native = packet['execution']['diagnostics']['natlangTeacher']
+    original_proof = packet['execution']['diagnostics']['openGoalVerification']
+    original_calls = native.get('calls') or []
+    captured_calls = [json.loads(bound_file(binding, root).read_text()) for binding in spec['calls']]
+    if (len(original_calls) != len(captured_calls) or not same_json_value(
+            {item['callId']: item for item in original_calls}, {item['callId']: item for item in captured_calls}) or
+            not same_json_value(native.get('rootCallIds'), verification.get('root_call_ids')) or
+            not same_json_value(native.get('entry'), (spec.get('interaction') or {}).get('entry')) or
+            original_proof.get('goal') != (spec.get('interaction') or {}).get('goal')):
+        raise ValueError('completed reassessment does not bind the exact original application call graph')
+    proofs = [json.loads(bound_file(item, root).read_text()).get('proof') for item in verification['evidence'] if item.get('kind') == 'workspace']
+    if len(proofs) != 1 or not isinstance(proofs[0], dict):
+        raise ValueError('completed reassessment needs one bound independent whole-outcome proof')
+    proof = proofs[0]
+    original_completed = json.loads(bound_file(validator['completed_outcome'], root).read_text())
+    def normalize_bindings(value):
+        normalized = dict(value)
+        for field in ('evidence', 'checker_sources'):
+            normalized[field] = [{key: item[key] for key in item if key != 'path'} for item in value.get(field) or []]
+        return normalized
+    if (assessment.get('completed_outcome', {}).get('sha256') != validator['completed_outcome']['sha256'] or
+            not same_json_value(normalize_bindings(proof), normalize_bindings(original_completed))):
+        raise ValueError('completed reassessment differs from its bound independent verdict')
+    if (original.get('passed') is not False or not same_json_value(original, packet['result']) or
+            assessment.get('schema') != 'natlang.live-reassessment/1' or
+            assessment.get('task_id') != spec['id'] or assessment.get('original_sha256') != hashlib.sha256(packet_bytes).hexdigest() or
+            proof.get('schema') != 'natlang.live-outcome-reassessment/1' or proof.get('passed') is not True or
+            proof.get('task_id') != spec['id'] or proof.get('original_sha256') != assessment['original_sha256'] or
+            proof.get('goal') != original_proof.get('goal') or not same_json_value(proof.get('entry'), native.get('entry')) or
+            not same_json_value(proof.get('actualResult'), native.get('report')) or
+            not isinstance(proof.get('checks'), dict) or set(proof['checks']) != set(original_proof.get('checks') or {}) or
+            not proof['checks'] or any(value is not True for value in proof['checks'].values()) or
+            not proof.get('rationale') or not proof.get('evidence') or not proof.get('checker_sources')):
+        raise ValueError('completed reassessment differs from the original execution or independent whole outcome')
+    for binding in proof['evidence'] + proof['checker_sources']:
+        bound_file(binding, root)
 
 
 def failed_action_turns(detail):
@@ -259,6 +313,7 @@ def load_episode(path):
     if not isinstance(checks, dict) or not checks or any(v is not True for v in checks.values()):
         raise ValueError('independent live task checks did not all pass')
     bound_file(verification['validator'], path.parent)
+    verify_completed_reassessment(verification, spec, path.parent)
     kinds = set()
     incorrect_optional_return = False
     for evidence in verification.get('evidence') or []:
@@ -444,6 +499,7 @@ def load_episode(path):
             'outcome': {'accepted': True, 'status': verification['status'], 'world': world, 'checks': checks,
                         'task_completed': verification['status'] == 'passed',
                         'root_call_ids': attested_roots,
+                        **({'reassessment': verification['reassessment']} if verification.get('reassessment') else {}),
                         **({'excluded_return_decisions': [{'invocation_id': call_id, 'ordinal': ordinal}
                              for call_id, ordinal in incorrect_returns.items()]} if incorrect_returns else {}),
                         **({'training_scope': verification['training_scope']} if training_scope is not None else {}),

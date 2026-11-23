@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve, posix } from 'node:path';
@@ -84,6 +85,7 @@ async function trainingScope(receipt, row, root) {
       JSON.parse(await readBound(scope.original_outcome, root)).passed !== false ||
       !Array.isArray(scope.invocations) || !scope.invocations.length)
     throw new Error('invalid independent partial training scope');
+  if(scope.assessor)await readBound(scope.assessor,root);
   const selected = new Map();
   for (const invocation of scope.invocations) {
     if (typeof invocation.call_id !== 'string' || selected.has(invocation.call_id) ||
@@ -101,6 +103,47 @@ async function trainingScope(receipt, row, root) {
     selected.set(invocation.call_id, invocation.ordinals == null ? null : new Set(invocation.ordinals));
   }
   return selected;
+}
+
+async function completedReassessment(receipt, manifest, row, root) {
+  const reassessment=receipt.reassessment;
+  if (!reassessment) {
+    if (row.outcome.reassessment) throw new Error('unattested completed reassessment');
+    return;
+  }
+  if (receipt.status!=='passed' || receipt.training_scope || !isDeepStrictEqual(reassessment,row.outcome.reassessment))
+    throw new Error('completed reassessment cannot relabel partial decisions');
+  const original=JSON.parse(await readBound(reassessment.original_outcome,root));
+  const assessment=JSON.parse(await readBound(reassessment.assessment,root));
+  const validator=JSON.parse(await readBound(receipt.validator,root));
+  const raw=await readBound(validator.original_packet,root);
+  const packet=JSON.parse(validator.original_packet.path.endsWith('.gz')?gunzipSync(raw):raw);
+  const native=packet.execution.diagnostics.natlangTeacher;
+  const prior=packet.execution.diagnostics.openGoalVerification;
+  const captured=await Promise.all(manifest.calls.map(async binding=>JSON.parse(await readBound(binding,root))));
+  const byId=calls=>Object.fromEntries(calls.map(item=>[item.callId,item]));
+  if(native.calls?.length!==captured.length || !isDeepStrictEqual(byId(native.calls),byId(captured)) ||
+      !isDeepStrictEqual(native.rootCallIds,receipt.root_call_ids) ||
+      !isDeepStrictEqual(native.entry??null,manifest.interaction?.entry??null) || prior.goal!==manifest.interaction?.goal)
+    throw new Error('completed reassessment does not bind exact original application graph');
+  const workspace=receipt.evidence.filter(item=>item.kind==='workspace');
+  if(workspace.length!==1)throw new Error('completed reassessment requires one independent whole-outcome proof');
+  const proof=JSON.parse(await readBound(workspace[0],root)).proof;
+  const originalCompleted=JSON.parse(await readBound(validator.completed_outcome,root));
+  const normalized=value=>({...value,...Object.fromEntries(['evidence','checker_sources'].map(field=>[field,(value[field]??[]).map(({path,...binding})=>binding)]))});
+  if(assessment.completed_outcome?.sha256!==validator.completed_outcome.sha256 || !isDeepStrictEqual(normalized(proof),normalized(originalCompleted)))
+    throw new Error('completed reassessment differs from bound independent verdict');
+  if(original.passed!==false || !isDeepStrictEqual(original,packet.result) ||
+      assessment.schema!=='natlang.live-reassessment/1' || assessment.task_id!==manifest.id || assessment.original_sha256!==digest(raw) ||
+      proof?.schema!=='natlang.live-outcome-reassessment/1' || proof.passed!==true || proof.task_id!==manifest.id ||
+      proof.original_sha256!==assessment.original_sha256 || proof.goal!==prior.goal ||
+      !isDeepStrictEqual(proof.entry??null,native.entry??null) || !isDeepStrictEqual(proof.actualResult??null,native.report??null) ||
+      !proof.checks || !Object.keys(proof.checks).length ||
+      !isDeepStrictEqual(Object.keys(proof.checks).sort(),Object.keys(prior.checks??{}).sort()) ||
+      Object.values(proof.checks).some(value=>value!==true) || !proof.rationale ||
+      !Array.isArray(proof.evidence) || !proof.evidence.length || !Array.isArray(proof.checker_sources) || !proof.checker_sources.length)
+    throw new Error('completed reassessment differs from actual original execution or independent outcome');
+  for(const artifact of [...proof.evidence,...proof.checker_sources])await readBound(artifact,root);
 }
 
 function decisionEligibility(record, detail, selected, incorrectReturn) {
@@ -184,6 +227,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
     throw new Error('observed workspace outcome evidence is incomplete');
   await readBound(receipt.validator, root);
 
+  await completedReassessment(receipt, manifest, row, root);
   const selected = await trainingScope(receipt, row, root);
   const decisions = Map.groupBy(row.trajectory, item => item.invocation_id);
   const returnExclusions = [];
