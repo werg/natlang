@@ -33,7 +33,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'scripts/neuralese_data'), str(REPO / 'training/neuralese'), str(REPO)]
 PY = sys.executable
-ADMITTED = '/mnt/external/natlang-rl-authoring/admitted/cases.jsonl'
+from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+ADMITTED = resolve_str('data_hdd', 'natlang-rl-authoring/admitted/cases.jsonl')
 
 
 def rows(path):
