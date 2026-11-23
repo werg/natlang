@@ -106,7 +106,7 @@ export type FixedPointOptions<T> = {
   maxSteps?: number;
   /** How state is carried between revisions: `'text'` (default) or `'neuralese'` (`view` each revision, `read` once at end). */
   carry?: CarryMode;
-  /** Optional soft-view hook used when `carry: 'neuralese'` (default: runtime Neuralese view / `compactValue.nl`). */
+  /** Optional soft-view hook used when `carry: 'neuralese'` (default: the Neuralese instance of the builtin `view`). */
   view?: (value: unknown, instructions?: string) => Maybe<unknown>;
   /** Optional readout hook used once at the end when `carry: 'neuralese'` (default: Neuralese `read`). */
   read?: (value: unknown) => Maybe<unknown>;

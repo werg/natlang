@@ -1,14 +1,11 @@
 // Tests for WS2 R4 (`escalate` as a pluggable crisp/nl/shadow policy with `shouldEscalate.nl` and `fallback` alias)
-// and WS8 N2/N3 (`compactValue.nl`, `compactParams.nl`, and `{ carry: 'neuralese' }` on std combinators).
+// and WS8 N3 (`{ carry: 'neuralese' }` on std combinators, viewed by the runtime's builtin view operator).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createNatlangRuntime, loadVirtualNatlang, std } from '../dist/index.js';
 import {
-  compactParams,
-  compactValue,
   escalate,
   fixedPoint,
-  neuralese,
   semanticMap,
   semanticReduce,
   shouldEscalate,
@@ -91,13 +88,9 @@ test('WS2 R4: escalate supports fallback alias and pluggable crisp / nl / shadow
   assert.equal(typeof shouldEscalate, 'function');
 });
 
-test('WS8 N2 & N3: compactValue/compactParams are exported and carry: "neuralese" compacts intermediate states across semanticReduce, semanticMap, and fixedPoint', async () => {
-  assert.equal(typeof compactValue, 'function');
-  assert.equal(typeof compactParams, 'function');
-  assert.equal(neuralese.compactValue, compactValue);
-  assert.equal(neuralese.compactParams, compactParams);
-  assert.equal(std.compactValue, compactValue);
-  assert.equal(std.neuralese.compactParams, compactParams);
+test('WS8 N3: carry: "neuralese" compacts intermediate states across semanticReduce, semanticMap, and fixedPoint', async () => {
+  // The std ships no second compaction operator: views come from the runtime's builtin view (or the view option).
+  assert.equal(std.compactValue, undefined);
 
   const driver = async () => ({ text: '"ok"', calls: [] });
   const runtime = createNatlangRuntime({ model: driver });
@@ -162,4 +155,21 @@ test('WS8 N2 & N3: compactValue/compactParams are exported and carry: "neuralese
   assert.equal(fpReads, 1, 'fixedPoint reads once at the end');
   assert.ok(fpViews >= 1);
   assert.match(String(converged.value), /^FINAL:/);
+});
+
+test('WS8 N3: carry: "neuralese" without a Neuralese view refuses with what to do instead', async () => {
+  const runtime = createNatlangRuntime({ model: async () => ({ text: '"ok"', calls: [] }) });
+  await assert.rejects(runtime.run(() => semanticMap(['a'], async item => item, { carry: 'neuralese' })),
+    /neuralese-unsupported-backend: carry: "neuralese" needs a runtime with a Neuralese server that serves view; leave carry out/);
+});
+
+test('WS2 R4: escalate to a model the runtime does not have keeps the local answer, marked unavailable, instead of rerunning it', async () => {
+  const fn = loadVirtualNatlang({ 'verdict.nl': '---\nargs:\n  x: string\nreturns: "allow" | "block"\nreadout: decision\n---\nChoose.\n' }, 'verdict.nl');
+  const driver = async () => { return { text: '"allow"', calls: [] }; };
+  driver.decide = async req => { return { log_probs: req.options.map(o => Math.log(JSON.parse(o) === 'allow' ? 0.6 : 0.4)) }; };
+  const runtime = createNatlangRuntime({ model: driver });
+  const result = await runtime.run(() => escalate(fn, { to: 'teacher' })('x'));
+  assert.equal(result.escalated, false);
+  assert.equal(result.value, 'allow');
+  assert.match(result.reason, /^unavailable: this runtime has no model teacher \(confidence\)/);
 });

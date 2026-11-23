@@ -213,7 +213,8 @@ trace and specialise. Every combinator nests its child calls under a `std:<name>
   `semanticMatch(left, right, { relation?, match?, block?, floor? })`, and
   `semanticRank(items, goal, { debiased?: true })` (concurrent symmetric pairwise `beats` + exact Copeland scoring).
 - **Policy & higher-order**: `escalate(fn, { to, floor?, risk? })` (confidence floor + asymmetric per-label risk floors,
-  recording `decision_escalate`), `withContext(fn, entries)` (`fn.in(Context.ofCallable(fn).with(entries))`, keeping
+  recording `decision_escalate`; on a runtime without the model `to` the local answer stands with `escalated: false`
+  and a `reason` starting `unavailable:`), `withContext(fn, entries)` (`fn.in(Context.ofCallable(fn).with(entries))`, keeping
   companion helpers intact), and `compileRule(rule, { examples?, check?, attempts? })` (synthesizes and example-verifies
   a reusable judgment function).
 

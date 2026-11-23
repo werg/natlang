@@ -313,14 +313,11 @@ function read<T>(value: Neuralese<T>): Promise<T>;
 function read(value: string): Promise<string>;
 `;
 
-/** Search the call's callable codebase by name, signature, type alias, or doc comment. */
-const SEARCH_CODE_FUNCTION = `declare function search_code(query: string): Array<{ name: string; kind: string; signature?: string; description?: string; path?: string }>;\n`;
-
 /** Ambient global declarations used by eval programs and virtual projects. */
 const STRING_NEURALESE_CONCAT = `interface String {
   concat<T, D extends string>(...strings: (string | Neuralese<T, D>)[]): string;
 }\n`;
-export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}\n${READ_FUNCTION.replace(/\nfunction /g, '\ndeclare function ')}\n${SEARCH_CODE_FUNCTION}${STRING_NEURALESE_CONCAT}`;
+export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}\n${READ_FUNCTION.replace(/\nfunction /g, '\ndeclare function ')}\n${STRING_NEURALESE_CONCAT}`;
 
 /** Host and application helper `pluggable` (runtime/pluggable.ts): for imports of the package, not for what an eval is shown. */
 const PLUGGABLE_MODULE_DTS = `
@@ -424,9 +421,6 @@ export declare const meets: NatlangFunction<[criterion: string, item: unknown], 
 export declare const relates: NatlangFunction<[relation: string, left: unknown, right: unknown], boolean>;
 export declare const compileRuleFn: NatlangFunction<[rule: string, problems?: string[]], (item: unknown) => Promise<unknown>>;
 export declare const shouldEscalate: NatlangFunction<[decision: any, floor?: number, risk?: Record<string, number>, history?: EscalationHistory, cost?: TierCost], boolean>;
-export declare const compactValue: NatlangFunction<[value: string, instructions?: string], Neuralese<string>>;
-export declare const compactParams: NatlangFunction<[value: string, name?: string, type?: string, purpose?: string], Neuralese<string>>;
-export declare const neuralese: { readonly compactValue: typeof compactValue; readonly compactParams: typeof compactParams };
 `;
 /** Module form of the standard library, resolved for `@natlang/<runtime>/std` imports in virtual programs. */
 export const STD_MODULE_FILE = '/__natlang__/std.d.ts';

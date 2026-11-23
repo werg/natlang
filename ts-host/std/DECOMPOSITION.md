@@ -15,10 +15,10 @@ Values pass through by reference: a combinator never serialises, clones or reads
 
 | Family | Combinator | Exact mechanism (TS) | Semantic judgment (`.nl` / caller) |
 |---|---|---|---|
-| Collections | `semanticMap(items, fn, { concurrency?, carry?, view? })` | bounded concurrent fan-out, order preservation, optional per-item Neuralese view (`carry: 'neuralese'`) | caller's `fn` (plus `view` / `compactValue.nl` when `carry: 'neuralese'`) |
+| Collections | `semanticMap(items, fn, { concurrency?, carry?, view? })` | bounded concurrent fan-out, order preservation, optional per-item Neuralese view (`carry: 'neuralese'`) | caller's `fn` (plus the builtin `view` when `carry: 'neuralese'`) |
 | | `semanticFilter(items, predOrCriterion, { floor?, concurrency? })` | concurrent fan-out, confidence threshold, exact array filter | caller's predicate or shipped `meets.nl` (`readout: decision`) |
 | | `semanticPartition(items, classifier, { floor?, concurrency? })` | concurrent `decide`, exact grouping into `groups` + `uncertain` | caller's finite classifier |
-| | `semanticReduce(items, initial, step, { mode?, combine?, concurrency?, carry?, view?, read? })` | left fold (`linear`) or parallel balanced pair reduction (`tree`), optional soft-state carry + final `read` | caller's `step` (and `combine`), carrying `S \| Neuralese<S>` by reference or via `compactValue.nl` |
+| | `semanticReduce(items, initial, step, { mode?, combine?, concurrency?, carry?, view?, read? })` | left fold (`linear`) or parallel balanced pair reduction (`tree`), optional soft-state carry + final `read` | caller's `step` (and `combine`), carrying `S \| Neuralese<S>` by reference or through the builtin `view` |
 | | `semanticMatch(left, right, { relation?, match?, block?, floor? })` | exact `block` pruning, unmatched set calculation | caller's `match` or shipped `relates.nl` (`readout: decision`) |
 | | `semanticRank(items, goal, { debiased?, concurrency? })` | concurrent pairwise schedule, symmetric debiasing `(a, b)` & `(b, a)`, exact Copeland/expected-win sort | shipped `beats.nl` (`readout: decision`) |
 | Convergence | `semanticRepair(value, { check, fix, attempts })` | exact `check`, repeat detection, `iterateOn(...).withLimit`, closest-value fallback | caller's `fix` |
@@ -29,7 +29,6 @@ Values pass through by reference: a combinator never serialises, clones or reads
 | | `compileRule(rule, { examples?, check?, attempts? })` | concurrent example validation + `semanticRepair` loop | shipped `compileRule.nl` returning `(item) => Promise<O>` |
 | Workspace | `proposeAndVerify(folder, reducer, { verify, attempts, args })` | `folder.propose`, exact `verify`, `semanticRepair` over draft continuation, `folder.accept` | caller's reducer |
 | | `branchAndSelect(folder, branches, { verify?, goal?, select?, debiased? })` | concurrent `folder.propose`, exact `verify`, `semanticRank` over passing branches, `folder.accept` | caller's branches + shipped `beats.nl` |
-| Neuralese | `neuralese.{compactValue, compactParams}` (also top-level exports) | shipped `.nl` compaction operators returning `Neuralese<string>` | shipped `compactValue.nl`, `compactParams.nl` |
 
 ## Traces
 

@@ -8,7 +8,7 @@ import { currentFrame } from '../runtime/context.js';
 import { decideInFrame } from '../runtime/runtime.js';
 import { isNeuraleseRef, NeuraleseUnsupportedError } from '../native/neuralese.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
-import { beats as shippedBeats, compactValue as shippedCompactValue, meets as shippedMeets, relates as shippedRelates } from './judgments.js';
+import { beats as shippedBeats, meets as shippedMeets, relates as shippedRelates } from './judgments.js';
 import { StdSpan, stdError } from './trace.js';
 
 type Maybe<T> = T | Promise<T>;
@@ -24,16 +24,17 @@ export function carryOf(value: unknown, combinator: string): CarryMode {
 
 const asViewText = (value: unknown): string => typeof value === 'string' ? value : JSON.stringify(value) ?? String(value);
 
-/** Default soft view for `carry: 'neuralese'`: uses the runtime's Neuralese viewer or `compactValue.nl`. */
+/**
+ * Default soft view for `carry: 'neuralese'`: the Neuralese instance of the builtin `view(value, instructions?)`
+ * (neuralese/view.ts), the one compaction operator the runtime serves and trains.
+ */
 export async function defaultSoftView(value: unknown, instructions?: string): Promise<unknown> {
   if (isNeuraleseRef(value)) return value;
-  const neuralese = currentFrame()?.task.runtime.options.neuralese;
-  if (neuralese?.view) {
-    const viewed = await neuralese.view({ value: asViewText(value), ...(instructions ? { instructions } : {}) });
-    if (viewed !== undefined) return viewed;
-  }
-  if (neuralese) return shippedCompactValue(asViewText(value), instructions);
-  throw new NeuraleseUnsupportedError('carry: "neuralese" needs a Neuralese-capable runtime or a custom view option');
+  const view = currentFrame()?.task.runtime.options.neuralese?.view;
+  const viewed = view ? await view({ value: asViewText(value), ...(instructions ? { instructions } : {}) }) : undefined;
+  if (viewed !== undefined) return viewed;
+  throw new NeuraleseUnsupportedError('carry: "neuralese" needs a runtime with a Neuralese server that serves view; ' +
+    'leave carry out to pass ordinary values, or pass your own view option.');
 }
 
 /** Default final readout for `carry: 'neuralese'`: reads a Neuralese reference back to an ordinary value. */
@@ -78,7 +79,7 @@ export type MapOptions = {
   concurrency?: number;
   /** How items reach `fn`: `'text'` (default) passes items untouched; `'neuralese'` runs `view` once per item first. */
   carry?: CarryMode;
-  /** Optional soft-view hook used when `carry: 'neuralese'` (default: runtime Neuralese view / `compactValue.nl`). */
+  /** Optional soft-view hook used when `carry: 'neuralese'` (default: the Neuralese instance of the builtin `view`). */
   view?: (value: unknown, instructions?: string) => Maybe<unknown>;
   /** Optional instructions forwarded to `view` when `carry: 'neuralese'`. */
   viewInstructions?: string;
@@ -205,7 +206,7 @@ export type ReduceOptions<S> = {
   concurrency?: number;
   /** How state is carried between steps: `'text'` (default) or `'neuralese'` (`view` between steps, `read` once at the end). */
   carry?: CarryMode;
-  /** Optional soft-view hook used when `carry: 'neuralese'` (default: runtime Neuralese view / `compactValue.nl`). */
+  /** Optional soft-view hook used when `carry: 'neuralese'` (default: the Neuralese instance of the builtin `view`). */
   view?: (value: unknown, instructions?: string) => Maybe<unknown>;
   /** Optional readout hook used once at the end when `carry: 'neuralese'` (default: Neuralese `read`). */
   read?: (value: unknown) => Maybe<unknown>;

@@ -14,5 +14,5 @@ export { escalate, withContext, compileRule } from './policy.js';
 export type { EscalateOptions, Escalated, RuleExample, CompileRuleOptions } from './policy.js';
 export { proposeAndVerify, branchAndSelect } from './workspace.js';
 export type { Workspace, Reducer, ProposeOptions, Proposed, Branch, Candidate, SelectOptions, Selected } from './workspace.js';
-export { intentOf, compatible, combine, settled, beats, meets, relates, compileRuleFn, shouldEscalate, compactValue, compactParams, neuralese } from './judgments.js';
+export { intentOf, compatible, combine, settled, beats, meets, relates, compileRuleFn, shouldEscalate } from './judgments.js';
 export type { Intent, Edit, EscalationHistory, TierCost } from './judgments.js';

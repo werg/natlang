@@ -40,9 +40,3 @@ export const compileRuleFn = load<[rule: string, problems?: string[]], (item: un
 /** `shouldEscalate(decision, floor?, risk?, history?, cost?)` (`readout: decision`): whether a local decision should escalate. */
 export const shouldEscalate = load<[decision: Decision<unknown>, floor?: number, risk?: Record<string, number>,
   history?: EscalationHistory, cost?: TierCost], boolean>('shouldEscalate');
-/** `compactValue(value, instructions?)`: compact a value into a `Neuralese<string>` state for downstream calls. */
-export const compactValue = load<[value: string, instructions?: string], NeuraleseRef>('compactValue');
-/** `compactParams(value, name?, type?, purpose?)`: compact a call argument into a `Neuralese<string>` state. */
-export const compactParams = load<[value: string, name?: string, type?: string, purpose?: string], NeuraleseRef>('compactParams');
-/** Learned Neuralese compaction operators shipped by `@natlang/std`. */
-export const neuralese = Object.freeze({ compactValue, compactParams });
