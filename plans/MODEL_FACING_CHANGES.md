@@ -3,6 +3,24 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — collector episodes judge refinements on the policy (refined returns were undecidable)
+
+- **Defect.** `executeProgram` (`ts-host/src/teacher/collector.ts`) builds `NodeNativeRuntime` with `agent:` and no
+  `model`, and `NatlangTask.refinementJudges` (`runtime/runtime.ts`) returned no judge without a model config. Every
+  `Is<T, P>` return, refined argument, `refine(...)` and refined service result in a collector episode (RL collection,
+  held eval, semantic-FP equivalence, teacher generation, reference replay, structure smoke) failed
+  `refinement-undecided: ... (no judge could decide it)` after the call had finished, and the call itself got no
+  repair feedback: the collector agent had a refinement gate only for an item-result binding, and that one had no judge.
+- **What the model sees now.** The judge runs on the episode's own driver (`agentDriver`): the policy's decision scorer
+  when it has `decide` (the existing judge readout, `JUDGE_SYSTEM_PROMPT`, options `true`/`false`; a collection scorer
+  samples the verdict), else a `holds(value, predicate)` call through the same agent (`JUDGE_CALL_INSTRUCTIONS`). The
+  collector agent always carries the refinement gate with the task's checker and judges, so a refined result the judge
+  rejects comes back inside the call as the same one-sentence refinement error the product runtime gives
+  (`refinement-unsatisfied: Make it unmistakable ...`) within the repair budget, and a refined root return is checked
+  too. The kernel's post-call check reuses the gate's cached verdict (one checker, one judge id), so a sampled verdict
+  is never drawn twice.
+- **Opt-out:** `NATLANG_COLLECTOR_REFINEMENT_JUDGE=0` (no judge, gate only for an item-result binding, as before).
+
 ### 2026-11-23 — `natlang init` writes the inbox planner; `Record<'a' | 'b', T>` is a record (B3)
 
 The front door is also the teacher prompt for idiomatic-program demonstrations (WS4 rule 4). Consumers and coding

@@ -117,6 +117,11 @@ export type NatlangRuntimeOptions = {
   escalation?: { models: string[]; enabled?: boolean };
   /** Drive interpreter sessions directly instead of through a model (fixtures, replay, tests). */
   agent?: import('../native/runtime.js').NativeAgent;
+  /**
+   * The model driver behind `agent` (the teacher collector's policy or teacher, a scripted replay). With no `model`,
+   * refinement judges score with its `decide`, else a `holds` call runs through `agent`; without it there is no judge.
+   */
+  agentDriver?: { decide?: DecisionScorer; model?: unknown; name?: string };
   /** Typed host services, available to callable-folder code via `natlang:services` and to eval as named bindings. */
   services?: Services;
   /**
@@ -431,15 +436,19 @@ export class NatlangTask {
   refinementChecker(): RefinementChecker { return this.runtime.refinementChecker(); }
   /**
    * The judge and the escalation judge for a call running on `model`: the configured `refinements.judge` model when
-   * there is one, else the call's own. Undefined when the driver cannot score replies.
+   * there is one, else the call's own. A task driven by `agent` with no model judges on the agent's driver
+   * (`agentDriver`): its scorer, else `holds` through the agent. Undefined when there is neither.
    */
   refinementJudges(model: ModelConfig | undefined, frame?: Frame): { judge?: RefinementJudge; escalation?: RefinementJudge } {
     const settings = this.runtime.options.refinements;
     const judgeOf = (name: string | undefined, config: ModelConfig | undefined): RefinementJudge | undefined => {
-      if (!config) return undefined;
-      const id = config.id ?? (config.driver as { model?: string }).model ?? (config.driver.name || 'model');
+      const agentDriver = this.runtime.options.agent ? this.runtime.options.agentDriver : undefined;
+      const driver: { decide?: DecisionScorer; model?: unknown; name?: string } | undefined = config?.driver ?? agentDriver;
+      if (!driver) return undefined;
+      const driverModel = typeof driver.model === 'string' && driver.model ? driver.model : undefined;
+      const id = config?.id ?? driverModel ?? (driver.name || (config ? 'model' : 'agent'));
       // A scorer cannot reserve a bounded completion allowance. Route bounded graphs through an ordinary child call.
-      const scorer = this.modelBudget.maxRequests === undefined && this.modelBudget.maxTokens === undefined ? decisionScorer(config.driver) : undefined;
+      const scorer = this.modelBudget.maxRequests === undefined && this.modelBudget.maxTokens === undefined ? decisionScorer(driver) : undefined;
       if (scorer) return decisionJudge(scorer, { id });
       // No scoring: run `holds` as an ordinary natural-language call on that model (needs the calling frame).
       return frame ? callJudge(async (value, predicate, signal) => {

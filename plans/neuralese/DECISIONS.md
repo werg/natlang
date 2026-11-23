@@ -7680,3 +7680,38 @@ edit becomes a proposal the program can adopt instead of dying with the run. The
   revision record, load error, adopt accept/reject/dry-run/stale, byte-identical rollback, refusal of failed and
   no-edit calls and of a forged protected revision, the CLI end to end with real `natlang check`). Conformance 22/22
   incl. 17-reopen-refine.
+
+## 2026-11-23 Collector episodes judge refinements on their own driver (refined returns were undecidable)
+
+- **Observation.** Authored probe `w900-refine` (helper `explain` returns `Is<string, "one sentence that says whose
+  order the writer is talking about">`) failed qualification: reference replay and structure smoke both ended with
+  `refinement-undecided: ... (no judge could decide it)`.
+- **Cause.** `ts-host/src/teacher/collector.ts` `executeProgramInEpisode` builds `NodeNativeRuntime` with `agent:` and
+  no `model` (collector.ts, the `new NodeNativeRuntime({ environment, agent: ... })` call), so `task.model()` is
+  undefined, and `NatlangTask.refinementJudges` (`ts-host/src/runtime/runtime.ts`, `judgeOf`: `if (!config) return
+  undefined;`) gave no judge. `RefinementChecker.check` then emits `source: 'none', outcome: 'undecided'`, and the
+  kernel's post-call return check (`runtime/kernel.ts` `invokeDefinition`, `phase: 'return'`) fails the call. Same for
+  refined arguments (kernel `phase: 'argument'`), `refine()` (`runtime/surface.ts`) and refined service results
+  (`checkedServices`). Separately, the collector's one shared `NativeToolAgent` carried a refinement gate only with an
+  item-result binding, and that gate had no judge either: no in-call repair, and refined root returns were never checked.
+  So every refined function in RL collection, held eval and equivalence runs failed, not only the replay.
+- **Fix (default, opt-out `NATLANG_COLLECTOR_REFINEMENT_JUDGE=0`).** New runtime option `agentDriver` (passed through
+  `NodeNativeRuntime`): a task driven by `agent` with no model judges on that driver, by `decisionJudge` when it has
+  `decide` (the policy's scorer: SGLang front / native engine `/v1/neuralese/decide`, sampled verdict in collection),
+  else by `callJudge` (`holds` through the agent, which a reference child or a smoke child named `holds` answers). The
+  collector passes its driver and builds the agent after the runtime, with the task's checker (shared verdict cache
+  with the kernel check, so a sampled verdict is drawn once) and the task's judges (the `holds` call in the judged
+  call's frame). Model-facing; recorded in `plans/MODEL_FACING_CHANGES.md`.
+- **Inventory** (everything that runs programs through `executeProgram`): RL/EI collection and held eval
+  (`run_bonsai_queue.py` -> `dist/teacher/collector.js` `collectBatch` -> `executeProgram`), `scripts/semantic_fp/
+  equivalence.py` (held eval's execution), teacher generation (`teacher_gen.py` -> collector.js), reference replay
+  (`curriculum.ts` `replayReference`/`referenceDriver`, `qualify_authored.py` verify), `structure_smoke.mjs`,
+  `corrections.ts`, `handoff.ts`, `native-forced-replay.ts`, `improvement/teacher.ts`, ts-host scripts calling
+  `executeProgram`: all covered by the one change. Not changed: evaluation fixtures (`teacher/evaluation-fixture.ts`
+  `executeEvaluationFixture` -> `evaluate`, whose worker builds the runtime with `model: { driver }`,
+  `evaluation/worker-entry.ts:58`, already judged); product runtimes with `model` (unchanged path); `interpreter({
+  agent })` test fixtures without `agentDriver` (no judge, as before). Engines: no serving change; the judge uses the
+  existing decide request every engine serves.
+- **Result.** `ts-host/test/collector-refinement-judge.test.mjs` (5 tests: scorer true/false, scripted `holds`
+  true/false, opt-out reproduces undecided). `qualify_authored.py` on `w900-refine` with the fixed runtime: PASS
+  (reference admitted, smoke returns expected); with the opt-out: FAIL with the original `refinement-undecided`.
