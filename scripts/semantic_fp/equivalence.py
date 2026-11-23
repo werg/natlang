@@ -41,6 +41,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
 
+from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes  # noqa: E402
 from natlang_neuralese.common.jsonio import read_jsonl  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes  # noqa: E402
 
