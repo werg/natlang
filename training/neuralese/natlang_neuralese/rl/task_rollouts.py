@@ -224,7 +224,11 @@ def graded_reward(outcome_class: str, reward: float | None, result: dict[str, An
     the credit: a right answer with 1 of 43 files earns 0.02, not half (returning the value and skipping the effects is
     the base model's commonest failure and must not be rewarded), and an episode that achieved none of the effects it
     had to make earns 0 whatever it returned. A task without a checked folder effect stays binary. Budget stops, other outcomes
-    and any other failed check are 0."""
+    and any other failed check are 0.
+
+    A task judged by a trusted executable verifier (``semantics.trusted_exact_verifier``) whose verdict carries a graded
+    ``score`` gets that score for its answer: the verifier's credit when the answer alone failed, and the factor on the
+    effect fraction (in place of the 0.5) when the files failed too."""
     if reward is None or reward == 1.0:
         return reward
     if outcome_class != "semantic_mismatch" or not result:
@@ -234,10 +238,26 @@ def graded_reward(outcome_class: str, reward: float | None, result: dict[str, An
     failed = {name for name, passed in checks.items() if not passed}
     if not checks or not failed or not failed <= GRADED_CHECKS:
         return 0.0
+    answer_credit = verifier_score(outcome, semantics or {})
+    if failed == {"answer"} and answer_credit is not None:
+        return round(answer_credit, 6)
     effects = effect_fraction(outcome, semantics or {})
     if not effects:
         return 0.0
-    return round(effects * (1.0 if checks.get("answer") else 0.5), 6)
+    factor = 1.0 if checks.get("answer") else (0.5 if answer_credit is None else answer_credit)
+    return round(effects * factor, 6)
+
+
+def verifier_score(outcome: dict[str, Any], semantics: dict[str, Any]) -> float | None:
+    """The graded answer credit in [0, 1] a trusted executable verifier returned (``trusted-exact-verifier.ts``), None
+    when the task has no such verifier or its verdict carries no score."""
+    if not isinstance(semantics.get("trusted_exact_verifier"), dict):
+        return None
+    oracle = outcome.get("oracle") if isinstance(outcome.get("oracle"), dict) else {}
+    score = oracle.get("score")
+    if isinstance(score, bool) or not isinstance(score, (int, float)) or not 0 <= score <= 1:
+        return None
+    return float(score)
 
 
 def expand_captures(trajectory: list[Any]) -> list[Any]:

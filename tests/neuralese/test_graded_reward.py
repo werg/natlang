@@ -48,3 +48,25 @@ def test_json_files_compare_as_data():
     assert tr.file_content_equal('a.json', '{"b": 1, "a": [1.0]}', '{"a":[1],"b":1}')
     assert not tr.file_content_equal('a.json', '{"a": 1, "a": 2}', '{"a": 2}')
     assert not tr.file_content_equal('a.md', 'x\n', 'x')
+
+
+def test_trusted_verifier_score_is_the_answer_credit():
+    verifier = {'trusted_exact_verifier': {'path': 'training/semantic_fp_tasks/x/verify.mjs', 'sha256': '0' * 64,
+                                           'oracle': {}}}
+    row = {'outcome': {'checks': {'answer': False, 'files': True}, 'oracle': {'accepted': False, 'score': 0.75}}}
+    assert tr.graded_reward('semantic_mismatch', 0.0, row, verifier) == 0.75
+    # without a trusted verifier an oracle score is not credit (ordinary answer oracles stay binary)
+    assert tr.graded_reward('semantic_mismatch', 0.0, row, {}) == 0.0
+    # a malformed score is no credit
+    bad = {'outcome': {'checks': {'answer': False}, 'oracle': {'accepted': False, 'score': 1.5}}}
+    assert tr.graded_reward('semantic_mismatch', 0.0, bad, verifier) == 0.0
+    # another failed check still leaves 0
+    other = {'outcome': {'checks': {'answer': False, 'world': False}, 'oracle': {'accepted': False, 'score': 0.75}}}
+    assert tr.graded_reward('semantic_mismatch', 0.0, other, verifier) == 0.0
+    # with file effects too, the verifier score replaces the 0.5 factor on the effect fraction
+    res, sem = result({'answer': False, 'files': False}, {'out.md': 'y'}, {}, {'out.md': 'y', 'log.md': 'z'})
+    res['outcome']['oracle'] = {'accepted': False, 'score': 0.5}
+    sem.update(verifier)
+    assert tr.graded_reward('semantic_mismatch', 0.0, res, sem) == pytest.approx(0.5 * 0.5)
+    res['outcome']['oracle']['score'] = 0.2
+    assert tr.graded_reward('semantic_mismatch', 0.0, res, sem) == pytest.approx(0.5 * 0.2)

@@ -6,6 +6,9 @@
 // same source) and by a generic perturbation must be rejected; (3) false-negative probe: each declared alternative gold
 // form (upstream aliases/annotator answers, trivial surface variants) replayed and its acceptance recorded. A case is kept
 // when (1) passes and every negative control is rejected. Alias acceptance is measured, never a keep condition.
+// Verifier-judged cases (semantics.trusted_exact_verifier) also carry keyword baselines: whole root scripts that answer
+// by surface cues with no natural-language call. Each replaces the reference and must run and be rejected, or the
+// case is not kept (the verifier would reward a keyword rule).
 // Writes OUT_DIR/cases.jsonl (kept rows, input order) and OUT_DIR/verification.json.
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -118,7 +121,7 @@ function terminalValue(record) {
 }
 async function qualify(record) {
   const result = { id: record.id, family: record.family, split: record.split, shape: record.curriculum?.shape,
-    reference_ok: false, problems: [], wrong: [], aliases: [] };
+    reference_ok: false, problems: [], wrong: [], aliases: [], keyword_baseline: [] };
   try {
     const [ref] = await verifyCases([record], TOOLS_PROMPT);
     result.reference_ok = ref.ok; result.problems = ref.problems;
@@ -144,6 +147,13 @@ async function qualify(record) {
     try { result.aliases.push({ value: code.slice(0, 120), accepted: await accepted(variant) }); }
     catch (e) { result.aliases.push({ value: code.slice(0, 120), accepted: null, error: String(e).slice(0, 300) }); }
   }
+  for (const code of checks.keyword_baseline_code ?? []) {
+    const variant = structuredClone(record);
+    variant.curriculum.reference.root = [['eval', { code, finish: true }]];
+    delete variant.curriculum.reference.children;
+    try { result.keyword_baseline.push({ value: code.slice(0, 120), accepted: await accepted(variant) }); }
+    catch (e) { result.keyword_baseline.push({ value: code.slice(0, 120), accepted: null, error: String(e).slice(0, 300) }); }
+  }
   for (const value of wrongs) {
     const variant = withAnswer(record, value);
     if (!variant) { result.wrong.push({ value, accepted: null, error: 'no terminal answer to replace' }); continue; }
@@ -157,7 +167,8 @@ async function qualify(record) {
     catch (e) { result.aliases.push({ value, accepted: null, error: String(e).slice(0, 300) }); }
   }
   result.wrong_rejected = result.wrong.length > 0 && result.wrong.every(w => w.accepted === false);
-  result.ok = result.reference_ok && result.wrong_rejected;
+  result.keyword_baseline_rejected = result.keyword_baseline.every(w => w.accepted === false);
+  result.ok = result.reference_ok && result.wrong_rejected && result.keyword_baseline_rejected;
   return result;
 }
 // Resume only under the exact input and executable closure. Preserve obsolete
@@ -207,6 +218,8 @@ const summary = {
   wrong_controls: results.reduce((n, r) => n + r.wrong.length, 0),
   wrong_accepted: results.reduce((n, r) => n + r.wrong.filter(w => w.accepted === true).length, 0),
   wrong_errors: results.reduce((n, r) => n + r.wrong.filter(w => w.accepted === null).length, 0),
+  keyword_baselines: results.reduce((n, r) => n + (r.keyword_baseline ?? []).length, 0),
+  keyword_baselines_not_rejected: results.reduce((n, r) => n + (r.keyword_baseline ?? []).filter(w => w.accepted !== false).length, 0),
   alias_probes: aliasTried.length, alias_rejected: aliasTried.filter(a => !a.accepted).length,
   alias_false_negative_rate: rate(aliasTried.filter(a => !a.accepted).length, aliasTried.length),
   by_split: Object.fromEntries(['train', 'dev', 'confirmation'].map(s => [s, kept.filter(r => r.split === s).length])),
@@ -216,7 +229,8 @@ const report = { schema: 'natlang.broad-rl-case-verification/1', input: { path: 
   executable_sha256: executableBinding,
   cases_sha256: sha(out + '/cases.jsonl'), summary,
   failures: results.filter(r => !r.ok).slice(0, 200).map(r => ({ id: r.id, problems: r.problems.slice(0, 3),
-    wrong_accepted: r.wrong.filter(w => w.accepted !== false).map(w => w.value) })),
+    wrong_accepted: r.wrong.filter(w => w.accepted !== false).map(w => w.value),
+    keyword_baseline_not_rejected: (r.keyword_baseline ?? []).filter(w => w.accepted !== false) })),
   alias_rejections: results.flatMap(r => r.aliases.filter(a => a.accepted === false).map(a => ({ id: r.id, value: a.value }))).slice(0, 200),
   results };
 fs.writeFileSync(out + '/verification.json', JSON.stringify(report) + '\n');

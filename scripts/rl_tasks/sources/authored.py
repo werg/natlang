@@ -7,11 +7,20 @@ authored shape, assigns the split from the world identity (related tasks share a
 records the author model as provenance and the scripted structure smoke, and emits the same case format the
 collector, verify.mjs and the RL controller already use. It never invents gold, wrong answers or references.
 
+`oracle: "verifier"` tasks are judged by executing their outcome instead of comparing it with `expected`: the task names
+a trusted verifier module under `training/semantic_fp_tasks/` (`verifier: {"path", "oracle"}`; the converter binds the
+file's sha256) whose `verifyCandidate({value, oracle, inputs, fixture, files})` returns `{ok, issues, score}`
+(`ts-host/src/teacher/trusted-exact-verifier.ts`). `expected` is then one accepted answer, `alias_answers` other
+accepted answers, and `keyword_baseline.code` a root eval script that solves the task by surface cues (keywords, field
+positions) without any natural-language call; qualification requires it to fail like the wrong answers.
+
   python scripts/rl_tasks/sources/authored.py IN.jsonl OUT.jsonl
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -39,7 +48,9 @@ GENERATOR = 'natlang.rl-authored-tasks/1'
 CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'neuralese_fan_in', 'iterate',
                         'iterate_neuralese', 'folder_reducer', 'decision_readout', 'skills', 'multi_operation_codebase',
                         'effect_state'})
-ORACLES = frozenset({'exact', 'normalized'})
+ORACLES = frozenset({'exact', 'normalized', 'verifier'})
+VERIFIER_ROOT = 'training/semantic_fp_tasks/'
+REPO = Path(os.environ.get('NATLANG_REPO_ROOT') or Path(__file__).resolve().parents[3])
 NAME = re.compile(r'^[a-z][a-z0-9_]*$')
 FILE = re.compile(r'^[a-z][a-z0-9_]*(/[a-z][a-z0-9_-]*)*(\.nl|\.ts|/SKILL\.md)$')
 # World-folder items: relative paths of plain segments (no '..', no absolute paths, no hidden files).
@@ -70,6 +81,26 @@ def reference_actions(task):
     return {'root': reference['root'], **({'children': reference['children']} if reference.get('children') else {})}
 
 
+def trusted_verifier(task):
+    """The `trusted_exact_verifier` binding of a verifier task: its module path, the file's sha256 and the hidden
+    oracle data the module judges with."""
+    spec = task.get('verifier')
+    if not isinstance(spec, dict) or not isinstance(spec.get('path'), str) or 'oracle' not in spec:
+        fail(task, 'oracle verifier needs verifier: {"path": "training/semantic_fp_tasks/.../NAME.mjs", "oracle": ...}')
+    path = spec['path']
+    if (not path.startswith(VERIFIER_ROOT) or not path.endswith('.mjs')
+            or any(part in ('', '.', '..') for part in path.split('/'))):
+        fail(task, f'verifier path must be a .mjs file under {VERIFIER_ROOT}')
+    source = REPO / path
+    if not source.is_file():
+        fail(task, f'verifier module {path} does not exist')
+    baseline = task.get('keyword_baseline')
+    if not isinstance(baseline, dict) or not isinstance(baseline.get('code'), str) or 'return' not in baseline['code']:
+        fail(task, 'oracle verifier needs keyword_baseline: {"code": a root eval script that answers by surface cues '
+                   'and returns its answer}')
+    return {'path': path, 'sha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'oracle': spec['oracle']}
+
+
 def fail(task, message):
     raise ValueError(f'{task.get("id", "?")}: {message}')
 
@@ -92,7 +123,10 @@ def convert(task):
     if not isinstance(constructs, list) or not set(constructs) <= CONSTRUCTS:
         fail(task, 'constructs must be a list (empty when no construct applies) within ' + ', '.join(sorted(CONSTRUCTS)))
     if task['oracle'] not in ORACLES:
-        fail(task, 'oracle must be exact or normalized')
+        fail(task, 'oracle must be exact, normalized or verifier')
+    verifier = trusted_verifier(task) if task['oracle'] == 'verifier' else None
+    if verifier is None and ('verifier' in task or 'keyword_baseline' in task):
+        fail(task, 'verifier and keyword_baseline go with oracle verifier')
     if task['oracle_depth'] not in ('answer', 'effect-state'):
         fail(task, 'oracle_depth must be answer or effect-state')
     if (task['oracle_depth'] == 'effect-state') != ('effect_state' in constructs):
@@ -147,9 +181,13 @@ def convert(task):
         'version': 'natlang.program/2', 'id': case_id, 'kind': 'lambda_source', 'family': family,
         'source': 'authored-rl:' + author['model'], 'split': split, 'source_ids': ['authored:' + task['id']],
         'source_groups': sorted({world, *('authored-group:' + g for g in task.get('groups', []))}),
-        'source_revisions': [GENERATOR], 'license': 'authored', 'gold_sources': ['authored-exact-oracle'],
+        'source_revisions': [GENERATOR], 'license': 'authored',
+        'gold_sources': ['authored-verifier-oracle' if verifier else 'authored-exact-oracle'],
         'generation': {'generator': GENERATOR, 'teacher_generation': True, 'author': author,
-                       'method': 'program, inputs, exact expected result and controls authored by a model worker; '
+                       'method': ('program, inputs, executable verifier, a reference answer and controls (wrong '
+                                  'answers, a keyword baseline) authored by a model worker; qualified by reference, '
+                                  'negative, keyword-baseline and alias replay; no sampled trajectory') if verifier else
+                                 'program, inputs, exact expected result and controls authored by a model worker; '
                                  'qualified by reference, negative and alias replay; no sampled trajectory'},
         'curriculum': {
             'version': CURRICULUM_VERSION, 'family': family, 'family_version': 1, 'shape': task.get('shape', family),
@@ -158,7 +196,9 @@ def convert(task):
             'evidence': {'world': [], 'retrieved': [], 'background': []}, 'assumptions': [], 'decisive': [],
             'plausible_actions': [], 'minimum_sequence': [],
             'reference': reference_actions(task),
-            'rl': {'level': task['level'], 'family': family, 'basis': 'authored-exact-oracle-reference-verified'},
+            'rl': {'level': task['level'], 'family': family,
+                   'basis': ('authored-verifier-oracle-reference-verified' if verifier
+                             else 'authored-exact-oracle-reference-verified')},
             **({'iterate': 'required'} if {'iterate', 'iterate_neuralese'} & set(constructs) else {}),
             **({'named': 'required'} if len([p for p in files if p.endswith('.nl')]) > 1 else {}),
             'external': {'source': 'authored', 'upstream': 'authored:' + author['model'], 'upstream_id': task['id'],
@@ -168,7 +208,8 @@ def convert(task):
                          'subject_domain': task.get('domain', 'other'),
                          'oracle_depth': task['oracle_depth'],
                          'checks': {'wrong_answers': wrong, 'alias_answers': aliases,
-                                    **({'wrong_code': wrong_code} if wrong_code else {})},
+                                    **({'wrong_code': wrong_code} if wrong_code else {}),
+                                    **({'keyword_baseline_code': [task['keyword_baseline']['code']]} if verifier else {})},
                          'structure': {'name': family, 'constructs': sorted(constructs),
                                        # replay: the whole root script runs against the scripted helper answers and its
                                        # returned value is what the oracle judges (a real run of the exact code
@@ -182,7 +223,11 @@ def convert(task):
                       # Declared aliases are alternate gold forms the oracle accepts (OracleSpec.alternates), in
                       # addition to what the oracle mode already ignores (record key order; case and spacing when
                       # normalized).
-                      'oracle': {'level': task['oracle'], 'alternates': aliases} if aliases else task['oracle'],
+                      # A verifier task is judged by its trusted verifier (collector.ts); its answer oracle is the
+                      # strict fallback no run reaches.
+                      'oracle': ('exact' if verifier else
+                                 {'level': task['oracle'], 'alternates': aliases} if aliases else task['oracle']),
+                      **({'trusted_exact_verifier': verifier} if verifier else {}),
                       # The runtime materializes folder_files as the directory reducer's world folder and, with
                       # expected_files, grades the folder the run leaves behind (collector.executeProgram).
                       **({'folder_files': folders} if folders is not None else {}),

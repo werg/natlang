@@ -14,14 +14,20 @@ JSON object `{task id: {"answer": <value>, "folders": {path: text}}}` (`folders`
 `compare` uses the task's own oracle kind (exact deep equality, or normalized: case, spaces, number formatting) and
 the alias answers; it exits 1 if any task disagrees, listing the ids. A disagreement is for a human or an auditor to
 settle by running the program literally: it can be a wrong `expected`, an ambiguous judgment or a solver slip.
+Verifier tasks (`oracle: verifier`) are judged by executing the solver's outcome with the task's own verifier
+(`verifier_controls.mjs`), not by equality with `expected`: any outcome the verifier accepts agrees.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
+
+import authored_checks
 
 HEAD = re.compile(r'^---\r?\n(.*?)\r?\n---', re.S)
 RETURNS = re.compile(r'^returns:\s*(.*)$', re.M)
@@ -51,6 +57,10 @@ FOLDER_ANSWER_FORMAT = (
     'tells it to write, and files it never touched appear unchanged. A file that does not exist after the run must not '
     'be listed. Copy file text exactly as the program writes it (including its trailing newline when the program writes one).')
 
+VERIFIER_NOTE = (' This task is judged by checking your outcome against what the program asks for, not against one '
+                 'expected text: any outcome that does what the program means passes. Read each item for what it '
+                 'means, as a careful person would, and apply the code steps exactly.')
+
 SOLVER_PROMPT = (
     'You are the blind solver for authored natlang RL tasks. Each packet row has a root program, its helper files, '
     'concrete inputs, (for folder tasks) the starting folder, and the declared return type. Solve every task by running '
@@ -68,6 +78,8 @@ def packet_row(task):
     if task.get('folders'):
         row['folders'] = task['folders']
         row['answer_format'] = FOLDER_ANSWER_FORMAT
+    if task.get('oracle') == 'verifier':
+        row['answer_format'] += VERIFIER_NOTE
     return row
 
 
@@ -103,14 +115,41 @@ def same(a, b, oracle):
     return a == b
 
 
-def compare(tasks, answers):
+def verifier_verdicts(tasks, answers, runtime=None):
+    """{task id: {accepted, score, issues}}: each verifier task's given answer judged by its own verifier."""
+    chosen = [task for task in tasks if task.get('oracle') == 'verifier']
+    if not chosen:
+        return {}
+    runtime = runtime or os.environ.get('NATLANG_VERIFIER_RUNTIME') or str(authored_checks.REPO / 'ts-host')
+    answers_path = Path(os.environ.get('TMPDIR', '/tmp')) / f'blind-solve-answers-{os.getpid()}.json'
+    answers_path.write_text(json.dumps(answers))
+    try:
+        done = subprocess.run([authored_checks.node(), str(Path(__file__).resolve().parent / 'verifier_controls.mjs'),
+                               runtime, '/dev/stdin', str(answers_path)],
+                              input=''.join(json.dumps(task) + '\n' for task in chosen), capture_output=True, text=True,
+                              cwd=os.environ.get('NATLANG_REPO_ROOT') or str(authored_checks.REPO))
+    finally:
+        answers_path.unlink(missing_ok=True)
+    if done.returncode:
+        raise RuntimeError('verifier_controls.mjs failed: ' + done.stderr[-2000:])
+    return json.loads(done.stdout)
+
+
+def compare(tasks, answers, runtime=None):
     disagreements, missing = [], []
+    judged = verifier_verdicts(tasks, {key: value for key, value in answers.items() if isinstance(value, dict)}, runtime)
     for task in tasks:
         given = answers.get(task['id'])
         if not isinstance(given, dict) or 'answer' not in given:
             missing.append(task['id'])
             continue
         oracle = task.get('oracle', 'exact')
+        if oracle == 'verifier':
+            verdict = judged.get(task['id']) or {}
+            if verdict.get('accepted') is not True:
+                disagreements.append({'id': task['id'], 'differs': ['verifier'], 'solver': given.get('answer'),
+                                      'verdict': verdict.get('issues') or verdict.get('error')})
+            continue
         accepted = [task['expected']] + list(task.get('alias_answers') or [])
         reasons = []
         if not any(same(given['answer'], value, oracle) for value in accepted):
