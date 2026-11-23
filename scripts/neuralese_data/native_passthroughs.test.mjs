@@ -24,7 +24,7 @@ test('exact passthrough keeps native authority and the typed signature, removes 
  assert.equal((await inventoryNativePassthroughs(root,reader)).rows[0].status,'converted');
 });
 test('selection and per-source iteration remain semantic functions',async t=>{
- for(const body of ['Call native.read. Match the named item in the goal and return it.','Call native.read once per distinct source. Return the ordered results.','Return native.read(id) unchanged. Summarize the result.']){
+ for(const body of ['Call native.read. Match the named item in the goal and return it.','Call native.read once per distinct source. Return the ordered results.','Return native.read(id) unchanged. Summarize the result.','Call native.read(id) and summarize the result.']){
   const root=await fixture(t,body);assert.equal((await inventoryNativePassthroughs(root,reader)).rows.filter(x=>x.status==='convert').length,0);
  }
 });

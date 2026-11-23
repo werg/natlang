@@ -32,13 +32,13 @@ export async function inventoryNativePassthroughs(root,reader,bindings={}){
   let call=/^Return\s+(?:the\s+(?:(?:exact|actual)\s+)?results? of\s+)?(?:await\s+)?(?:services\.)?([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\(([^()]*)\)(?:\s+(?:unchanged|verbatim|exactly|for the original goal))?\.$/u.exec(body);
   if(call){const rest=body.slice(call[0].indexOf(')')+1).replace(/^[^.]*(?:\.|$)/u,'');if(/\b(?:[Cc]all|[Pp]ass|[Gg]ive|[Ii]f|[Tt]hen|[Cc]hoose|[Ii]nfer|[Cc]lassify|[Ii]nterpret|[Cc]onstruct|[Rr]ewrite)\b/u.test(rest))call=null;}
   let inferred=false;
-  if(/\b(?:match|quote|omit|once per|for each|ignore the archive|preferring|classify|infer|choose|select)\b/iu.test(body))continue;
+  if(/\b(?:match|quote|omit|once per|for each|ignore the archive|preferring|classify|infer|choose|select|summarize|rewrite|transform)\b/iu.test(body))continue;
   if(!call){
    const prefix=/^Call\s+(?:services\.)?([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)(?:\(([^()]*)\))?/u.exec(body);
    if(!prefix)continue;
    const rest=body.slice(prefix[0].length);
    if(body.length>330||/\b(?:if|when|then|otherwise|unless|only|require|identify|compare|choose|select|classify|interpret|infer|derive|construct|check|verify|validate|pass|give|expect|for each)\b/iu.test(rest)||/\b[Cc]all\b/u.test(rest))continue;
-   call=prefix;inferred=prefix[3]===undefined;
+   call=prefix;inferred=prefix[3]===undefined||!/^\s*(?:and return (?:its |the )?(?:actual |exact )?(?:result|receipt|observation)(?: unchanged)?)?\.$/u.test(rest);
   }
   const row={path:relative(root,file),line:1,body_line:source.slice(0,source.indexOf(parts[2])).split('\n').length,source_sha256:hash(source),service:call[1],method:call[2],arguments:call[3],status:'kept',reason:''};rows.push(row);
   const owner=await packageAt(file);if(!owner){row.reason='No enclosing Natlang package declares the service binding';continue;}
