@@ -29,19 +29,14 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(REPO / 'training' / 'neuralese'), str(REPO)]
+from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
+
 GIB = 2**30
 
 
 def log(**fields):
     print(json.dumps({'at': time.strftime('%Y-%m-%dT%H:%M:%S'), **fields}), flush=True)
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, 'rb') as stream:
-        for block in iter(lambda: stream.read(8 << 20), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def is_cold(rel: str, patterns) -> bool:
@@ -115,7 +110,7 @@ def verify(target: Path, staging: Path, hot, cold, digests=None) -> list[str]:
     for rel in hot:
         src, dst = target / rel, staging / rel
         if not dst.is_file() or dst.is_symlink() or dst.stat().st_size != src.stat().st_size \
-                or sha256(dst) != (digests.get(rel) or sha256(src)):
+                or sha256_file_hex(dst) != (digests.get(rel) or sha256_file_hex(src)):
             bad.append(rel)
     for rel in cold:
         link = staging / rel
@@ -165,7 +160,6 @@ def swap(link: Path, staging: Path, quiet_checks: int = 3, wait_seconds: float =
 
 
 def update_registry(link: Path, target: Path) -> list[str]:
-    sys.path[:0] = [str(REPO / 'training' / 'neuralese'), str(REPO)]
     from natlang_neuralese.common import data_registry as reg
     archived = reg.portable(target)
     latest = {}
