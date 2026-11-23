@@ -66,3 +66,50 @@ test('NATLANG_COLLECTOR_REFINEMENT_JUDGE=0 restores the judge-less collector', a
     assert.match(traceText(run), /refinement-undecided/);
   } finally { delete process.env.NATLANG_COLLECTOR_REFINEMENT_JUDGE; }
 });
+
+// Every place a helper's result can carry a refinement (held-v4 B1 lost hv4-untr-008/012 to these shapes before the
+// fix): a field of a record result, the elements of an array result, an inline `nl` lambda made in eval, and a
+// callable-folder TypeScript helper over a refined `.nl` function. Each is judged (true admits, false rejects with
+// refinement-unsatisfied); none ends undecided.
+const VERBATIM = 'copied verbatim from the note';
+const shapeRecord = (id, files, code) => ({ code, record: { version: 'natlang.program/2', id, kind: 'lambda_source', split: 'test',
+  source_ids: [id], source_groups: ['synthetic-only'], semantics: { root: 'r.nl', files,
+    inputs: { note: 'Order A-1 ships Monday.' }, expected: 'A-1', operation: 'exact' } } });
+const rootNl = '---\nargs:\n  note: string\nreturns: string\n---\nGive the order id of note.\n';
+const refinedShapes = {
+  'a record field': shapeRecord('refine-field', { 'r.nl': rootNl,
+    'r/pick.nl': `---\nargs:\n  note: string\nreturns: "{ id: Is<string, \\"${VERBATIM}\\">; n: number }"\n---\nPick the order id of note.\n` },
+  'return (await pick(note)).id;'),
+  'array elements': shapeRecord('refine-array', { 'r.nl': rootNl,
+    'r/pick.nl': `---\nargs:\n  note: string\nreturns: "Is<string, \\"${VERBATIM}\\">[]"\n---\nList the order ids of note.\n` },
+  'return (await pick(note))[0];'),
+  'an inline nl lambda': shapeRecord('refine-inline', { 'r.nl': rootNl },
+    `const pick = nl<(note: string) => Is<string, "${VERBATIM}">>\`Pick the order id of note.\`;\nreturn await pick(note);`),
+  'a TypeScript helper over a refined .nl': shapeRecord('refine-ts', { 'r.nl': rootNl,
+    'r/pick.ts': `import type { Is } from "@natlang/node";\nimport ask from "./ask.nl";\n` +
+      `export default async function pick(note: string): Promise<Is<string, "${VERBATIM}">> { return await ask(note); }\n`,
+    'r/ask.nl': `---\nargs:\n  note: string\nreturns: "Is<string, \\"${VERBATIM}\\">"\n---\nPick the order id of note.\n` },
+  'return await pick(note);'),
+};
+const helperValue = id => id === 'refine-field' ? { id: 'A-1', n: 1 } : id === 'refine-array' ? ['A-1'] : 'A-1';
+for (const [shape, { record: shaped, code }] of Object.entries(refinedShapes)) for (const scorer of [false, true]) for (const verdict of [true, false])
+  test(`a refined helper result in ${shape} is judged by ${scorer ? 'the scorer' : 'a holds child'} (${verdict})`, async () => {
+    let judged = 0;
+    const reply = request => {
+      const name = callName(request);
+      if (name === 'r') return { calls: [['eval', { code, finish: true }]] };
+      if (name === 'holds') {
+        judged += 1;
+        return Array.isArray(request.tools) && request.tools.length === 0 ? { text: JSON.stringify(verdict), calls: [] } :
+          { calls: [['return_result', { status: 'success', value: verdict }]] };
+      }
+      return { calls: [['return_result', { status: 'success', value: helperValue(shaped.id) }]] };
+    };
+    const driver = scorer ? Object.assign(async request => reply(request), { model: 'test-policy',
+      decide: async () => { judged += 1; return { log_probs: verdict ? [0, -6] : [-6, 0] }; } }) : async request => reply(request);
+    const run = await executeProgram(shaped, driver, options(`${shaped.id}-${scorer}-${verdict}`));
+    assert.ok(judged >= 1, 'a judge ran');
+    assert.doesNotMatch(traceText(run), /refinement-undecided/);
+    assert.equal(run.outcome.accepted, verdict);
+    if (!verdict) assert.match(traceText(run), /refinement-unsatisfied/);
+  });
