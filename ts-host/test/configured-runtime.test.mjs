@@ -116,13 +116,15 @@ test('guided generation is on for natlang backends unless the profile says other
   assert.equal('guidance' in (await runtimeModel({ kind: 'external', endpoint: 'http://x', model: 'm', apiKeyEnv: 'K' }, other)).model, false);
 });
 
-test('a managed stock model reads its decisions as {"result": VALUE}; a model natlang trained, an endpoint, or a profile that says so keeps the bare value', async () => {
+test('a managed stock model reads its decisions as {"result": VALUE}; any other model in the form it answers in (auto), or the form its profile names', async () => {
   const { resolveModelChoice } = await import('../dist/model/config.js');
   assert.equal(resolveModelChoice({}).decisionReply, 'result-object');
   assert.equal(resolveModelChoice({ local: { stock: 'lfm3-1.7b-q4_k_m' } }).decisionReply, 'result-object');
   assert.equal(resolveModelChoice({ decisionReply: 'value' }).decisionReply, 'value');
-  assert.equal('decisionReply' in resolveModelChoice({ local: { modelPath: '/models/natlang.gguf' } }), false);
-  assert.equal('decisionReply' in resolveModelChoice({ endpoint: 'http://x', model: 'm' }), false);
+  // a GGUF, an endpoint or a native checkpoint may or may not have been trained on the bare value (B14: an October
+  // checkpoint was not): auto reads each readout in the form the model answers in
+  assert.equal(resolveModelChoice({ local: { modelPath: '/models/natlang.gguf' } }).decisionReply, 'auto');
+  assert.equal(resolveModelChoice({ endpoint: 'http://x', model: 'm' }).decisionReply, 'auto');
   assert.equal(resolveModelChoice({ endpoint: 'http://x', model: 'm', decisionReply: 'result-object' }).decisionReply, 'result-object');
-  assert.throws(() => resolveModelChoice({ decisionReply: 'object' }), /decisionReply must be value or result-object/);
+  assert.throws(() => resolveModelChoice({ decisionReply: 'object' }), /decisionReply must be value, result-object, auto/);
 });

@@ -8767,3 +8767,13 @@ kills it.
   `test_round_stages_preempt_the_standing_collection_which_resumes_on_its_policy` (test_async_train.py, including
   `memory_ledger.preemption_plan` with the real priorities) and
   `test_cycle_stages_outrank_its_collection_and_a_requeued_unit_is_joined` (test_expert_iteration.py).
+
+## 2026-11-23 15:00 Async round preparation resumes per step
+
+The async driver's `prepare` recorded only `stages/prepared.done`, so every driver restart during a round reran frontier, data and build. Today's restarts (11:03, 13:01, 13:03, 14:26) each re-queued round r0001's data stage, which takes hours. The 14:26 restart rewrote `frontier.json` and `data.sh` while the build was reading the data outputs. It also relaunched the old collection at high priority, which preempted the Pop held-v4 collector.
+
+**Fix:** frontier, data and build now each write `stages/<step>.done`, and a restart resumes after the last finished step. A test covers a restart while the build runs.
+
+**For r0001:** the coordinator stopped the 14:26 driver and the duplicate data stage, and marked frontier and data done, since their outputs had completed at 13:57.
+
+**Rule:** only the coordinator restarts the aei1 driver, and only at a round boundary unless a fix requires otherwise.

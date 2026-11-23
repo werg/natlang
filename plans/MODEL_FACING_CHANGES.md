@@ -3,6 +3,30 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — a readout without reasoning is read in the reply form the model answers in (`decisionReply: 'auto'`); reasoning samples at T=1 (B14 instant collapse)
+
+- **What changed.** Every profile except a managed stock model now defaults to `decisionReply: 'auto'` (it was `value`
+  for native profiles, GGUF paths and endpoints). Under `auto`, a joint readout without reasoning (`readout: instant`,
+  `NATLANG_DECISION_SAMPLES=0`, a refused reasoning scorer) is scored in both forms, the bare value and
+  `{"result": VALUE}` (`framedDecision`'s existing request texts), and each option alone; the form whose lone scores sum
+  to more probability is read (`decision-frame.ts` `autoFramedScores`; the trace's `decision_readout` carries
+  `reply_frame` and `reply_masses`). Reasoned readouts, field-by-field steps and requests that are not readouts keep the
+  bare value. Same in the in-page engine (`BrowserModelLoadOptions.decisionReply`, default `auto`). Reasoning samples of
+  a `readout: decision` call are drawn at the call's temperature, else T=1 (they took the backend default, greedy on the
+  native engine, so the 4 samples were one reasoning).
+- **Why (first principles).** A readout's probabilities are the model's answer distribution only where the model
+  answers. The B14 checkpoint (5ff07638) after an empty think block opens a tool call (p 0.97); the bare value gets
+  ~e^-8 (`"` + `billing`) to e^-13 (`true`), and among such improbable continuations the first listed option and the
+  value's first-token merge decide (`"sp`+`am` -10 nats, `true` over `false` by ~2 nats on every ticket). In
+  `{"result": VALUE}` the same model reads the ticket. Whether a checkpoint answers the bare value instantly depends
+  on its training, which nothing in its files records, so the readout measures it per call.
+- **Prompt text.** No new text: the two request texts are `decisionPrompt`'s existing ones.
+- **Opt-outs.** `decisionReply: 'value'` (or `result-object`) in the profile, `NATLANG_DECISION_REPLY=value`;
+  `NATLANG_DECISION_REASONING_TEMPERATURE=backend` (or a number).
+- **Measured** (28 held triage tickets, the B14 prompts at 19844f4d): on 5ff07638 (llama.cpp fork, Q8_0) bare value
+  4/28 units, `{"result": VALUE}` 26/28; on aei1's policy e15b20a8 (Colab SGLang) bare value 21/28, object 18/28, auto 21/28
+  (value chosen on 55 of 56 readouts). Bench re-measure: DECISIONS 2026-11-23 "instant readout collapse".
+
 ### 2026-11-23 — Semantic-FP language and eval surface (da8ae933a, 8e586c02e; recorded in review)
 
 These two commits changed what the model sees without an entry here; this records them, with the review's fixes.

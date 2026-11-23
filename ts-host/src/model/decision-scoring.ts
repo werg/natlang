@@ -10,7 +10,7 @@
  *   - `open_reply` (a field-by-field step of a record decision) scores each reply as the start of the message: continued
  *     rather than closed on the chat-completions route, the item's `open_reply` on the batch endpoint, echoed back.
  */
-import type { DecisionRequest, DecisionScores } from '../contracts.js';
+import type { DecisionRequest, DecisionScorer, DecisionScores } from '../contracts.js';
 
 type Json = Record<string, unknown>;
 
@@ -93,4 +93,14 @@ export function scoresFromBatchResult(result: BatchScoreResult, item: Pick<Decis
   return { log_probs: result.log_probs, ...(result.tokens ? { tokens: result.tokens } : {}),
     ...(Number.isSafeInteger(result.prompt_tokens) ? { prompt_tokens: result.prompt_tokens } : {}),
     ...(result.native_decision_capture ? { native_decision_capture: result.native_decision_capture } : {}) };
+}
+
+/** Score `items` together on `scorer` (its `scoreMany` when it batches, else concurrently), in order; the first item
+ * that fails fails the whole (an auto-framed readout needs every score: decision-frame.ts `autoFramedScores`). */
+export async function scoreAll(scorer: DecisionScorer, items: DecisionRequest[], signal?: AbortSignal): Promise<DecisionScores[]> {
+  if (items.length === 1) return [await scorer(items[0]!, signal)];
+  const settled = scorer.scoreMany ? await scorer.scoreMany(items, signal) : await Promise.allSettled(items.map(item => scorer(item, signal)));
+  const failed = settled.find(result => result.status === 'rejected');
+  if (failed) throw (failed as PromiseRejectedResult).reason;
+  return settled.map(result => (result as PromiseFulfilledResult<DecisionScores>).value);
 }

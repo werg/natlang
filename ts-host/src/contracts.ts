@@ -169,6 +169,9 @@ export type DecisionScores = { log_probs: number[]; tokens?: number[];
    * instead of the most probable one (its sampling receipt is recorded with the capture). */
   chosen?: number;
   native_decision_capture?: Record<string,unknown>;
+  /** The reply form an `auto` readout was read in and each form's total probability (natural log), decision-frame.ts
+   * `autoFramedScores`; absent when the form was fixed. */
+  reply_frame?: 'value' | 'result-object'; reply_masses?: Record<'value' | 'result-object', number>;
   /** Host-only association to the active learning recorder. */
   x_natlang_native_recorded_turn?: string;
   /** Set by a coalescing scorer: the batch this readout was scored in. */

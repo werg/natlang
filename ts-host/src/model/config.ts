@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { defaultNatlangConfigDirectory } from '../package/store.js';
 import { DEFAULT_LOCAL_MODEL, stockModel, type LocalModelRelease } from '../model-catalog.js';
 import { fingerprint } from '../adaptation/identity.js';
-import { DECISION_REPLIES } from '../decision-frame.js';
+import { DECISION_REPLY_SETTINGS } from '../decision-frame.js';
 import type { ProgramModel } from '../package/manifest.js';
 import type { ModelConfig, NatlangRuntimeOptions } from '../runtime/runtime.js';
 import type { LocalServerSettings } from '../llama/slots.js';
@@ -24,9 +24,11 @@ export type BatchingSettings = {
 export type ModelProfile = {
   /** Match the prompt rendering declared by the trained weights; unadapted models use full. */
   promptRendering?: import('../native/system-prompts.js').PromptRendering;
-  /** The reply a decision readout scores (decision-frame.ts): `value` for a model natlang trained, `result-object` for an
-   * instruction model that was not. A managed stock model's default is `result-object`, anything else's `value`. */
-  decisionReply?: import('../decision-frame.js').DecisionReply;
+  /** The reply a decision readout scores (decision-frame.ts): `value` for a model natlang trained to answer with the bare
+   * value, `result-object` for an instruction model that was not, `auto` to read each readout without reasoning in the
+   * form the model puts more probability on. A managed stock model's default is `result-object`, anything else's `auto`
+   * (`NATLANG_DECISION_REPLY` overrides it). */
+  decisionReply?: import('../decision-frame.js').DecisionReplySetting;
   endpoint?: string; chatCompletionsUrl?: string; provider?: string; model?: string; apiKeyEnv?: string;
   /** The endpoint is a native Neuralese reference server: tuned weights, native state and soft instruction/skill
    * states run through its exact native path (docs/TUNING.md). */
@@ -86,8 +88,8 @@ function mergeRequest(defaults: Record<string, unknown>, request: Record<string,
 export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.promptRendering !== undefined && !['full', 'program-header'].includes(profile.promptRendering))
     throw new Error('promptRendering must be full or program-header');
-  if (profile.decisionReply !== undefined && !DECISION_REPLIES.includes(profile.decisionReply))
-    throw new Error(`decisionReply must be ${DECISION_REPLIES.join(' or ')}`);
+  if (profile.decisionReply !== undefined && !DECISION_REPLY_SETTINGS.includes(profile.decisionReply))
+    throw new Error(`decisionReply must be ${DECISION_REPLY_SETTINGS.join(', ')}`);
   if (profile.runtime && (typeof profile.runtime !== 'object' || Array.isArray(profile.runtime)))
     throw new TypeError('profile.runtime must be an object');
   if (profile.runtime && 'review' in profile.runtime)
@@ -160,7 +162,7 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
       throw new Error('batching.scoreEndpoint requires batching.mode explicit-batch');
   }
   const common = { promptRendering: profile.promptRendering ?? 'full', headers: profile.headers, runtime: profile.runtime,
-    ...(profile.decisionReply === undefined ? {} : { decisionReply: profile.decisionReply }),
+    decisionReply: profile.decisionReply ?? 'auto',
     ...(profile.concurrency === undefined ? {} : { concurrency: profile.concurrency }),
     ...(batching === undefined ? {} : { batching }) };
   if (profile.provider) return { ...common, kind: 'pi-provider', provider: profile.provider, model: profile.model!,
@@ -178,7 +180,7 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   const release = profile.local?.modelPath ? undefined : profile.local?.stock ? stockModel(profile.local.stock) : DEFAULT_LOCAL_MODEL;
   const defaults = release?.request as Record<string, unknown> | undefined;
   // A stock model was not trained on the bare-value reply the readout scores; it answers in an object (decision-frame.ts).
-  return { ...common, ...(profile.decisionReply === undefined && release ? { decisionReply: 'result-object' as const } : {}),
+  return { ...common, ...(profile.decisionReply === undefined ? { decisionReply: release ? 'result-object' as const : 'auto' as const } : {}),
     kind: 'managed-local', model: profile.local?.modelId ?? release?.id ?? 'local-gguf',
     request: defaults ? mergeRequest(structuredClone(defaults), profile.request) : profile.request, local: profile.local, ...(release ? { release } : {}) };
 }
