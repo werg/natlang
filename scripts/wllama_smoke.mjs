@@ -12,6 +12,12 @@
  * `--items` scores those score items (a JSON array, e.g. scripts/semantic_fp/decision_parity.py `llama-items`) on both
  * engines in place of the built-in ones, and `--out` writes both engines' results (`decision_parity.py llama`).
  *
+ * Tuple results (docs/ENGINE_PARITY.md "Result schemas: tuples"): both engines get one `return_result` tool whose value is
+ * the runtime's schema of `[string, number]` and of `[string, number?]` (`schemaOf`), told to return a value that breaks it
+ * (`["red", "green", "blue"]`), and, for the optional tail, `["red"]`. The smoke fails unless each engine's grammar
+ * keeps the value to the type and lets the one-element tail through; an unconstrained control (`value: {}`) shows the
+ * prompt elicits the breaking value.
+ *
  * Needs playwright (npx playwright, or a wllama checkout's node_modules via NODE_PATH) and Chrome. Exits 1 when the
  * page renders or tokenizes an item differently from the native server (its prompt and reply token counts), ranks its
  * options differently, differs by more than the tolerance, or ranks a repeated item differently or moves it by more than
@@ -80,6 +86,27 @@ items.push({ messages: [triage, ticket], continuations: ['{"label":"billing","ur
 items.push({ messages: [triage, ticket], open_reply: true,
   continuations: ['{"label":"billing","', '{"label":"technical","', '{"label":"other","'] });
 if (itemsFile) items.splice(0, items.length, ...JSON.parse(readFileSync(itemsFile, 'utf8')));
+
+// Tuple results: the runtime's result schemas (ts-host/dist/native/agent.js schemaOf) under each engine's tool grammar.
+const { schemaOf } = await import(pathToFileURL(resolve(dirname(fileURLToPath(import.meta.url)), '../ts-host/dist/native/agent.js')).href);
+const { TypeEnv, parseType } = await import(pathToFileURL(resolve(dirname(fileURLToPath(import.meta.url)), '../ts-host/dist/native/types.js')).href);
+const tupleRequest = (value, schema) => ({ max_tokens: 160, temperature: 0, chat_template_kwargs: { enable_thinking: false },
+  messages: [{ role: 'system', content: 'You finish a function call by calling return_result.' },
+    { role: 'user', content: `Call return_result with status "success" and value ${value}, written exactly so.` }],
+  tools: [{ type: 'function', function: { name: 'return_result', description: 'Finish with the result.', parameters: { type: 'object',
+    properties: { status: { type: 'string', enum: ['success', 'failed'] }, value: schema }, required: ['status', 'value'] } } }],
+  tool_choice: 'auto' });
+const tupleCases = [
+  { type: '[string, number]', ask: '["red", "green", "blue"]', min: 2, max: 2 },
+  { type: '[string, number?]', ask: '["red", "green", "blue"]', min: 1, max: 2 },
+  { type: '[string, number?]', ask: '["red"]', min: 1, max: 2, expect: ['red'] },
+  { type: 'control', ask: '["red", "green", "blue"]', expect: ['red', 'green', 'blue'] },
+].map(item => ({ ...item, request: tupleRequest(item.ask, item.type === 'control' ? {} : schemaOf(parseType(item.type), new TypeEnv())) }));
+const tupleValue = reply => {
+  const call = reply?.choices?.[0]?.message?.tool_calls?.[0];
+  if (!call) return { error: JSON.stringify(reply?.choices?.[0]?.message ?? reply).slice(0, 300) };
+  try { return { value: JSON.parse(call.function.arguments).value }; } catch { return { error: call.function.arguments }; }
+};
 const templateText = template ? readFileSync(template, 'utf8') : undefined;
 
 const port = 18000 + Math.floor(Math.random() * 1000), base = `http://127.0.0.1:${port}`;
@@ -89,7 +116,7 @@ const native = spawn(server, ['-m', model, '--port', String(port), '-c', String(
 const post = async (path, body, init = {}) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body), ...init });
 const score = async scored => (await (await post('/v1/natlang/score', { items: scored })).json()).results.map(result => result.log_probs ?? result);
-let expected, nativeResults, states = null;
+let expected, nativeResults, states = null, nativeTuples;
 try {
   for (let attempt = 0; attempt < 300 && !nativeResults; attempt++) {
     await new Promise(done => setTimeout(done, 1000));
@@ -112,6 +139,8 @@ try {
       continuations: options };
     states = { produce, id, wire: Buffer.from(wire).toString('base64'), consume, expected: (await score([consume]))[0] };
   }
+  nativeTuples = [];
+  for (const item of tupleCases) nativeTuples.push(tupleValue(await (await post('/v1/chat/completions', item.request)).json()));
   await runPage();
   if (states && page.states) await crossCheck();
 } finally { native.kill(); }
@@ -124,7 +153,7 @@ async function runPage() {
   try {
     const tab = await browser.newPage();
     await tab.goto(`http://127.0.0.1:${http.address().port}/`);
-    page = await tab.evaluate(async ({ items, states, templateText, templateKwargs, contextTokens }) => {
+    page = await tab.evaluate(async ({ items, states, templateText, templateKwargs, contextTokens, tupleRequests }) => {
       const { Wllama } = await import('/esm/index.js');
       const engine = new Wllama({ default: '/esm/wasm/wllama.wasm' });
       await engine.loadModelFromUrl(location.origin + '/model.gguf', { useCache: false, n_ctx: contextTokens, n_gpu_layers: 0,
@@ -132,9 +161,16 @@ async function runPage() {
         ...(templateKwargs ? { default_template_kwargs: templateKwargs } : {}) });
       const all = await engine.createNatlangScore({ items });
       const again = await engine.createNatlangScore({ items: [items[1]] });
+      const tuples = [];
+      for (const request of tupleRequests) {
+        const reply = await engine.createChatCompletion(request);
+        const call = reply?.choices?.[0]?.message?.tool_calls?.[0];
+        if (!call) { tuples.push({ error: JSON.stringify(reply?.choices?.[0]?.message ?? reply).slice(0, 300) }); continue; }
+        try { tuples.push({ value: JSON.parse(call.function.arguments).value }); } catch { tuples.push({ error: call.function.arguments }); }
+      }
       const result = { shapes: all.results.map(result => ({ tokens: result.tokens, prompt_tokens: result.prompt_tokens, open_reply: result.open_reply })),
         all: all.results.map(result => result.log_probs ?? result), again: again.results[0].log_probs ?? again.results[0],
-        capabilities: engine.capabilities };
+        capabilities: engine.capabilities, tuples };
       if (!states || !engine.capabilities.nativeStateStore) return result;
       // the server's state, put after load
       const wire = Uint8Array.from(atob(states.wire), char => char.charCodeAt(0));
@@ -147,7 +183,7 @@ async function runPage() {
       let binary = ''; for (const byte of got?.state ?? []) binary += String.fromCharCode(byte);
       return { ...result, states: { put, consumed: consumed.log_probs ?? consumed, id: id ?? null, meta: got?.meta ?? null,
         wire: got ? btoa(binary) : null, reply: id ? null : reply } };
-    }, { items, states, templateText, templateKwargs, contextTokens });
+    }, { items, states, templateText, templateKwargs, contextTokens, tupleRequests: tupleCases.map(item => item.request) });
   } finally { await browser.close(); http.close(); rmSync(profile, { recursive: true, force: true }); }
 }
 
@@ -194,11 +230,26 @@ expected.forEach((scores, index) => {
 if (rank(page.again) !== rank(page.all[1])) failures.push('a repeated item ranks its options differently');
 const drift = Math.max(...page.again.map((score, option) => Math.abs(score - page.all[1][option])));
 if (drift > tolerance) failures.push(`a repeated item moved by ${drift.toFixed(3)} nats`);
+const tupleKept = (item, got) => {
+  if (got.error) return `no return_result call: ${got.error}`;
+  // The control's value schema admits a string, so an engine may read the value as its text.
+  let value = got.value;
+  if (item.type === 'control' && typeof value === 'string') try { value = JSON.parse(value); } catch { /* compared as it is */ }
+  if (item.expect) return JSON.stringify(value) === JSON.stringify(item.expect) ? null : `value ${JSON.stringify(value)}, asked ${item.ask}`;
+  return Array.isArray(value) && value.length >= item.min && value.length <= item.max && typeof value[0] === 'string' &&
+    (value.length < 2 || typeof value[1] === 'number') ? null : `value ${JSON.stringify(value)} breaks ${item.type}`;
+};
+for (const [engine, got] of [['native', nativeTuples], ['page', page.tuples]])
+  tupleCases.forEach((item, index) => {
+    const problem = tupleKept(item, got[index]);
+    if (problem) failures.push(`tuple result ${item.type} (${engine}, asked ${item.ask}): ${problem}`);
+  });
 if (states && !page.states) failures.push('the natlang GGUF\'s native states were not checked: the page build has no nativeStateStore');
 if (outFile) writeFileSync(outFile, JSON.stringify({ schema: 'natlang.wllama-smoke-scores/1', model, server, template: template ?? null,
   template_kwargs: templateKwargs ?? null, items, native: nativeResults, page: page.all.map((log_probs, index) =>
     Array.isArray(log_probs) ? { log_probs, ...page.shapes[index] } : { error: log_probs }) }, null, 1) + '\n');
 console.log(JSON.stringify({ native: expected, page: page.all, repeated: page.again, capabilities: page.capabilities,
+  tuples: tupleCases.map((item, index) => ({ type: item.type, asked: item.ask, native: nativeTuples[index], page: page.tuples[index] })),
   ...(states ? { native_states: { server: { id: states.id, consumed: states.expected }, page: { ...states.page, consumed: page.states?.consumed } } } : {}),
   failures }));
 process.exit(failures.length ? 1 : 0);

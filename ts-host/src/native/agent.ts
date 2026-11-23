@@ -285,6 +285,10 @@ export function collapseHistory(messages: Record<string, unknown>[], keptStart: 
 }
 
 
+/** NATLANG_TUPLE_SCHEMA=prefix-items: an optional-tail tuple's schema as one prefixItems schema (before 2026-11-23). */
+const tupleSchemaPrefixItems = (): boolean =>
+  typeof process !== 'undefined' && (process.env.NATLANG_TUPLE_SCHEMA ?? '').trim() === 'prefix-items';
+
 export function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> {
   if (depth > 5) return {};
   const resolved = env.resolve(type);
@@ -299,14 +303,15 @@ export function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, un
     { anyOf: resolved.members.map(part => schemaOf(part, env, depth + 1)) };
   if (resolved.kind === 'list') return { type: 'array', items: schemaOf(resolved.element, env, depth + 1) };
   if (resolved.kind === 'tuple') {
-    const minItems = resolved.minLength ?? resolved.elements.length;
-    const maxItems = resolved.elements.length;
-    return {
-      type: 'array',
-      prefixItems: resolved.elements.map(element => schemaOf(element, env, depth + 1)),
-      minItems,
-      maxItems,
-    };
+    const elements = resolved.elements.map(element => schemaOf(element, env, depth + 1));
+    const minItems = resolved.minLength ?? elements.length;
+    const exact = (length: number) => ({ type: 'array', prefixItems: elements.slice(0, length), minItems: length, maxItems: length });
+    // An optional tail is one exact-length tuple per admitted length (docs/ENGINE_PARITY.md "Result schemas: tuples"):
+    // llama.cpp's grammar (the managed server and the page) writes every prefixItems element and ignores minItems, so
+    // `[A, B?]` as one prefixItems schema forced B. NATLANG_TUPLE_SCHEMA=prefix-items keeps that one schema.
+    if (minItems === elements.length || tupleSchemaPrefixItems())
+      return { ...exact(elements.length), minItems };
+    return { anyOf: Array.from({ length: elements.length - minItems + 1 }, (_, index) => exact(minItems + index)) };
   }
   if (resolved.kind === 'dict') return { type: 'object', additionalProperties: schemaOf(resolved.element, env, depth + 1) };
   if (resolved.kind === 'record') return { type: 'object',
