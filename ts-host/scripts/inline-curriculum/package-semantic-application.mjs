@@ -7,9 +7,13 @@ import { curriculumCase, returnCall } from './lib.mjs';
 import { verifyCases } from '../../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 
-const args = process.argv.slice(2);
+const argv = process.argv.slice(2);
+// --no-review-custody: an execution measurement (scripts/semantic_fp/equivalence.py) runs the program on its world
+// and verifier; it needs no source-review receipts, and the package report records that none were bound.
+const reviewCustody = !argv.includes('--no-review-custody');
+const args = argv.filter(arg => arg !== '--no-review-custody');
 if (args.length !== 4 || args[0] !== '--manifest' || args[2] !== '--out')
-  throw Error('usage: node package-semantic-application.mjs --manifest PROJECT_JSON --out FRESH_DIRECTORY');
+  throw Error('usage: node package-semantic-application.mjs --manifest PROJECT_JSON --out FRESH_DIRECTORY [--no-review-custody]');
 const repo = resolve(import.meta.dirname, '../../..');
 const manifestPath = resolve(args[1]);
 const output = resolve(args[3]);
@@ -192,7 +196,7 @@ if (manifest.external_verifier_path) {
     sha256: exactVerifierHash, oracle };
 }
 const reviewBindings = [];
-if (manifest.independent_reviews !== undefined) {
+if (reviewCustody && manifest.independent_reviews !== undefined) {
   if (!Array.isArray(manifest.independent_reviews) ||
       new Set(manifest.independent_reviews.map(review => review?.path)).size !== manifest.independent_reviews.length)
     throw Error('independent_reviews must list distinct receipt paths');
@@ -207,7 +211,7 @@ if (manifest.independent_reviews !== undefined) {
     reviewBindings.push({ path: review.path, sha256: actual, reviewer: review.reviewer });
   }
 }
-if (manifest.readiness?.independent_oracle_review === true && reviewBindings.length === 0)
+if (reviewCustody && manifest.readiness?.independent_oracle_review === true && reviewBindings.length === 0)
   throw Error('independent oracle review needs a pinned review receipt');
 row.generation.collection = 'teacher';
 row.generation.source_quality = 'Exact authored natlang project snapshot; external verifier and independent semantic review required.';
@@ -249,7 +253,7 @@ const report = { schema: 'natlang.semantic-application-package/1', id: manifest.
     hasFullGold ? 'candidate_pending_reference_and_semantic_review' :
     exactVerifierHash ? 'held_exact_verifier_bound_semantic_review_pending' :
       'held_invariant_oracle_requires_external_verifier',
-  source_review_binding: { reviewed: sourceReviewed, receipts: reviewBindings },
+  source_review_binding: { reviewed: sourceReviewed, receipts: reviewBindings, custody_checked: reviewCustody },
   training_admission: false, program_file_count: Object.keys(files).length,
   nl_file_count: Object.keys(files).filter(path => path.endsWith('.nl')).length,
   fixture_file_count: Object.keys(fixture).length, graph_edge_count: graph?.edges?.length ?? null,
