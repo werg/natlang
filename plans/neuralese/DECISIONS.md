@@ -8643,3 +8643,33 @@ stores existed. Native reference engine findings, not fixed: its batched decode 
 CUDA cap (natlang test of 210 examples at once), and under load its health route stops answering so `natlang serve`
 kills it.
 
+
+## 2026-11-23 15:30 Semantic-FP applications, tools, examples and verifiers: review of da8ae933a and 8e586c02e (rv2)
+
+- **Why:** the two campaign commits added ten flagship apps, two Tier 0 tools, `examples/pr-review`, playground and
+  example upgrades and four verifiers in one push. The review (scope: applications, examples, playground, website,
+  bench, migrator changes, `code_test.mjs`/`policy_eval.mjs`, kit v2) found defects that make results untrustworthy.
+- **Verifiers:** `code_test.mjs` ran model code in a vm context seeded with host intrinsics and called it with host
+  objects, so `x.constructor.constructor('return process')()` reached the verifier's process (shown: escape candidates
+  scored 1), and a synchronous loop in a case hung the verifier. Now: a worker thread with memory limits, a fresh
+  context without string code generation, JSON in and out only, the vm timeout per step and worker termination for
+  promise loops; TypeScript candidates are type-stripped; an empty `cases` is refused. `policy_eval.mjs` accepted an
+  answer that skipped cases while staying above `min_accuracy`; every case now needs a verdict. Tests cover each
+  rejection.
+- **Apps:** the 12 new apps had `natlang.json` `{}`, so `natlang test` refused them; they now have real manifests.
+  Shared pluggable misuse in inbox-pilot, ci-doctor and runbook-engine (nl decisions run twice, shadow never served
+  crisp) fixed; runbook-engine ran dependents of a step whose health check never converged; ci-doctor's assertion guard
+  passed weakened assertions; diligence accepted citations from the wrong section; pr-shepherd treated Python
+  re-indentation and string-internal spacing as trivial. Fixture packs that held only counts or names with no inputs
+  (sem-grep-sql, codemod-studio, diligence) are deleted; the remaining packs are checked against the crisp paths in the
+  tier tests. Each DECOMPOSITION lists what is not built (e.g. codemod-studio re-implements `applications/migration`'s
+  edit/validate/repair loop instead of calling it; sem-grep-sql does not generalise nldb).
+- **Tier 0:** idiom-reviewer now classifies steps with the migrator's `stepKind.nl` contract (copied; packages cannot
+  import each other's sources, so the shared home is `@natlang/std`), judges prose interpreters per function, and runs
+  as `natlang run applications/idiom-reviewer -- DIR`; `natlang check --idiom` does not call it yet. task-author
+  admitted tasks without running any oracle and with no keyword baseline; drafts now carry a reference, ≥ 2 negatives
+  and a keyword-baseline answer, replayed through a required `replay` service, with a required `isReserved` custody
+  check.
+- **Live (policy e15b20a8 via the aei1 collection actor):** pr-shepherd examples 3/5, idiom-reviewer 5/6, inbox-pilot
+  3/3, runbook-engine 4/4, semantic-etl 2/2, sem-sheet 1/2, task-author 1/2, examples/pr-review 2/2, examples/triage
+  21/28.
