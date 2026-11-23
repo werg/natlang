@@ -1,14 +1,39 @@
 #!/bin/bash
 # Continuous storage sweep (owner, 2026-10-28: keep freeing disk space all the time).
-# Run by the natlang-storage-sweep user timer every 30 minutes. Deletes only disposable scratch that no process
-# has open and that has not been modified for SWEEP_AGE_MINUTES: test temp roots, natlang scratch directories in
-# /tmp, torch inductor caches and the external test scratch. Logs what it removed and the free space afterwards;
-# writes a low-space warning when root falls below SWEEP_ALERT_GB.
+# Run by the natlang-storage-sweep user timer every 30 minutes, under the memory ledger
+# (scripts/systemd/natlang-storage-sweep.service). Deletes disposable scratch that no process has open and that has
+# not been modified for SWEEP_AGE_MINUTES: test temp roots, natlang scratch directories in /tmp, torch inductor caches
+# and the external test scratch. Then removes experiment pins and code worktrees on the root disk that no process,
+# unit or watch/state file references and that are older than SWEEP_PIN_AGE_HOURS (prune_stale_checkouts.py;
+# SWEEP_PINS=0 opts out). Logs what it removed and the free space afterwards; below a disk floor (root
+# SWEEP_ROOT_FLOOR_GB, external SWEEP_EXTERNAL_FLOOR_GB) it appends a DISK FLOOR line to the ops log
+# (SWEEP_OPS_LOG) and the journal, and writes storage-low.json. The floors are checked first;
+# SWEEP_ALERTS_ONLY=1 stops there (the unit's ExecStartPre, which needs no ledger admission).
 set -uo pipefail
 AGE=${SWEEP_AGE_MINUTES:-180}
 ALERT_GB=${SWEEP_ALERT_GB:-60}
+ROOT_FLOOR_GB=${SWEEP_ROOT_FLOOR_GB:-40}
+EXTERNAL_FLOOR_GB=${SWEEP_EXTERNAL_FLOOR_GB:-50}
+PIN_AGE_HOURS=${SWEEP_PIN_AGE_HOURS:-6}
+OPS_LOG=${SWEEP_OPS_LOG:-$HOME/data/lfm3-rl-dgx-20261029/ops/storage-alerts.log}
 LOG=${SWEEP_LOG:-$HOME/.local/state/natlang/storage-sweep.log}
 mkdir -p "$(dirname "$LOG")"
+# Disk floors: one line per sweep while a disk is under its floor, in the ops log and the journal.
+floor_alert() {  # MOUNT FLOOR_GB
+  mountpoint -q "$1" || [ "$1" = / ] || return 0
+  local avail
+  avail=$(df -BG --output=avail "$1" | tail -1 | tr -dc 0-9)
+  if [ -n "$avail" ] && [ "$avail" -lt "$2" ]; then
+    local line="$(date -Is) DISK FLOOR $1: ${avail} GiB free < floor $2 GiB (storage_sweep; free space: AGENTS.md Storage hygiene)"
+    echo "$line" >> "$LOG"
+    mkdir -p "$(dirname "$OPS_LOG")" 2>/dev/null && echo "$line" >> "$OPS_LOG"
+    echo "$line" >&2
+  fi
+}
+floor_alert / "$ROOT_FLOOR_GB"
+floor_alert /mnt/external "$EXTERNAL_FLOOR_GB"
+# the unit's ExecStartPre: the alerts alone, which need no memory, so they fire even when the ledger cannot admit
+[ "${SWEEP_ALERTS_ONLY:-0}" = 1 ] && exit 0
 # A live pytest root must not prevent pruning its completed sibling runs. Never
 # delete the whole pytest-of directory: its pytest-current and live PID locks
 # belong to ongoing tests even when they have no files open at this instant.
@@ -45,6 +70,11 @@ while IFS= read -r path; do
     echo "$(date -Is) removed $path ${bytes:-0}" >> "$LOG"
   fi
 done < <(candidates)
+
+if [ "${SWEEP_PINS:-1}" != 0 ]; then
+  /usr/bin/python3 "$(dirname "$0")/prune_stale_checkouts.py" --apply --min-age-hours "$PIN_AGE_HOURS" \
+    | grep -v '"kept"' >> "$LOG" 2>&1
+fi
 
 free_gb=$(df -BG --output=avail / | tail -1 | tr -dc 0-9)
 echo "$(date -Is) sweep removed $((removed / 1073741824)) GiB; root free ${free_gb} GiB" >> "$LOG"
