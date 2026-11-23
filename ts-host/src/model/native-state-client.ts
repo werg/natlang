@@ -172,8 +172,8 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
     if (imported.adapter_state_consumption)
       return failure('neuralese-native-source-integrity', 'adapter-state receipt requires its explicit consumption mode');
     if (imported.mode === 'in-context-text') {
-      // A text-written state read as its exact tokens in this producer's own context: the source stream holds the
-      // tokens, and the receipt names the state they came from.
+      // A text-written state or produce span read as its exact tokens in this producer's own context: the source
+      // stream holds the tokens, and the receipt names the state they came from.
       if (imported.observed_native_state_id !== imported.id)
         return failure('neuralese-native-source-integrity', 'in-context text import must name the state whose tokens it read');
       continue;

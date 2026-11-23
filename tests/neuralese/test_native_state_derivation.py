@@ -10,6 +10,16 @@ from natlang_neuralese.model.native_state_derivation import optimize_state,verif
 from natlang_neuralese.serve.store import encode_native_state,decode_native_state,TensorStore
 
 
+@pytest.fixture(autouse=True)
+def _splice_produced_states(monkeypatch):
+    """These tests exercise the exact splice of text-written and produced states (gradients through the state, capture
+    occurrences, the splice protocol); engines read both as their tokens in the reader's context by default
+    (engine.reads_in_context; covered in test_sglang_actor and test_native_serve), so they opt out here."""
+    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
+    monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
+
+
+
 @pytest.mark.parametrize('family',['lfm'])
 @pytest.mark.parametrize('algorithm',['sgd','adam'])
 def test_actual_state_updates_restore_immutable_origin_and_named_moments(tmp_path,family,algorithm):

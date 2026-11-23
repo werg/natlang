@@ -279,7 +279,7 @@ def test_native_engine_spans_are_stored_by_the_native_path(tmp_path, monkeypatch
     front, _, _ = _front(tmp_path)
     stored = []
     monkeypatch.setattr(Engine, '_native_store_capture',
-                        lambda self, ids, chunks, *, text, owner=None: stored.append(chunks) or ('block', SimpleNamespace(id='b1')))
+                        lambda self, ids, chunks, *, text, owner=None, producer_kind=None: stored.append(chunks) or ('block', SimpleNamespace(id='b1')))
     monkeypatch.setattr(SglangEngine, '_sglang_capture', lambda *a, **k: pytest.fail('a native span went to SGLang'))
     chunk = {'token_ids': torch.tensor([3, 4]), 'embeddings': torch.zeros(2, 4)}
     block, record = front._native_store_capture([3, 4], [chunk], text='x')
@@ -309,18 +309,11 @@ def test_a_block_from_an_earlier_policy_version_splices_exactly_and_keeps_its_pr
     assert front.producer_policy('blk') == {'policy_sha256': 'c' * 64, 'version': 1, 'engine': 'sglang'}
 
 
-def test_write_checkpoint_records_learner_step_and_source_step_separately(tmp_path):
-    import exp0_sft
+def test_pruned_checkpoint_records_learner_step_and_source_step_separately(tmp_path):
     import grpo
 
-    embed = torch.nn.Embedding(6, 4)
-    proj = torch.nn.Linear(4, 4, bias=False)
-    model = torch.nn.Module()
-    model.model = torch.nn.Module()
-    model.model.embed_tokens = embed
-    model.model.proj = proj
-    orig_embed = embed.weight.detach().to(torch.bfloat16).clone()
-    orig_proj = proj.weight.detach().to(torch.bfloat16).clone()
+    orig_embed = torch.randn(6, 4).to(torch.bfloat16)
+    orig_proj = torch.randn(4, 4).to(torch.bfloat16)
     state = {
         'schema': 'natlang.native-checkpoint/1',
         'model_config': {'marker_ids': [4, 5]},
@@ -329,15 +322,6 @@ def test_write_checkpoint_records_learner_step_and_source_step_separately(tmp_pa
                            'lm_head.weight': orig_embed},
         'step': 120,
     }
-    sft_path = tmp_path / 'sft.pt'
-    exp0_sft.write_checkpoint(model, state, [4, 5], sft_path, '1' * 64, step=17)
-    written = torch.load(sft_path, map_location='cpu', weights_only=False)
-    assert written['learner_step'] == 17
-    assert written['step'] == 17
-    assert written['source_step'] == 120
-    assert written['inference_source']['learner_step'] == 17
-    assert written['inference_source']['source_step'] == 120
-
     native_rows = {'embedding_rows': orig_embed[torch.tensor([4, 5])].clone(),
                    'tied_head': True, 'names': ['model.embed_tokens.weight', 'model.proj.weight']}
     grpo_path = tmp_path / 'grpo.pt'

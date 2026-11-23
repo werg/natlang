@@ -1116,42 +1116,6 @@ def parity(args):
                       'frac_over_0.5': (d.abs() > 0.5).float().mean().item()}))
 
 
-def write_checkpoint(model, state, special, out_path, source_sha256, step, trained=None):
-    """A pruned (inference-only) native checkpoint: the trained backbone in the source's bf16 layout, the source's interface.
-    ``trained``: the backbone already on the host ({name: bf16 tensor}, e.g. a pinned snapshot); else read from ``model``."""
-    backbone = {}
-    original = state['backbone_state']
-    for name, value in original.items():
-        if name == 'lm_head.weight':
-            continue
-        backbone[name] = value
-    if trained is None:
-        trained = {k: v.detach().to('cpu', torch.bfloat16) for k, v in model.state_dict().items() if k != 'lm_head.weight'}
-    changed = 0
-    for name in list(backbone):
-        new = trained[name]
-        if name == 'model.embed_tokens.weight':
-            new = new.clone()
-            new[torch.tensor(special)] = original[name][torch.tensor(special)]
-        changed += int((new != original[name]).sum())
-        backbone[name] = new.contiguous()
-    if 'lm_head.weight' in original:
-        backbone['lm_head.weight'] = backbone['model.embed_tokens.weight']
-    out = {k: state[k] for k in ('schema', 'model_config', 'interface_state')}
-    source_step = int(state['step'])
-    learner_step = int(step)
-    out.update(backbone_state=backbone, step=learner_step, learner_step=learner_step, source_step=source_step,
-               inference_only=True, optimizer_pruned=True, optimizer_pruned_keys=['training'],
-               inference_source={'schema': 'natlang.native-inference-source/1', 'training_checkpoint_sha256': source_sha256,
-                                 'training_checkpoint_bytes': 0, 'step': learner_step,
-                                 'learner_step': learner_step, 'source_step': source_step})
-    # atomic; a target on the external disk is written to the NVMe and moved in the background (staged_write)
-    from natlang_neuralese.train.checkpoint_offload import staged_write
-    with staged_write(out_path, expected_bytes=sum(v.numel() * v.element_size() for v in backbone.values())) as target:
-        torch.save(out, target.path)
-    return changed
-
-
 def train(args):
     run_started = time.time()
     # what the run trains on, recorded in the data registry before it is read (data no entry holds stops it here;
@@ -1232,14 +1196,17 @@ def train(args):
     learner = Lfm3Learner.from_checkpoint(
         args.checkpoint, args.base, spec, device='cuda', dtype=torch.bfloat16,
         compile_layers=not args.no_compile, fp8_base=False if args.no_fp8_base else None,
-        seed=args.seed, base_weights_sha256=source_sha,
+        seed=args.seed, base_weights_sha256=source_sha, marker_init=args.marker_init,
     )
     model, state = learner.model, learner.state
+    if learner.marker_init:
+        print(json.dumps({'event': 'role-marker rows initialised from text', **learner.marker_init}), flush=True)
     model.train()
     forward = lfm3_fast_train.hidden
     pack_tokens = args.pack_tokens if args.pack_tokens >= 0 else resident_tokens(model, args.activation_gb)
     ref_bundles, ref_rows = learner.snapshot_reference()
-    optimizer = learner.build_optimizer(lr=args.lr, betas=(0.9, 0.95), eps=1e-8, weight_decay=args.weight_decay)
+    optimizer = learner.build_optimizer(lr=args.lr, betas=(0.9, 0.95), eps=1e-8, weight_decay=args.weight_decay,
+                                        row_lr_scale=args.row_lr_scale)
     parameters = learner.trainable_parameters()
 
     start_step = 0
@@ -1364,7 +1331,7 @@ def train(args):
         fraction = step / max(1, total - 1)
         scale = min(1., (step + 1) / args.warmup) * (args.min_lr_fraction + (1 - args.min_lr_fraction) * 0.5 * (1 + math.cos(math.pi * fraction)))
         for g in optimizer.param_groups:
-            g['lr'] = args.lr * scale
+            g['lr'] = args.lr * scale * g.get('lr_scale', 1.0)
         denominator = sum(chain_mass(chains[i]) for i in group)
         step_started = time.time()
         torch.cuda.reset_peak_memory_stats()
@@ -1593,6 +1560,11 @@ def main():
     p.add_argument('--lora-alpha', type=float, default=None, help='LoRA alpha (default: equal to --lora-rank)')
     p.add_argument('--gate-rank', type=int, default=None, help='optional attention gate_proj rank (<= 16; default frozen)')
     p.add_argument('--no-trainable-rows', action='store_true', help='freeze Neuralese marker/override embedding rows (default trainable)')
+    p.add_argument('--marker-init', choices=('text-v1', 'none'), default='text-v1',
+                   help="role-marker rows still equal to the base's reserved row start from text (lfm3_learner.MARKER_PHRASES); "
+                        "'none' keeps them")
+    p.add_argument('--row-lr-scale', type=float, default=10.0,
+                   help="the trainable Neuralese rows' LR as a multiple of --lr (their own optimizer group; 1 = one group's LR)")
     p.add_argument('--no-fp8-base', action='store_true', help='disable Blackwell FP8 frozen-base GEMMs (BF16 base opt-out)')
     p.add_argument('--no-compile', action='store_true', help='disable torch.compile on fast layers')
     p.add_argument('--resume', action='store_true', help='resume from --state-dir (default OUT_DIR/learner-state)')

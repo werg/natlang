@@ -27,6 +27,16 @@ from natlang_neuralese.serve.store import TensorStore
 from natlang_neuralese.serve.http import serve
 
 
+@pytest.fixture(autouse=True)
+def _splice_produced_states(monkeypatch):
+    """These tests exercise the exact splice of text-written and produced states (gradients through the state, capture
+    occurrences, the splice protocol); engines read both as their tokens in the reader's context by default
+    (engine.reads_in_context; covered in test_sglang_actor and test_native_serve), so they opt out here."""
+    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
+    monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
+
+
+
 @pytest.fixture
 def cpu_harness_threads():
     previous=torch.get_num_threads()

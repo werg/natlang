@@ -1715,6 +1715,15 @@ class WeightSync:
         return interface_with_rows(interface, rows.token_ids, leaves['trainable_rows.rows'], self.marker_ids,
                                    self.override_ids)
 
+    def master_rows(self):
+        """The FP32 master copy of the version's trained rows (``lfm3_learner.master_rows``), or None."""
+        from natlang_neuralese.train.lfm3_learner import master_rows
+        leaves = (self.pending or {}).get('leaves')
+        rows = self.learner.trainable_rows
+        if not leaves or rows is None:
+            return None
+        return master_rows({'trainable_rows.rows': leaves['trainable_rows.rows'], 'trainable_rows.token_ids': rows.token_ids})
+
     def _identity(self, slot):
         from natlang_neuralese.serve.sglang_actor import export_tensors_identity
         return {'weights_sha256': hashlib.sha256(memoryview(slot['map'])).hexdigest(),
@@ -2035,7 +2044,7 @@ def process_memory_gb():
 
 # ---- learner ---------------------------------------------------------------------------------------------------------
 def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, trained, learner_step=None, extra=None):
-    """``exp0_sft.write_checkpoint``'s pruned native checkpoint from a host snapshot, without holding the source backbone:
+    """A pruned native checkpoint from a host snapshot, without holding the source backbone:
     the trained backbone (BF16), the source's native embedding rows at the interface ids, the source's interface."""
     import torch
     backbone = {name: trained[name].contiguous() for name in native_rows['names']}
@@ -4220,7 +4229,7 @@ def train(args):
         refuse_legacy_resume(resume_dir, Path(args.state_dir), source_sha)
     learner = Lfm3Learner.from_checkpoint(
         args.checkpoint, args.base, spec, device='cuda', base_weights_sha256=source_sha,
-        fp8_base=True if args.fp8_base else None, compile_layers=not args.no_compile,
+        fp8_base=True if args.fp8_base else None, compile_layers=not args.no_compile, marker_init=args.marker_init,
     )
     model = learner.model
     special = learner.special_ids
@@ -4232,7 +4241,7 @@ def train(args):
     gc.collect()
     drop_cache([args.checkpoint, *Path(args.base).glob('*.safetensors')])
     log_line(log, {'event': 'learner model loaded', 'meminfo_gib': meminfo(), 'load_s': round(time.time() - t0, 1),
-                   'adapter_spec': spec.to_dict(), 'fp8_base': learner.fp8_base,
+                   'adapter_spec': spec.to_dict(), 'fp8_base': learner.fp8_base, 'marker_init': learner.marker_init,
                    'trainable_params': sum(p.numel() for p in learner.trainable_parameters())})
     forward = lfm3_fast_train.hidden
     pack_tokens = args.pack_tokens if args.pack_tokens > 0 else lfm3_fast_train.resident_tokens(
@@ -4245,7 +4254,8 @@ def train(args):
     reference_active = args.kl_beta > 0
     ref_bundles, ref_rows = reference_snapshot(learner) if reference_active else (None, None)
     parameters = learner.trainable_parameters()
-    optimizer = learner.build_optimizer(lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.99), eps=1e-8)
+    optimizer = learner.build_optimizer(lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.99), eps=1e-8,
+                                        row_lr_scale=args.row_lr_scale)
 
     step, cursor, first_group = 0, 0, 0
     consumed_groups = set()
@@ -4505,6 +4515,8 @@ def train(args):
         policy_id = sync.publishing['policy_id']
         provenance = {'parameterization': 'lora+rows', 'adapter_spec': spec.to_dict(), 'effective_policy_sha256': policy_id,
                       'base_weights_sha256': source_sha}
+        if (master := sync.master_rows()) is not None:
+            provenance['trainable_rows_fp32'] = master
         write_pruned_checkpoint({**state, 'interface_state': sync.interface(state['interface_state'])}, native_rows,
                                 special, path, source_sha, sync.backbone(), learner_step=step_number, extra=provenance)
         from natlang_neuralese.common.hashing import sha256_file_hex
@@ -5469,7 +5481,7 @@ def train(args):
         cosine = moment_cosine(parameters, optimizer)
         lr = args.lr * min(1., (step + 1) / args.warmup) * data_scale
         for g in optimizer.param_groups:
-            g['lr'] = lr
+            g['lr'] = lr * g.get('lr_scale', 1.0)
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
         torch.cuda.synchronize()
@@ -5932,6 +5944,11 @@ def build_parser():
     t.add_argument('--lora-alpha', type=float, default=None, help='LoRA alpha (default: equal to --lora-rank)')
     t.add_argument('--gate-rank', type=int, default=None, help='optional attention gate_proj rank (<= 16; default frozen)')
     t.add_argument('--no-trainable-rows', action='store_true', help='freeze Neuralese marker/override embedding rows')
+    t.add_argument('--marker-init', choices=('text-v1', 'none'), default='text-v1',
+                   help="role-marker rows still equal to the base's reserved row start from text (lfm3_learner.MARKER_PHRASES); "
+                        "'none' keeps them")
+    t.add_argument('--row-lr-scale', type=float, default=10.0,
+                   help="the trainable Neuralese rows' LR as a multiple of the step's LR (their own optimizer group)")
     t.add_argument('--no-publication-sentinel', action='store_true',
                    help='skip the sentinel log-probability check after each actor update (WeightSync._sentinel)')
     t.add_argument('--fp8-base', action='store_true', help='FP8 frozen-base GEMMs (Blackwell; off by default: lfm3_learner, NATLANG_FP8_BASE=1 also opts in)')

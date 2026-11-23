@@ -34,6 +34,9 @@ import { decodeNativeState, encodeNativeState, nativeStateContentId, nativeState
 
 type Json = Record<string, unknown>;
 
+/** The receipt mode of a state read as its own tokens in the consumer's context (engine `reads_in_context`). */
+const IN_CONTEXT_TEXT = 'in-context-text';
+
 /** Header naming the owner of requests (a session or runtime ID): its pins and collections are its own (serve/store.py). */
 export const OWNER_HEADER = 'x-natlang-owner';
 
@@ -536,8 +539,12 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         (value as Json).kind === 'native_state' && (value as Json).id === id).length;
       const receipts = imports.filter(value => value && typeof value === 'object' && (value as Json).id === id) as Json[];
       const expectedMode = modes?.[id] ?? 'exact-native-state';
-      if (!expectedCount || receipts.length !== expectedCount || receipts.some(receipt =>
-          receipt.mode !== expectedMode || receipt.observed_native_state_id !== id))
+      // A text write or produce span is read as its own tokens in this call's context (`in-context-text`, every engine
+      // when the state is exact and unadapted): the prompt holds those tokens, not a native_state occurrence.
+      const spliced = receipts.filter(receipt => !(receipt.mode === IN_CONTEXT_TEXT && expectedMode === 'exact-native-state'));
+      if (!receipts.length || spliced.length !== expectedCount || receipts.some(receipt =>
+          (receipt.mode !== expectedMode && !(receipt.mode === IN_CONTEXT_TEXT && expectedMode === 'exact-native-state')) ||
+          receipt.observed_native_state_id !== id))
         throw Object.assign(new Error(`neuralese-native-state-import: server did not consume ${id} with declared mode ${expectedMode} (imports=${
           JSON.stringify(imports).slice(0, 1200)})`),
           { code: 'neuralese-native-state-import' });
@@ -652,9 +659,11 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       // A scoped list is an occurrence list, not a set of IDs. Repeated IDs
       // deliberately create repeated prompt parts and receipts, each sharing
       // the same source node when they refer to the same produced state.
-      const sourcesMatch = (actual: Json[]) => actual.length === expected.length &&
-        actual.every((item, index) => item.source_occurrence === expected[index]!.source_occurrence);
-      if (!sourcesMatch(promptOccurrences) || !sourcesMatch(importReceipts))
+      const sourcesMatch = (actual: Json[], wanted: Json[]) => actual.length === wanted.length &&
+        actual.every((item, index) => item.source_occurrence === wanted[index]!.source_occurrence);
+      // occurrences read in context (`in-context-text`) stand in the prompt as tokens, not as native_state parts
+      const spliced = expected.filter((_, index) => importReceipts[index]?.mode !== IN_CONTEXT_TEXT);
+      if (!sourcesMatch(promptOccurrences, spliced) || !sourcesMatch(importReceipts, expected))
         throw Object.assign(new Error(`neuralese-native-state-import: ${expected.length} prepared occurrence(s) for ${id} differ from the server prompt and import receipts`),
           { code: 'neuralese-native-state-import' });
     }

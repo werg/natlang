@@ -209,7 +209,8 @@ def _updated_block(block, values):
             if key in values:
                 copied[name] = values[key].detach().clone()
         layers.append(copied)
-    return replace(block, layers=tuple(layers))
+    # fitted values are no longer the tokens' forward: no producer kind (state_block.PRODUCER_KINDS)
+    return replace(block, layers=tuple(layers), producer_kind=None)
 
 
 def focus_labels(fit, bindings, *, full_gain, threshold=.05):

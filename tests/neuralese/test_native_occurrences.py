@@ -8,6 +8,16 @@ from natlang_neuralese.rl.native_occurrences import graph_binding
 from natlang_neuralese.rl.native_replay import compile_replay
 
 
+@pytest.fixture(autouse=True)
+def _splice_produced_states(monkeypatch):
+    """These tests exercise the exact splice of text-written and produced states (gradients through the state, capture
+    occurrences, the splice protocol); engines read both as their tokens in the reader's context by default
+    (engine.reads_in_context; covered in test_sglang_actor and test_native_serve), so they opt out here."""
+    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
+    monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
+
+
+
 def repeated_graph(family):
     model,roles,identity,block_id,block,original=actor_rollout(family)
     first=copy.deepcopy(original[1]);first['graph_turn']='first';first['written_nodes']={block_id:'first-write'}

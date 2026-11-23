@@ -8,6 +8,10 @@ from natlang_neuralese.serve.chat import RequestError
 
 
 def choose(engine,monkeypatch,ids):
+    roles=engine.role_tokens
+    if any(token in (roles.consume_open,roles.consume_close) for token in ids):
+        # consume markers are banned in every draw (engine.role_bans); a sampled one needs the opt-out
+        monkeypatch.setenv('NATLANG_BAN_CONSUME_MARKERS','0')
     values=iter(ids)
     def token(seq):
         value=next(values)

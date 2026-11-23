@@ -4,7 +4,7 @@
     merge_checkpoint.py convert --hf MODEL.safetensors --source fresh-init/checkpoint.pt --out CK
     merge_checkpoint.py merge --base CK0 --term CK1=0.5 [--term CK2=1.0 ...] --out CK
 
-convert: the snapshot's backbone in ``exp0_sft.write_checkpoint``'s pruned layout (BF16, what ``pop_rl_actor.py
+convert: the snapshot's backbone in the pruned native checkpoint layout (``grpo.write_pruned_checkpoint``) (BF16, what ``pop_rl_actor.py
 serve-checkpoint`` and the held eval serve), with the source's model_config and interface and the source's embedding rows
 at the interface ids (the HF model has no learned interface rows). Names, shapes and dtypes must equal the source's.
 The safetensors file is read with ``safetensors.safe_open`` only (data, no code).
@@ -45,7 +45,7 @@ def load_native(path):
 
 
 def pruned(state, backbone, source_sha256, recipe):
-    """``exp0_sft.write_checkpoint``'s output dict for ``backbone`` (tied head re-pointed at the embedding)."""
+    """The pruned native checkpoint dict (``grpo.write_pruned_checkpoint``'s layout) for ``backbone`` (tied head re-pointed at the embedding)."""
     if 'lm_head.weight' in state['backbone_state']:
         if not torch.equal(state['backbone_state']['lm_head.weight'], state['backbone_state']['model.embed_tokens.weight']):
             raise ValueError('untied lm_head: tied-embedding checkpoints only')

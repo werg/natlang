@@ -155,6 +155,7 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
             files.append({'outtype': outtype, 'file': target.name, 'bytes': target.stat().st_size,
                           'sha256': sha256_file_hex(target), 'native_identity': dict(identity)})
     produce_open = int(roles.produce_open)
+    from ..serve.engine import role_bans
     # Files of other tensor types exported earlier from the same checkpoint stay listed.
     try:
         earlier = json.loads((out_dir / 'manifest.json').read_text())
@@ -179,7 +180,10 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
                     # With the producer adapter in the GGUF, llama-server (and the page's wllama, the same server code)
                     # produces native states when the model samples the produce marker; without it the marker would
                     # start a span no adapter decodes, so it is banned.
-                    'logit_bias': {} if producer is not None else {str(produce_open): -100}},
+                    # The consume markers are never a reply's to sample (`engine.role_bans`; the engine places them
+                    # around imported state): banned on every engine.
+                    'logit_bias': {**({} if producer is not None else {str(produce_open): -100}),
+                                   **{str(token): -100 for token in sorted(role_bans(roles))}}},
         'files': files,
         'hf_config': 'hf-config',
         'converter': {'llama_cpp': str(llama_cpp), 'replication': _replication(llama_cpp)},

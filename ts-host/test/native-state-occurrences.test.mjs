@@ -26,6 +26,25 @@ test('same artifact independent writer/use occurrences bind completely rather th
   assert.throws(()=>nativeCaptureGraphBinding('reader',{prompt:[{kind:'native_state',id},{kind:'native_state',id}]},ambiguousNodes),/ambiguous/);
 });
 
+test('a read the engine fed as the state\'s own tokens (in-context-text) binds no native input',()=>{
+  const id='nzs1_'+'c'.repeat(52);
+  const nodes=new Map([
+    ['w',{kind:'block_write',node:'w',turn:'producer',block:id}],
+    ['read-inline',{kind:'block_read',node:'read-inline',turn:'reader',block:id,format:'in-context-text',inputs:[{node:'w',block:id}]}],
+    ['read-spliced',{kind:'block_read',node:'read-spliced',turn:'reader',block:id,stop_gradient:true,inputs:[{node:'w',block:id}]}],
+  ]);
+  // one occurrence read in context (tokens in the prompt, its receipt only), one spliced
+  const capture={prompt:[{kind:'tokens',token_ids:[5,6]},{kind:'native_state',id,source_occurrence:'w',stop_gradient:true}],
+    native_state_imports:[{id,mode:'in-context-text',observed_native_state_id:id,source_occurrence:'w'},
+      {id,mode:'exact-native-state',observed_native_state_id:id,source_occurrence:'w',stop_gradient:true}]};
+  const reader=nativeCaptureGraphBinding('reader',capture,nodes);
+  assert.deepEqual(reader.read_bindings,{[id]:'w'});
+  // every read in context: nothing to bind, and no inventory mismatch
+  const inline={prompt:[{kind:'tokens',token_ids:[5,6]}],native_state_imports:[{id,mode:'in-context-text',observed_native_state_id:id}]};
+  const only=new Map([...nodes].filter(([key])=>key!=='read-spliced'));
+  assert.deepEqual(nativeCaptureGraphBinding('reader',inline,only).read_bindings,{});
+});
+
 test('a unique external native-state root retains its differentiable read occurrence',()=>{
   const id='nzs1_'+'b'.repeat(52);
   const nodes=new Map([['external-read',{kind:'block_read',node:'external-read',turn:'reader',block:id,

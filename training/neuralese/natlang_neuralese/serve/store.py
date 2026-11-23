@@ -225,7 +225,8 @@ class NativeStateFile:
     """A native state read from its file's header and its two small index tensors (token_ids, positions), never its
     payload: identity, layout and text for whoever moves the state without computing on it (the SGLang front hands the
     path to the fork, the HTTP server streams the file). Both a store record (`id`, `meta()`) and its block (`block`
-    is itself; the identity fields, `text`, `token_ids`, `adapter_binding`, `derivation` as on `NativeStateBlock`).
+    is itself; the identity fields, `text`, `token_ids`, `adapter_binding`, `derivation`, `producer_kind` as on
+    `NativeStateBlock`).
     `load()` makes the `NativeStateBlock` for code that computes on the tensors."""
 
     def __init__(self, path, metadata, entries, token_ids, positions, stat):
@@ -244,6 +245,7 @@ class NativeStateFile:
     embedding_weight_sha256 = property(lambda self: self._metadata["embedding_weight_sha256"])
     adapter_binding = property(lambda self: self._metadata.get("adapter_binding"))
     derivation = property(lambda self: self._metadata.get("derivation"))
+    producer_kind = property(lambda self: self._metadata.get("producer_kind"))
     layer_kinds = property(lambda self: tuple(self._metadata["layer_kinds"]))
     block = property(lambda self: self)
 

@@ -16,6 +16,7 @@ An item leaves the register when its fix lands on main. A finding reported by an
 | Memetic layout fix (c64d250b2) on a real actor | queued unit `memverify-dgx3`, then the round 1 health report |
 | held-v4 sft-v6 reference measurement | Pop unit `popheld-hv4-sft-v6`; the coordinator appends the result to DECISIONS |
 | Remove the legacy `expert_iteration.py cycle` mode once aei1's round 1 has a held verdict (AGENTS.md: async-drive replaces cycle) | coordinator, after the r0001 verdict |
+| Typed-contracts before/after measurement (30 tasks x 2 samples, prose vs typed): not completed (Colab front taken by aei1's SFT, DGX actor saturated); partial 6/9 vs 3/6 in `ops/typed-contracts-20261123/measure-colab-partial/`. Rerun with `ops/typed-contracts-20261123/driver/supervise2.sh` (set `SHA=` to the current policy) when an actor has room, then append to DECISIONS "typed output contracts" | coordinator (deferred: no free actor 2026-11-23) |
 | aei1 round 1 build, SFT and held verdict | aei1 driver; the coordinator reads its health report |
 
 ## Reasoned decisions in training
@@ -96,22 +97,19 @@ authoring rule (a prose `Output contract:` paragraph is an error), the migrated 
   on the live SGLang front. Follow-ups:
   - **Re-enable Neuralese variants in aei1's collection and SFT mix** at the next pin with d16437be8. Measure the
     collection's read-back rate with the failure-taxonomy `readback.py`. Owner: coordinator.
-  - **Marker rows** (125033–125036): bit-identical to the base's reserved row through sft-v9 (the legacy freeze). The
-    current learner trains them, but they start identical and `produce_close` never occurs in training data. Do these
-    at a round boundary, each with an opt-out:
-    - text-initialise the four rows from distinct phrases, scaled to ordinary row norm. This changes the tied head's
-      marker logits: measure spontaneous marker emission on the probe.
-    - give the rows their own optimizer group with an LR multiplier.
-    - find why producer documents lack `produce_close`.
-    - keep the rows in FP32 in merged checkpoints (`merge_policy_state` `sparse_row_dtype`).
-    - delete the dead `exp0_sft.write_checkpoint`.
-
-    Owner: learner agent, next round.
-  - **Produce spans the model emits and another call reads** are still spliced from the producer's context, which is
-    the same out-of-context problem. Decide between in-context reading of every text-primed state and trained readers,
-    with `neuralese_readback_probe.py` as the acceptance test. Owner: Neuralese agent.
-  - **A text-written state moved between engines** is spliced as stored (ENGINE_PARITY gap row). Blocked on a durable
-    producer-kind field in the state header.
+  - **Marker rows: done (0462075ea; DECISIONS 2026-11-23 23:00).** Text-initialised, with their own AdamW group at
+    10x LR and an FP32 master copy in merged checkpoints. `exp0_sft.write_checkpoint` is removed. `produce_close` is
+    explained: producer documents end at the payload, and no loss reads the close. Consume markers are banned in every
+    draw on every engine (cd6d9c3dc). These enter aei1 at the next round boundary on a learner pin with 0462075ea.
+    Owner: coordinator. Open: spontaneous marker emission at temperature 1, and the rows' held effect.
+  - **Produce spans read in context: done (d6b3218e7, cd6d9c3dc).** On the native probe the span arm went from 0/8
+    to 4/8. Reader rows from recorded writes were not added; the reason is in DECISIONS. Open: measure the
+    collection's read-back rate on the new pin, and reconsider trained readers if it stays well below the inline arm.
+    Owner: coordinator.
+  - **Cross-engine moves: done.** `producer_kind` is in the state header and every engine applies one rule: Python
+    native, SGLang, and fork natlang-b12092 for llama-server and the page (f9bee8f6c). Remaining: the consume-marker
+    ban reaches llama-server and the page only with the next GGUF export (ENGINE_PARITY gap row). Owner: whoever
+    exports next.
 - **Harness messages found, not changed** (`HELD_FAILURES` 3.8). Owner: runtime-messages agent, next session:
   - the "cut off" footer after a `console.log` that printed the whole value;
   - a rejected service write that reads as a partial write;
@@ -164,7 +162,7 @@ Brief E covered only the Neuralese-free capabilities. Open:
 - **aei1 round 1 -> 2 boundary checklist (coordinator, about 06:00 on 2026-11-24):**
   1. Move the driver to a pin at or after 78fb05054: read-back fix, decision-budget fix, memetic leak fix, Colab-via-Drive.
   2. Re-enable Neuralese variants once the L4 actor runs the read-back fix (rollout agent, 2026-11-23 21:45).
-  3. Take the marker-row and produce-span changes once they land (Neuralese learner agent).
+  3. Take the Neuralese marker rows and produce spans: these landed on main (head dda393bc7). Learner and collection must move together, because learners score the consume-marker bans that collection records: 0462075ea plus cd6d9c3dc for the learner, d6b3218e7 plus cd6d9c3dc for the SGLang fronts. The Colab VM actor needs the same commit.
   4. Admit the new task batch from briefs A-D (authoring agent): done, `natlang-rl-task-supply-20261123hfb` is in grpo-pool (242 rows; briefs A–E).
   5. The typed-contract pool replaces prose `Output contract:` tasks (typed-contract agent).
   6. Rerun bench arm D and the GRPO gradient bench.

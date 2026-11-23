@@ -20,6 +20,7 @@ from ..common.hashing import sha256_file_hex
 from ..common.jsonio import write_json_durable
 from .lfm3_learner import (
     AdapterSpec,
+    master_rows,
     merge_policy_state,
     LayerAdapterBundle,
     Lfm3Learner,
@@ -186,6 +187,25 @@ def save_learner_state(state_dir, learner: Lfm3Learner, optimizer: torch.optim.O
         raise
 
 
+def regroup_optimizer_state(saved: dict, optimizer: torch.optim.Optimizer) -> dict:
+    """``saved`` (an optimizer ``state_dict``) laid out in ``optimizer``'s parameter groups when only the grouping
+    differs: a state saved before the trainable rows had their own group (one group: factors then rows) resumes into
+    the factor and row groups, and the reverse. The per-parameter moments keep their flat order; the live groups'
+    hyperparameters (``lr_scale`` included) apply. A different parameter count is left to ``load_state_dict``."""
+    groups = optimizer.param_groups
+    if len(saved['param_groups']) == len(groups):
+        return saved
+    flat = [index for group in saved['param_groups'] for index in group['params']]
+    if len(flat) != sum(len(group['params']) for group in groups):
+        return saved
+    regrouped, start = [], 0
+    for group in groups:
+        count = len(group['params'])
+        regrouped.append({**{k: v for k, v in group.items() if k != 'params'}, 'params': flat[start:start + count]})
+        start += count
+    return {'state': saved['state'], 'param_groups': regrouped}
+
+
 def load_learner_state(state_dir, learner: Lfm3Learner, optimizer: torch.optim.Optimizer | None = None, *,
                        restore_rng: bool = True, verify_base_sha: str | None = None) -> dict:
     """Restore FP32 LoRA factors, trainable rows, optimizer state, reference factors, and RNG/cursors."""
@@ -210,7 +230,7 @@ def load_learner_state(state_dir, learner: Lfm3Learner, optimizer: torch.optim.O
 
     if optimizer is not None and (root / 'optimizer_state.pt').is_file():
         opt_state = torch.load(root / 'optimizer_state.pt', map_location=device, weights_only=False)
-        optimizer.load_state_dict(opt_state)
+        optimizer.load_state_dict(regroup_optimizer_state(opt_state, optimizer))
 
     ref_bundles: tuple[LayerAdapterBundle, ...] = ()
     ref_rows: TrainableRows | None = None
@@ -265,8 +285,13 @@ def load_learner_state(state_dir, learner: Lfm3Learner, optimizer: torch.optim.O
 
 
 def _write_merged(out_path, state, backbone, interface, *, learner_step, adapter_spec, effective_sha, source,
-                  extra=None) -> dict:
-    """Write a merged native checkpoint (``merge_policy_state``'s result) staged and atomically; returns its record."""
+                  extra=None, tensors=None) -> dict:
+    """Write a merged native checkpoint (``merge_policy_state``'s result) staged and atomically; returns its record.
+    ``tensors`` (the merged factor tensors): their trainable rows also go in as the FP32 master copy
+    ``trainable_rows_fp32`` (``lfm3_learner.master_rows``)."""
+    master = master_rows(tensors or {})
+    if master is not None:
+        extra = {**(extra or {}), 'trainable_rows_fp32': master}
     source_step = int(state['step'])
     step_val = int(learner_step)
     out = {
@@ -306,7 +331,8 @@ def export_merged_checkpoint(learner: Lfm3Learner, state: dict, out_path, *, sou
     effective_sha = learner.effective_policy_sha256(source_sha256)
     record = _write_merged(out_path, state, backbone, interface, learner_step=learner_step,
                            adapter_spec=learner.spec.to_dict(), effective_sha=effective_sha,
-                           source={'training_checkpoint_sha256': source_sha256, 'training_checkpoint_bytes': 0})
+                           source={'training_checkpoint_sha256': source_sha256, 'training_checkpoint_bytes': 0},
+                           tensors=tensors)
     return {**record, 'changed_elements': changed}
 
 
@@ -395,7 +421,7 @@ def merge_factors_to_checkpoint(base_checkpoint_path, factors_dir, out_checkpoin
                            adapter_spec=manifest['adapter_spec'], effective_sha=effective_sha,
                            source={'training_checkpoint_sha256': actual_base_sha, 'training_checkpoint_bytes':
                                    base_path.stat().st_size, 'adapter_factors_sha256': actual_factors_sha},
-                           extra={'round_id': manifest.get('round_id')})
+                           extra={'round_id': manifest.get('round_id')}, tensors=tensors)
     return {**record, 'base_checkpoint_sha256': actual_base_sha, 'adapter_factors_sha256': actual_factors_sha,
             'merged_matrices': len(manifest.get('scales') or {}), 'changed_elements': changed,
             'round_id': manifest.get('round_id')}

@@ -39,14 +39,25 @@ def layer_fields(kind) -> tuple[str, ...]:
     raise ValueError(f'unsupported native shared layer state: {kind!r}')
 
 
+# How a state's tensors came about, when they are the plain forward of its own tokens (`producer_kind`, optional, part of
+# the content id): 'text' = `native.text-write` (the text forced as a produce span from position 0, nothing before it);
+# 'span' = a produce span in its producer's call (`native.capture`, the grammar capture, a produce span sampled in
+# generation). Every engine reads such a state, when it is exact and carries no adapter binding or derivation, as its
+# token ids inline in the reader's own context (`in-context-text`): a 1.7B reader could not read the KV of a context it
+# never saw (DECISIONS 2026-11-23 "Neuralese read-back"; ENGINE_PARITY). Other states (contextual bodies, optimized,
+# derived and soft states) carry no kind and splice as stored. States written before the field existed keep their ids.
+PRODUCER_KINDS = ('text', 'span')
+
+
 def native_state_metadata(*, text, architecture, tokenizer_fingerprint, checkpoint_sha256, embedding_weight_sha256,
-                          layer_kinds, adapter_binding=None, derivation=None) -> dict[str, Any]:
+                          layer_kinds, adapter_binding=None, derivation=None, producer_kind=None) -> dict[str, Any]:
     """The canonical metadata of a native state (hashed into its id, stored in its file header)."""
     return {'schema': SCHEMA, 'text': text, 'architecture': architecture,
             'tokenizer_fingerprint': tokenizer_fingerprint, 'checkpoint_sha256': checkpoint_sha256,
             'embedding_weight_sha256': embedding_weight_sha256, 'layer_kinds': list(layer_kinds),
             **({'adapter_binding': adapter_binding} if adapter_binding is not None else {}),
-            **({'derivation': derivation} if derivation is not None else {})}
+            **({'derivation': derivation} if derivation is not None else {}),
+            **({'producer_kind': producer_kind} if producer_kind is not None else {})}
 
 
 def validate_native_layout(metadata, descriptors) -> int:
@@ -57,6 +68,10 @@ def validate_native_layout(metadata, descriptors) -> int:
     if not isinstance(metadata, dict) or metadata.get('schema') != SCHEMA:
         raise ValueError('unsupported native state schema')
     validate_derivation(metadata.get('derivation'))
+    if 'producer_kind' in metadata and metadata['producer_kind'] not in PRODUCER_KINDS:
+        raise ValueError(f"native state producer_kind must be one of {PRODUCER_KINDS}")
+    if 'producer_kind' in metadata and metadata.get('derivation') is not None:
+        raise ValueError('a derived native state has no producer kind: its tensors are not its tokens\' forward')
     if not isinstance(metadata.get('text'), str) or not isinstance(metadata.get('architecture'), str) or not metadata['architecture']:
         raise ValueError('native state needs text and an architecture identity')
     for name in ('tokenizer_fingerprint', 'checkpoint_sha256', 'embedding_weight_sha256'):
@@ -117,6 +132,7 @@ class NativeStateBlock:
     architecture: str
     adapter_binding: dict | None = field(default=None, kw_only=True)
     derivation: dict | None = field(default=None,kw_only=True)
+    producer_kind: str | None = field(default=None, kw_only=True)
 
     def descriptors(self) -> dict[str, tuple[torch.dtype, tuple[int, ...]]]:
         """name -> (dtype, shape) of every tensor, as a native-state file header declares them."""
@@ -159,7 +175,8 @@ class NativeStateBlock:
                                      checkpoint_sha256=self.checkpoint_sha256,
                                      embedding_weight_sha256=self.embedding_weight_sha256,
                                      layer_kinds=[layer.get('kind') for layer in self.layers],
-                                     adapter_binding=self.adapter_binding, derivation=self.derivation)
+                                     adapter_binding=self.adapter_binding, derivation=self.derivation,
+                                     producer_kind=self.producer_kind)
 
     def tensors(self) -> dict[str, torch.Tensor]:
         return {'token_ids': self.token_ids, 'positions': self.positions, 'embeddings': self.embeddings,
@@ -185,6 +202,7 @@ class NativeStateBlock:
         block = cls(**{name: metadata[name] for name in ('text', 'architecture', 'tokenizer_fingerprint',
                         'checkpoint_sha256', 'embedding_weight_sha256')},
                     **{name: tensors[name] for name in ('token_ids', 'positions', 'embeddings')},
-                    layers=tuple(layers), adapter_binding=metadata.get("adapter_binding"),derivation=metadata.get("derivation"))
+                    layers=tuple(layers), adapter_binding=metadata.get("adapter_binding"),derivation=metadata.get("derivation"),
+                    producer_kind=metadata.get("producer_kind"))
         block.validate()
         return block

@@ -44,7 +44,10 @@ export type NativeInvocationActorReceipt = { schema: 'natlang.native-invocation-
 
 export type NativeStateMetadata = { text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[];
-  adapter_binding?: NativeAdapterBinding; derivation?: NativeStateDerivation } &
+  adapter_binding?: NativeAdapterBinding; derivation?: NativeStateDerivation;
+  /** 'text': a text write; 'span': a produce span in its producer's call. Such a state (exact, no adapter binding or
+   * derivation) is read as its token ids inline in the reader's context on every engine (`in-context-text`). */
+  producer_kind?: 'text' | 'span' } &
   { schema: 'neuralese.native-state/1' };
 export type NativeStateArtifact = { id: string; metadata: NativeStateMetadata; tensors: Record<string, NativeStateTensor> };
 export type NativeTensorDtype = 'F16' | 'BF16' | 'F32' | 'F64';
@@ -403,6 +406,8 @@ function validateNativeState(metadata: NativeStateMetadata, tensors: Record<stri
     throw new RangeError('invalid native-state metadata');
   if (metadata.adapter_binding !== undefined) validateNativeAdapterBinding(metadata.adapter_binding, metadata);
   validateNativeStateDerivation(metadata.derivation);
+  if (metadata.producer_kind !== undefined && (!['text', 'span'].includes(metadata.producer_kind) || metadata.derivation !== undefined))
+    throw new RangeError('native state producer_kind is text or span, and a derived state has none');
   const expected = new Set(['token_ids', 'positions', 'embeddings']);
   const count = (name: string, rank: number): number[] => {
     const tensor = tensors[name];

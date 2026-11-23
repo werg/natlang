@@ -2811,7 +2811,7 @@ class AsyncRoundDriver:
         while not (factors / 'policy_manifest.json').exists():
             # a DGX learner of this round that runs (a driver restarted mid-SFT) is joined, never raced by a second
             # learner on the session: the hand-back moves it, verified, when that pays
-            if self.a.sft_profile == 'colab' and not self.c.present(unit):
+            if self.a.sft_profile == 'colab' and not self.dgx_sft_running(round_dir, unit):
                 self.colab_sft(round_dir, policy)
                 if (factors / 'policy_manifest.json').exists():
                     break
@@ -2820,13 +2820,19 @@ class AsyncRoundDriver:
             # appears; stopped (and cancelled if requeued) here, the next round's collection restarts it. Also when a
             # restarted driver joins a running learner: the round's start just queued the DGX collection again
             self.stop_collections(remote=False)
-            if not self.c.present(unit):
+            if not self.dgx_sft_running(round_dir, unit):
                 self.launch_sft(round_dir, policy, activation_gb=self.a.sft_activation_gb, preflight_only=False)
             # the remote actors keep collecting the policy the round trains from for the whole SFT; a session the
             # keeper replaced (and served again) gets its collector back, one that was down at the round's start gets
             # one. A session fit for SFT may take the round over (the hand-back stops the unit, ending the wait)
             self.handed_back = None
-            self.c.wait(unit, poll=120, between=lambda: self.dgx_sft_between(round_dir, policy, unit))
+            between = lambda: self.dgx_sft_between(round_dir, policy, unit)
+            self.c.wait(unit, poll=120, between=between)
+            while self.handed_back != round_dir.name and self.dgx_learner_pids(round_dir):
+                # systemd and the ledger no longer answer for the unit but its learner still trains: keep joining it
+                self.note(round=round_dir.name, dgx_learner_without_unit=self.dgx_learner_pids(round_dir), unit=unit)
+                time.sleep(120)
+                between()
             if self.handed_back != round_dir.name:
                 break
             self.ensure_collection(policy)          # the DGX is free again: its standing collection resumes
@@ -2834,6 +2840,17 @@ class AsyncRoundDriver:
             raise SystemExit(f'round {round_dir.name}: no factors after the SFT ({round_dir}/sft/train.log)')
         self.record_sft_speed(round_dir)
         return factors
+
+    @staticmethod
+    def dgx_learner_pids(round_dir):
+        """Live DGX ``exp0_sft`` processes training this round (``--out-dir`` ``sft/``), read from /proc."""
+        import pop_rl_actor
+        return pop_rl_actor.local_learners(Path(round_dir) / 'sft')
+
+    def dgx_sft_running(self, round_dir, unit):
+        """Whether this round trains on the DGX: its unit runs or the ledger holds it, or (whatever those answer) an
+        exp0_sft process trains its ``sft/``. Every path that would start a learner checks this first."""
+        return self.c.present(unit) or bool(self.dgx_learner_pids(round_dir))
 
     def colab_sft(self, round_dir, policy):
         """The round on a Colab session (``run-sft``) until its factors exist, or until it falls back to the DGX: every
@@ -2860,6 +2877,12 @@ class AsyncRoundDriver:
                                       reason='the Colab learner failed 3 times')
                 self.handback_blocked.add(round_dir.name)       # no hand-back to where it keeps failing
                 self.note(round=round_dir.name, takeover='dgx', colab_failures=failures)
+                return
+            if up and self.dgx_sft_running(round_dir, f'{self.a.name}-{round_dir.name}-sft'):
+                # a DGX learner of this round trains (whatever round.json's profile says): no second learner on the
+                # session; train_sft joins it (only the verified hand-back moves a round off the DGX)
+                self.note(round=round_dir.name, colab_refused='a DGX learner of this round is running',
+                          pids=self.dgx_learner_pids(round_dir))
                 return
             if up:
                 away_since = None
@@ -2990,9 +3013,9 @@ class AsyncRoundDriver:
         # verified on the VM: only now does the DGX learner stop
         self.c.stop_unit(unit)
         deadline = time.time() + 600
-        while self.c.present(unit) and time.time() < deadline:
+        while self.dgx_sft_running(round_dir, unit) and time.time() < deadline:
             time.sleep(5)
-        if self.c.present(unit):
+        if self.dgx_sft_running(round_dir, unit):
             self.note(round=name, handback_failed=f'{unit} did not stop', host=host)
             return
         subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}.service'], stderr=subprocess.DEVNULL)

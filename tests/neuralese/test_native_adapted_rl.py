@@ -272,7 +272,10 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
             for index,action in enumerate(actions):
                 trace['cached_hidden'].append(normalized_inputs[-1])
                 trace['cached_logits'].append(seq.logits[0].detach())
-                distribution=seq.logits[0].float().div(action['temperature']).log_softmax(-1)
+                # the action's recorded law: its bans (the role bans, engine.role_bans) renormalize the distribution
+                from natlang_neuralese.common.sampling import masked_log_distribution
+                distribution=masked_log_distribution(seq.logits[0].float(),action['temperature'],
+                    banned=action.get('banned_token_ids'))
                 current.append(distribution[action['token_id']])
                 if index+1<len(actions):
                     output=engine._native_forward([action['token_id']],seq.cache)

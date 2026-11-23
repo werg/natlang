@@ -143,7 +143,8 @@ def _span_fixture(tmp_path):
                            'layer_kinds': ['attention' if native.backbone.is_attention(i) else 'finite_convolution'
                                            for i in range(native.backbone.num_layers)],
                            'producer_embedding': {'input_id_offset': native.backbone.embedding_weight.shape[0]}}
-    front.sglang_banned = []
+    from natlang_neuralese.serve.engine import role_bans
+    front.sglang_banned = sorted(role_bans(front.role_tokens))   # as the actor sets them at load
     front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
     front.native_fallback_reasons, front.sglang_state_writes, front.sglang_capture_dir = {}, 0, None
     roles = front.role_tokens
@@ -271,8 +272,12 @@ def test_produce_span_capture_file_is_adopted_into_the_store_and_refused_when_wr
 
 
 @pytest.mark.parametrize('case', ['stop-inside', 'close-without-open', 'nested', 'consume-marker', 'length-inside'])
-def test_protocol_failures_match_the_native_engine(tmp_path, case):
+def test_protocol_failures_match_the_native_engine(tmp_path, case, monkeypatch):
     native, front, roles, word, _ = _span_fixture(tmp_path)
+    if case == 'consume-marker':
+        # consume markers are banned in every draw (engine.role_bans); a sampled one is reachable with the opt-out
+        monkeypatch.setenv('NATLANG_BAN_CONSUME_MARKERS', '0')
+        front.sglang_banned = []
     stop = sorted(front.stop_ids)[0]
     tokens, max_tokens = {
         'stop-inside': (word('t4') + [roles.produce_open] + word('t6') + [stop], 32),
@@ -296,7 +301,10 @@ def _import_fixture(tmp_path):
     make = lambda: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0, max_tokens=32,
                                      rl_capture=True, rl_top_k=2, native_recording=True, request_id='r', seed=1)
     _scripted(native, front, tokens, make)
-    block = stored['native'][0]
+    assert stored['native'][0].producer_kind == 'span'
+    # the splice path: the same tensors with no producer kind (a contextual or soft state, which splices as stored)
+    import dataclasses
+    block = dataclasses.replace(stored['native'][0], producer_kind=None)
     block_id = native.store.put_native_state(block).id
     assert front.store.put_native_state(block).id == block_id
     messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': block_id},
@@ -382,21 +390,82 @@ def test_text_written_state_is_read_as_its_tokens_in_the_readers_context(tmp_pat
     prompt_ids = [token for segment in theirs['prompt'] for token in segment['token_ids']]
     with torch.no_grad():
         inline = native.shared_model.logits(native_step(native.shared_model, torch.tensor([prompt_ids]))['h_final'][:, -1])
+    from natlang_neuralese.serve.engine import role_bans
+    inline[..., sorted(role_bans(roles))] = float('-inf')   # the draw's logits carry the consume-marker bans
     assert torch.allclose(seen[0].float(), inline.float(), atol=1e-4)
     # Opt-out: the stored state is spliced (the old path); a state not written from text is spliced too.
     monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
     script = iter(reply)
     assert native.generate(later())['native_state']['imports'][0]['mode'] == 'exact-native-state'
     monkeypatch.delenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT')
-    # The front's store records its text writes: a restarted front (empty memory) still reads them in context.
+    # The state's header says it was written from text: an engine with no memory of the write and no store marks (a
+    # restarted front, another engine's store the file was carried to) still reads it in context.
+    import dataclasses
+    import shutil
+    stored_block = native.store.get_native_state(block_id).block
+    assert stored_block.producer_kind == 'text' and front.stored_native_state(block_id).producer_kind == 'text'
     front._text_written_states.clear()
-    assert front.text_write_in_context(block_id)
     native._text_written_states.clear()
-    if native._text_write_marks() is not None:
-        import shutil
-        shutil.rmtree(native._text_write_marks())
+    for engine in (native, front):
+        if engine._text_write_marks() is not None:
+            shutil.rmtree(engine._text_write_marks(), ignore_errors=True)
+    script = iter(reply)
+    assert native.generate(later())['native_state']['imports'][0]['mode'] == 'in-context-text'
+    assert front.reads_in_context(block_id, front.stored_native_state(block_id))
+    # A text write stored before the header field existed reads in context only where its store marked it.
+    legacy_id = native.store.put_native_state(dataclasses.replace(stored_block, producer_kind=None)).id
+    assert legacy_id != block_id
+    old = lambda: GenerationRequest(messages=[{'role': 'user', 'content': [
+        {'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': legacy_id}, {'type': 'text', 'text': ' t5'}]}],
+        temperature=1.0, max_tokens=8, rl_capture=True, rl_top_k=2, native_recording=True, request_id='r3', seed=2)
+    script = iter(reply)
+    assert native.generate(old())['native_state']['imports'][0]['mode'] == 'exact-native-state'
+    native._note_text_write(legacy_id)
+    script = iter(reply)
+    assert native.generate(old())['native_state']['imports'][0]['mode'] == 'in-context-text'
+
+
+def test_produce_span_is_read_as_its_tokens_in_the_readers_context(tmp_path, monkeypatch):
+    """A produce span read by another call (here sampled in generation; `native.capture` stores the same kind) is
+    consumed as its exact tokens inline on both engines, like a text write: its header carries `producer_kind` 'span'
+    and the receipt is `in-context-text`, with no consume markers and no import. NATLANG_NEURALESE_SPAN_IN_CONTEXT=0
+    splices it as stored."""
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    tokens = word('t4') + [roles.produce_open] + word('t6 t7') + [roles.produce_close] + [sorted(front.stop_ids)[0]]
+    make = lambda: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0, max_tokens=32,
+                                     rl_capture=True, rl_top_k=2, native_recording=True, request_id='r', seed=1)
+    _scripted(native, front, tokens, make)
+    block = stored['native'][0]
+    assert block.producer_kind == 'span' and stored['front'][0].producer_kind == 'span'
+    block_id = native.store.put_native_state(block).id
+    assert front.store.put_native_state(block).id == block_id
+    span = list(block.token_ids.tolist())
+    assert span == word('t6 t7')
+    messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': block_id},
+                                             {'type': 'text', 'text': ' t5'}]}]
+    later = lambda: GenerationRequest(messages=messages, temperature=1.0, max_tokens=8, rl_capture=True, rl_top_k=2,
+                                      native_recording=True, request_id='r2', seed=2)
+    reply = word('t8') + [sorted(front.stop_ids)[0]]
+    script = iter(reply)
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(later())
+    records = [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in reply]
+    sent = []
+    front._sglang_generate = lambda body: (sent.append(body), {'output_ids': reply, 'meta_info': {'natlang_top_k': records}})[1]
+    actual = front.generate(later())
+    receipt = {'id': block_id, 'mode': 'in-context-text', 'observed_native_state_id': block_id}
+    assert expected['native_state']['imports'] == actual['native_state']['imports'] == [receipt]
+    assert actual['x_natlang_rl_capture']['prompt'] == expected['x_natlang_rl_capture']['prompt']
+    ids = sent[0]['input_ids']
+    assert roles.consume_open not in ids and roles.consume_close not in ids
+    assert any(ids[i:i + len(span)] == span for i in range(len(ids)))
+    assert 'natlang_import' not in sent[0]['sampling_params'].get('custom_params', {})
+    monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
     script = iter(reply)
     assert native.generate(later())['native_state']['imports'][0]['mode'] == 'exact-native-state'
+    sent.clear()
+    assert front.generate(later())['native_state']['imports'][0]['mode'] == 'exact-native-state'
+    assert sent[0]['sampling_params']['custom_params']['natlang_import']
 
 
 def test_same_base_adapter_state_mode_imports_with_the_native_receipt(tmp_path):
@@ -579,8 +648,10 @@ def test_guidance_rewinds_on_sglang_like_the_native_engine(tmp_path, monkeypatch
     assert actual['choices'][0]['message'] == expected['choices'][0]['message']
     assert len(sent) == 3 and sent[1]['input_ids'] == sent[0]['input_ids'] + [t['t5']]
     assert sent[1]['sampling_params']['max_new_tokens'] == 1
-    assert set(sent[1]['sampling_params']['logit_bias']) == {str(t['t6'])}
-    assert 'logit_bias' not in sent[2]['sampling_params'] and sent[2]['input_ids'] == sent[1]['input_ids'] + [t['t8']]
+    assert set(sent[1]['sampling_params']['logit_bias']) == {str(t['t6'])} | {str(x) for x in front.sglang_banned}
+    # after the rewound draw only the role bans stay (engine.role_bans)
+    assert set(sent[2]['sampling_params'].get('logit_bias') or {}) == {str(x) for x in front.sglang_banned}
+    assert sent[2]['input_ids'] == sent[1]['input_ids'] + [t['t8']]
     assert ''.join(d.get('text', '') for d in deltas['front']) == ''.join(d.get('text', '') for d in deltas['native'])
     assert bool(deltas['native']) == streamed
 
@@ -955,8 +1026,10 @@ def test_top_p_is_forwarded_to_sglang_and_declared_in_the_sampling_law(tmp_path,
     assert 'top_p' not in law and law['probabilities'] == 'post-processing-normalized'
     greedy = front.generate(GenerationRequest(messages=[{'role': 'user', 'content': 't4'}], top_p=.95, max_tokens=4))
     assert 'top_p' not in bodies[-1]['sampling_params'] and greedy['choices']
-    # the native engine: the same law, the draw from the nucleus
-    law = native.generate(make(top_p=.5))['x_natlang_rl_capture']['sampling_law']
+    # the native engine: the same law, the draw from the nucleus (the tiny random model may draw a produce marker:
+    # a recorded protocol failure still declares its law)
+    law = native.generate(make(top_p=.5, native_recording=True, native_protocol_recovery=True)
+                          )['x_natlang_rl_capture']['sampling_law']
     assert law['top_p'] == .5 and law['probabilities'] == 'post-temperature-untruncated'
     # a path that sampled without the requested nucleus refuses the reply
     consume = SglangEngine._sglang_consume
@@ -979,7 +1052,8 @@ def test_guided_open_reasoning_streams_on_sglang_like_the_native_engine(tmp_path
     native = actor(tmp_path, 'lfm', lexical=True, words=LEXICAL + THINK)
     front = load_native_engine(str(tmp_path / 'actor.pt'), dtype=native.backbone.embedding_weight.dtype,
                                engine_class=SglangEngine)
-    front.sglang_banned = []
+    from natlang_neuralese.serve.engine import role_bans
+    front.sglang_banned = sorted(role_bans(front.role_tokens))   # as the actor sets them at load
     front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
     front.native_fallback_reasons = {}
     stop = sorted(front.stop_ids)[0]
@@ -1023,7 +1097,8 @@ def test_unguided_stream_announces_open_reasoning_on_sglang_like_the_native_engi
     native = actor(tmp_path, 'lfm', lexical=True, words=LEXICAL + THINK)
     front = load_native_engine(str(tmp_path / 'actor.pt'), dtype=native.backbone.embedding_weight.dtype,
                                engine_class=SglangEngine)
-    front.sglang_banned = []
+    from natlang_neuralese.serve.engine import role_bans
+    front.sglang_banned = sorted(role_bans(front.role_tokens))   # as the actor sets them at load
     front._sglang_lock, front.sglang_requests, front.sglang_tokens, front.native_fallbacks = threading.Lock(), 0, 0, 0
     front.native_fallback_reasons = {}
     stop = sorted(front.stop_ids)[0]

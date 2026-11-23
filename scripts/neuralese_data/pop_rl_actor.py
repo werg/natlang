@@ -16,7 +16,7 @@ checkpoint with a block store, so a collector fetches its stored blocks over HTT
 checkpoint SHA (the transport receipt binds it) and binds ``actor_export`` in every capture (arithmetic on another GPU
 differs from the learner's). stop removes the container and keeps the block store.
 
-serve-checkpoint serves a pruned native checkpoint (``exp0_sft.write_checkpoint`` / GRPO's ``step-N/checkpoint.pt``:
+serve-checkpoint serves a pruned native checkpoint (``learner_state.export_merged_checkpoint`` / GRPO's ``step-N/checkpoint.pt``:
 already model-only BF16, so no view or transport is prepared) with the same SGLang engine and export format: the file
 goes to Pop as is (rsync, sha256-checked by the driver), and the actor runs an exported copy of commit C on Pop
 (``git archive``, no worktree), so a pinned experiment's held evaluations on Pop serve its own code. Pop keeps the
@@ -1360,6 +1360,35 @@ def pull_learner_state(host, remote_run, local_state, *, attempts=3):
     return True
 
 
+def local_learners(work_dir):
+    """PIDs of live ``exp0_sft.py`` processes on this machine whose ``--out-dir`` is ``work_dir``: the DGX learner of a
+    round, read from /proc, so it holds whatever systemd or the ledger answer (2026-11-23: a restarted driver saw no
+    unit for a DGX learner that kept training and started run-sft beside it)."""
+    target = os.path.realpath(str(work_dir))
+    found = []
+    for pid in os.listdir('/proc'):
+        if not pid.isdigit() or int(pid) == os.getpid():
+            continue
+        try:
+            words = [w.decode(errors='replace') for w in Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0') if w]
+        except OSError:
+            continue
+        if not any(w.endswith('exp0_sft.py') for w in words) or '--out-dir' not in words[:-1]:
+            continue
+        if os.path.realpath(words[words.index('--out-dir') + 1]) == target:
+            found.append(int(pid))
+    return found
+
+
+def refuse_beside_local_learner(work_dir, when):
+    """SystemExit when a DGX learner trains ``work_dir``: never a second learner of one round (only the hand-back,
+    after it stopped the DGX unit, moves a round to a session)."""
+    pids = local_learners(work_dir)
+    if pids:
+        log(event='run-sft refused: a DGX learner trains this run', work=str(work_dir), pids=pids, when=when)
+        raise SystemExit(f'run-sft {when}: a DGX learner (pid {pids}) trains {work_dir}; a round has one learner')
+
+
 def remote_sft_run(cfg, run_name):
     """The VM directory of ``run-sft --run-name RUN_NAME`` (its learner state, logs, factors)."""
     return f'{cfg["work_root"]}/sft-{run_name}'
@@ -1527,6 +1556,7 @@ def run_remote_sft(args):
     it trained before when it can (``ensure_remote_checkpoint``); the learner runs detached from the SSH link; an
     actor recorded on the session alone (not capped beside the learner) yields the GPU and is served again after."""
     import threading
+    refuse_beside_local_learner(args.work, 'at start')
     cfg = host_config('colab', host=args.host)
     host = cfg['host']
     if not host:
@@ -1591,6 +1621,9 @@ def run_remote_sft(args):
     host_ram_gib = args.host_ram_gib if args.host_ram_gib is not None else learner['host_ram_gib']
     # an actor served alone holds the GPU the learner alone needs (the admission would wait out its timeout): it
     # yields for the round and is served again afterwards (between rounds the session decodes, during one it trains)
+    # minutes of transfers since the start check: before the actor yields, the sync thread starts (its pulls replace
+    # the local learner-state) or the VM learner starts, no DGX learner may train this run
+    refuse_beside_local_learner(args.work, 'before the VM learner starts')
     yielded = None
     actor = read_json(colab_state_path(host)) or {}
     if not learner['beside_actor'] and actor.get('pid') is not None:

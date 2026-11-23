@@ -38,7 +38,7 @@ from concurrent.futures import Future
 import numpy as np
 
 from .chat import RequestError
-from .engine import TEXT_IN_CONTEXT_MODE, Engine, Sequence, _insert_privileged, derive_seed
+from .engine import TEXT_IN_CONTEXT_MODE, Engine, Sequence, _insert_privileged, derive_seed, role_bans
 from ..common.sampling import TOP_K_MASS_FIELD
 from .native_protocol import FAILURE_CODES, capture_enabled, failure_descriptor
 
@@ -347,7 +347,9 @@ class SglangEngine(Engine):
         self._adapter_files, self._adapter_clock = {}, 0
         roles = self.role_tokens
         markers = {int(roles.produce_open), int(roles.produce_close), int(roles.consume_open), int(roles.consume_close)}
-        self.sglang_banned = sorted(int(token) for token in export_manifest['serving']['banned_token_ids'])
+        # the export's bans and the role bans every engine applies (`engine.role_bans`: the consume markers)
+        self.sglang_banned = sorted({int(token) for token in export_manifest['serving']['banned_token_ids']}
+                                    | role_bans(roles))
         if not set(self.sglang_banned) <= markers:
             raise ValueError('the HF export bans tokens other than the role markers')
         if (int(roles.produce_open) not in self.sglang_banned
@@ -682,7 +684,8 @@ class SglangEngine(Engine):
         if len(ids) + 2 >= self.context:
             raise RequestError('context-length', 'forced native text and producer markers exceed this model context')
         opened = [int(self.role_tokens.produce_open)] + [int(token) for token in ids]
-        block, record = self._native_store_capture(ids, [{'ids': opened, 'start': 1, 'end': len(opened)}], text=text)
+        block, record = self._native_store_capture(ids, [{'ids': opened, 'start': 1, 'end': len(opened)}], text=text,
+                                                   producer_kind='text')
         self._note_text_write(record.id)
         meta = record.meta()
         if value_type is not None:
@@ -751,7 +754,8 @@ class SglangEngine(Engine):
         ids.extend(span)
         text = self.tokenizer.decode(span, skip_special_tokens=False)
         block, record = self._native_store_capture(span, [{'ids': ids, 'start': start, 'end': len(ids),
-                                                           **({'imports': spliced} if spliced else {})}], text=text)
+                                                           **({'imports': spliced} if spliced else {})}], text=text,
+                                                   producer_kind='span')
         with self._sglang_lock:
             self.sglang_state_writes += 1
         return self._capture_result(block, record, prefix, span, value_type, imports, blocks)
@@ -1499,10 +1503,10 @@ class SglangEngine(Engine):
                **({'source_occurrence': source_occurrence} if source_occurrence else {})}
         derivation = {'state_derivation': block.derivation} if block.derivation is not None else {}
         capture = capture_enabled(seq)
-        if not (seq.request.native_state_modes or {}).get(block_id) and self.text_write_in_context(block_id) \
+        if not (seq.request.native_state_modes or {}).get(block_id) and self.reads_in_context(block_id, block) \
                 and self._sglang_exact(block):
-            # A text-written state: its exact tokens inline in this call's context, no consume markers
-            # (`Engine.text_write_in_context`, `_native_consume_text_in_context`).
+            # A text-written state or produce span: its exact tokens inline in this call's context, no consume markers
+            # (`Engine.reads_in_context`, `_native_consume_text_in_context`).
             tokens = [int(token) for token in block.token_ids]
             ids.extend(tokens)
             seq.native_own_position += len(tokens)
@@ -1623,7 +1627,7 @@ class SglangEngine(Engine):
             self.sglang_state_writes += 1
         state['run'], state['text'] = len(seq.items), ''
 
-    def _native_store_capture(self, token_ids, chunks, *, text, owner=None):
+    def _native_store_capture(self, token_ids, chunks, *, text, owner=None, producer_kind=None):
         """`Engine._native_store_capture` on SGLang. `chunks` is the one capture request of the span (ids, start, end,
         adapter, imports). The fork writes the span's state as a native-state file with the metadata the native
         engine would give the block; the store adopts that file (renamed in, verified from the file: layout, finite
@@ -1633,7 +1637,8 @@ class SglangEngine(Engine):
             # A span the native engine computed (native-routed sequences and endpoints pass `native_step` captures):
             # stored from those tensors by the native engine's own path, never re-run on SGLang (which a paused
             # engine would hold while a rebind waits for this native call to finish).
-            block, record = super()._native_store_capture(token_ids, chunks, text=text, owner=owner)
+            block, record = super()._native_store_capture(token_ids, chunks, text=text, owner=owner,
+                                                          producer_kind=producer_kind)
             self._note_producer(record.id, native=True)
             return block, record
         from ..model.native_adapters import execution_binding, SCHEMA as ADAPTER_SCHEMA
@@ -1647,7 +1652,7 @@ class SglangEngine(Engine):
             checkpoint_sha256=self.execution_native_identity['checkpoint_sha256'],
             embedding_weight_sha256=self.embedding_weight_sha256, layer_kinds=self.sglang_export['layer_kinds'],
             adapter_binding=({'schema': ADAPTER_SCHEMA, 'base_native_identity': self.native_identity,
-                              'adapters': bindings} if bindings else None))
+                              'adapters': bindings} if bindings else None), producer_kind=producer_kind)
         path = self._sglang_capture(capture['ids'], capture['start'], capture['end'], metadata,
                                     capture.get('adapter'), capture.get('imports'))
         try:

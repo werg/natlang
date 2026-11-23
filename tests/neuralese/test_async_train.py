@@ -499,9 +499,9 @@ def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tm
 def _driver(tmp_path, monkeypatch, **over):
     import expert_iteration as ei
     monkeypatch.setattr(ei, 'OPS', tmp_path / 'ops')
-    (tmp_path / 'ops' / 'grpo-v4').mkdir(parents=True)
+    (tmp_path / 'ops' / 'grpo-v4').mkdir(parents=True, exist_ok=True)
     pin = tmp_path / 'pin'
-    (pin / 'scripts' / 'neuralese_data').mkdir(parents=True)
+    (pin / 'scripts' / 'neuralese_data').mkdir(parents=True, exist_ok=True)
     start = tmp_path / 'start.pt'
     start.write_bytes(b'start')
     argv = ['async-drive', '--root', str(tmp_path / 'loop'), '--name', 'aei', '--start', str(start),
@@ -707,6 +707,101 @@ def test_a_round_on_the_dgx_moves_to_a_fit_session_from_its_verified_state(tmp_p
                                                     for i in range(304, 340)))
     d.record_sft_speed(rd)
     assert d.measured_sft_speed() == {'NVIDIA A100-SXM4-80GB': 3.4}
+
+
+def test_a_driver_killed_mid_push_and_its_successor_never_race_the_dgx_learner(tmp_path, monkeypatch):
+    """2026-11-23: driver 1 decided to move r0001 to the A100 (22:36) and was stopped mid-push (22:41); driver 2,
+    started with the same argv, saw no DGX unit (systemd and the ledger answered "not present" while the learner kept
+    training), entered the Colab path and run-sft trained r0001 on the A100 beside the DGX learner (both to step 353).
+    Now: driver 1 dies leaving the DGX learner as it was; driver 2 finds the learner by its process (--out-dir sft/),
+    joins it, and the only way the round reaches the session is the verified hand-back: push, stop, the learner gone,
+    then run-sft. run-sft itself refuses while a DGX learner trains the run."""
+    import subprocess
+    import pop_rl_actor
+    ei, d, rd, events = _dgx_round(tmp_path, monkeypatch)
+    learner = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)', str(tmp_path / 'pin' / 'exp0_sft.py'),
+                                'train', '--out-dir', str(rd / 'sft')])
+    try:
+        assert pop_rl_actor.local_learners(rd / 'sft') == [learner.pid]
+        assert pop_rl_actor.local_learners(rd / 'mix') == []
+
+        class Killed(BaseException):        # the driver's unit stopped: nothing after the push runs
+            pass
+
+        def killed_mid_push(*a, **k):
+            events.append(('push-started',))
+            raise Killed()
+        monkeypatch.setattr(pop_rl_actor, 'push_learner_state', killed_mid_push)
+        with pytest.raises(Killed):
+            d.train_sft(rd, d.controller.current)
+        kinds = [e[0] for e in events]
+        assert 'push-started' in kinds and 'stop' not in kinds and 'colab_sft' not in kinds
+        assert learner.poll() is None and not (rd / 'sft' / 'handback.json').exists()
+        assert json.loads((rd / 'round.json').read_text())['profile'] == 'dgx'
+
+        # driver 2: same root and argv; its systemd/ledger view says the unit is gone, the learner still trains
+        ei2, d2 = _driver(tmp_path, monkeypatch, argv=['--sft-profile', 'colab', '--colab-hosts', 'colab-g4'])
+        log = []
+        monkeypatch.setattr(d2.c, 'present', lambda unit: False)
+        monkeypatch.setattr(d2.c, 'active', lambda unit: False)
+        monkeypatch.setattr(d2.c, 'wait', lambda unit, poll=60, between=None: log.append(('wait', unit)))
+        monkeypatch.setattr(d2, 'stop_collections', lambda **kw: log.append(('stop_collections',)))
+        monkeypatch.setattr(d2, 'ensure_remote_collection', lambda policy: None)
+        monkeypatch.setattr(d2, 'ensure_collection', lambda policy: log.append(('ensure_collection',)))
+        monkeypatch.setattr(d2.c, 'session', lambda host, profile, opened: None)
+
+        def stop(unit):
+            log.append(('stop', unit))
+            learner.terminate()
+            learner.wait(30)
+        monkeypatch.setattr(d2.c, 'stop_unit', stop)
+
+        def push(host, cfg, remote_run, local_state, *, run_name, via):
+            log.append(('push', learner.poll() is None))
+            return {'step': 304, 'via': 'drive', 'seconds': 300.0, 'bytes': 1000, 'files': 2}
+        monkeypatch.setattr(pop_rl_actor, 'push_learner_state', push)
+
+        def run(argv, **kw):
+            argv = list(map(str, argv))
+            if 'run-sft' in argv:
+                log.append(('run-sft', learner.poll() is None))
+                (rd / 'sft' / 'factors').mkdir(parents=True, exist_ok=True)
+                (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
+            elif any('launch-sft.sh' in a for a in argv):
+                log.append(('launch-sft', 'PREFLIGHT_ONLY' in kw.get('env', {})))
+            return SimpleNamespace(returncode=0)
+        monkeypatch.setattr(ei2.subprocess, 'run', run)
+        assert d2.train_sft(rd, d2.controller.current) == rd / 'sft' / 'factors'
+        kinds = [e[0] for e in log]
+        # joined (no DGX launch, no Colab learner) until the verified hand-back stopped it
+        assert kinds.index('wait') < kinds.index('push') < kinds.index('stop') < kinds.index('run-sft')
+        assert ('launch-sft', False) not in log and ('run-sft', False) in log and ('run-sft', True) not in log
+        assert kinds.count('run-sft') == 1 and ('push', True) in log
+        notes = (d2.root / 'drive.log').read_text()
+        assert 'dgx_learner_without_unit' in notes and '"handback": "colab"' in notes
+        assert json.loads((rd / 'round.json').read_text())['profile_changes'][-1]['to_profile'] == 'colab'
+    finally:
+        learner.kill()
+        learner.wait()
+
+
+def test_run_sft_and_the_colab_path_refuse_while_a_dgx_learner_trains_the_round(tmp_path, monkeypatch):
+    """Whatever round.json's profile says and whatever systemd answers: colab_sft does not start run-sft while this
+    round's DGX learner process lives, and run-sft refuses at its start and again before the VM learner starts."""
+    import pop_rl_actor
+    ei, d, rd, events = _dgx_round(tmp_path, monkeypatch)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    monkeypatch.setattr(pop_rl_actor, 'local_learners', lambda work: [4242] if Path(work) == rd / 'sft' else [])
+    launched = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: launched.append(argv) or SimpleNamespace(returncode=0))
+    ei.AsyncRoundDriver.colab_sft(d, rd, d.controller.current)
+    assert launched == [] and 'colab_refused' in (d.root / 'drive.log').read_text()
+    args = SimpleNamespace(host='colab-g4', run_name='aei-r0001', work=str(rd / 'sft'),
+                           launch_json=str(rd / 'sft' / 'launch.json'), commit=None, state_sync_minutes=15.0,
+                           vram_gib=None, host_ram_gib=None)
+    monkeypatch.setattr(pop_rl_actor, 'host_config', lambda *a, **k: (_ for _ in ()).throw(AssertionError('went on')))
+    with pytest.raises(SystemExit, match='a round has one learner'):
+        pop_rl_actor.run_remote_sft(args)
 
 
 def test_no_handback_when_opted_out_unfavourable_unsaved_or_unverified(tmp_path, monkeypatch):

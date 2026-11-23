@@ -15,7 +15,9 @@ def state_values(block):
 
 def replace_state_values(block,values,*,derivation=None):
     tensors={**block.tensors(),**values}
-    metadata=block.metadata()
+    # replaced values are no longer the tokens' forward: no producer kind, so every engine splices them as stored
+    # (state_block.PRODUCER_KINDS)
+    metadata={k:v for k,v in block.metadata().items() if k!='producer_kind'}
     if derivation is not None:metadata={**metadata,'derivation':derivation}
     from .state_block import NativeStateBlock
     return NativeStateBlock.from_tensors(metadata,tensors)
@@ -62,7 +64,8 @@ def _verify_optimizer_derivation(store,block):
     if parent is None:raise ValueError('optimized native state needs its exact archived parent')
     if sorted(origins(store,parent_id))!=value['origin_state_ids']:
         raise ValueError('optimized native state changed its original producer provenance')
-    old_metadata={key:item for key,item in parent.block.metadata().items() if key!='derivation'}
+    # the parent's producer kind does not carry over: optimized values are no longer its tokens' forward
+    old_metadata={key:item for key,item in parent.block.metadata().items() if key not in ('derivation','producer_kind')}
     if {key:item for key,item in block.metadata().items() if key!='derivation'}!=old_metadata:
         raise ValueError('optimized native state changed token text, native basis or adapter provenance')
     records={key:store.get_native_tensor_artifact(value[key]) for key in ('gradient_id','update_artifact_id')}

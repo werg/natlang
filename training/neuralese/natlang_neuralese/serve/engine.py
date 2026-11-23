@@ -25,8 +25,35 @@ from .native_protocol import capture_enabled
 from ..common.sampling import behavior_top_k_declaration
 from .store import TensorStore
 
-# A text-written state consumed as its exact tokens in the consumer's own context (Engine.text_write_in_context).
+# A text-written state or produce span consumed as its exact tokens in the consumer's own context (Engine.reads_in_context).
 TEXT_IN_CONTEXT_MODE = 'in-context-text'
+
+
+def role_bans(roles):
+    """Tokens no reply may sample: the two consume markers, which only the engine places around an imported state
+    (a sampled one is the protocol error `neuralese-native-state-consume-marker`). Banned in every draw's law and
+    recorded per sample (`banned_token_ids`), so learners score the same law. With text-initialised marker rows
+    (2026-11-23) a reader copying a spliced state's markers sampled one at greedy (1 of 16 probe reads). Opt-out:
+    NATLANG_BAN_CONSUME_MARKERS=0."""
+    if os.environ.get('NATLANG_BAN_CONSUME_MARKERS', '1') == '0':
+        return frozenset()
+    return frozenset((int(roles.consume_open), int(roles.consume_close)))
+
+
+def reads_in_context(block, *, marked=lambda: False):
+    """The `in-context-text` rule shared by every Python engine (`Engine.reads_in_context`): an exact state (the caller
+    checks) with no adapter binding and no derivation whose header says it is the plain forward of its own tokens
+    (`producer_kind` 'text' or 'span'), or, for a header without the field, a text write this store marked
+    (``marked()``). Opt-outs: NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 (text writes), NATLANG_NEURALESE_SPAN_IN_CONTEXT=0
+    (produce spans)."""
+    if getattr(block, 'adapter_binding', None) is not None or getattr(block, 'derivation', None) is not None:
+        return False
+    kind = getattr(block, 'producer_kind', None)
+    if kind == 'span':
+        return os.environ.get('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '1') != '0'
+    if os.environ.get('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '1') == '0':
+        return False
+    return kind == 'text' or (kind is None and marked())
 
 
 def derive_seed(*parts) -> int:
@@ -667,7 +694,7 @@ class Engine:
         exact = self._native_exact(block)
         state_receipt = None
         declared_mode = (seq.request.native_state_modes or {}).get(block_id)
-        if exact and declared_mode is None and self.text_write_in_context(block_id):
+        if exact and declared_mode is None and self.reads_in_context(block_id, block):
             return self._native_consume_text_in_context(seq, block_id, block)
         if declared_mode is not None:
             from ..model.native_adapters import adapter_state_input_receipt, SAME_BASE_STATE_MODE
@@ -734,18 +761,23 @@ class Engine:
                                    **({'observed_native_state_id': observed_id} if observed_id is not None else {}),
                                    **({'adapter_state_consumption': state_receipt} if state_receipt is not None else {})})
 
-    def text_write_in_context(self, block_id):
+    def reads_in_context(self, block_id, block):
         """Whether an import of `block_id` is fed as its exact tokens, inline, in the consumer's own context (`in-context-text`).
 
-        A state this engine wrote from text (`native_write_text`, no adapters) holds that text's KV computed at
-        positions 0.. with nothing before it: no BOS, no call. Spliced into a reader's call, the reader could not tell it
-        from noise (2026-11-23: 1 of 87 held read-backs returned the producer's text; the same text captured in the
-        reader's own context reads back exactly). The text-primed state of a value is therefore its tokens computed
-        where the consumer reads them; with the identity producer adapter this is the inline text. States written
-        otherwise (in-context captures, contextual bodies, optimized or derived states) still splice exactly.
-        NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices text writes too (the pre-2026-11-23 behaviour)."""
-        if os.environ.get('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '1') == '0':
-            return False
+        A state whose tensors are the plain forward of its own tokens in some other context: a text write (`native_write_text`:
+        the text at positions 0.. with nothing before it, no BOS, no call) or a produce span in its producer's call
+        (`native.capture`, a produce span sampled in generation). Spliced into a reader's call, the reader could not use
+        that KV (2026-11-23: 1 of 87 held read-backs returned the producer's text; the same text in the reader's own
+        context reads back exactly, and a span captured in a producer call read back like the context-free write,
+        DECISIONS 2026-11-23 "marker rows"). The text-primed state of a value is therefore its tokens computed where the
+        consumer reads them; with the identity producer adapter this is the inline text. The kind is the state header's
+        `producer_kind` (so a state carried to another engine's store reads the same); a text write stored before that
+        field existed is known from this store's `text-writes` marks. States with an adapter binding or a derivation,
+        and contextual bodies, optimized or soft states, still splice exactly. NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices
+        text writes, NATLANG_NEURALESE_SPAN_IN_CONTEXT=0 produce spans (the behaviour before 2026-11-23)."""
+        return reads_in_context(block, marked=lambda: self._text_write_marked(block_id))
+
+    def _text_write_marked(self, block_id):
         if block_id in self.__dict__.get('_text_written_states', ()):
             return True
         marks = self._text_write_marks()
@@ -1104,7 +1136,7 @@ class Engine:
         from ..common.sampling import masked_log_distribution
         # The grammar's mask, then guidance bans, temperature and the nucleus: the law SGLang draws from
         log_probs = masked_log_distribution(self._tool_grammar_mask(seq, seq.logits[0]), seq.request.temperature or 1.0,
-            banned=sorted(seq.bans.get(seq.native_own_position, ())))
+            banned=self._native_bans(seq))
         if seq.request.temperature and seq.request.temperature > 0:
             if seq.nucleus_applied is not None:
                 # top-p: the draw comes from the nucleus; the recorded logp stays the untruncated law (as the SGLang
@@ -1118,6 +1150,10 @@ class Engine:
                 seq.native_sample_top_k = encode_top_k(log_probs, seq.request.rl_top_k)
             return token, float(log_probs[token])
         return int(log_probs.argmax()), None
+
+    def _native_bans(self, seq):
+        """The tokens banned at this draw: guidance bans at this position and the role bans (`role_bans`)."""
+        return sorted(set(seq.bans.get(seq.native_own_position, ())) | role_bans(self.role_tokens))
 
     def _guidance_replay(self, seq, ids, producing):
         """A guidance rewind replays retained reply inputs into the cache; returns the forward output (a producing
@@ -1140,7 +1176,7 @@ class Engine:
         block, record = self._native_store_capture(
             seq.native_capture_ids, seq.native_capture_chunks,
             text=self.tokenizer.decode(seq.native_capture_ids, skip_special_tokens=False),
-            owner=seq.request.native_store_owner)
+            owner=seq.request.native_store_owner, producer_kind='span')
         seq.blocks.append(record)
         seq.items.append(record)
         seq.native_item_positions.append(seq.native_write_start_own)
@@ -1170,8 +1206,10 @@ class Engine:
         if seq.request.on_delta is not None and seq.guide is None:
             seq.request.on_delta({"native_state": record.meta()})
 
-    def _native_store_capture(self, token_ids, chunks, *, text, owner=None):
-        """Store one actual producer span through the common versioned native-state path."""
+    def _native_store_capture(self, token_ids, chunks, *, text, owner=None, producer_kind=None):
+        """Store one actual producer span through the common versioned native-state path. ``producer_kind``
+        (`state_block.PRODUCER_KINDS`): 'text' for a text write, 'span' for a produce span in its producer's call;
+        None for a contextual body."""
         from ..model.state_block import NativeStateBlock
         from ..model.shared_state import concatenate_captures
         fields = concatenate_captures(chunks)
@@ -1185,7 +1223,8 @@ class Engine:
                                  embedding_weight_sha256=self.embedding_weight_sha256,
                                  architecture=self.model_config.get("architecture") or self.backbone.config.model_type,
                                  adapter_binding=({'schema': ADAPTER_SCHEMA, 'base_native_identity': self.native_identity,
-                                                   'adapters': bindings} if bindings else None), **fields)
+                                                   'adapters': bindings} if bindings else None),
+                                 producer_kind=producer_kind, **fields)
         block.validate()
         return block, self.store.put_native_state(block, owner=owner)
 
@@ -1321,7 +1360,7 @@ class Engine:
             opened = native_step(self.shared_model, tensor(prefix[last:]), cache)
             capture = native_step(self.shared_model, tensor(span), opened["cache"], producing=True)
         text = self.tokenizer.decode(span, skip_special_tokens=False)
-        block, record = self._native_store_capture(span, [capture], text=text)
+        block, record = self._native_store_capture(span, [capture], text=text, producer_kind='span')
         return self._capture_result(block, record, prefix, span, value_type, imports, blocks)
 
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
@@ -1526,7 +1565,7 @@ class Engine:
                                   opened["cache"], producing=True)
             native_step(self.shared_model, torch.tensor([[self.role_tokens.produce_close]],
                 dtype=torch.long, device=self.device), capture["cache"])
-        block, record = self._native_store_capture(ids, [capture], text=text)
+        block, record = self._native_store_capture(ids, [capture], text=text, producer_kind='text')
         meta = record.meta()
         if value_type is not None:
             meta["type"] = value_type
@@ -1785,6 +1824,10 @@ class Engine:
             forced=seq.native_forced_replay
             pending, seq.native_spec = seq.native_spec, []
             seq.native_sample_top_k = None
+            if not forced and (bans := role_bans(self.role_tokens)):
+                # the draw's logits carry the role bans, so every sampler and receipt reads the banned law
+                seq.logits = seq.logits.clone()
+                seq.logits[..., sorted(bans)] = float('-inf')
             token, sampled_logp = ((seq.native_forced_tokens.pop(0),None) if forced else self._native_token(seq))
             top_k_receipt = None
             if seq.request.rl_top_k is not None and not forced and seq.request.temperature > 0:
@@ -1793,7 +1836,7 @@ class Engine:
                     # A sampler that did not record its distribution: the same normalized law over these logits.
                     from ..common.sampling import encode_top_k, masked_log_distribution
                     top_k_receipt = encode_top_k(masked_log_distribution(seq.logits[0], seq.request.temperature,
-                        banned=sorted(seq.bans.get(seq.native_own_position, ()))), seq.request.rl_top_k)
+                        banned=self._native_bans(seq)), seq.request.rl_top_k)
             sample_index = len(seq.rl_samples)
             # The next-token query is the output position of the last own
             # input; imported KV slots do not contribute to this index.
@@ -1805,8 +1848,8 @@ class Engine:
                 seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
                                        **({'forced':True} if forced else {}),
                                        **({'top_k': top_k_receipt} if top_k_receipt is not None else {}),
-                                       **({'banned_token_ids': sorted(seq.bans.get(seq.native_own_position, ()))}
-                                          if seq.guide is not None else {}),
+                                       **({'banned_token_ids': self._native_bans(seq)}
+                                          if seq.guide is not None or self._native_bans(seq) else {}),
                                        "input_role": "produce" if producing_input else "ordinary",
                                        "terminal": terminal,
                                        "query_own_position": query_own_position})
@@ -1874,7 +1917,8 @@ class Engine:
         if limit is None:
             import os
             limit = self.native_spec_draft = int(os.environ.get('NATLANG_NATIVE_SPEC_DRAFT', '0'))
-            self.native_spec_layers_ok = not any(
+            # the layer check only matters when drafting is on (an engine stub without a backbone drafts nothing)
+            self.native_spec_layers_ok = limit > 0 and not any(
                 self.backbone.layer_types[index] == 'linear_attention' for index in range(self.backbone.num_layers))
         marker = self.role_tokens
         markers = {marker.produce_open, marker.produce_close, marker.consume_open, marker.consume_close}
