@@ -8,18 +8,28 @@
  * adapter, with each adapter alone, back to the base (explicitly and with no `lora` field, after an adapter request),
  * and each adapter again. It checks that every adapter changes the output, that returning to the base reproduces the
  * base exactly (no prefix cached under another adapter serves it), and that each stack is reproducible.
+ *
+ *   node scripts/wllama-lora-smoke.mjs --wllama DIR --base base.gguf --lora release.gguf --parity prompts.json --out page.json
+ *
+ * Parity mode (scripts/neuralese_data/check_tuned_lora_llama_parity.py writes prompts.json and scores the output against
+ * the native adapted model): each prompt's token ids are completed greedily through `createCompletion` with `logprobs`,
+ * the adapter at scale 0 and at scale 1, as the managed llama-server run is; the output is that script's candidate file.
  */
 import { createServer } from 'node:http';
-import { createReadStream, statSync } from 'node:fs';
+import { createReadStream, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium } from 'playwright-core';
 import { chromiumPath } from './chromium-path.mjs';
 
+
 const { values } = parseArgs({ options: { wllama: { type: 'string' }, base: { type: 'string' }, lora: { type: 'string', multiple: true },
-  prompt: { type: 'string', default: 'The three most important things about a lighthouse are' }, tokens: { type: 'string', default: '24' } } });
-if (!values.wllama || !values.base || (values.lora?.length ?? 0) < 2) {
-  console.error('usage: wllama-lora-smoke.mjs --wllama DIR --base BASE.gguf --lora A.gguf --lora B.gguf');
+  prompt: { type: 'string', default: 'The three most important things about a lighthouse are' }, tokens: { type: 'string', default: '24' },
+  parity: { type: 'string' }, out: { type: 'string' }, top: { type: 'string', default: '5' } } });
+const parity = values.parity ? JSON.parse(readFileSync(values.parity, 'utf8')) : null;
+if (!values.wllama || !values.base || (values.lora?.length ?? 0) < (parity ? 1 : 2) || (parity && !values.out)) {
+  console.error('usage: wllama-lora-smoke.mjs --wllama DIR --base BASE.gguf --lora A.gguf --lora B.gguf\n' +
+    '       wllama-lora-smoke.mjs --wllama DIR --base BASE.gguf --lora RELEASE.gguf --parity prompts.json --out page.json');
   process.exit(2);
 }
 const files = { '/base.gguf': resolve(values.base), ...Object.fromEntries(values.lora.map((path, i) => [`/lora-${i}.gguf`, resolve(path)])) };
@@ -49,6 +59,28 @@ window.run = async ({ loras, prompt, tokens }) => {
   await wllama.exit();
   return out;
 };
+// One candidate run per prompt and scale, in check_tuned_lora_llama_parity.py's candidate format.
+window.parity = async ({ prompts, tokens, top, nCtx }) => {
+  const wllama = new Wllama({ default: '/wllama/esm/wasm/wllama.wasm' }, { allowOffline: true });
+  if (!wllama.capabilities?.loraBlobs) throw new Error('this wllama build cannot load LoRA blobs');
+  const blob = async path => (await fetch(path)).blob();
+  await wllama.loadModel([await blob('/base.gguf')], { n_ctx: nCtx, n_batch: 512, n_gpu_layers: 0, n_parallel: 1,
+    lora_adapters: [{ blob: await blob('/lora-0.gguf'), scale: 0 }], lora_init_without_apply: true });
+  const runs = [];
+  for (const prompt of prompts) for (const scale of [0, 1]) {
+    const started = performance.now();
+    const reply = await wllama.createCompletion({ prompt: prompt.ids, max_tokens: tokens, temperature: 0, logprobs: top,
+      cache_prompt: false, lora: [{ id: 0, scale }] });
+    const items = reply.choices?.[0]?.logprobs?.content ?? reply.completion_probabilities ?? [];
+    if (!items.length) throw new Error('no logprobs in the reply: ' + JSON.stringify(reply).slice(0, 400));
+    runs.push({ prompt: prompt.index, adapted: scale === 1, tokens: items.map(item => item.id), logprobs: items.map(item => item.logprob),
+      top: items.map(item => Object.fromEntries((item.top_logprobs ?? []).map(entry => [String(entry.id), entry.logprob]))),
+      seconds: (performance.now() - started) / 1000 });
+    console.log(JSON.stringify({ prompt: prompt.index, adapted: scale === 1, tokens: items.length, seconds: runs.at(-1).seconds }));
+  }
+  await wllama.exit();
+  return runs;
+};
 window.ready = true;
 </script>`;
 const server = createServer((request, response) => {
@@ -71,6 +103,17 @@ try {
   tab.on('console', message => { if (message.type() === 'error') console.error('[page]', message.text()); });
   await tab.goto(`http://127.0.0.1:${server.address().port}/`);
   await tab.waitForFunction(() => window.ready);
+  if (parity) {
+    tab.on('console', message => { if (message.type() === 'log') console.log('[page]', message.text()); });
+    const tokens = Number(values.tokens);
+    const nCtx = Math.max(...parity.prompts.map(prompt => prompt.ids.length)) + tokens + 64;
+    const runs = await tab.evaluate(options => window.parity(options),
+      { prompts: parity.prompts, tokens, top: Number(values.top), nCtx });
+    writeFileSync(values.out, JSON.stringify({ engine: `wllama (page) ${values.base.split('/').at(-1)}`, wllama: wllamaDir, runs }));
+    console.log(`wrote ${values.out} (${runs.length} runs)`);
+    await browser.close(); server.close();
+    process.exit(0);
+  }
   const started = Date.now();
   const out = await tab.evaluate(options => window.run(options),
     { loras: values.lora.map((_, i) => `/lora-${i}.gguf`), prompt: values.prompt, tokens: Number(values.tokens) });

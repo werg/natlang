@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
 
@@ -209,7 +211,33 @@ def test_pop_actor_serves_an_adapter_release_on_sglang_slots():
     assert pop_actor_driver.adapter_args({}) == ['--sglang-adapter-slots', '0']
     job = {'adapter_release': {'path': '/eval/adapter-ab', 'rank': 16, 'scale': 1.0, 'result_sha256': 'ab'}}
     assert pop_actor_driver.adapter_args(job) == ['--adapter-release', '/eval/adapter-ab', '--adapter-scale', '1.0',
-                                                  '--sglang-adapter-slots', '1', '--sglang-adapter-rank', '16']
+                                                  '--sglang-adapter-slots', '1']
+
+
+def test_sglang_slot_rank_fits_a_release_over_every_lfm3_family(monkeypatch, tmp_path):
+    """A rank-16 fit over every LFM3 family packs q|k|v into one fork module (48) and w1|w3 into another (32): the
+    server sizes its slots from the release, so the default 32 no longer sends every adapted turn to the native engine."""
+    import serve_native_checkpoint as S
+    from natlang_neuralese.export.native_hf import packed_slot_rank
+    layer = lambda i, family: f'port.hf.model.layers.{i}.{family}.weight'
+    attention = ['self_attn.q_proj', 'self_attn.k_proj', 'self_attn.v_proj', 'self_attn.o_proj', 'self_attn.gate_proj']
+    conv = ['conv.in_proj', 'conv.out_proj']
+    mlp = ['feed_forward.w1', 'feed_forward.w2', 'feed_forward.w3']
+    names = [layer(2, f) for f in attention + mlp] + [layer(0, f) for f in conv + mlp]
+    fit = {'kind': 'free-lora', 'rank': 16, 'parameter_names': names}
+    assert packed_slot_rank([fit]) == 48
+    assert packed_slot_rank([fit, {'kind': 'xs', 'rank': 4, 'parameter_names': [layer(2, 'self_attn.k_proj')]}]) == 52
+    assert packed_slot_rank([{'kind': 'free-lora', 'rank': 16, 'parameter_names': [layer(0, f) for f in mlp]}]) == 32
+    with pytest.raises(ValueError):
+        packed_slot_rank([{'kind': 'free-lora', 'rank': 4, 'parameter_names': ['port.hf.model.embed_tokens.weight']}])
+    args = S.build_parser().parse_args(['--checkpoint', 'c', '--checkpoint-sha256', 'x'])
+    assert args.sglang_adapter_rank is None and S.adapter_slot_rank(args) == S.DEFAULT_ADAPTER_RANK
+    monkeypatch.setattr(S, 'release_slot_rank', lambda release: 48)
+    args = S.build_parser().parse_args(['--checkpoint', 'c', '--checkpoint-sha256', 'x', '--adapter-release', str(tmp_path)])
+    assert S.adapter_slot_rank(args) == 48
+    args = S.build_parser().parse_args(['--checkpoint', 'c', '--checkpoint-sha256', 'x', '--adapter-release', str(tmp_path),
+                                        '--sglang-adapter-rank', '16'])
+    assert S.adapter_slot_rank(args) == 16   # explicit wins (adapted turns over it run on the native engine)
 
 
 def test_pop_attestation_distinguishes_base_and_adapted_actors(monkeypatch):

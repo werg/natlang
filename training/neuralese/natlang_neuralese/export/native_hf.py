@@ -87,6 +87,22 @@ def adapter_targets(model):
     return targets
 
 
+def packed_slot_rank(specs):
+    """The SGLang slot rank a stack of adapter specs (`adapter_spec`: kind, rank, parameter_names; one per stack member)
+    needs: per fused fork module (q|k|v in `qkv_proj`, w1|w3 in `gate_up_proj`) the members' and parts' ranks add, as
+    `sglang_actor._sglang_adapter_file` concatenates them. A rank-16 fit over every LFM3 family needs 48 (qkv_proj)."""
+    import re
+    ranks = {}
+    for spec in specs:
+        for name in spec['parameter_names']:
+            match = re.fullmatch(r'port\.hf\.model\.layers\.(\d+)\.(.+)\.weight', name)
+            if match is None or match.group(2) not in ADAPTER_MODULES:
+                raise ValueError(f'no SGLang adapter module for native matrix {name}')
+            key = (match.group(1), ADAPTER_MODULES[match.group(2)][0])
+            ranks[key] = ranks.get(key, 0) + int(spec['rank'])
+    return max(ranks.values(), default=0)
+
+
 @torch.no_grad()
 def producer_embeddings(model):
     """Row t: the producing input embedding of token t (`model.adapter(model.embed(t), producing)`, as native_step)."""

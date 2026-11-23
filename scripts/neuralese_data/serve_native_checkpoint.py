@@ -48,8 +48,8 @@ def bound_host_heap(arenas=2, trim_seconds=60.0):
     return thread
 
 
-def main() -> None:
-    bound_host_heap()
+def build_parser():
+    """The server's flags (also read by check_sglang_adapter_parity.py, so its SGLang launch stays the server's)."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--checkpoint', type=Path, required=True)
     parser.add_argument('--checkpoint-sha256', required=True)
@@ -124,8 +124,10 @@ def main() -> None:
     parser.add_argument('--sglang-adapter-slots', type=int, default=4,
                         help='resident native adapter stacks on SGLang (0 opts out: adapted turns run on the native '
                              'engine); batches without an adapted request replay the base-only decode graph')
-    parser.add_argument('--sglang-adapter-rank', type=int, default=32,
-                        help='largest summed adapter rank per SGLang module and slot')
+    parser.add_argument('--sglang-adapter-rank', type=int,
+                        help='largest summed adapter rank per SGLang module and slot (default: 32, raised to what '
+                             "--adapter-release's stack needs: the fused qkv_proj of a rank-16 fit over every LFM3 "
+                             'family sums to 48, which a smaller slot sends to the native engine)')
     parser.add_argument('--sglang-projection', choices=('native', 'vendor'), default='vendor',
                         help="LFM3 projections on SGLang: the learner's invariant native kernel, or one fused vendor "
                              'BF16 GEMM (fp32 accumulate; the learner corrects the gap with importance weights)')
@@ -159,6 +161,12 @@ def main() -> None:
                              'NATLANG_SPECULATIVE_NGRAM serves without it)')
     parser.add_argument('--sglang-arg', action='append', default=[], help='extra sglang.launch_server argument')
     parser.add_argument('--hf-export-dir', type=Path, help='HF export cache (default: <store-dir or checkpoint dir>/sglang-hf/<sha>)')
+    return parser
+
+
+def main() -> None:
+    bound_host_heap()
+    parser = build_parser()
     args = parser.parse_args()
     from natlang_neuralese.common.cuda_context import ensure_context
     ensure_context(args.device)   # GB10: a context can fail to create under host-memory fragmentation; retried
@@ -520,9 +528,32 @@ def memory_saver_library_path(python, current=''):
     return os.pathsep.join(dict.fromkeys([*wheels, *filter(None, current.split(os.pathsep))]))
 
 
+DEFAULT_ADAPTER_RANK = 32
+
+
+def release_slot_rank(release):
+    """The slot rank a program fit's stack (`tune.build` output) needs on SGLang (`native_hf.packed_slot_rank`)."""
+    from natlang_neuralese.export.native_hf import packed_slot_rank
+    from natlang_neuralese.tune.stack_export import load_artifacts
+    release = Path(release)
+    artifacts = load_artifacts(release / 'artifacts')
+    ids = [item['artifact'] for item in json.loads((release / 'result.json').read_text())['artifacts']]
+    return packed_slot_rank(artifacts[ident].provenance['adapter_spec'] for ident in ids)
+
+
+def adapter_slot_rank(args):
+    """--sglang-adapter-rank, or the default raised to what --adapter-release needs: a stack over the slot rank runs
+    every adapted turn on the native engine (`sglang_actor._sglang_reason` 'adapter rank'), on Pop's CPU front."""
+    if args.sglang_adapter_rank is not None:
+        return args.sglang_adapter_rank
+    release = getattr(args, 'adapter_release', None)
+    return max(DEFAULT_ADAPTER_RANK, release_slot_rank(release) if release is not None else 0)
+
+
 def launch_sglang(engine, args, checkpoint, release=None):
     """Export the checkpoint for SGLang (cached by SHA-256), start the fork's server and bind the front to it."""
     import os
+    args.sglang_adapter_rank = adapter_slot_rank(args)
     from natlang_neuralese.export.native_hf import export_loaded
     root = Path(__file__).resolve().parents[2]
     fork = json.loads((root / 'training/neuralese/sglang-fork.json').read_text())

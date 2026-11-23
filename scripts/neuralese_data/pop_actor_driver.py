@@ -148,14 +148,16 @@ def transport_args(job, transport, stage, checkpoint):
 
 
 def adapter_args(job):
-    """SGLang adapter slots: none for a plain checkpoint; one resident slot of the release's rank for a program fit served
-    by default (``job['adapter_release']``: a `tune.build` output on Pop, `serve_native_checkpoint.py --adapter-release`),
-    so adapted turns run on SGLang and never on the CPU front."""
+    """SGLang adapter slots: none for a plain checkpoint; one resident slot for a program fit served by default
+    (``job['adapter_release']``: a `tune.build` output on Pop, `serve_native_checkpoint.py --adapter-release`), so adapted
+    turns run on SGLang and never on the CPU front. The server sizes the slot from the release's stack
+    (`serve_native_checkpoint.adapter_slot_rank`): the fit's rank was passed before, and a rank-16 fit over every LFM3
+    family packs to 48 in qkv_proj, so every adapted turn fell back to the native engine."""
     release = job.get('adapter_release')
     if not release:
         return ['--sglang-adapter-slots', '0']
     return ['--adapter-release', release['path'], '--adapter-scale', str(release.get('scale', 1.0)),
-            '--sglang-adapter-slots', '1', '--sglang-adapter-rank', str(release['rank'])]
+            '--sglang-adapter-slots', '1']
 
 
 def serve_sglang(job, checkpoint, transport, stage, work):
