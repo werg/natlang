@@ -559,12 +559,13 @@ def test_entry_rejects_boolean_number_alias_and_missing_exact_json():
         live.verify_entry(interaction, root)
 
 
+@pytest.mark.parametrize('return_kind', ['optional', 'incidental'])
 @pytest.mark.parametrize('retain_prior_action', [True, False])
 @pytest.mark.parametrize('terminal_tool,terminal_args', [
     ('return_result', {'status': 'success', 'value': {'incorrectReceipt': True}}),
     ('eval', {'code': 'return {incorrectReceipt: true}', 'finish': True}),
 ])
-def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp_path, terminal_tool, terminal_args, retain_prior_action, monkeypatch):
+def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp_path, terminal_tool, terminal_args, retain_prior_action, monkeypatch, return_kind):
     path, spec, detail, verification = fixture(tmp_path)
     open_goal(detail, spec, verification)
     detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
@@ -580,6 +581,14 @@ def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp
         'passed': True, 'outcomeDimensions': {'effects': {'passed': True},
             'returnedValue': {'required': False, 'passed': False, 'checks': {'receiptMatches': False}}}}}),
         'kind': 'workspace'}]
+    if return_kind == 'incidental':
+        text = '{"incorrectReceipt":true}'
+        detail['record']['definition']['source'] = 'runUserGoal.nl'
+        detail['record']['output'] = {'complete': True, 'hash': hashlib.sha256(text.encode()).hexdigest(), 'bytes': len(text)}
+        selector = {'definition': detail['record']['definition'], 'valueJson': text, 'sha256': detail['record']['output']['hash']}
+        verification['evidence'] = [{**artifact(tmp_path, 'incidental-readback.json', {'proof': {
+            'actualResult': {'incorrectReceipt': True}, 'outcomeDimensions': {'incidentalValues': {
+                'passed': False, 'incorrectReturns': [selector]}}}}), 'kind': 'workspace'}]
     rewrite(tmp_path, spec, detail, verification)
     episode = live.load_episode(path)
     assert len(episode['turns']) == int(retain_prior_action)
@@ -681,3 +690,25 @@ def test_partial_reassessment_binds_retained_assessor_source(tmp_path):
     (tmp_path / 'assessor-source.json').write_text('changed assessor source')
     with pytest.raises(ValueError, match='artifact changed'):
         live.load_episode(path)
+
+
+def test_exact_optional_return_selector_matches_only_actual_function_value():
+    text='"check-declaration"'
+    selector={'definition':{'name':'chooseNext','source':'owned/chooseNext.nl'},
+              'valueJson':text,'sha256':hashlib.sha256(text.encode()).hexdigest()}
+    proof={'actualResult':{'admission':{'decision':'check-declaration'}},
+           'outcomeDimensions':{'incidentalValues':{'passed':False,'incorrectReturns':[selector]}}}
+    record={'definition':selector['definition'],'output':{'complete':True,'hash':selector['sha256'],'bytes':len(text)},
+            'model_turns':[{'kind':'generation'},{'kind':'score'},{'kind':'generation'}]}
+    assert live.declared_return_exclusions([proof],{'actual':record})=={'actual':2}
+    optional=copy.deepcopy(proof)
+    optional['outcomeDimensions']['incidentalValues']['incorrectReturns'][0]['required']=False
+    assert live.declared_return_exclusions([optional],{})=={}
+    assert live.declared_return_exclusions([optional],{'unrelated':{**record,'definition':{'name':'chooseNext','source':'foreign.nl'}}})=={}
+    for changed in ({'definition':{'name':'different','source':'owned/chooseNext.nl'}},
+                    {'output':{**record['output'],'hash':'0'*64}}):
+        with pytest.raises(ValueError,match='actual original invocation'):
+            live.declared_return_exclusions([proof],{'forged':{**record,**changed}})
+    forged=copy.deepcopy(proof);forged['outcomeDimensions']['incidentalValues']['incorrectReturns'][0]['sha256']='0'*64
+    with pytest.raises(ValueError,match='identity/hash'):
+        live.declared_return_exclusions([forged],{'actual':record})

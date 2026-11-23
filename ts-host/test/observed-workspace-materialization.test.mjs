@@ -25,7 +25,7 @@ if kind.startswith('partial'):
   verification['training_scope']['invocations'][0]['ordinals']=[0]
  spec['verification']=artifact(root,'verification.json',verification);path.write_text(json.dumps(spec))
 else:
- if kind=='caught-child':
+ if kind in ('caught-child','incidental-nested'):
   path,spec,_,verification=tree_fixture(root);detail=json.loads((root/'call.json').read_text())
   child=json.loads((root/'child.json').read_text());child['events']=[{'kind':'action','outcome':'completed','tool_call_id':'actual-tool-id'}]
   spec['calls'][1]=artifact(root,'child.json',child)
@@ -38,7 +38,7 @@ else:
   interaction.update(program=entry['program'],entry=entry);verification['interaction']=copy.deepcopy(interaction)
   detail['record'].update(program_root='skills/documents',inputs={name:{'complete':True,'bytes':len(text.encode()),'hash':hashlib.sha256(text.encode()).hexdigest()} for name,text in texts.items()})
   detail['record']['definition'].update(name=entry['callable'],source='reconcileDraft.nl')
- if 'masked' in kind:
+ if 'masked' in kind or kind.startswith('incidental'):
   terminal=copy.deepcopy(detail['record']['model_turns'][0]);args={'status':'success','value':{'wrong':True}}
   terminal['reply']['raw_calls']=[{'id':'terminal-id','type':'function','function':{'name':'return_result','arguments':json.dumps(args)}}]
   terminal['reply']['calls']=[['return_result',args]]
@@ -46,7 +46,23 @@ else:
   detail['record']['model_turns']=([detail['record']['model_turns'][0]] if kind!='masked-only' else [])+[terminal]
   detail['events'].append({'kind':'action','outcome':'completed','tool_call_id':'terminal-id'})
   verification['evidence']=[{**artifact(root,'optional-readback.json',{'proof':{'outcomeDimensions':{'returnedValue':{'required':False,'passed':False}}}}),'kind':'workspace'}]
- if kind=='caught-child':
+ if kind.startswith('incidental'):
+  detail['record']['definition']['source']='runUserGoal.nl'
+  detail['record']['output']={'complete':True,'hash':hashlib.sha256(b'{"wrong":true}').hexdigest(),'bytes':14}
+  text='{"wrong":true}'
+  selector={'definition':copy.deepcopy(detail['record']['definition']),'valueJson':text,'sha256':hashlib.sha256(text.encode()).hexdigest()}
+  if kind=='incidental-forged-hash':selector['sha256']='0'*64
+  if kind=='incidental-foreign-call':selector['definition']['source']='foreign.nl'
+  proof={'actualResult':{'wrong':True},'outcomeDimensions':{'incidentalValues':{'passed':False,'incorrectReturns':[selector,selector,{**selector,'required':False,'definition':{'name':'absentHelper','source':'absent.nl'}}]}}}
+  if kind=='incidental-nested':
+   child['record']['definition']['source']='owned/recoverAndWrite.nl'
+   child['record']['output']=copy.deepcopy(detail['record']['output'])
+   child['record']['model_turns']=[copy.deepcopy(terminal)]
+   child['events']=[{'kind':'action','outcome':'completed','tool_call_id':'terminal-id'}]
+   proof['outcomeDimensions']['incidentalValues']['incorrectReturns'].append({**selector,'definition':copy.deepcopy(child['record']['definition'])})
+   spec['calls'][1]=artifact(root,'child.json',child)
+  verification['evidence']=[{**artifact(root,'incidental.json',{'proof':proof}),'kind':'workspace'}]
+ if kind in ('caught-child','incidental-nested'):
   spec['calls'][0]=artifact(root,'call.json',detail);spec['verification']=artifact(root,'verification.json',verification);path.write_text(json.dumps(spec))
  else:rewrite(root,spec,detail,verification)
 if kind=='completed':
@@ -80,7 +96,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1]]) {
+for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['incidental',1],['incidental-nested',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {
@@ -99,11 +115,11 @@ for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial
     } finally {await rm(root,{recursive:true,force:true});}
   });
 }
-for (const kind of ['partial','partial-error','masked']) {
+for (const kind of ['partial','partial-error','masked','incidental']) {
   test(`rejects forged decision admission from independently excluded ${kind} evidence`, async () => {
     const {root,row}=await fixture(kind);
     try {
-      const excluded=kind==='masked'?row.trajectory.at(-1):row.trajectory.find(turn=>turn.invocation_id==='call-one'&&turn.phase==='action');
+      const excluded=['masked','incidental'].includes(kind)?row.trajectory.at(-1):row.trajectory.find(turn=>turn.invocation_id==='call-one'&&turn.phase==='action');
       excluded.training_admission={approved:true};
       await assert.rejects(verifyObservedWorkspaceEvidence(row),/observed decision differs/);
       await writeFile(join(root,'forged.jsonl'),JSON.stringify(row)+'\n');
@@ -179,4 +195,28 @@ test('partial original assessor bytes remain independently bound',async()=>{
  try{await writeFile(join(root,row.outcome.training_scope.assessor.path),'changed assessor source');
   await assert.rejects(verifyObservedWorkspaceEvidence(row),/artifact changed/);
  }finally{await rm(root,{recursive:true,force:true})}
+});
+
+for(const kind of ['incidental-forged-hash','incidental-foreign-call'])test(`rejects ${kind} output exclusion`,async()=>{
+ await assert.rejects(fixture(kind),/incorrect return/);
+});
+for(const mutation of ['hash','foreign-source','value'])test(`independent disk verifier rejects incidental ${mutation} forgery`,async()=>{
+ const {root,row}=await fixture('incidental');
+ try {
+  const manifest=JSON.parse(await readFile(join(root,'manifest.json'),'utf8'));
+  const receipt=JSON.parse(await readFile(join(root,'verification.json'),'utf8'));
+  const proof=JSON.parse(await readFile(join(root,'incidental.json'),'utf8'));
+  const selector=proof.proof.outcomeDimensions.incidentalValues.incorrectReturns[0];
+  if(mutation==='hash')selector.sha256='0'.repeat(64);
+  if(mutation==='foreign-source')selector.definition.source='foreign.nl';
+  if(mutation==='value'){
+   selector.valueJson='{"invented":true}';
+   selector.sha256=createHash('sha256').update(selector.valueJson).digest('hex');
+  }
+  const bind=async(name,value)=>{const bytes=Buffer.from(JSON.stringify(value));await writeFile(join(root,name),bytes);return {path:name,sha256:createHash('sha256').update(bytes).digest('hex')};};
+  receipt.evidence[0]={...await bind('incidental.json',proof),kind:'workspace'};
+  manifest.verification=await bind('verification.json',receipt);row.provenance.verification=manifest.verification;
+  const source=await bind('manifest.json',manifest);row.provenance.source_manifest={...source,path:join(root,source.path)};
+  await assert.rejects(verifyObservedWorkspaceEvidence(row),/incorrect return/);
+ } finally {await rm(root,{recursive:true,force:true});}
 });

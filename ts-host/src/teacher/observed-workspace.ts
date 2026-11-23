@@ -60,7 +60,7 @@ export function materializeObservedWorkspace(row: ObservedRow, digest: string): 
   for (const value of (row.outcome.excluded_return_decisions ?? []) as unknown[]) {
     const exclusion = object(value);
     const call = typeof exclusion.invocation_id === 'string' ? calls.get(exclusion.invocation_id) : undefined;
-    if (!call || call.parent_call_id !== null || !Number.isSafeInteger(exclusion.ordinal) || Number(exclusion.ordinal) < 0)
+    if (!call || !Number.isSafeInteger(exclusion.ordinal) || Number(exclusion.ordinal) < 0)
       throw new Error('invalid independently excluded application return');
     excludedReturns.add(`${exclusion.invocation_id}:${exclusion.ordinal}`);
   }
