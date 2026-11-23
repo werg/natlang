@@ -113,6 +113,31 @@ def split_manifest(directory, family, name, items, held):
     return {'path': str(directory / 'manifest.json'), 'tasks': len(items)}
 
 
+def subset(args):
+    """DIR/<NAME>/: the first --tasks of a split's manifest in stable hash order, as its own pinned held_eval manifest
+    (the split's engine.json beside it; ``subset_of`` names the parent manifest's sha256). A measurement arm of every
+    program on the whole dev split costs ~4,200 episodes at 2 samples; a fixed subset is the same population, cheaper."""
+    from natlang_neuralese.rl.held_eval import write_manifest
+    directory = Path(args.dir)
+    parent = directory / args.split
+    manifest = json.loads((parent / 'manifest.json').read_text())
+    family = (manifest.get('program') or {}).get('family') or directory.name
+    order = sorted(manifest['tasks'], key=lambda t: hashlib.sha256(f'subset:{family}:{t["id"]}'.encode()).hexdigest())
+    keep = order[:args.tasks]
+    ids = {t['id'] for t in keep}
+    rows = [row for row in read_jsonl(parent / 'cases.jsonl') if row['id'] in ids]
+    out = directory / (args.name or f'{args.split}{args.tasks}')
+    body = {k: v for k, v in manifest.items() if k != 'cases'}
+    body.update(tasks=[t for t in manifest['tasks'] if t['id'] in ids],
+                excluded_split_groups=manifest['excluded_split_groups'],
+                subset_of={'manifest_sha256': sha256_file(parent / 'manifest.json'), 'split': args.split,
+                           'tasks': len(ids), 'order': f'sha256(subset:{family}:<task id>)'})
+    sha = write_manifest(out, body, rows)
+    if (parent / 'engine.json').exists():
+        shutil.copyfile(parent / 'engine.json', out / 'engine.json')
+    print(json.dumps({'manifest': str(out / 'manifest.json'), 'sha256': sha, 'tasks': len(rows)}))
+
+
 # ---- split -----------------------------------------------------------------------------------------------------------
 def split(args):
     from natlang_neuralese.rl.held_eval import training_exclusion_ids
@@ -375,13 +400,21 @@ def plan(args):
 
 
 # ---- bank ------------------------------------------------------------------------------------------------------------
-def program_rows(engine, directory, *, sha):
+def world_order(family, task):
+    return hashlib.sha256(f'bank-world:{family}:{task}'.encode()).hexdigest()
+
+
+def program_rows(engine, directory, *, sha, max_worlds=None):
     """Pool rows of one program (meta_bank.build_pool input): its support rows lowered with the engine's template,
-    one world per support task."""
+    one world per support task; with ``max_worlds``, only that many support tasks in stable hash order (an episode
+    draws a few worlds: lowering every row of a 12k-row program costs time and memory and adds nothing)."""
     from natlang_neuralese.tune.rows import lower_rows
     directory = Path(directory)
     family = json.loads((directory / 'split.json').read_text())['family']
     turns = read_jsonl(directory / 'rows.jsonl')
+    if max_worlds:
+        keep = set(sorted({t['component'] for t in turns}, key=lambda task: world_order(family, task))[:max_worlds])
+        turns = [t for t in turns if t['component'] in keep]
     lowered = lower_rows(engine, turns, prompt_weight=0.)
     return [{'family': family, 'world': turn['component'], 'actor': {'checkpoint_sha256': sha}, 'graph': row['graph']}
             for turn, row in zip(turns, lowered)], family
@@ -481,11 +514,11 @@ def bank(args):
                                     dtype=getattr(torch, args.dtype) if args.dtype else None, store=store, training_state=False)
         rows, fits, held_dirs = [], {}, {}
         for directory in args.programs:
-            made, family = program_rows(engine, directory, sha=sha)
+            made, family = program_rows(engine, directory, sha=sha, max_worlds=args.max_worlds)
             rows.append((made, family, 'meta-train'))
             fits[family] = program_fit(engine, directory)
         for directory in args.held:
-            made, family = program_rows(engine, directory, sha=sha)
+            made, family = program_rows(engine, directory, sha=sha, max_worlds=args.max_worlds)
             rows.append((made, family, 'held'))
             held_dirs[family] = Path(directory)
         pool = {'families': {}}
@@ -520,7 +553,10 @@ def bank(args):
         manifest = learner.publish()
         learner.save()
         for family, directory in held_dirs.items():
-            made = [r for made, f, _ in rows if f == family for r in made]
+            # the bank adapts from a few support rows (its point is few-shot adaptation): --held-support-rows of the
+            # held program's support rows, whole worlds in stable hash order
+            made = sorted((r for made, f, _ in rows if f == family for r in made),
+                          key=lambda r: (world_order(family, r['world']), r['graph']['id']))[:args.held_support_rows]
             bank_ = learner.bank_of('meta')
             fitted = learner.fit(made, 'meta')
             cores = bank_.composed_cores(list(range(len(bank_.components))), fitted['coefficients'])
@@ -638,13 +674,13 @@ def colab_measure(args):
     policy = policy_id_of(info.get('rl_policy_binding') or {})
     results = {}
     for directory in dirs:
-        out = directory / 'eval' / f'{args.arm}-dev-{args.series}'
+        out = directory / 'eval' / f'{args.arm}-{args.split}-{args.series}'
         out.mkdir(parents=True, exist_ok=True)
         unit = f'progdev-{directory.name[:40]}-{args.arm}-{int(time.time())}'
         env = (f'NATLANG_REPO={pin} PYTHONPATH={pin}/training/neuralese:{pin} HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 '
                f'MKL_NUM_THREADS=1')
         measure = (f'exec /usr/bin/env {env} {sys.executable} -m natlang_neuralese.rl.held_eval measure '
-                   f'--manifest {directory}/dev/manifest.json --endpoint {record["endpoint"]}={args.slots} '
+                   f'--manifest {directory}/{args.split}/manifest.json --endpoint {record["endpoint"]}={args.slots} '
                    f'--policy-id {policy} --top-p 0.95 --samples {args.samples} --out {out} '
                    f'--label {directory.name}-{args.arm}-{args.series} --allow-other-engine --max-model-requests 40 '
                    f'>> {out}/measure.log 2>&1')
@@ -754,6 +790,9 @@ def main(argv=None):
     b.add_argument('--target-pattern', default=r'self_attn\.(q_proj|k_proj|v_proj|o_proj)|conv\.(in_proj|out_proj)',
                    help='bank target matrices (default: the program fits\' attention and conv projections)')
     b.add_argument('--recipe', help='JSON overrides of meta_bank.MetaRecipe')
+    b.add_argument('--max-worlds', type=int, default=64, help='support tasks per program lowered into the pool')
+    b.add_argument('--held-support-rows', type=int, default=64,
+                   help='support rows a held program is adapted from (the bank inner fit; recorded in the release)')
     b.add_argument('--seed', type=int, default=0)
     cf = sub.add_parser('colab-fit', help='a fit as a tenant of the Colab session (yields to rounds; resumable)')
     cf.add_argument('--dir', required=True)
@@ -767,14 +806,21 @@ def main(argv=None):
     cm.add_argument('--host', default=None)
     cm.add_argument('--commit', required=True)
     cm.add_argument('--pin', required=True, help='experiment pin (scripts/pin_checkout.py) the episodes run from')
-    cm.add_argument('--series', default='a100', help='result directory suffix: DIR/eval/<arm>-dev-<series>')
+    cm.add_argument('--split', default='dev', help='the manifest directory measured (dev, or a subset such as dev64)')
+    cm.add_argument('--series', default='a100', help='result directory suffix: DIR/eval/<arm>-<split>-<series>')
+    ss = sub.add_parser('subset', help='a stable-hash subset of a split as its own pinned manifest (DIR/<split><tasks>)')
+    ss.add_argument('--dir', required=True)
+    ss.add_argument('--split', default='dev')
+    ss.add_argument('--tasks', type=int, required=True)
+    ss.add_argument('--name')
     cm.add_argument('--samples', type=int, default=2)
     cm.add_argument('--slots', type=int, default=32)
     cm.add_argument('--budget-gb', type=float, default=12.)
     cm.add_argument('--priority', default='low')
     args = parser.parse_args(argv)
     status = {'split': split, 'rows': rows, 'plan': plan, 'release': release, 'teacher-tasks': teacher_tasks,
-              'bank': bank, 'colab-fit': colab_fit, 'colab-measure': colab_measure}[args.command](args)
+              'bank': bank, 'colab-fit': colab_fit, 'colab-measure': colab_measure,
+              'subset': subset}[args.command](args)
     return status if isinstance(status, int) else 0
 
 
