@@ -485,3 +485,48 @@ def test_pinned_producer_default_publishes_owner_without_changing_read_snapshot(
     assert not (pin / producer.entry_file('new')).exists()
     assert {e['id'] for e in corpus_registry.load(pin)['corpora']} == {'old'}
     assert {e['id'] for e in corpus_registry.load(owner)['corpora']} == {'old', 'new'}
+
+
+def test_dirty_stale_owner_recognizes_published_entry_and_can_publish_another(tmp_path, monkeypatch):
+    origin, repo = setup(tmp_path, monkeypatch)
+    original_head = sh('git', 'rev-parse', 'HEAD', cwd=repo)
+    push_from_other(tmp_path, origin, {'foreign-dirty.txt': 'new published source\n'}, 'advance unrelated source')
+    (repo / 'foreign-dirty.txt').write_text('uncommitted source work\n')
+    (repo / 'foreign-staged.txt').write_text('staged source work\n')
+    sh('git', 'add', 'foreign-staged.txt', cwd=repo)
+    assert rc.register([NEW], 'first publication from stale owner', check=False) == ['new']
+    assert sh('git', 'rev-parse', 'HEAD', cwd=repo) == original_head
+    assert not (repo / rc.entry_file('new')).exists()
+    published_head = sh('git', 'rev-parse', 'main', cwd=origin)
+    assert rc.register([NEW], 'idempotent recognition needs no checkout sync', check=False) == []
+    assert sh('git', 'rev-parse', 'main', cwd=origin) == published_head
+    assert rc.register([{**NEW, 'id': 'another'}], 'next publication', check=False) == ['another']
+    assert main_ids(origin) == ['another', 'new', 'old']
+    assert sh('git', 'rev-parse', 'HEAD', cwd=repo) == original_head
+    assert (repo / 'foreign-dirty.txt').read_text() == 'uncommitted source work\n'
+    assert sh('git', 'show', ':foreign-staged.txt', cwd=repo) == 'staged source work\n'
+
+
+def test_replace_uses_published_manifest_bytes_without_overwriting_stale_owner(tmp_path, monkeypatch):
+    origin, repo = setup(tmp_path, monkeypatch)
+    push_from_other(tmp_path, origin, {'foreign-dirty.txt': 'new source\n'}, 'advance unrelated source')
+    (repo / 'foreign-dirty.txt').write_text('local source\n')
+    assert rc.register([NEW], 'publish original', check=False) == ['new']
+    original_manifest = sh('git', 'show', 'main:training/corpus-manifests/new.json', cwd=origin)
+    updated = {**NEW, 'note': 'curated successor'}
+    assert rc.register([updated], 'update metadata against published entry', replace=True, check=False) == ['new']
+    assert main_entry(origin, 'new') == text(updated)
+    assert sh('git', 'show', 'main:training/corpus-manifests/new.json', cwd=origin) == original_manifest
+    assert not (repo / rc.entry_file('new')).exists()
+
+
+def test_promotion_snapshot_cannot_overwrite_newer_published_curation(tmp_path, monkeypatch):
+    origin, repo = setup(tmp_path, monkeypatch)
+    assert rc.register([NEW], 'publish original', check=False) == ['new']
+    selected_ref = sh('git', 'rev-parse', 'main', cwd=origin).strip()
+    curated = {**NEW, 'license': 'new published curator decision'}
+    assert rc.register([curated], 'curation moved', replace=True, check=False) == ['new']
+    with pytest.raises(ValueError, match='curated registry metadata changed'):
+        rc.register([{**NEW, 'roles': {'grpo-pool': {'order': 1}}}], 'stale promotion',
+                    replace=True, check=False, expected_registry_ref=selected_ref)
+    assert main_entry(origin, 'new') == text(curated)

@@ -479,3 +479,48 @@ def test_inventory_dataset_id_cannot_bypass_path_admission(roots, monkeypatch):
     ref = dr.consume(['archive'], run='test:inventory', how='explicit opt-out',
                      allow_unregistered=True, record=False)[0]
     assert ref == {'id': 'archive', 'unregistered': True, 'inventory_only': True}
+
+
+def test_promotion_uses_published_curated_fields_and_role_order_with_dirty_stale_owner(roots, monkeypatch, capsys):
+    import subprocess
+    import data_registry as cli
+    repo, origin, other = roots / 'repo', roots / 'origin.git', roots / 'other'
+    def git(directory, *args):
+        return subprocess.run(['git', '-C', str(directory), *args], check=True,
+                              capture_output=True, text=True).stdout.strip()
+    git_entries(repo, [{'id': 'existing', 'owner': 'dgx', 'path': 'data_hdd:existing',
+                        'roles': {'grpo-pool': {'order': 4, 'file': 'cases.jsonl'}}}])
+    (repo / 'source.txt').write_text('old source\n')
+    git(repo, 'init', '-q', '-b', 'main')
+    git(repo, 'config', 'user.email', 'test@test')
+    git(repo, 'config', 'user.name', 'test')
+    git(repo, 'add', '.')
+    git(repo, 'commit', '-qm', 'initial owner')
+    original_head = git(repo, 'rev-parse', 'HEAD')
+    git(roots, 'clone', '-q', '--bare', str(repo), str(origin))
+    git(repo, 'remote', 'add', 'origin', str(origin))
+    git(roots, 'clone', '-q', str(origin), str(other))
+    git(other, 'config', 'user.email', 'test@test')
+    git(other, 'config', 'user.name', 'test')
+    git_entries(other, [
+        {'id': 'existing', 'owner': 'dgx', 'path': 'data_hdd:existing',
+         'roles': {'grpo-pool': {'order': 20, 'file': 'cases.jsonl'}}},
+        {'id': 'new', 'owner': 'dgx', 'path': 'data_hdd:new', 'license': 'published-curated-license',
+         'note': 'published curator decision'}])
+    (other / 'source.txt').write_text('new published source\n')
+    git(other, 'add', '.')
+    git(other, 'commit', '-qm', 'published curated registry and source')
+    git(other, 'push', '-q', 'origin', 'main')
+    (repo / 'source.txt').write_text('uncommitted owner source\n')
+    pool(roots / 'data_hdd/new/cases.jsonl', ['new-row'])
+    dr.record_dataset('new', roots / 'data_hdd/new', kind='rl-tasks', format='f', license='producer-license')
+    monkeypatch.setattr(dr, 'code_repo', lambda: repo)
+    monkeypatch.delenv('NATLANG_REGISTRY_REPO', raising=False)
+    assert cli.main(['promote', 'new', '--role', 'grpo-pool', '--dry-run']) == 0
+    entry = json.loads(capsys.readouterr().out)[0]
+    assert entry['license'] == 'published-curated-license'
+    assert entry['note'] == 'published curator decision'
+    assert entry['roles']['grpo-pool']['order'] == 21
+    assert git(repo, 'rev-parse', 'HEAD') == original_head
+    assert (repo / 'source.txt').read_text() == 'uncommitted owner source\n'
+    assert not (repo / 'training/corpora/new.json').exists()

@@ -17,6 +17,7 @@ import argparse
 import collections
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -135,7 +136,7 @@ def main(argv=None) -> int:
     if a.cmd == 'consume':
         _print(dr.consume(a.items, run=a.run, how=a.how, amount=a.amount))
         return 0
-    reg = dr.load(repo=dr.registry_owner_repo()) if a.cmd == 'promote' else dr.load()
+    reg = published_promotion_registry() if a.cmd == 'promote' else dr.load()
     if a.cmd == 'show':
         ds = reg.datasets.get(a.name)
         if ds is None:
@@ -176,6 +177,16 @@ def main(argv=None) -> int:
     return 2
 
 
+def published_promotion_registry():
+    """Curated promotion metadata belongs to one immutable published owner ref."""
+    owner = dr.assert_registry_writable(dr.registry_owner_repo())
+    origin = subprocess.run(['git', '-C', str(owner), 'remote', 'get-url', 'origin'],
+                            capture_output=True, text=True)
+    if origin.returncode == 0:
+        subprocess.run(['git', '-C', str(owner), 'fetch', '-q', 'origin'], check=True)
+    return dr.load(repo=owner, ref=dr.registry_owner_ref(owner))
+
+
 def promote(reg, a) -> int:
     ids = list(a.ids)
     if a.all_closed:
@@ -204,7 +215,7 @@ def promote(reg, a) -> int:
     sys.path.insert(0, str(owner / 'scripts/neuralese_data'))
     import register_corpora
     register_corpora.register(entries, f'data registry: promote {len(entries)} dataset(s)', replace=True,
-                              check=not a.no_check)
+                              check=not a.no_check, expected_registry_ref=getattr(reg, 'git_ref', None))
     return 0
 
 

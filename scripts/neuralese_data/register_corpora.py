@@ -95,7 +95,7 @@ def _guard_clean(publisher_git, paths, original_head):
                          'commit/publish them separately before retrying:\n  ' + '\n  '.join(conflicts))
 
 
-def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tries=10) -> list[str]:
+def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tries=10, expected_registry_ref=None) -> list[str]:
     assert_registry_writable(REPO)
     import io
     import contextlib
@@ -115,30 +115,33 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
     repository = publisher.Git(REPO)
     head_entries = {path: repository.entry('HEAD', path) for path in selected}
     _guard_clean(repository, selected, head_entries)
-    upstream_entries = {path: repository.entry('origin/main', path) for path in selected}
-    changed_upstream = [path for path in selected if head_entries[path] != upstream_entries[path]]
-    if changed_upstream:
-        sync_output = io.StringIO()
-        with contextlib.redirect_stdout(sync_output), contextlib.redirect_stderr(sync_output):
-            status = publisher.main(['-C', str(REPO), '--sync-only'])
-        if status != publisher.EXIT_OK:
-            raise ValueError('registration paths differ from origin/main; safe checkout sync was blocked. '
-                'Preserve the other work and resolve the reported conflict:\n' + sync_output.getvalue()[-4000:])
-        head_entries = {path: repository.entry('HEAD', path) for path in selected}
-        _guard_clean(repository, selected, head_entries)
-        changed_upstream = [path for path in selected if head_entries[path] != repository.entry('origin/main', path)]
-        if changed_upstream:
-            raise ValueError('registration paths contain unpublished local commits: ' + ', '.join(changed_upstream)
-                + '; publish or reconcile those exact paths before retrying')
+    # Published blobs own registry state. A stale checkout need not absorb
+    # unrelated source commits merely to register or recognize a dataset.
+    published = repository.rev('origin/main')
+    base = repository.out('merge-base', 'HEAD', published)
+    local_selected = [path for path in selected
+                      if head_entries[path] != repository.entry(base, path)]
+    if local_selected:
+        raise ValueError('registration paths contain unpublished local commits: ' + ', '.join(local_selected)
+                         + '; publish or reconcile those exact paths before retrying')
+    published_entries = {path: repository.entry(published, path) for path in selected}
+    if expected_registry_ref is not None:
+        for entry in entries:
+            path = entry_file(entry['id'])
+            current = published_entries[path]
+            if current != repository.entry(expected_registry_ref, path):
+                current_value = json.loads(repository.blob(current[1])) if current is not None else None
+                if current_value != entry:
+                    raise ValueError(f"{entry['id']} curated registry metadata changed since promotion's published snapshot; reload and retry")
     initial = {}
     for entry in entries:
-        found = head_entries[entry_file(entry['id'])]
+        found = published_entries[entry_file(entry['id'])]
         initial[entry['id']] = json.loads(repository.blob(found[1])) if found is not None else None
         if initial[entry['id']] is not None and initial[entry['id']] != entry and not replace:
             raise ValueError(f"{entry['id']} is registered with different content; manifests are immutable: "
                              'publish a new id (or --replace for an entry whose manifest is unchanged)')
     changed = [entry for entry in entries if initial.get(entry['id']) != entry or
-               head_entries[f"{MANIFESTS}/{entry['id']}.json"] is None]
+               published_entries[f"{MANIFESTS}/{entry['id']}.json"] is None]
     if not changed:
         return []
     with tempfile.TemporaryDirectory(prefix='natlang-corpus-registration-') as temporary:
@@ -155,7 +158,7 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
                     value = sync.publish(REPO, entry, publish_cache, manifest_output=generated)
             except (OSError, ValueError) as error:
                 raise ValueError(f"publish {entry['id']}: {error}") from error
-            existing = head_entries[manifest_name]
+            existing = published_entries[manifest_name]
             if existing is not None:
                 old_bytes = repository.blob(existing[1])
                 if json.loads(old_bytes) != value:
@@ -164,12 +167,13 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
                 generated.write_bytes(old_bytes)
             else:
                 contents[manifest_name] = generated.read_bytes()
-        # the candidate admission verifier reads one registry document: the checkout's with these entries in place
+        # Admission reads the same exact published registry snapshot as preflight,
+        # plus these proposed successors; local stale metadata cannot replace it.
         registry_file = scratch / 'registry.json'
         if str(REPO / 'training/neuralese') not in sys.path:
             sys.path.insert(0, str(REPO / 'training/neuralese'))
         from natlang_neuralese.common import corpus_registry
-        document = corpus_registry.load(REPO)
+        document = corpus_registry.load_ref(REPO, published)
         by_id = {e['id']: e for e in document['corpora']}
         by_id.update({e['id']: e for e in changed})
         document['corpora'] = sorted(by_id.values(), key=lambda e: e['id'])
@@ -236,7 +240,8 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
                 '-m',message,'-m','Registered unattended by scripts/neuralese_data/register_corpora.py:\n'+body,
                 '--trailer',TRAILERS,*contents]
         with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
-            status = publisher.main(args, content_overrides=overrides, plan_validator=validate_plan)
+            status = publisher.main(args, final_overrides=lambda _git, _base, _upstream: overrides,
+                                    plan_validator=validate_plan)
         if status != publisher.EXIT_OK:
             raise ValueError('registration was not published; preserve selected paths and resolve the conflict:\n'+output.getvalue()[-4000:])
         # The publisher uses a temporary index and --no-advance. Sync separately:
@@ -250,7 +255,7 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool, *, tr
 
 
 def register(entries: list[dict], message: str, replace: bool = False, links: dict[str, str] | None = None,
-             tries: int = 10, check: bool = True) -> list[str]:
+             tries: int = 10, check: bool = True, *, expected_registry_ref=None) -> list[str]:
     """Register ENTRIES from canonical main, preserving all other work."""
     assert_registry_writable(REPO)
     for rel, target in (links or {}).items():
@@ -258,7 +263,7 @@ def register(entries: list[dict], message: str, replace: bool = False, links: di
     LOCK.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK, 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        done = attempt(entries, message, replace, check, tries=tries)
+        done = attempt(entries, message, replace, check, tries=tries, expected_registry_ref=expected_registry_ref)
     if done:
         print(json.dumps({'registered': done}), flush=True)
     return done
