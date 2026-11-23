@@ -533,7 +533,7 @@ def test_one_sft_recipe_for_colab_and_dgx_and_the_dgx_learner_runs_through_the_l
     launched = []
     monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: launched.append((argv, kw['env'])) or
                         SimpleNamespace(returncode=0))
-    def finished(unit, poll=60):
+    def finished(unit, poll=60, between=None):
         (rd / 'sft' / 'factors').mkdir(parents=True, exist_ok=True)
         (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
     monkeypatch.setattr(d.c, 'active', lambda unit: False)
@@ -568,7 +568,7 @@ def test_a_round_skips_an_answering_session_slower_than_the_dgx_and_trains_on_th
     launched = []
     monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: launched.append(argv) or SimpleNamespace(returncode=0))
     monkeypatch.setattr(ei.time, 'sleep', lambda s: (_ for _ in ()).throw(AssertionError('waited for a session')))
-    def finished(unit, poll=60):
+    def finished(unit, poll=60, between=None):
         (rd / 'sft' / 'factors').mkdir(parents=True, exist_ok=True)
         (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
     monkeypatch.setattr(d.c, 'active', lambda unit: False)
@@ -875,3 +875,227 @@ def test_publication_is_idempotent_and_goes_through_the_ledger(tmp_path, monkeyp
     assert cmd[cmd.index('--base-checkpoint') + 1] == cur['checkpoint'] and cmd[cmd.index('--out') + 1] == str(rd / 'policy')
     d.publish(rd, cur, rd / 'sft' / 'factors')     # a rerun after a crash: published.json exists, nothing runs again
     assert len(ran) == 1
+
+
+# ---- remote (Colab) collection through a DGX SFT, rebinds and the round size (DECISIONS 2026-11-23) -------------------
+def _remote_driver(tmp_path, monkeypatch, *argv):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--rebind-actor', 'colab-g4@http://127.0.0.1:8570', *argv])
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port, bind_host=None: f'http://127.0.0.1:{port + 10161}')
+    return ei, d
+
+
+def test_a_dgx_sft_stops_only_the_dgx_collection_and_keeps_the_remote_one_collecting(tmp_path, monkeypatch):
+    """The DGX learner needs the DGX actor's memory, not the Colab actor's: stop_collections(remote=False) leaves the
+    remote collectors running; the SFT wait keeps (re)starting the remote collection of the policy it trains from
+    (a session the keeper replaced and served again gets its collector back)."""
+    ei, d = _remote_driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    d.collect_dir(cur).mkdir(parents=True)
+    unit = d.collection_unit(cur)
+    assert d.remote_units(unit) == [f'{unit}-remote0']
+    present, stopped = {unit, f'{unit}-fill', f'{unit}-remote0'}, []
+    monkeypatch.setattr(d.c, 'present', lambda u: u in present)
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), present.discard(u)))
+    d.stop_collections(remote=False)
+    assert stopped == [unit, f'{unit}-fill'] and f'{unit}-remote0' in present
+    d.stop_collections()
+    assert stopped[-1] == f'{unit}-remote0'
+
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'chains.sha256').write_text('f' * 64 + '\n')
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(d.c, 'active', lambda u: False)
+    monkeypatch.setattr(d, 'stop_collections', lambda **kw: None)
+    ensured = []
+    monkeypatch.setattr(d, 'ensure_remote_collection', lambda p: ensured.append(p['sha256']))
+
+    def wait(unit, poll=60, between=None):
+        between()
+        between()
+        (rd / 'sft' / 'factors').mkdir(parents=True, exist_ok=True)
+        (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
+    monkeypatch.setattr(d.c, 'wait', wait)
+    d.train_sft(rd, cur)
+    assert ensured == [cur['sha256']] * 2
+
+
+def test_cycle_wait_calls_between_and_survives_its_failure(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch)
+    polls = iter([True, True, False])
+    monkeypatch.setattr(d.c, 'present', lambda u: next(polls))
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: SimpleNamespace(returncode=1))
+    calls = []
+
+    def between():
+        calls.append(1)
+        raise RuntimeError('tunnel down')
+    d.c.wait('u', between=between)
+    assert len(calls) == 2
+
+
+def test_the_next_rounds_snapshot_waits_for_the_remote_collection_while_the_dgx_one_is_stopped(tmp_path, monkeypatch):
+    """A DGX SFT stops the DGX collection minutes after the round starts: the next round's snapshot (prepared ahead)
+    then waited for nothing and froze the newest policy's frontier at those minutes. It waits for the remote
+    collection (--snapshot-min-hours from the earliest start) and snapshots at once only when no collection runs."""
+    ei, d = _remote_driver(tmp_path, monkeypatch, '--snapshot-min-hours', '2')
+    cur = d.controller.current
+    remote = d.collect_dir(cur).with_name(d.collect_dir(cur).name + '-remote0')
+    for w, started in ((d.collect_dir(cur), 1000.), (remote, 2000.)):
+        w.mkdir(parents=True)
+        (w / 'runs.jsonl').write_text(json.dumps({'started': started}) + '\n')
+    now = {'t': 1000. + 3600}
+    present = {f'{d.collection_unit(cur)}-remote0'}
+    monkeypatch.setattr(ei.time, 'time', lambda: now['t'])
+    slept = []
+
+    def sleep(s):
+        slept.append(s)
+        now['t'] += 3600
+    monkeypatch.setattr(ei.time, 'sleep', sleep)
+    monkeypatch.setattr(d.c, 'present', lambda u: u in present)
+    monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (_ for _ in ()).throw(StopIteration('snapshot taken')))
+    with pytest.raises(StopIteration):
+        d.prepare(d.root / 'r0002', [cur])
+    assert len(slept) == 1                      # waited one poll: 2 h after the DGX collection's start
+    slept.clear()
+    present.clear()
+    now['t'] = 1000.
+    with pytest.raises(StopIteration):          # nothing collects: what was scored is the snapshot
+        d.prepare(d.root / 'r0003', [cur])
+    assert not slept
+
+
+def test_a_failed_or_missed_rebind_is_retried_and_an_actor_already_serving_is_skipped(tmp_path, monkeypatch):
+    ei, d = _remote_driver(tmp_path, monkeypatch)
+    import pop_rl_actor
+    cur = d.controller.current
+    d.controller.record_round_published('r0001', str(tmp_path / 'v1.pt'), '1' * 64, base_sha256=cur['sha256'])
+    new = d.controller.current
+    published = d.round_dir('r0001') / 'policy' / 'published.json'
+    published.parent.mkdir(parents=True)
+    published.write_text(json.dumps({'checkpoint_sha256': '1' * 64, 'checkpoint': str(tmp_path / 'v1.pt'),
+                                     'factors_dir': str(tmp_path / 'factors'), 'sglang_export': {'dir': '/x'}}))
+    serving = {'sha': cur['sha256']}
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: serving['sha'] == sha)
+    rebinds = []
+
+    def rebind(**kw):
+        rebinds.append(kw)
+        if len(rebinds) == 1:
+            raise RuntimeError('ssh: connection closed')
+        serving['sha'] = kw['policy_id']
+    monkeypatch.setattr(pop_rl_actor, 'rebind_actor', rebind)
+    monkeypatch.setattr(d.c, 'present', lambda u: True)          # the collector of the new policy runs: no launch
+    d.ensure_remote_collection(new)
+    assert len(rebinds) == 1 and rebinds[0]['checkpoint'] == str(tmp_path / 'v1.pt')
+    assert rebinds[0]['front_url'] == 'http://127.0.0.1:8570' and rebinds[0]['host'] == 'colab-g4'
+    d.ensure_remote_collection(new)                              # within the retry interval: no second try
+    assert len(rebinds) == 1
+    d._rebind_tried.clear()
+    d.ensure_remote_collection(new)
+    assert len(rebinds) == 2 and serving['sha'] == '1' * 64
+    d._rebind_tried.clear()
+    d.ensure_remote_collection(new)                              # already serving: nothing to do
+    d.rebind_remote(json.loads(published.read_text()), str(tmp_path / 'factors'), new['version'])
+    assert len(rebinds) == 2
+    d.ensure_remote_collection(cur)                              # the start policy has no factors: never rebound
+    assert len(rebinds) == 2
+
+
+def test_a_rebound_colab_actors_record_names_the_new_policy_for_the_keepers_re_serve(tmp_path, monkeypatch):
+    import pop_rl_actor
+    sys.path.insert(0, str(REPO / 'scripts' / 'colab'))
+    import session_keeper
+    record = {'policy_id': 'a' * 64, 'endpoint': 'http://127.0.0.1:18731', 'pid': 7,
+              'serve_args': {'checkpoint': '/ckpt/v0.pt', 'policy_id': 'a' * 64, 'commit': 'c' * 40, 'port': 8570,
+                             'kv_cache_dtype': 'fp8_e4m3', 'weight_dtype': 'bfloat16', 'host': 'colab-g4'}}
+    rebound = {'front_url': 'http://127.0.0.1:8570', 'policy_id': 'b' * 64, 'version': 3,
+               'export_dir': '/content/natlang-work/sglang-hf-v3-bbbb', 'weights_sha256': 'e' * 64}
+    out = pop_rl_actor.rebound_record(record, rebound, '/data/aei1/r0003/policy/checkpoint.pt')
+    assert out['policy_id'] == 'b' * 64 and out['serve_args']['policy_id'] == 'b' * 64
+    assert out['serve_args']['checkpoint'] == '/data/aei1/r0003/policy/checkpoint.pt'
+    assert out['serve_args']['commit'] == 'c' * 40 and out['rebound']['from_policy_id'] == 'a' * 64
+    assert pop_rl_actor.rebound_record(record, rebound, None) is None                 # no DGX checkpoint to serve
+    assert pop_rl_actor.rebound_record(record, {**rebound, 'front_url': 'http://127.0.0.1:8571'}, '/c') is None
+    assert pop_rl_actor.rebound_record({}, rebound, '/c') is None
+    # rebind_actor writes it for a Colab host after the attestation
+    monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path)
+    pop_rl_actor.write_json(pop_rl_actor.colab_state_path('colab-g4'), record)
+    monkeypatch.setattr(pop_rl_actor, 'host_config', lambda profile, host=None: {})
+    monkeypatch.setattr(pop_rl_actor, '_prepare_remote_rebind_export', lambda **kw: (rebound['export_dir'], 'e' * 64))
+    monkeypatch.setattr(pop_rl_actor, '_http_json', lambda url, payload=None, **kw:
+                        {'success': True} if url.endswith('update_weights_from_disk') else {})
+    import natlang_neuralese.serve.sglang_actor as sa
+    monkeypatch.setattr(sa, 'attest_all_routes', lambda info, expected: (True, {}))
+    pop_rl_actor.rebind_actor(front_url='http://127.0.0.1:8570', policy_id='b' * 64, version=3,
+                              factors_dir=tmp_path, host='colab-g4', checkpoint='/data/aei1/r0003/policy/checkpoint.pt')
+    # the keeper serves a replaced session again from the record: the rebound policy
+    keeper = session_keeper.Keeper(SimpleNamespace(order='A100:hm,G4,L4', state=str(tmp_path / 'k.json'),
+                                                   actor_root=str(tmp_path), alias='colab-g4'))
+    serve = keeper.actor_record()['serve_args']
+    assert (serve['checkpoint'], serve['policy_id']) == ('/data/aei1/r0003/policy/checkpoint.pt', 'b' * 64)
+
+
+def test_the_round_mix_is_capped_with_its_composition_whole_episodes_and_unseen_first(tmp_path):
+    import numpy as np
+    import sft_sources
+
+    def chain(part, task, round_, n):
+        return {'part': part, 'task': task, 'round': round_, 'ids': np.zeros(n + 4, dtype=np.int32),
+                'segs': [(4, n, {'sample': np.zeros(n)})]}
+    chains = [chain('rl-own', 't1', 'own:1', 100), chain('rl-own', 't2', 'own:2', 100),
+              chain('teacher', 't3', 'teacher:3', 50), chain('teacher', 't3', 'teacher:3', 50),
+              chain('teacher', 't4', 'teacher:4', 100),
+              chain('filled', 't5', 'teacher:5', 100), chain('filled', 't6', 'teacher:6', 100)]
+    kept, report = sft_sources.cap_target_tokens(chains, 0)
+    assert kept is chains and not report['applied']
+    kept, report = sft_sources.cap_target_tokens(chains, 10_000)
+    assert kept is chains and not report['applied']
+    kept, report = sft_sources.cap_target_tokens(chains, 300, trained_keys={'own:1', 'teacher:5'})
+    assert report['applied'] and report['fraction'] == 0.5
+    rounds = [c['round'] for c in kept]
+    # every part keeps half; the trained episode goes last (own:2, teacher:6 kept); a two-chain episode stays whole
+    assert rounds == ['own:2', 'teacher:3', 'teacher:3', 'teacher:6']
+    assert {p: v['kept_weighted_target_tokens'] for p, v in report['parts'].items()} == \
+        {'rl-own': 100, 'teacher': 100, 'filled': 100}
+    # the next build's prefer-unseen treats a dropped episode as never trained
+    out = tmp_path / 'mix'
+    out.mkdir()
+    import zstandard
+    rows = [{'episode': k, 'task_id': t} for k, t in (('own:1', 't1'), ('own:2', 't2'), ('teacher:4', 't4'))]
+    (out / 'rows.jsonl.zst').write_bytes(zstandard.ZstdCompressor().compress(
+        ''.join(json.dumps(r) + '\n' for r in rows).encode()))
+    (out / 'build.json').write_text(json.dumps({'target_cap': {'dropped_episode_keys': ['own:1', 'teacher:4']}}))
+    keys, tasks = sft_sources.trained_in([out])
+    assert keys == {'own:2'} and tasks == {'t2'}
+
+
+def test_async_rounds_build_capped_mixes_by_default(tmp_path, monkeypatch):
+    ei, d = _remote_driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+    _, _, build = d.prepare_plan(d.root / 'r0001', [cur])
+    assert build[build.index('--max-target-tokens') + 1] == str(ei.ROUND_TARGET_TOKENS) == '12000000'
+    assert "'--max-target-tokens'" in (REPO / 'scripts/neuralese_data/sft_sources.py').read_text()
+    _, d0 = _remote_driver(tmp_path / 'off', monkeypatch, '--round-target-tokens', '0')
+    d0.collect_dir(d0.controller.current).mkdir(parents=True)
+    (d0.collect_dir(d0.controller.current) / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+    assert '--max-target-tokens' not in d0.prepare_plan(d0.root / 'r0001', [d0.controller.current])[2]
+
+
+def test_dry_run_shows_the_remote_collection_and_the_dgx_sft_sizing(tmp_path, monkeypatch, capsys):
+    ei, d = _remote_driver(tmp_path, monkeypatch, '--remote-slots', '64', '--dry-run')
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: True)
+    plan = d.plan()
+    (remote,) = plan['remote_collect']
+    assert remote['endpoint'] == 'http://127.0.0.1:18731' and remote['serves_policy'] and remote['budget_gb'] == 23
+    argv = remote['collect']
+    assert argv[argv.index('--actor') + 1] == 'http://127.0.0.1:18731=64' and argv[argv.index('--slots') + 1] == '64'
+    assert argv[argv.index('--work') + 1].endswith('-remote0')
+    assert argv[argv.index('--checkpoint-sha256') + 1] == d.controller.current['sha256']
+    assert plan['sft_dgx'] == {'activation_gb': 56, 'budget_gb': 80}

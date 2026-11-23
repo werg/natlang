@@ -1805,15 +1805,61 @@ def october_candidates(args, funnel, held, weights):
 
 
 def trained_in(builds):
-    """(episode keys, task ids) an earlier build trained: its OUT/rows.jsonl.zst rows (``--prefer-unseen``)."""
+    """(episode keys, task ids) an earlier build trained: its OUT/rows.jsonl.zst rows (``--prefer-unseen``), less the
+    episodes its ``--max-target-tokens`` cap dropped after their rows were written (build.json ``target_cap``)."""
     keys, tasks = set(), set()
     for build in builds:
+        report = Path(build) / 'build.json'
+        dropped = set(((json.loads(report.read_text()).get('target_cap') or {}).get('dropped_episode_keys') or ())
+                      if report.exists() else ())
         for line in zstd_lines(Path(build) / 'rows.jsonl.zst'):
             if line.strip():
                 row = json.loads(line)
+                if row['episode'] in dropped:
+                    continue
                 keys.add(row['episode'])
                 tasks.add(row['task_id'])
     return frozenset(keys), frozenset(tasks)
+
+
+def cap_target_tokens(chains, cap, trained_keys=frozenset()):
+    """(kept chains, report) of a mix bounded to ``cap`` weighted target tokens (``--max-target-tokens``; the
+    async round size): every part (``chain['part']``: own, teacher, each aux part) keeps the same fraction cap / total
+    of its weighted target tokens, so the mix's composition (own and aux shares) is the uncapped build's. Whole
+    episodes (a part's chains sharing task and round) are kept or dropped. Within a part the episodes a
+    ``--prefer-unseen`` build trained go last, otherwise the admission order stands (own and teacher: the build's
+    priority, breadth-first over tasks; aux parts: their shuffle); an episode that would overshoot its part's budget
+    is skipped for a smaller one. A mix at or under the cap is returned whole."""
+    from exp0_sft import chain_mass
+    total = sum(chain_mass(c) for c in chains)
+    if not cap or total <= cap:
+        return chains, {'cap': cap, 'total_weighted_target_tokens': int(total), 'applied': False}
+    fraction = cap / total
+    units, order = {}, []
+    for chain in chains:
+        key = (str(chain.get('part')), str(chain.get('task')), str(chain.get('round')))
+        if key not in units:
+            units[key] = []
+            order.append(key)
+        units[key].append(chain)
+    by_part = collections.defaultdict(list)
+    for key in order:
+        by_part[key[0]].append(key)
+    kept_units, parts = set(), {}
+    for part, keys in by_part.items():
+        mass = {k: sum(chain_mass(c) for c in units[k]) for k in keys}
+        budget, taken = fraction * sum(mass.values()), 0.
+        for k in sorted(keys, key=lambda k: k[2] in trained_keys):      # stable: unseen first, then admission order
+            if taken + mass[k] <= budget:
+                kept_units.add(k)
+                taken += mass[k]
+        parts[part] = {'weighted_target_tokens': int(sum(mass.values())), 'kept_weighted_target_tokens': int(taken),
+                       'episodes': len(keys), 'kept_episodes': sum(k in kept_units for k in keys),
+                       'kept_trained_before': sum(k in kept_units and k[2] in trained_keys for k in keys)}
+    kept = [c for c in chains if (str(c.get('part')), str(c.get('task')), str(c.get('round'))) in kept_units]
+    return kept, {'cap': cap, 'total_weighted_target_tokens': int(total), 'applied': True,
+                  'fraction': round(fraction, 4), 'kept_weighted_target_tokens': int(sum(chain_mass(c) for c in kept)),
+                  'parts': parts}
 
 
 PREFER_UNSEEN_SCOPES = ('family', 'global')
@@ -3017,6 +3063,16 @@ def build(args):
     all_chains[:], unfilled = drop_unfilled_live(all_chains, getattr(args, 'unfilled_live_teacher', 'auto'), aux_parts)
     if unfilled:
         funnel['teacher']['unfilled_live_dropped'] += unfilled
+    # the round size (``--max-target-tokens``): every part scaled alike, unseen episodes first; an episode the cap
+    # dropped is not trained (admitted_episode_keys, round.json, and the next build's prefer-unseen leave it out)
+    all_chains[:], target_cap = cap_target_tokens(all_chains, getattr(args, 'max_target_tokens', 0) or 0, trained_keys)
+    if target_cap['applied']:
+        kept_rounds = {str(c.get('round')) for c in all_chains}
+        target_cap['dropped_episode_keys'] = sorted(e['round'] for e in sft_episodes if str(e['round']) not in kept_rounds)
+        dropped = set(target_cap['dropped_episode_keys'])
+        sft_episodes[:] = [e for e in sft_episodes if e['round'] not in dropped]
+        print(json.dumps({'event': 'target cap', 'dropped_episodes': len(dropped),
+                          **{k: v for k, v in target_cap.items() if k != 'dropped_episode_keys'}}), flush=True)
     chains = all_chains
     open_goal_scope = getattr(args, 'open_goal_scope', None) or 'all'
     mix = mix_report(chains, aux_report, open_goal_scope)
@@ -3115,6 +3171,7 @@ def build(args):
         'stats': {k: dict(v) for k, v in stats.items()},
         'episodes': len(sft_episodes), 'tasks': len({e['task_id'] for e in sft_episodes}),
         'admitted_episode_keys': sorted(e['round'] for e in sft_episodes),
+        'target_cap': target_cap,
         'chains': len(chains), 'forward_tokens': forward,
         'target_tokens': int(sum(len(r['sample']) for e in sft_episodes for r in e['rows'])),
         'target_mass': target_mass_report(target_mass),
@@ -3552,6 +3609,9 @@ def main():
                    help='forward tokens of teacher episodes, taken breadth-first over tasks (0: every capped episode)')
     b.add_argument('--own-loss-share', type=float, default=0.25,
                    help='share of the weighted target tokens taken by the student\'s own successes (0: every capped one)')
+    b.add_argument('--max-target-tokens', type=int, default=0,
+                   help='bound the mix to this many weighted target tokens (the async round size): every part keeps '
+                        'the same fraction, whole episodes, unseen ones first (0: no bound)')
     b.add_argument('--max-task-target-tokens', type=int, default=0,
                    help='per task cap on weighted target tokens that own successes may fill up to (0: none)')
     b.add_argument('--prefer-unseen', action='append', default=[], metavar='BUILD_OUT',

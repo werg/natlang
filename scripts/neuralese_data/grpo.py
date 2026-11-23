@@ -810,11 +810,20 @@ class Collector:
         """An extra actor more than --max-staleness versions behind (its publication failed): start nothing there."""
         return self.version - self.served_version(url) > getattr(self.args, 'max_staleness', 2)
 
+    def episode_valid(self, actor_url, info):
+        """Whether a finished episode on ``actor_url`` is a verdict on its task. An actor this run serves and rebinds
+        itself always is; ``expert_iteration``'s collector over remote actors checks that the actor still answers and
+        serves the collected policy (a replaced Colab session may come back serving another one)."""
+        return True
+
     def slot(self, index=0):
         sampling = self.work / 'sampling-config.json'
         while not self.stop.is_set():
             # fewer slots while the learner computes (they share the GPU) and while memetic nested runs use the actor
             if index >= self.active_slots - (self._nested_slots() if getattr(self, 'memetic_rows', None) else 0):
+                time.sleep(2)
+                continue
+            if self.endpoint_for_slot(index) is None:   # this slot's actor is down: idle until it serves again
                 time.sleep(2)
                 continue
             item = self._take()
@@ -830,7 +839,7 @@ class Collector:
             workers.mkdir(exist_ok=True)
             key = entry['key']
             actor_url = self.endpoint_for_slot(index)
-            if self.actor_lagging(actor_url):
+            if actor_url is None or self.actor_lagging(actor_url):
                 with self.lock:
                     self.pending.appendleft(item)
                 time.sleep(5)
@@ -861,6 +870,9 @@ class Collector:
                 self._abandon(group, key, process.returncode)
                 if self.stop.is_set():
                     return
+                continue
+            if not self.episode_valid(actor_url, info):   # no verdict: its group is dropped, never scored
+                self._abandon(group, key, process.returncode)
                 continue
             with self.lock:
                 if info.get('abandoned'):   # a sibling was interrupted: this group is never scored
