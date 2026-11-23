@@ -74,7 +74,7 @@ def assess(packet_path, review_path, attestation_path, catalog_path, out):
     review_binding = {'path': copied_review.name, 'sha256': digest(copied_review), 'role': 'original-rejected-review'}
     content_binding = bind(root, 'independent-content-audit.json', attestation)
     lifecycle = {'baseline': before, 'current': current, 'delta': {'committedEventChanged': False, 'workingHeadChanged': True, 'protectedMainChanged': False},
-                 'originalReviewAccepted': False, 'nativePassed': True, 'newTeacherInference': False, 'newReviewerInference': False}
+                 'originalReviewAccepted': False, 'nativePassed': True, 'newTeacherCalls': 0, 'newExternalReviewerCalls': 0, 'contentAssessmentSource': attestation['auditor']}
     native_binding = bind(root, 'native-lifecycle-correction.json', lifecycle)
     checker = root / 'assessor.py'
     shutil.copyfile(__file__, checker)

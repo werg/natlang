@@ -166,7 +166,7 @@ export async function verifyOriginalRejection(packet, proof, root) {
   if(bindings.length!==1 || typeof passed!=='boolean')return false;
   const review=JSON.parse(await readBound(bindings[0],root)),observed=packet.execution?.diagnostics?.openGoalVerification;
   const input=observed?.preparedContentProject?.artifact?.semanticReviewInput??observed?.semanticReviewInput;
-  return review.schema==='natlang.live-workflow-review/1' && review.verdict?.accepted===false && input!==undefined &&
+  return review.schema==='natlang.live-workflow-review/1' && review.verdict?.accepted===false && input && typeof input==='object' && !Array.isArray(input) && Object.keys(input).length>0 &&
     isDeepStrictEqual(review.input,input) && !!(review.exchange||review.exchanges?.length);
 }
 

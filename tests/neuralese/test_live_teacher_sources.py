@@ -812,13 +812,16 @@ def test_native_bridge_selected_return_binds_actual_authored_output(tmp_path, mu
     else:
         assert len(live.load_episode(path)['turns']) == 1
 
-@pytest.mark.parametrize('mutation',[None,'accepted','input','missing'])
+@pytest.mark.parametrize('mutation',[None,'accepted','input','missing','empty-input'])
 def test_original_review_rejection_is_bound_separately_from_native_success(tmp_path,mutation):
     observed={'actual':{'documents':[{'path':'note.md','text':'The checked draft.'}]},'expected':{'goal':'Prepare a draft'},'rubric':'Check content.'}
     packet={'result':{'passed':True},'execution':{'diagnostics':{'openGoalVerification':{'preparedContentProject':{'artifact':{'semanticReviewInput':observed}}}}}}
     review={'schema':'natlang.live-workflow-review/1','input':copy.deepcopy(observed),'verdict':{'accepted':False,'verdict':'Content is correct; old handle was mistaken for a new commit.'},'exchange':{'request':{},'reply':{}}}
     if mutation=='accepted':review['verdict']['accepted']=True
     if mutation=='input':review['input']['expected']['goal']='Different goal'
+    if mutation=='empty-input':
+        packet['execution']['diagnostics']['openGoalVerification']['preparedContentProject']['artifact']['semanticReviewInput']=None
+        review['input']=None
     proof={'evidence':[{**artifact(tmp_path,'original-review.json',review),'role':'original-rejected-review'}]}
     if mutation=='missing':proof['evidence']=[]
     assert live.verify_original_rejection(packet,proof,tmp_path) is (mutation is None)

@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import shutil
 
-from live_teacher_sources import bound_file, load_episode, open_goal_fingerprint, same_json_value, validate_reassessment_check_roles, verify_original_rejection, verify_entry
+from live_teacher_sources import bound_file, load_episode, same_json_value, validate_reassessment_check_roles, verify_original_rejection, verify_entry
 from sft_sources import ZstdWriter, held_closure, held_hit
 
 
