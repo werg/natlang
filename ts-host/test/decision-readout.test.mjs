@@ -247,6 +247,53 @@ test('framedDecision asks for and scores {"result": VALUE} on a readout request 
   assert.equal(framedDecision(judge, 'result-object'), judge, 'a request that is not a readout carries its own instructions');
 });
 
+test('auto reply form: a readout without reasoning is read in the form the model puts more probability on (B14 instant collapse)', async () => {
+  const { autoFramedScores, decisionPrompt } = await import('../dist/decision-frame.js');
+  const options = ['"billing"', '"spam"'];
+  const request = { messages: [{ role: 'system', content: 's' }, { role: 'user', content: decisionPrompt(options) }], options };
+  // A model that answers in an object after its empty think block (the B14 checkpoint): a bare value costs ~8 nats
+  // more, and among the bare values the first listed wins; in the object it reads the ticket.
+  const scorer = (valueMass, objectMass) => {
+    const seen = [];
+    const score = async items => items.map(item => {
+      seen.push(item);
+      const object = item.options[0].startsWith('{"result"');
+      const own = object ? { '{"result": "billing"}': -3, '{"result": "spam"}': -0.05 } : { '"billing"': -0.01, '"spam"': -5 };
+      // alone, an option keeps the form's opening (its share of the mass); together, the shared tokens are prompt
+      return { log_probs: item.options.map(option => own[option] + (item.options.length === 1 ? (object ? objectMass : valueMass) : 0)) };
+    });
+    return { seen, score };
+  };
+  let probe = scorer(-8, -0.5);
+  let scores = await autoFramedScores(request, 'auto', probe.score);
+  assert.equal(scores.reply_frame, 'result-object');
+  assert.deepEqual(scores.log_probs, [-3, -0.05], 'the object form\'s joint scores');
+  assert.ok(scores.reply_masses['result-object'] > scores.reply_masses.value);
+  assert.equal(probe.seen.length, 2 + 2 * options.length, 'both forms together and each option alone, in one round');
+  assert.ok(probe.seen.slice(2).every(item => item.options.length === 1));
+  // A model trained on the bare value puts its mass there: read as before.
+  probe = scorer(-0.01, -0.3);
+  scores = await autoFramedScores(request, 'auto', probe.score);
+  assert.equal(scores.reply_frame, 'value');
+  assert.deepEqual(scores.log_probs, [-0.01, -5]);
+  // Fixed forms, reasoned readouts, field steps and requests that are not readouts are scored once, as framed.
+  for (const [item, reply, form] of [[request, 'value', options], [request, 'result-object', ['{"result": "billing"}', '{"result": "spam"}']],
+    [{ ...request, reasoning: 'r' }, 'auto', options], [{ ...request, open_reply: true }, 'auto', options],
+    [{ messages: [{ role: 'user', content: 'Judge it.' }], options }, 'auto', options]]) {
+    probe = scorer(-1, -1);
+    scores = await autoFramedScores(item, reply, probe.score);
+    assert.equal(probe.seen.length, 1); assert.deepEqual(probe.seen[0].options, form); assert.equal(scores.reply_frame, undefined);
+  }
+  const { decisionReplySetting } = await import('../dist/decision-frame.js');
+  process.env.NATLANG_DECISION_REPLY = 'value';
+  try { assert.equal(decisionReplySetting('auto'), 'value', 'NATLANG_DECISION_REPLY opts out'); }
+  finally { delete process.env.NATLANG_DECISION_REPLY; }
+  assert.equal(decisionReplySetting('auto'), 'auto');
+  process.env.NATLANG_DECISION_REPLY = 'bare';
+  try { assert.throws(() => decisionReplySetting(undefined), /NATLANG_DECISION_REPLY must be/); }
+  finally { delete process.env.NATLANG_DECISION_REPLY; }
+});
+
 
 test('generated decisions use the exact scored decision prompt and record a generation without a distribution', async()=>{
  const fn=loadVirtualNatlang({'verdict.nl':VERDICT},'verdict.nl');let scoredRequest,generatedRequest;const traces=[];

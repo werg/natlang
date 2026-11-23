@@ -14,6 +14,18 @@
  */
 export type DecisionReply = 'value' | 'result-object';
 export const DECISION_REPLIES: readonly DecisionReply[] = ['value', 'result-object'];
+/**
+ * A profile's `decisionReply`: one form, or `auto` (the default except for a managed stock model): a readout without
+ * reasoning is read in the form the model puts more probability on (`autoFramedScores`). Whether a checkpoint answers a
+ * readout with the bare value right after its empty think block depends on how it was trained, which its files do not
+ * say: the B14 triage bench's native checkpoint 5ff07638 (the checkpoint a stale `lfm-latest` profile served) puts
+ * ~e^-8 on the bare value there and opens a tool call instead, so its option scores followed the listing order and the
+ * value's first-token merges (`billing` for spam, `true` on every ticket: 4/28, against 26/28 in `{"result": VALUE}`),
+ * while aei1's collection policy e15b20a8 puts nearly all of its mass on the bare value (DECISIONS 2026-11-23
+ * "instant readout collapse").
+ */
+export type DecisionReplySetting = DecisionReply | 'auto';
+export const DECISION_REPLY_SETTINGS: readonly DecisionReplySetting[] = [...DECISION_REPLIES, 'auto'];
 
 /** The prompt that asks for one of `replies` (JSON texts) in `frame`. */
 export const decisionPrompt = (replies: readonly string[], frame: DecisionReply = 'value') => frame === 'result-object' ?
@@ -62,4 +74,47 @@ export function framedDecision<T extends { messages: unknown[]; options: string[
   if (last?.role !== 'user' || last.content !== decisionPrompt(request.options)) return request;
   return { ...request, messages: [...request.messages.slice(0, -1), { ...last, content: decisionPrompt(request.options, frame) }],
     options: request.options.map(option => decisionReply(option, frame)) };
+}
+
+/** The `decisionReply` in force: `NATLANG_DECISION_REPLY` (value, result-object or auto) overrides the profile's. */
+export function decisionReplySetting(configured: DecisionReplySetting | undefined): DecisionReplySetting | undefined {
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_DECISION_REPLY;
+  if (env === undefined || env === '') return configured;
+  if (!(DECISION_REPLY_SETTINGS as readonly string[]).includes(env))
+    throw new Error(`NATLANG_DECISION_REPLY must be ${DECISION_REPLY_SETTINGS.join(', ')}, not ${env}`);
+  return env as DecisionReplySetting;
+}
+
+const logSumExp = (values: readonly number[]) => {
+  const top = Math.max(...values);
+  return top === -Infinity ? top : top + Math.log(values.reduce((sum, value) => sum + Math.exp(value - top), 0));
+};
+
+/**
+ * Score a readout in the reply form `reply` names (`framedDecision`); under `auto`, in the form the model answers in.
+ *
+ * `auto` applies to a joint readout without reasoning (after its own reasoning the model answers in the form the
+ * request asks for, the bare value; a field-by-field step continues the form its first step chose, the value): the
+ * request is scored in both forms, and each option of each form is also scored alone. An option scored alone keeps
+ * the tokens it shares with the others (`</think>`, the object's opening), so the sum of a form's lone scores is the
+ * model's probability of answering in that form at all. The form with more of it is read: its scores (the options
+ * together, the shared tokens cancelled exactly) are returned with `reply_frame` and both forms' `reply_masses`
+ * (natural log). One round of 2 + 2K items, which a batching server scores together.
+ */
+export async function autoFramedScores<T extends { messages: unknown[]; options: string[]; open_reply?: boolean; reasoning?: string },
+  S extends { log_probs: number[] }>(request: T, reply: DecisionReplySetting | undefined, scoreAll: (items: T[]) => Promise<S[]>):
+    Promise<S & { reply_frame?: DecisionReply; reply_masses?: Record<DecisionReply, number> }> {
+  const last = request.messages.at(-1) as { role?: unknown; content?: unknown } | undefined;
+  const readout = last?.role === 'user' && last.content === decisionPrompt(request.options);
+  if (reply !== 'auto' || !readout || request.open_reply || typeof request.reasoning === 'string' || request.options.length < 2)
+    return (await scoreAll([framedDecision(request, reply === 'auto' ? 'value' : reply)]))[0]!;
+  const frames = DECISION_REPLIES.map(frame => framedDecision(request, frame));
+  const alone = frames.flatMap(item => item.options.map(option => ({ ...item, options: [option] })));
+  const scored = await scoreAll([...frames, ...alone]);
+  const k = request.options.length;
+  const masses = DECISION_REPLIES.map((_, index) => logSumExp(scored.slice(frames.length + index * k, frames.length + (index + 1) * k)
+    .map(scores => scores.log_probs[0]!)));
+  const pick = masses[1]! > masses[0]! ? 1 : 0;
+  return { ...scored[pick]!, reply_frame: DECISION_REPLIES[pick]!,
+    reply_masses: Object.fromEntries(DECISION_REPLIES.map((frame, index) => [frame, masses[index]!])) as Record<DecisionReply, number> };
 }

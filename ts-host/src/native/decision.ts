@@ -214,6 +214,26 @@ export function decisionSamples(configured?: number, temperature?: number): numb
   return temperature === 0 ? Math.min(value, 1) : value;
 }
 
+/** The temperature a `readout: decision` call draws its reasoning samples at when the call sets none: the sampling law
+ * (T=1, as collection and the calibration that chose DECISION_SAMPLES). Left to the backend, the samples took its
+ * default, which is greedy on the native engine (and on a stock model's greedy request settings): every sample was the
+ * same reasoning, so a readout cost DECISION_SAMPLES decodes for one draw and its probabilities were one conditional
+ * (B14 triage, DECISIONS 2026-11-23 "instant readout collapse"). `NATLANG_DECISION_REASONING_TEMPERATURE` sets
+ * another value; `backend` restores the backend default. */
+export const DECISION_REASONING_TEMPERATURE = 1;
+
+/** The temperature of a readout's reasoning samples: the call's, else the `NATLANG_DECISION_REASONING_TEMPERATURE`
+ * value, else DECISION_REASONING_TEMPERATURE; undefined (the backend's default) for `backend`. */
+export function decisionReasoningTemperature(callTemperature?: number): number | undefined {
+  if (callTemperature !== undefined) return callTemperature;
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_DECISION_REASONING_TEMPERATURE;
+  if (env === undefined || env === '') return DECISION_REASONING_TEMPERATURE;
+  if (env === 'backend') return undefined;
+  const value = Number(env);
+  if (!Number.isFinite(value) || value < 0) throw new RangeError(`NATLANG_DECISION_REASONING_TEMPERATURE must be a temperature (0 or more) or backend, not ${env}`);
+  return value;
+}
+
 /** Scorers that declined (`decision-unsupported`: a backend that cannot score replies). */
 const declinedScorers = new WeakSet<DecisionScorer>();
 

@@ -257,4 +257,11 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
   const bare = await sent({ decisionReply: 'value' });
   assert.deepEqual(bare.continuations ?? bare.options, options);
   assert.equal(bare.messages.at(-1).content, decisionPrompt(options));
+  // auto (the default of every profile but a managed stock model): both forms and each option alone, in one batch
+  const session = createManagedModelSession({ decisionReply: 'auto' }, environment);
+  try { await session.prepare(); const scores = await session.decide(request); assert.deepEqual(scores.log_probs, [0, -1]); assert.equal(scores.reply_frame, 'value'); }
+  finally { await session.close(); }
+  const batches = readFileSync(marker, 'utf8').trim().split('\n').map(line => JSON.parse(line).items);
+  assert.deepEqual(batches.flat().map(item => item.continuations), [options, ['{"result": "knight"}', '{"result": "knave"}'],
+    ['"knight"'], ['"knave"'], ['{"result": "knight"}'], ['{"result": "knave"}']]);
 });
