@@ -24,6 +24,7 @@ forwarded to the collector as ``judge_model``); without one they are reported ``
     equivalence.py report RUN [--append baseline.jsonl]
     equivalence.py compare A/report.jsonl B/report.jsonl [--out FILE]
     equivalence.py summary baseline.jsonl
+    equivalence.py requeue RUN     (attempts that wrote no result, e.g. during an actor outage, run again on resume)
 """
 from __future__ import annotations
 
@@ -314,6 +315,24 @@ def measure(cases, out, endpoints, *, samples=4, seed_base=None, case_seconds=36
     return result, rows
 
 
+def requeue(run):
+    """Forget the finished attempts of a stopped run that wrote no result row (the collector could not reach the actor),
+    so that resuming the run measures them again; an attempt with a result, pass or fail, is kept. Returns their keys."""
+    run = Path(run)
+    dropped = []
+    for entry in read_jsonl(run / 'sealed-queue.jsonl'):
+        journal = run / 'workers' / f"{entry['key']}.journal.jsonl"
+        if not journal.exists() or not any(r.get('event') == 'finish' for r in read_jsonl(journal)):
+            continue
+        output = Path(entry['output'])
+        if output.is_file() and output.stat().st_size > 0:
+            continue
+        journal.unlink()
+        shutil.rmtree(output.parent, ignore_errors=True)
+        dropped.append(entry['key'])
+    return dropped
+
+
 # ---- reports ----------------------------------------------------------------------------------------------------------
 def _sample_cost(output):
     """(model calls, prompt tokens, completion tokens, final value, oracle verdict, status) of one episode's result."""
@@ -508,6 +527,8 @@ def main(argv=None):
     q.add_argument('second', type=Path)
     q.add_argument('--slack-cases', type=float, default=1.0)
     q.add_argument('--out', type=Path)
+    w = sub.add_parser('requeue', help='a stopped run: attempts that wrote no result run again on resume')
+    w.add_argument('run', type=Path)
     s = sub.add_parser('summary', help='pass counts per corpus and case kind of a report or baseline JSONL')
     s.add_argument('report', type=Path)
     args = parser.parse_args(argv)
@@ -543,6 +564,9 @@ def main(argv=None):
         if args.out:
             args.out.write_text(text)
         sys.stdout.write(text)
+    elif args.command == 'requeue':
+        dropped = requeue(args.run)
+        print(json.dumps({'requeued': len(dropped), 'keys': dropped}))
     elif args.command == 'summary':
         print(json.dumps(summary(list(read_jsonl(args.report))), indent=1))
 

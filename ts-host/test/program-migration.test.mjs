@@ -57,3 +57,22 @@ test('problemsOf runs natlang check: a leaf with readout passes; a changed decla
   const stillFlagged = await problemsOf(root, original, { 'gate.nl': '---\nargs: { text: string }\nreturns: Verdict\n---\nAnswer "pass" when text gives a reason.\n' });
   assert.ok(stillFlagged.some(p => /readout: decision/.test(p)), stillFlagged.join('\n'));
 });
+
+test('typeProblems: a driver helper is type-checked against the functions it imports and the driver it serves', async () => {
+  process.env.NATLANG_BIN ??= fileURLToPath(new URL('../../scripts/natlang', import.meta.url));
+  const { checkProgram, problemsOf } = await import('../../applications/dist/migration/program/host.js');
+  const root = mkdtempSync(join(tmpdir(), 'program-migration-types-'));
+  writeFileSync(join(root, 'natlang.json'), '{}');
+  writeFileSync(join(root, 'types.ts'), 'export type Note = { text: string };\n');
+  mkdirSync(join(root, 'flow'));
+  writeFileSync(join(root, 'flow.nl'), '---\nargs: { a: string, b: number }\nreturns: Note\n---\nBind n = shorten(a, b). Return n.\n');
+  writeFileSync(join(root, 'flow', 'shorten.nl'), '---\nargs: { text: string, words: number }\nreturns: Note\n---\nShorten text to words words.\n');
+  const original = await checkProgram(root);
+  const body = '---\nargs: { a: string, b: number }\nreturns: Note\n---\nReturn run(a, b).\n';
+  const good = "import shorten from './shorten.nl';\nimport type { Note } from '../types.js';\nexport default async function run(a: string, b: number): Promise<Note> { return await shorten(a, b); }\n";
+  assert.deepEqual(await problemsOf(root, original, { 'flow.nl': body, 'flow/run.ts': good }), []);
+  const objectCall = good.replace('shorten(a, b)', 'shorten({ text: a, words: b } as any)');
+  assert.ok((await problemsOf(root, original, { 'flow.nl': body, 'flow/run.ts': objectCall })).some(p => /Expected 2 arguments/.test(p)));
+  const wrongParameters = good.replace('run(a: string, b: number)', 'run(args: { a: string, b: number })').replace('shorten(a, b)', 'shorten(args.a, args.b)');
+  assert.ok((await problemsOf(root, original, { 'flow.nl': body, 'flow/run.ts': wrongParameters })).some(p => /run\.ts default export/.test(p)));
+});
