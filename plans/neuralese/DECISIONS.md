@@ -7589,3 +7589,46 @@ annotated `FolderHandle` (plain tsc against dist, so the dist declaration, not t
 writes `propose<[], Ledger>`; a target argument whose type contains `Untrusted` is refused ("Request types cannot be
 passed"); a decision readout on an endpoint without scoring (the Colab front) falls back to generation, and LFM3 then
 thinks and fails `decision-generation-invalid`.
+
+## 2026-11-23 04:30 Verifier-judged authored tasks; first batch into grpo-pool (semantic-FP B6, WS5 O1)
+
+Owner direction: break the cue-word trap. Rounds 10-23 qualified by exact match after a literal blind solve, and so
+selected programs whose judgments were keyword lists (`contains the word dog, cat, pet or pets`).
+- **Mechanism (d00814b62).** Authored tasks may declare `oracle: "verifier"`. The task binds a trusted verifier under
+  the new allow-listed root `training/semantic_fp_tasks/`, and the converter records its sha256. The task also carries
+  a `keyword_baseline`: a root script that answers by surface cues.
+  - The verifier returns `{ok, issues, score}`; `ok` implies `score == 1`. The brief said `{pass, score}`; the
+    existing `verifyCandidate` contract was kept.
+  - The collector now passes the files the run left (`files`).
+  - Graded reward uses the verifier `score` as answer credit (`task_rollouts.verifier_score`). Held scoring stays
+    binary on `ok`.
+  - `verifier_controls.mjs`, run from `authored_checks.py`, requires:
+    - the reference and every alias accepted;
+    - every wrong answer, the degenerate values and the keyword baseline rejected;
+    - a deterministic verdict.
+  - The lint rejects cue rules in instructions.
+  - `verify.mjs` replays the keyword baseline through the collector, and the baseline must run to an answer and be
+    rejected. That last condition was added after w405's refused baselines had counted as rejected.
+  - `blind_solve compare` judges a solver's outcome with the task's own verifier.
+  - Verifiers: `labels`, `order`, `assignment`, `ledger`. Every outcome meeting the oracle passes, and a record already
+    right and left alone earns no credit.
+  - Authoring rules: kit section 18.
+- **Batch sfp1:** 5 Opus authors (w402-w406), 5 families, 25 programs x 2 worlds = 50 tasks.
+  - Qualification, collector replay on pin d00814b62:
+    - 50/50 references accepted;
+    - 255/255 wrong controls rejected;
+    - 50/50 keyword baselines ran and were rejected;
+    - 44/44 alias outcomes (other valid orders, assignments and operation lists) accepted;
+    - 50/50 full smoke replays accepted.
+  - An independent Sonnet blind solve agreed with the verifiers on 50/50, after two w403 notes were rewritten to remove
+    an ambiguity it found.
+  - Novelty passed. Family-wide `invented:*` groups were removed and the batches re-admitted, because they tied every
+    world to the held worlds (custody 28/36 related).
+  - The 36 train rows form `natlang-rl-task-supply-20261123sfp1`, promoted to `grpo-pool`.
+  - The 14 held rows are `natlang-rl-authored-{dev,confirmation}-20261123sfp1`, seeds for held-v4.
+  - Final checks: held-v3 verify 0/0 (also with exposure), custody 0 related, group closure passed.
+  - Repetition against the 37,323-row pool: no instruction text, program text or functional program shared; 23
+    programs (21.8 effective); 6 structures.
+- **Not done here:** no model has run these tasks, so their pass rate and frontier tier are unmeasured. There are no
+  Neuralese, folder or iterate constructs, and decide appears in 33%. w401, the exemplar with one program, was not
+  admitted.

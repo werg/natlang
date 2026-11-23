@@ -908,6 +908,12 @@ halves. **Where this section differs from sections 2-17, this section wins.**
   above all the cue reading of each trap. The keyword baseline is the honest surface-cue solver of the task: plain code
   over the inputs (the root's arguments are its variables) with regexes, word lists and field positions and no helper,
   `nl` or `decide` call, ending in `return <its answer>;`. It must fail; if it passes, the task does not need reading.
+  Smoke scripts and keyword baselines run as natlang root evals, under the eval limits (no `while`/`do`, no function
+  calling itself; use `for...of`, a counted `for` or array methods): the replay counts a baseline the eval refuses as
+  not rejected.
+- *`groups` stays empty for invented worlds.* A group names a real shared source (a dataset item two worlds draw on);
+  a family-wide group ties every world into one custody identity, so one held world withholds the whole family from
+  training (sfp1: 28 of 36 train rows were related to held worlds until the groups were removed).
 - *Smoke is a full replay* (`smoke.replay: true`): the smoke script is the program's own algorithm calling its helpers,
   the scripted children (`$match` on text only the call's arguments contain) answer with the meanings, and the verifier
   judges what the script returns.

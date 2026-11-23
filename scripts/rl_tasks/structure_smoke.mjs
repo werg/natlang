@@ -50,7 +50,7 @@ for (const [key, list] of chosen) for (const row of list) {
   const driver = async request => {
     const context = request.messages, name = callName(context);
     const rootName = row.semantics.root.replace(/\.nl$/, '').split('/').pop();
-    for (const message of context) if (message.role === 'tool' && /error|refused|rejected/i.test(String(message.content).slice(0, 200)))
+    for (const message of context) if (message.role === 'tool' && /error|refused|rejected|forbidden|not allowed/i.test(String(message.content).slice(0, 200)))
       errors.push(String(message.content).slice(0, 400));
     if (name === rootName) {
       const action = smoke.root[step++];

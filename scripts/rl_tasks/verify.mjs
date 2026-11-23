@@ -151,7 +151,14 @@ async function qualify(record) {
     const variant = structuredClone(record);
     variant.curriculum.reference.root = [['eval', { code, finish: true }]];
     delete variant.curriculum.reference.children;
-    try { result.keyword_baseline.push({ value: code.slice(0, 120), accepted: await accepted(variant) }); }
+    // A baseline the eval refuses (a forbidden loop, a missing name) proves nothing: it must run to a returned answer
+    // (status done) and that answer must be rejected. A refused baseline counts as not rejected.
+    try {
+      const { run } = await replayReference(variant, TOOLS_PROMPT);
+      const ran = run.outcome.status === 'done';
+      result.keyword_baseline.push({ value: code.slice(0, 120), accepted: ran ? run.outcome.accepted === true : null,
+        ...(ran ? {} : { error: 'did not run to an answer: ' + JSON.stringify(run.outcome.detail ?? run.outcome.status).slice(0, 240) }) });
+    }
     catch (e) { result.keyword_baseline.push({ value: code.slice(0, 120), accepted: null, error: String(e).slice(0, 300) }); }
   }
   for (const value of wrongs) {
