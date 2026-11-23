@@ -23,6 +23,8 @@ def no_real_machine_effects(monkeypatch):
         raise AssertionError('a ledger test reached the real machine (balloon_reclaim)')
     monkeypatch.setattr(ledger, 'balloon_reclaim', refuse)
     monkeypatch.setattr(ledger, 'has_gb10', lambda: False)
+    monkeypatch.setattr(ledger, 'known_dgx_host', lambda: False)
+    ledger.dgx_reserve_required.cache_clear()
 
 
 def claim(cls, budget, used, admitted):
@@ -1483,3 +1485,42 @@ def test_ownership_lookup_never_calls_unknown_state_empty(tmp_path):
     with pytest.raises(ValueError):ledger.owned_units(path)
     path.write_text('{"schema":"unrecognized"}')
     with pytest.raises(ValueError):ledger.unit_owned('future',path)
+
+
+def test_dgx_default_applies_to_old_implicit_specs_and_queued_relaunches(monkeypatch):
+    monkeypatch.setattr(ledger, 'has_gb10', lambda: True)
+    for budget in (2, 12, 100):
+        assert ledger.default_reserve(budget * GIB) == 15 * GIB
+    legacy = {'reserve': GIB}
+    assert ledger.spec_reserve(legacy, 3 * GIB) == 15 * GIB
+    explicit = {'reserve': 2 * GIB, 'reserve_explicit': True}
+    assert ledger.spec_reserve(explicit, 3 * GIB) == 2 * GIB
+    entries = {
+        'old.service': {'spec': legacy, 'budget': 3 * GIB, 'reserve': GIB},
+        'explicit.service': {'spec': explicit, 'budget': 3 * GIB, 'reserve': 2 * GIB},
+        'waiter.service': {'budget': 3 * GIB, 'reserve': GIB, 'reserve_explicit': False},
+    }
+    for entry in entries.values():
+        entry.update(priority='low', since=1, seen=10, requeued=True)
+    ordered = dict(ledger.waiting_order({'waiting': entries}, now=10))
+    assert ordered['old.service']['reserve'] == 15 * GIB
+    assert ordered['waiter.service']['reserve'] == 15 * GIB
+    assert ordered['explicit.service']['reserve'] == 2 * GIB
+    assert not ledger.fits(16 * GIB, 3 * GIB, ordered['old.service']['reserve'])
+
+
+def test_reserve_policy_caches_only_verified_machine_identity(monkeypatch):
+    probes = []
+    monkeypatch.setattr(ledger, 'has_gb10', lambda: probes.append(True) or True)
+    assert ledger.default_reserve(GIB) == 15 * GIB
+    assert ledger.default_reserve(100 * GIB) == 15 * GIB
+    assert probes == [True]
+
+
+def test_known_dgx_keeps_reserve_when_gpu_discovery_is_unavailable(monkeypatch):
+    monkeypatch.setattr(ledger, 'known_dgx_host', lambda: True)
+    def unavailable():
+        raise AssertionError('known DGX reserve must not depend on a healthy NVIDIA driver')
+    monkeypatch.setattr(ledger, 'has_gb10', unavailable)
+    assert ledger.default_reserve(3 * GIB) == 15 * GIB
+    assert ledger.spec_reserve({'reserve': 0, 'reserve_explicit': True}, GIB) == 0

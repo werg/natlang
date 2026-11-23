@@ -9913,3 +9913,14 @@ Owner requested deletion of unwanted DGX bloat, not relocation. Deleted roughly 
 bootstrap/audit/export copies; original captures and registered training inputs remain. Storage guidance
 now retains actual training/evaluation/recovery inputs and minimal consumed metadata, rather than
 archiving uncertain diagnostics. Original earlier Sol captures remain protected; generation stays Luna-only.
+
+
+### 2026-11-24 — DGX ledger defaults retain diagnostic headroom
+
+Observed a 3 GiB held-verification claim with `reserve_explicit:false` and a 1 GiB reserve on the DGX. The shared proportional default violated the required 15 GiB diagnostic headroom. Default admission now leaves 15 GiB on the actual DGX (known local hostname from the existing coordination mapping, or verified NVIDIA GB10 hardware); CUDA discovery failure cannot remove the known-host policy. Tick/Pop retain quarter-budget reserves clamped to 1–8 GiB. Explicit `--reserve-gb` remains the opt-out.
+
+Mechanism inventory: `scripts/memory_ledger.py` owns all admission, queue, backfill and guard consumers. `run` selects the default and repeats it after learned-budget growth; `spec_reserve` applies it to old implicit launch specs; `requeue_spec` and `waiting_order` refresh requeued specs before guard admission. New run waiters persist explicitness so their defaults can also refresh. Unmarked legacy queue entries without a launch spec cannot distinguish explicit from implicit reserves and remain unchanged until their existing waiter is restarted. No running job budget or MemoryMax changes. Managed/in-page/Python/SGLang engines do not implement ledger admission; their launchers use this common CLI, and require no model/engine restart. Existing `has_gb10` is the actual-device probe; no architecture-only or remote execution-profile inference is used.
+
+Deployment: pull the commit in the DGX canonical checkout, restart only the ledger guard so its resident policy updates, and use the new CLI for future launches. Existing waiter processes retain their old Python code; restart only owned implicit waiters with their exact original launch arguments if immediate adoption is necessary. Requeued stored specs are upgraded automatically by the new guard. Do not stop productive jobs for the cleanup audit; its explicit 15 GiB reserve is already correct. All original data and active runtime pins remain untouched.
+
+Validation: actual Tick ledger unit `vibe-ledger-dgx-reserve-tests-a`, 0.5 GiB budget/7.5 GiB reserve, passed all 98 ledger tests in 3.19 s (127.8 MiB peak). Tests cover implicit old specs and queued relaunches, explicit zero/small overrides, non-DGX proportional admission, machine-identity caching and known-DGX policy with unavailable GPU discovery.
