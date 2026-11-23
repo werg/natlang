@@ -125,6 +125,36 @@ def registry_owner_repo() -> Path:
     return assert_registry_writable(explicit) if explicit else canonical_checkout_repo(code_repo())
 
 
+def _registry_ref_commit(repo, ref: str) -> str:
+    result = subprocess.run(['git', '-C', str(repo), 'rev-parse', '--verify', '--end-of-options', f'{ref}^{{commit}}'],
+                            capture_output=True, text=True)
+    if result.returncode:
+        raise ValueError(f'registry ref {ref!r} is unavailable in {repo}; fetch the registry owner first')
+    return result.stdout.strip()
+
+
+def registry_owner_ref(repo=None) -> str | None:
+    """Resolve one authoritative LIVE registry snapshot, never silently stale HEAD.
+
+    A published owner follows origin/main. HEAD is allowed only for an actual
+    local Git registry without an origin. The returned OID freezes one scan or
+    build; the next scan resolves the publication ref again.
+    """
+    owner = assert_registry_writable(repo) if repo is not None else registry_owner_repo()
+    configured = os.environ.get('NATLANG_REGISTRY_REF')
+    if configured is not None:
+        if not configured: raise ValueError('NATLANG_REGISTRY_REF must name a published registry ref')
+        return _registry_ref_commit(owner, configured)
+    git_marker = owner / '.git'
+    if not git_marker.exists() and not git_marker.is_symlink():
+        return None  # explicit local filesystem registry / dry-run; no publication is claimed
+    has_origin = subprocess.run(['git', '-C', str(owner), 'config', '--get', 'remote.origin.url'],
+                                capture_output=True, text=True).returncode == 0
+    if has_origin:
+        return _registry_ref_commit(owner, 'origin/main')
+    return _registry_ref_commit(owner, 'HEAD')
+
+
 def canonical_repo() -> Path:
     """Mutable data anchor independent of an immutable code pin or registry override."""
     return canonical_checkout_repo(root('repo'))
@@ -390,11 +420,11 @@ def record_inventory(identity: str, path, *, note=None, kind='archive', extra=No
     return _append({k: v for k, v in record.items() if v is not None})
 
 
-def _input_refs(inputs, *, repo=None) -> list:
+def _input_refs(inputs, *, repo=None, ref=None) -> list:
     """Inputs as ``{id, manifest_sha256 | sha256, path?}``: ids stay ids (their latest snapshot), paths resolve to the
     dataset that holds them plus the file's own digest."""
     refs = []
-    reg = load() if repo is None else load(repo=repo)
+    reg = load(repo=repo, ref=ref) if ref is not None else (load() if repo is None else load(repo=repo))
     for item in inputs or ():
         if isinstance(item, dict):
             refs.append(item)
@@ -419,7 +449,7 @@ def _input_refs(inputs, *, repo=None) -> list:
 
 def record_dataset(identity: str, path, *, kind: str, format: str, include=None, exclude=(), rows=None,
                    inputs=(), license=None, protected=False, supersedes=None, roles=None, note=None,
-                   producer=None, admission=None, closed=True, extra=None, registry_repo=None) -> dict:
+                   producer=None, admission=None, closed=True, extra=None, registry_repo=None, registry_ref=None) -> dict:
     """Append a dataset snapshot record (what a producer wrote). PATH is a directory (``include`` globs select files)
     or a single file. ``rows`` defaults to the line count of the selected ``.jsonl`` files. ``closed`` False marks a
     dataset that keeps growing (a teacher campaign, a refreshed source): every later snapshot is another record."""
@@ -440,7 +470,7 @@ def record_dataset(identity: str, path, *, kind: str, format: str, include=None,
     record = {'op': 'dataset', 'id': identity, 'path': manifest['path'], 'kind': kind, 'format': format,
               'include': list(include) if include else None, 'exclude': list(exclude) if exclude else None,
               'manifest_sha256': sha, 'files': len(manifest['files']), 'bytes': manifest['bytes'], 'rows': rows,
-              'inputs': _input_refs(inputs, repo=registry_repo), 'license': license, 'protected': bool(protected),
+              'inputs': _input_refs(inputs, repo=registry_repo, ref=registry_ref), 'license': license, 'protected': bool(protected),
               'supersedes': supersedes, 'roles': roles, 'note': note, 'admission': admission, 'closed': bool(closed),
               'producer': _producer(producer)}
     if extra:
@@ -471,12 +501,12 @@ def record_files(identity: str, paths, base) -> dict | None:
     return _append({'op': 'files', 'id': identity, 'files': files})
 
 
-def consume(items, *, run: str, how: str, amount=None, allow_unregistered=None, record=True, repo=None) -> list[dict]:
+def consume(items, *, run: str, how: str, amount=None, allow_unregistered=None, record=True, repo=None, ref=None) -> list[dict]:
     """Record that RUN read ITEMS (paths or dataset ids) and return the resolved references. A path no dataset contains
     raises ``UnregisteredData`` unless ``allow_unregistered`` (default: ``NATLANG_ALLOW_UNREGISTERED_DATA=1``)."""
     if allow_unregistered is None:
         allow_unregistered = os.environ.get(ALLOW_ENV) == '1'
-    reg = load() if repo is None else load(repo=repo)
+    reg = load(repo=repo, ref=ref) if ref is not None else (load() if repo is None else load(repo=repo))
     refs, missing = [], []
     for item in items:
         if item is None:
@@ -514,11 +544,11 @@ def consume(items, *, run: str, how: str, amount=None, allow_unregistered=None, 
     return refs
 
 
-def require_registered(paths, *, repo=None) -> None:
+def require_registered(paths, *, repo=None, ref=None) -> None:
     """Producer-side check: refuse inputs no dataset contains (same opt-out as ``consume``)."""
     if os.environ.get(ALLOW_ENV) == '1':
         return
-    reg = load() if repo is None else load(repo=repo)
+    reg = load(repo=repo, ref=ref) if ref is not None else (load() if repo is None else load(repo=repo))
     missing = []
     for path in paths:
         if path is None:
@@ -537,8 +567,9 @@ def require_registered(paths, *, repo=None) -> None:
 class Registry:
     """Merged view: git entries (pinned) plus journal records (machine-wide)."""
 
-    def __init__(self, git_entries: list, journal: list, *, repo=None):
+    def __init__(self, git_entries: list, journal: list, *, repo=None, ref=None):
         self.repo = Path(repo) if repo is not None else code_repo()
+        self.git_ref = ref
         self.git = {e['id']: e for e in git_entries}
         self.git_order = [e['id'] for e in git_entries]
         self.journal = journal
@@ -786,8 +817,13 @@ class Registry:
         manifest = stored_manifest(ds['manifest_sha256']) if ds.get('manifest_sha256') else None
         if manifest is None and ds.get('layer', '').startswith('git'):
             try:
-                manifest = json.loads((self.repo / GIT_MANIFESTS / f'{identity}.json').read_text())
-            except (OSError, ValueError):
+                if self.git_ref is None:
+                    text = (self.repo / GIT_MANIFESTS / f'{identity}.json').read_text()
+                else:
+                    text = subprocess.run(['git', '-C', str(self.repo), 'show', f'{self.git_ref}:{GIT_MANIFESTS}/{identity}.json'],
+                                          capture_output=True, text=True, check=True).stdout
+                manifest = json.loads(text)
+            except (OSError, ValueError, subprocess.CalledProcessError):
                 manifest = None
         return list((manifest or {}).get('files') or []) + self.extra_files.get(identity, [])
 
@@ -820,20 +856,26 @@ def _read_journal() -> list:
     return rows
 
 
-def load(*, repo=None, fresh=False) -> Registry:
+def load(*, repo=None, ref=None, fresh=False) -> Registry:
     """The merged registry. The git layer is read from REPO (default: the checkout this code runs from)."""
     global _LOADED
-    repo = Path(repo) if repo else code_repo()
-    key = (str(repo), corpus_registry.signature(repo), _mtime(journal_path()))
+    repo = Path(repo) if repo is not None else code_repo()
+    oid = _registry_ref_commit(repo, ref) if ref is not None else None
+    key = (str(repo), oid if oid is not None else corpus_registry.signature(repo), _mtime(journal_path()))
     if not fresh and _LOADED is not None and _LOADED[0] == key:
         return _LOADED[1]
     if _GIT_CACHE.get('key') != key[:2]:
         try:
-            git_entries = corpus_registry.load(repo)['corpora']
+            document = corpus_registry.load_ref(repo, oid) if oid is not None else corpus_registry.load(repo)
+            git_entries = document['corpora']
         except (OSError, ValueError, KeyError):
+            if oid is not None: raise  # an explicit published snapshot must not become an empty registry
             git_entries = []
         _GIT_CACHE.update(key=key[:2], entries=git_entries)
-    reg = Registry(_GIT_CACHE['entries'], _read_journal(), repo=repo)
+    else:
+        git_entries = _GIT_CACHE['entries']
+    # Keep this call's selected entries local across journal I/O / other readers.
+    reg = Registry(git_entries, _read_journal(), repo=repo, ref=oid)
     _LOADED = (key, reg)
     return reg
 
@@ -846,22 +888,23 @@ def _mtime(path: Path):
         return None
 
 
-def role_paths(name: str, *, repo=None) -> list[str]:
+def role_paths(name: str, *, repo=None, ref=None) -> list[str]:
     """The role's files as local paths (``grpo.py`` POOLS and friends)."""
-    return [str(p) for _, p in load(repo=repo).role(name)]
+    reg = load(repo=repo, ref=ref) if ref is not None else load(repo=repo)
+    return [str(p) for _, p in reg.role(name)]
 
 
-def role_prefix_paths(prefix: str, *, repo=None) -> list[tuple[str, str]]:
+def role_prefix_paths(prefix: str, *, repo=None, ref=None) -> list[tuple[str, str]]:
     """``[(role, local path)]`` of every role whose name starts with PREFIX, sorted by role then role order (the held
     sets: every ``held-eval*`` role is excluded from training, ``held_eval.training_exclusion_ids``)."""
-    reg = load() if repo is None else load(repo=repo)
+    reg = load(repo=repo, ref=ref) if ref is not None else (load() if repo is None else load(repo=repo))
     names = sorted({name for ident in reg.git_order for name in (reg.git[ident].get('roles') or {})
                     if name.startswith(prefix)})
     return [(name, str(p)) for name in names for _, p in reg.role(name)]
 
 
-def role_path(name: str, *, repo=None) -> str:
-    paths = role_paths(name, repo=repo)
+def role_path(name: str, *, repo=None, ref=None) -> str:
+    paths = role_paths(name, repo=repo, ref=ref) if ref is not None else role_paths(name, repo=repo)
     if len(paths) != 1:
         raise ValueError(f'registry role {name!r} names {len(paths)} datasets; exactly one expected')
     return paths[0]
