@@ -8778,6 +8778,14 @@ The async driver's `prepare` recorded only `stages/prepared.done`, so every driv
 
 **Rule:** only the coordinator restarts the aei1 driver, and only at a round boundary unless a fix requires otherwise.
 
+
+### 2026-11-23 — Full semantic Vibe queue resumed after restart
+
+Activated release `7a851ebe` (Host `a675`, matching ABI 4 Base `6fff`/System `c38`/SST `aa0`, five vendors Core `9f`) and immutable driver/reader `760`. All 155 runtime bindings / 10,075 files / 525,873,029 bytes hash-verified; all 2,327 catalog rows and 118 entry bindings unchanged. Full 1,748 training-goal queue resumed in vibe-semantic-full-luna-v12b-20261123 with 8 Luna workers, 13 GiB cgroup cap, 7.5 GiB reserve and 1 h per goal; no max-wave slice. The previous 16 GiB request did not fit current desktop RAM, so the actual ceiling was reduced, retaining parallelism and reserve. Initial native startup peak ~7.8 GiB/no OOM; task outcomes are not yet complete.
+
+Official DGX reader `760` built and activated with source-bound forwarded-return checks, registry lookup and producer-entrypoint fixes; export/ingest/fill jobs remain low-priority, resumable and preserve 15 GiB reserve. Actual producer-parity audit found original 0035 IR identical to pinned derivation and independently materialized 1 trajectory / 9 eligible decisions / 0 rejections. 103 unique episodes are ingested; all duplicate originals, failed raw captures and existing Sol data remain retained. New teachers remain Luna.
+
+The cache-only WAL/batching successor Host `bd84` is clean/pushed and passed 56 targeted tests plus quick gate. It remains out of this frozen release: exact effectiveVersion fingerprinting proves it invalidates all 155 runtime keys, so a full prepared rebuild belongs at the next natural release. No fabricated cache-hit claim or v13 run. Historical TCP attribution remains open. Details: VIBESTUDIO_SEMANTIC_CUTOVER_20261123.md and campaign candidate/v12-RELEASE-PROOF.md.
 ## 2026-11-23 instant readout collapse (B14 C-instant 4/28): the readout scored a reply form the checkpoint does not answer in
 
 **Observations (B14, b0fe8d310).** `examples/triage` at 19844f4d on the `bench-base` native profile (checkpoint
