@@ -157,5 +157,5 @@ WS6 §3 A8, nldb generalised to a repository: files and their metadata tables an
 
 - Every repository file body crosses the boundary as `Untrusted<string>`, fenced from prompt injection.
 
-Not built: `judge.nl` reads file content as a plain string (the `Untrusted<string>` fence of `RepoFile.content` ends at
-the SQLite table); `askRepository` reads Neuralese views of files only through `runQuery`.
+File content keeps its `Untrusted<string>` fence through the SQLite table (the fence is keyed by text): `judge.nl` sees
+it fenced. Not built: `askRepository` has no Neuralese views of files (only `runQuery` has).

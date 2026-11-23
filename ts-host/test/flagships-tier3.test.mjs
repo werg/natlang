@@ -194,7 +194,11 @@ test('A8 nldb/grep: a question in words over files and metadata compiles to SQL;
       clarification: '', explanation: 'Files that retry, with their owners.', assumptions: [] })};`;
   });
   const judged = [];
-  const runtime = createNatlangRuntime({ model: withGeneratedDecisions(model.driver, inputs => { judged.push(inputs.value); return /retr/.test(inputs.value); }), calls: false });
+  // File content stays Untrusted<string> through the SQLite table (the fence is keyed by text): the judge sees it fenced.
+  const runtime = createNatlangRuntime({ model: withGeneratedDecisions(model.driver, (_inputs, opening) => {
+    assert.match(opening, /untrusted data from src\//);
+    judged.push(opening); return /retry with backoff|retries the carrier/.test(opening);
+  }), calls: false });
   const root = mkdtempSync(join(tmpdir(), 'natlang-nldb-grep-'));
   const options = { path: join(root, 'repo.sqlite'), run: fn => runtime.run(fn), today: () => '2026-11-23' };
   const first = await askRepository('Which files retry failed calls, and who owns them?', { files, tables: { owners } }, options);

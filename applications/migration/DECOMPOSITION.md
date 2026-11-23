@@ -192,5 +192,5 @@ codemod no longer has its own (`transformFile.nl` inside `proposeAndVerify` was 
 | Mine a reusable rule from verified pairs | fn | `codemod/mineCrispRule.nl` | A judgment over examples. |
 | Admit a mined rule | crisp | `verifyMinedRule` | Replays the rule on verified pairs and clean files through `verify`; any regression refuses it. |
 
-Not built: the migration loop's repository texts are plain strings (the codemod's `SourceFile` content is
-`Untrusted<string>`, and that fence ends at the loop).
+Not built: a site excerpt or an edited revision of an untrusted codemod file is new text and is not marked
+`Untrusted` (the original texts keep their fence, which is keyed by text).

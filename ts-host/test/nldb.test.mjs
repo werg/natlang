@@ -127,7 +127,11 @@ function folderModel() {
     const winner = /^keep track/i.test(request) ? 'schema' : /\?$/.test(request) ? 'question' : /old/.test(request) ? 'unclear' : 'change';
     return { log_probs: options.map(option => Math.log(option === JSON.stringify(winner) ? 0.9 : 0.1 / (options.length - 1))) };
   };
-  return { driver: Object.assign(model.driver, { decide }), seen };
+  // A decision's reasoning samples (tool-free generations before its options are scored) are answered with a short
+  // reasoning and not counted as stages.
+  const driver = Object.assign(async (request, ...rest) => request.tools?.length === 0
+    ? { text: 'The request reads as one kind of statement.', calls: [] } : model.driver(request, ...rest), { decide });
+  return { driver, seen };
 }
 
 test('the folder database: a natural-language server parses, plans and executes; writes pages, indexes and checks; commits atomically', async () => {

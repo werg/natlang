@@ -50,7 +50,8 @@ test('natlang check --idiom reports the reviewer\'s findings as diagnostics at t
 
     const strict = natlang(['check', dir, '--idiom-strict', '--json'], { NATLANG_IDIOM_REVIEWER: fake });
     assert.equal(strict.status, 1);
-    assert.equal(JSON.parse(strict.stdout).diagnostics.find(item => item.code === 'idiom-review-mechanism-in-prose').severity, 'error');
+    const error = JSON.parse(strict.stdout).diagnostics.find(item => item.code === 'idiom-review-mechanism-in-prose');
+    assert.ok(error && error.severity === undefined, 'an error (check --json marks only warnings with a severity)');
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(fake, { recursive: true, force: true }); }
 });
 
