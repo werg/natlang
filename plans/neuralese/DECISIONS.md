@@ -9643,9 +9643,9 @@ OOMed at 6–8 GB) ran CPU-only; spontaneous marker emission at temperature 1 (t
 collection's read-back rate on a pin with these changes; multi-state reads; the held effect of the new rows; a probe
 rerun of the spliced arm with the ban (a hard logit mask, so 0 refusals is expected by construction); the learner
 HeadMask cost now that every sample records bans; the in-page wllama smoke against the b12092 wasm and a CUDA build
-of the fork. Pre-existing failures seen and left open, because they fail on the base too:
-`test_native_typed_harness[recorded]` (StopIteration from the scripted sampler) and
-`test_serving_close_boundary[5-*]`.
+of the fork. One test that also fails on main is still open: `test_native_typed_harness[recorded]` (StopIteration
+from its scripted sampler). `test_serving_close_boundary[5-*]` is fixed in 6ea0771a1: speculative drafting read the
+backbone even when drafting was off.
 
 ### 2026-11-23: whole-corpus semantic functional integration (in progress)
 
