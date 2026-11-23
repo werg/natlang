@@ -8080,6 +8080,21 @@ most of it long thinking turns). Every combinator ran on the real model and the 
   first what will break". That choice is arguable, since the breaking change is the second bullet.
 A second live run with the fixed check is queued; its result is appended below when it completes.
 
+**B13 second live run and the compatibility diagnostic (2026-11-23 06:30).** With the fixed check (`b13-live-3`, same
+front, 13 calls) the notes passed with no problems after the first draft (`semanticRepair` with 0 fixes), the summary
+settled, the section was accepted on its first proposal, and `beats` again picked the bulleted announcement. Both merge
+conflicts were again judged incompatible (highlights P = 0.148). A diagnostic program (`decide(compatible, ...)` on
+four hand-built cases, ledger `b13-diag-2`/`-3`) found the judgment does not discriminate on the current policy.
+Additive highlight edits with clean, hand-written intents scored P(compatible) = 0.085 (boolean) and 0.037 under a
+`"compatible" | "conflicting"` rewording. A true version clash scored 0.037 and 0.164: the order is reversed. Two
+release titles scored 0.322. So the gap is not `intentOf` and not the wording; LFM3 has a strong "conflict" prior on
+this judgment. The shipped wording stays. The mechanism handled it safely: `keep: 'base'`, explicit `unresolved[]`,
+and the floor. Programs that need these merges can pass `compatible: compatible.on({ model })`. Action: semantic-merge
+conflicts with gold compatibility labels go into the WS5 `semantic-convergence` construct family
+(`plans/semantic-fp/05_TRAINING_DATA_AND_ORACLES.md`). Two more model-side observations stay open as evidence: the
+model wrote a nested `nl` inside `intentOf`'s eval, which was rejected as `nl-not-tag` and cost about 20 minutes; and
+`intentOf` adds invented causal clauses.
+
 ## 2026-11-22 23:30 GRPO decision-only steps: the step's data factor counts units and scales the gradient; KL telemetry per value (decision hunt)
 
 Observations (LoRA bench, 7c9038cf5, grpo-v4/run2 replay, 6 groups/step): steps 1 and 6 trained only sampled decisions
