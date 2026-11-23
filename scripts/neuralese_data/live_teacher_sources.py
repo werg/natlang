@@ -36,6 +36,42 @@ def same_json_value(left, right):
     return left == right
 
 
+def declared_return_exclusions(proofs, records):
+    """Bind optional wrong returns to original function identity and value bytes."""
+    selectors = []
+    def contains(value, wanted):
+        return same_json_value(value, wanted) or (isinstance(value, dict) and any(contains(item, wanted) for item in value.values())) or (isinstance(value, list) and any(contains(item, wanted) for item in value))
+    for proof in proofs:
+        incidental = (proof.get('outcomeDimensions') or {}).get('incidentalValues') or {}
+        if incidental.get('passed') is not False:
+            continue
+        values = incidental.get('incorrectReturns')
+        if not isinstance(values, list) or not values:
+            raise ValueError('incorrect incidental returns need exact original value bindings')
+        for item in values:
+            definition, text = item.get('definition'), item.get('valueJson')
+            if (not isinstance(definition, dict) or not definition.get('name') or not definition.get('source') or
+                    not isinstance(text, str) or hashlib.sha256(text.encode('utf-8')).hexdigest() != item.get('sha256')):
+                raise ValueError('incorrect return value identity/hash differs')
+            try: value = json.loads(text)
+            except (TypeError, ValueError) as error: raise ValueError('invalid incorrect return JSON') from error
+            if not contains(proof.get('actualResult'), value):
+                raise ValueError('incorrect return value is outside the actual application result')
+            selectors.append(item)
+    excluded, matched = {}, set()
+    for call_id, record in records.items():
+        for index, selector in enumerate(selectors):
+            definition, output = record.get('definition') or {}, record.get('output') or {}
+            if (definition.get('name') == selector['definition']['name'] and definition.get('source') == selector['definition']['source'] and
+                    output.get('complete') is True and output.get('hash') == selector['sha256'] and output.get('bytes') == len(selector['valueJson'].encode('utf-8'))):
+                generations = [i for i, exchange in enumerate(record.get('model_turns') or []) if exchange.get('kind') == 'generation']
+                if generations: excluded[call_id] = generations[-1]
+                matched.add(index)
+    if any(index not in matched and selector.get('required') is not False for index, selector in enumerate(selectors)):
+        raise ValueError('incorrect return binding does not match its actual original invocation')
+    return excluded
+
+
 def verify_entry(interaction, root, *, partial=False):
     """Bind application inputs to the actual invocation, including historical routers."""
     entry = interaction.get('entry')
@@ -317,11 +353,13 @@ def load_episode(path):
     verify_completed_reassessment(verification, spec, path.parent)
     kinds = set()
     incorrect_optional_return = False
+    workspace_proofs = []
     for evidence in verification.get('evidence') or []:
         evidence_path = bound_file(evidence, path.parent)
         kinds.add(evidence.get('kind'))
         if evidence.get('kind') == 'workspace':
             proof = json.loads(evidence_path.read_text()).get('proof') or {}
+            workspace_proofs.append(proof)
             returned = (proof.get('outcomeDimensions') or {}).get('returnedValue') or {}
             if returned.get('required') is False and returned.get('passed') is False:
                 incorrect_optional_return = True
@@ -389,7 +427,7 @@ def load_episode(path):
             chain.append(current)
             current = records[current]['parent_call_id']
         ancestry[call_id] = list(reversed(chain))
-    incorrect_returns = {}
+    incorrect_returns = declared_return_exclusions(workspace_proofs, records)
     if interaction is not None and incorrect_optional_return:
         for call_id in roots:
             generations = [index for index, exchange in enumerate(records[call_id].get('model_turns') or [])
@@ -509,7 +547,7 @@ def load_episode(path):
             'trajectory': decisions,
         }
         turns = observed_training_turns(trajectory)
-    if not turns and not (trajectory is not None and incorrect_optional_return):
+    if not turns and not (trajectory is not None and (incorrect_optional_return or incorrect_returns)):
         raise ValueError('workflow call coverage incomplete or has no generated executor targets')
     return {'key': episode_key, 'source': 'teacher', 'run': str(path),
             'task_id': spec['id'], 'family': spec['family'], 'task': task, 'turns': turns,

@@ -5,6 +5,18 @@ import { dirname, resolve, posix } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { graphCustodyMatches } from '../dist/calls/graph-custody.js';
 
+function declaredReturnSelectors(proof) {
+  const incidental=proof.outcomeDimensions?.incidentalValues;
+  if(incidental?.passed!==false)return [];
+  if(!Array.isArray(incidental.incorrectReturns)||!incidental.incorrectReturns.length)throw new Error('incorrect incidental returns need exact original value bindings');
+  const contains=(value,wanted)=>isDeepStrictEqual(value,wanted)||value!==null&&typeof value==='object'&&Object.values(value).some(item=>contains(item,wanted));
+  for(const item of incidental.incorrectReturns){
+    if(!item.definition?.name||!item.definition?.source||typeof item.valueJson!=='string'||createHash('sha256').update(item.valueJson).digest('hex')!==item.sha256)throw new Error('incorrect return value identity/hash differs');
+    if(!contains(proof.actualResult,JSON.parse(item.valueJson)))throw new Error('incorrect return value is outside the actual application result');
+  }
+  return incidental.incorrectReturns;
+}
+
 async function readBound(binding, root) {
   if (!binding?.path || !/^[a-f\d]{64}$/u.test(binding.sha256 ?? ''))
     throw new Error('invalid observed workspace artifact binding');
@@ -214,11 +226,15 @@ export async function verifyObservedWorkspaceEvidence(row) {
     throw new Error('observed workspace trajectory differs from the independently verified manifest');
   const evidenceKinds = new Set();
   let incorrectOptionalReturn = false;
+  const returnSelectors=[];
+  const matchedReturnSelectors=new Set();
   for (const evidence of receipt.evidence ?? []) {
     const evidenceBytes = await readBound(evidence, root);
     evidenceKinds.add(evidence.kind);
     if (evidence.kind === 'workspace') {
-      const returned = JSON.parse(evidenceBytes).proof?.outcomeDimensions?.returnedValue;
+      const proof=JSON.parse(evidenceBytes).proof??{};
+      returnSelectors.push(...declaredReturnSelectors(proof));
+      const returned = proof.outcomeDimensions?.returnedValue;
       incorrectOptionalReturn ||= returned?.required === false && returned.passed === false;
     }
   }
@@ -270,7 +286,12 @@ export async function verifyObservedWorkspaceEvidence(row) {
 
     const actual = record.model_turns ?? [];
     const projected = decisions.get(call.call_id) ?? [];
-    const lastGeneration = incorrectOptionalReturn && record.parent_call_id === null
+    let selectorMatch=false;
+    returnSelectors.forEach((item,index)=>{
+      const matches=record.definition?.name===item.definition.name&&record.definition?.source===item.definition.source&&record.output?.complete===true&&record.output.hash===item.sha256&&record.output.bytes===Buffer.byteLength(item.valueJson);
+      if(matches){matchedReturnSelectors.add(index);selectorMatch=true;}
+    });
+    const lastGeneration = selectorMatch || incorrectOptionalReturn && record.parent_call_id === null
       ? actual.findLastIndex(exchange => exchange.kind === 'generation') : -1;
     if (lastGeneration >= 0) returnExclusions.push({invocation_id: call.call_id, ordinal: lastGeneration});
     const eligible = decisionEligibility(record, original, selected, lastGeneration);
@@ -305,6 +326,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
   }
   if (captureScopes.size || callFiles.size || decisions.size || roots.size)
     throw new Error('observed trajectory does not cover the full verified call tree');
+  if (returnSelectors.some((item,index)=>item.required!==false&&!matchedReturnSelectors.has(index)))throw new Error('incorrect return binding does not match its actual original invocation');
   if ((selected && [...selected.keys()].some(id => !capturedRecords.has(id))) ||
       row.outcome.excluded_return_decisions !== undefined && !equal(row.outcome.excluded_return_decisions, returnExclusions))
     throw new Error('observed decision admission differs from independent training scope or return evidence');
