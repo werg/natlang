@@ -75,22 +75,19 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
   on the live SGLang front. Follow-ups:
   - **Re-enable Neuralese variants in aei1's collection and SFT mix** at the next pin with d16437be8. Measure the
     collection's read-back rate with the failure-taxonomy `readback.py`. Owner: coordinator.
-  - **Marker rows** (125033–125036): bit-identical to the base's reserved row through sft-v9 (the legacy freeze). The
-    current learner trains them, but they start identical and `produce_close` never occurs in training data. Do these
-    at a round boundary, each with an opt-out:
-    - text-initialise the four rows from distinct phrases, scaled to ordinary row norm. This changes the tied head's
-      marker logits: measure spontaneous marker emission on the probe.
-    - give the rows their own optimizer group with an LR multiplier.
-    - find why producer documents lack `produce_close`.
-    - keep the rows in FP32 in merged checkpoints (`merge_policy_state` `sparse_row_dtype`).
-    - delete the dead `exp0_sft.write_checkpoint`.
-
-    Owner: learner agent, next round.
-  - **Produce spans the model emits and another call reads** are still spliced from the producer's context, which is
-    the same out-of-context problem. Decide between in-context reading of every text-primed state and trained readers,
-    with `neuralese_readback_probe.py` as the acceptance test. Owner: Neuralese agent.
-  - **A text-written state moved between engines** is spliced as stored (ENGINE_PARITY gap row). Blocked on a durable
-    producer-kind field in the state header.
+  - **Marker rows: done (0462075ea; DECISIONS 2026-11-23 23:00).** Text-initialised, with their own AdamW group at
+    10x LR and an FP32 master copy in merged checkpoints. `exp0_sft.write_checkpoint` is removed. `produce_close` is
+    explained: producer documents end at the payload, and no loss reads the close. Consume markers are banned in every
+    draw on every engine (cd6d9c3dc). These enter aei1 at the next round boundary on a learner pin with 0462075ea.
+    Owner: coordinator. Open: spontaneous marker emission at temperature 1, and the rows' held effect.
+  - **Produce spans read in context: done (d6b3218e7, cd6d9c3dc).** On the native probe the span arm went from 0/8
+    to 4/8. Reader rows from recorded writes were not added; the reason is in DECISIONS. Open: measure the
+    collection's read-back rate on the new pin, and reconsider trained readers if it stays well below the inline arm.
+    Owner: coordinator.
+  - **Cross-engine moves: done.** `producer_kind` is in the state header and every engine applies one rule: Python
+    native, SGLang, and fork natlang-b12092 for llama-server and the page (f9bee8f6c). Remaining: the consume-marker
+    ban reaches llama-server and the page only with the next GGUF export (ENGINE_PARITY gap row). Owner: whoever
+    exports next.
 - **Harness messages found, not changed** (`HELD_FAILURES` 3.8). Owner: runtime-messages agent, next session:
   - the "cut off" footer after a `console.log` that printed the whole value;
   - a rejected service write that reads as a partial write;

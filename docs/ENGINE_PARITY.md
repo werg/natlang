@@ -97,6 +97,7 @@ bandwidth; `--sglang-kv-cache-dtype auto` is the opt-in.
 | af0f93100 | `/v1/natlang/score`: the tokens every reply of an item shares are prompt (they join `n_score_from` and the decision capture's prompt), each reply scores only its own, at least its last token; `NATLANG_DECISION_SHARED_PREFIX=option` keeps them | every engine: the Python engines and SGLang render through `decision_items` (`_shared_into_prompt`, 2026-11-23); checked on the natlang Q8_0 GGUF (CPU): closed and open items score the same own tokens per option as `decision_items`, captures equal |
 | 0bee37915 | `/v1/natlang/score` items take `reasoning`: each continuation is the content of an assistant message with that reasoning (`reasoning_content`), so the reasoning is prompt; results echo `reasoning: true`, the decision capture records it | Python native and SGLang the same day (`native_learning.decision_items`); the page from the same release; gap row above until the pin moves |
 | b704a8b2f | native-state files: `--native-state` and the page's `native_states` load natlang's store files (a release's `states/<id>.nzs`) through the PUT path (verified once, stored as read); PUT `{"path"}`; non-finite values refused; GGUF state-span format removed | every engine: section "Native state: one format, handed over as files" |
+| 1a7f5015f | a text write or produce span is read in the reader's context (`in-context-text`): `producer_kind` ("text"/"span") is validated native-state metadata (refused with another value or with a `derivation`); a state of the server's identity carrying it, with no `adapter_binding` or `derivation`, is consumed as its own token ids inline with no consume markers, receipt `in-context-text`, recorded by the RL capture as tokens; every produced span carries `producer_kind: "span"` (its content id is the Python engines' for the same span); opt-outs `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0`, `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0`; `/v1/neuralese/info` lists the mode; an in-page reply carries its import receipts (`native_state.imports`) as an HTTP reply does | every engine: Python native and SGLang (`engine.py` `reads_in_context`, `_native_consume_text_in_context`; `sglang_actor.py` `_sglang_import`); the page compiles the same fork sources (werg/wllama builds `server-native-state.cpp`, `server-common.cpp`, `server-context.cpp`) |
 
 ## Record decisions: joint and field by field
 
@@ -138,21 +139,37 @@ compose by concatenation (CSPD's composition; docs/TUNING.md). Per request in on
 `sglang_actor.py` `_sglang_import`); the page serializes requests. Since 2026-11-20 `natlang tune` trains them on the
 managed backend by default (`tune.softStates: false` opts out; `tune/pipeline.ts` `softStatesServed`). No gap.
 
-**A text-written state is read in the reader's context (`in-context-text`, 2026-11-23).** `native.text-write` encodes
-a value's text from position 0 with nothing before it (no BOS, no call), and a reader that splices that state cannot
-use it: 1 of 87 held read-backs returned the producer's text (DECISIONS 2026-11-23 "Neuralese read-back"). The
-Python native engine and the SGLang actor therefore consume a state they wrote from text (`native_write_text` without
-adapters; recorded in memory and as `text-writes/<id>` in the store) as the state's exact token ids, inline in the
-reader's own context, with no consume markers (their rows were the base's untrained reserved-token row through sft-v9,
-and the reader echoed them as stray tokens around the text). The receipt is `{"mode": "in-context-text",
-"observed_native_state_id": id}` and the RL capture records the tokens, so learners replay what was computed
-(`engine.py` `text_write_in_context`, `_native_consume_text_in_context`; `sglang_actor.py` `_sglang_import`;
-`test_sglang_actor.py` `test_text_written_state_is_read_as_its_tokens_in_the_readers_context`).
-`NATLANG_NEURALESE_TEXT_IN_CONTEXT=0` splices it as stored. States written otherwise (produce spans, contextual bodies,
-optimized, derived and soft states) still splice exactly on every engine. The managed llama-server and the page serve
-no text write, so no state reaches them through this path; a text-written state moved to another engine's store
-carries no `text-writes` mark and is spliced there as stored (row below). `scripts/neuralese_data/neuralese_readback_probe.py`
-is the acceptance probe (state vs the same text inline vs a shuffled state) against any front.
+**A text write or produce span is read in the reader's context (`in-context-text`, 2026-11-23).** `native.text-write`
+encodes a value's text from position 0 with nothing before it (no BOS, no call), and a produce span holds the KV of its
+producer's call; a reader that splices either cannot use it: 1 of 87 held read-backs returned the producer's text, and on
+the probe a spliced span read back 0 of 8 on the native engine and on SGLang where the same text inline read 6 of 8
+(DECISIONS 2026-11-23 "Neuralese read-back" and "marker rows, produce spans, producer kind"). The native-state header
+therefore records how a state was produced: `producer_kind` 'text' (a text write) or 'span' (a produce span from
+`native.capture`, the grammar capture or generation), optional and part of the content id, absent for every other
+state. Every engine applies one rule: a state exact for the engine, with no `adapter_binding` and no `derivation`, whose
+header has a producer kind and for which the request declares no state mode, is consumed as its exact token ids inline
+in the reader's own context, with no consume markers. The receipt is `{"mode": "in-context-text",
+"observed_native_state_id": id}` and the RL capture records the tokens, so learners replay what was computed. Python
+native and SGLang: `engine.py` `reads_in_context`, `_native_consume_text_in_context`; `sglang_actor.py` `_sglang_import`
+(`test_sglang_actor.py` `test_text_written_state_is_read_as_its_tokens_in_the_readers_context`,
+`test_produce_span_is_read_as_its_tokens_in_the_readers_context`); a text write stored before the field existed is still
+known from its store's `text-writes/<id>` mark. The managed fork and the page from natlang-b12092 (fork 1a7f5015f:
+`native_state_registry::resolve`, every produced span carries `producer_kind: "span"`, the page compiles the same
+sources). Opt-outs on the serving engine: `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0` (text writes) and
+`NATLANG_NEURALESE_SPAN_IN_CONTEXT=0` (spans) splice as stored. Contextual bodies, optimized, derived and soft states
+still splice exactly on every engine. ts-host accepts the receipt for write-source imports, scoped states, implicit
+read occurrences and native-gradient bindings (an in-context read binds no native input).
+`scripts/neuralese_data/neuralese_readback_probe.py` is the acceptance probe (a text-written state, a captured span,
+the same text inline, a shuffled state) against any front.
+
+**Replies never sample a consume marker (2026-11-23).** The engine places `<|neuralese_consume|>` and
+`<|/neuralese_consume|>` around an imported state; a sampled one is the protocol error
+`neuralese-native-state-consume-marker`. With the marker rows initialised from text (their tied head rows no longer
+the base's generic reserved row), a reader copying a spliced state's markers sampled one at greedy in 3 of 8 probe
+reads. Every draw bans both (`engine.role_bans`): the Python native engine in its law (`_native_bans`) and SGLang by
+logit bias (`sglang_banned`), both recording `banned_token_ids` per sample so learners score the same law
+(`lower_rollout_turns` bans, `exp0_sft.law_mask`); the GGUF export's `serving.logit_bias` carries them for the managed
+llama-server and the page (`native_gguf`). Opt-out `NATLANG_BAN_CONSUME_MARKERS=0`.
 
 **The learned operators' in-context capture** (OPERATORS_RESTORE_20261117.md) has a managed HTTP implementation and an engine primitive shared by the fork and page; the page runtime binding remains blocked as recorded below. The Python engine and the SGLang actor serve `native.capture`: the actor goes through the fork's capture request, the request its forced-producing parity covers. The managed llama-server and the page serve no write endpoints and write states only from produce spans; the managed HTTP `grammarCapture` client sends the call's own messages again with a grammar of the exact ids `<reply prefix> produce_open <content> produce_close`.
 
@@ -238,7 +255,7 @@ Python engine captures: calls 9, 4,406 sampled tokens, 270 constrained (the gram
 | Prefix-cache hit telemetry | upstream counters | n/a | `natlang_prefix_cache_hits/misses` | `natlang_sglang_prompt_tokens_total` and `natlang_sglang_cached_prompt_tokens_total` (2026-11-14) | none |
 | Warm openings kept across restarts | yes (`--slot-save-path`) | yes from natlang-b12076 (`browser/warm-openings.ts`, on by default for a model loaded with its `sha256`; werg/wllama 0095d0f, `capabilities.slotState`): the opening is prefilled once, its slot state saved to OPFS and restored after a reload, keyed by model, engine build, context, slots, GPU/CPU, `swa_full` and template. LFM3 Q8_0 CPU, 678-token opening, 17 MB state: first call after a reload 5.5 s instead of 98 s, decision scores bit-identical to the saving load | no | no | Python native and SGLang: deliberately not built; the actors restart rarely and their in-process caches already reuse the opening |
 | Page serves the stock model with the full sliding-window cache (`swa_full`, as the managed server's `--swa-full`) | yes | yes (`local-model.ts`, 2026-11-14) | n/a | n/a | none. Without it the page continued no earlier prompt past a ~170-token checkpoint, and a decision with a prompt beyond the sliding window aborted the engine (`failed to restore context checkpoint`, a `GGML_ABORT` in `server-context.cpp` when a checkpoint does not fit the SWA cache; also in the vendored natlang-b12074 build): from natlang-b12076 a checkpoint that does not load falls back to re-processing the prompt (fork cab27bfbe) |
-| Text-written state moved between engines | n/a (serves no text write) | n/a (serves no text write) | in-context read only for states its own store marked (`text-writes/<id>`) | same | Blocked on a durable per-state provenance field: the native-state header has no producer kind, and adding one changes every content ID. Within an episode the writer and its readers share one front, so collection and held reads are covered; a state carried to another engine's store is spliced as stored. |
+| Consume-marker ban on the managed llama-server and the page | from the next GGUF export (`native_gguf` `serving.logit_bias`) | same, through the published model's `request.logit_bias` | yes | yes | Blocked on a GGUF export: the published natlang-lfm3-5ff07638 GGUF and its manifest predate the ban (`model-default.ts` `logit_bias: {}`); the next `native_gguf` export and `publish_browser_model.mjs` carry it. |
 | Native writes: `native.text-write`, `native.init-body`, `native.capture` (the learned operators' in-context capture, OPERATORS_RESTORE_20261117.md), `view`, `operator/1` | no direct native APIs; in-context capture is implemented by the shared HTTP `grammarCapture` client using produce spans | no direct native APIs; the engine can produce spans, but `BrowserLocalModel.neuraleseRuntime()` does not yet bind `capture` | yes (`engine.py` `native_capture`, `_native_write_text_impl`) | yes (`_sglang_native_capture` and `_sglang_write_text` through the fork's capture request; `native.init-body` still runs on the resident Python model) | managed HTTP capture client is implemented in `model/native-operator.ts` and wired by `native-state-client.ts`; managed fork/Python exact-span equivalence was measured live (two sites, 400-token spans; see evidence above). That check and the wllama produce-span smoke establish the engine primitive, not the production BrowserLocalModel capture binding. Page capture is blocked on the natlang-b12081 / wllama `5b0dcd35` public ABI: it exposes no tokenize/detokenize or native role-marker-ID query required by exact grammar capture (`vendor/wllama/esm/wllama.d.ts:180-439`; `model/native-operator.ts:27-65`). `BrowserLocalModel.neuraleseRuntime()` consequently has no capture binding. The active operators restoration (`a14187520`, `d306de499`, merged by `f577c13a8`) still needs those public fork/page primitives and a release through `update_llama_runtime.mjs --fork`; direct vendor edits or assumed token IDs are not equivalent. Other direct native write/init-body/view/operator APIs remain absent from the fork/page; grammar capture alone does not implement those APIs |
 
 | Gradients (`natlang:learning`: `POST /v1/neuralese/grad` recorded objectives and derivative programs, native-state and adapter optimizer steps) | no: blocked, llama.cpp has no backward pass through the model or the spliced native state | no: blocked, wllama has no backward pass; the page refuses the module (`ModuleUnavailableError`, `browser/index.ts`) and takes trained states and adapters as `.nz` files | yes (`serve/http.py` `/v1/neuralese/grad`, `serve/native_grad.py`, `serve/native_derivative.py`); conformance: `conformance/neuralese/cases/termination-learning-graph.yaml` `grad-*` and `graph-replay-fixed-choices`, run by `ts-host/scripts/native-conformance.mjs` against `tests/neuralese/learning_conformance_server.py` (2026-11-23) | no: blocked, the SGLang actor serves generation only (no gradient replay endpoint; its weights update by `rebind` from the learner) | train on the Python native engine and hand the results to every engine as native states or adapter files; an engine gains the row with a backward pass |

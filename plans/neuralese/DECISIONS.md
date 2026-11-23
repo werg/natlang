@@ -9536,3 +9536,113 @@ in sft-v6 through sft-v9 are bit-identical to the HF base's generic reserved-tok
 - in-generation produce spans read by another call (they are still spliced from the producer's context);
 - the llama-server/wllama consumption of text-written states (no such states reach them);
 - the cold vs warm prefix-cache consumer forward on SGLang beyond the parity test.
+
+## 2026-11-23 23:00 Neuralese: marker rows from text, produce spans read in context, producer kind in the state header (0462075ea, d6b3218e7, cd6d9c3dc, f9bee8f6c)
+
+Follow-up to 21:30 "Neuralese read-back" and its OPEN_ITEMS rows (marker rows, produce spans, cross-engine moves,
+reader training). Bundled for the next aei1 round boundary.
+
+**Marker rows (0462075ea).**
+- **Text initialisation.** A learner whose four role-marker rows are still indistinguishable (pairwise cosine
+  > 0.999; sft-v9: >= 0.99996) starts them from short phrases (`lfm3_learner.MARKER_PHRASES`): " Write the value:",
+  " (value written)", " Quoted value:", " (quote ends)". Each row is the phrase's mean embedding, its deviation from the
+  mean ordinary row rescaled to the mean ordinary deviation, so the tied head scores it like an ordinary token. On
+  sft-v9 the rows come out at norm 0.74–0.77 (ordinary rows 0.92 on average), pairwise cosine 0.43–0.66 (was 0.99996).
+  The frozen embedding keeps the served rows, so the reference view of the start rows is the behaviour policy; trained
+  rows are never reset. Opt-out `--marker-init none` (`exp0_sft.py`, `grpo.py train`). Applied wherever a learner
+  starts (SFT rounds on the DGX or Colab, GRPO, probes building a learner); a resumed learner state restores its own
+  rows.
+- **Row LR.** The trainable rows have their own AdamW group at 10x the LR (`--row-lr-scale`; AdamW moves a coordinate
+  by about the LR per step and a row's coordinates are ~0.02, so at 5e-5 a row needed ~500 consistent steps to move by
+  its own size). A one-group learner state resumes into two (`learner_state.regroup_optimizer_state`).
+- **Precision.** Merged checkpoints carry the rows' FP32 master copy (`trainable_rows_fp32`) beside the BF16 interface
+  rows, and the next learner starts from it. The engines keep loading BF16 rows: the native engine's
+  bf16-stochastic-rounding profile requires them, and the SGLang and GGUF exports cast to the served dtype anyway.
+  `test_marker_rows.py` checks that distinct rows in a checkpoint reach the native engine's sparse rows, the SGLang
+  export (`native_hf.merged_state`) and the GGUF export llama-server and the page load (`native_gguf.merged_backbone`).
+- **`produce_close` in training data.** aei1 r0001's `neuralese-graph-own` chains (1,058 chains, 844 imports) hold
+  `produce_open` 644 times, all at position 0 of pass-through producer documents; `consume_open`/`consume_close` 844
+  times each, all as context; `produce_close` 0 times; no marker is ever a target. The close is missing because
+  producer documents end at the payload (`lower_rollout_turns.write_sources` keeps `ids[:payload_stop]`) and no trained
+  call samples a produce span. Nothing reads the close position (the state is the payload rows), so adding it to
+  producer documents would only add a forward position no loss sees; its row gets its meaning from text initialisation.
+- The dead `exp0_sft.write_checkpoint` is removed; its test now covers `grpo.write_pruned_checkpoint` alone.
+
+**Produce spans read in context; `producer_kind` (d6b3218e7).** A produce span read by another call was spliced from
+its producer's call, the out-of-context state the 21:30 fix removed for text writes. Measured on the native engine
+(below), a span captured in a producer call reads back like the context-free write. Both Python engines now read it
+as its token ids inline (`in-context-text`), opt-out `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0`. The state header gains an
+optional `producer_kind` ('text' | 'span', part of the content id, absent for every other state, so only text-written
+and span ids change). One rule (`engine.reads_in_context`) decides from the header, so a state carried to another
+engine's store reads the same; legacy text writes keep their `text-writes` marks. The llama.cpp fork and the page
+follow the same rule (fork release below; ENGINE_PARITY).
+- **ts-host defect found on the way:** with the 21:30 fix, a text-written state bound as a scoped native state
+  (guidance, memetic guidance) or prepared as an implicit read occurrence came back with an `in-context-text` receipt
+  and no `native_state` prompt part, which `requireExactNativeImports` and the occurrence check refused; a
+  `natlang:learning` run's `nativeCaptureGraphBinding` would have failed the read inventory. Both accept in-context
+  receipts now (an in-context read binds no native input and carries no state gradient).
+
+**Reader training rows from recorded writes: not added.** Under the new default every read of a text write or span is
+the text inline in the reader's context, which the base model copies (probe inline arm below), and collection samples
+those reads on policy, so own successes train them once Neuralese variants are back on. Rows built from recorded writes
+would train either the spliced path, which no default read uses any more, or a copy the runtime already samples, with
+a synthesised target. Reconsider if the collection's read-back rate after the round stays well below the probe's
+inline arm.
+
+**Probe** (`neuralese_readback_probe.py`, greedy, the runtime's `natlang.read` prompt, exact `return_result`):
+8 values, greedy, max_tokens 400; arms are a text-written state, a span captured in a producer call (`native.capture`),
+the same text inline, a shuffled state. Hits are exact read-backs.
+
+| Policy and engine | Read path | Text state | Captured span | Inline | Shuffled |
+|---|---|---|---|---|---|
+| sft-v9, native engine, before (21:30 code) | text in context, spans spliced | 4/8 | 0/8 | 6/8 | 0/8 |
+| sft-v9, Colab SGLang front (21:30 code) | text in context, spans spliced | 4/8 | 0/8 | 6/8 | 0/8 |
+| sft-v9, native engine, after | both in context | 4/8 | 4/8 | 6/8 | 0/8 |
+| sft-v9 with text-initialised rows, native, after | both in context | 4/8 | 4/8 | 6/8 | - |
+| sft-v9, native, `TEXT=0 SPAN=0` | both spliced | 0/8 | 0/8 | - | - |
+| text-initialised rows, native, spliced, no ban | both spliced | 0/8 | 0/8 (3 refused) | - | - |
+
+The span arm goes from 0/8 to 4/8, matching the text-written state. The in-context misses against inline are mostly
+reasoning cut at 400 tokens. The text-initialised rows leave the in-context replies unchanged (the same 24 replies:
+in-context reads use no marker). Spliced, they read nothing back either, and 3 of 8 captured-span reads were refused
+because the reader sampled a consume marker, copying the markers around the spliced state. That is the finding
+behind the ban below. The before row on SGLang is the 21:30 code on the Colab front; the after rows ran on the native
+engine at an 11 GB DGX ledger budget, because another agent was updating the Colab actor.
+
+**Consume-marker ban (cd6d9c3dc).** The engine places the consume markers itself, so a sampled one is always a
+protocol error. Every draw on every engine bans both: `engine.role_bans` in the Python native law, `sglang_banned`
+on SGLang, and the GGUF export's `serving.logit_bias` for llama-server and the page (it reaches them with the next
+export; ENGINE_PARITY row). Samples record `banned_token_ids`, so learners score the same law. Opt-out:
+`NATLANG_BAN_CONSUME_MARKERS=0`. On the same pass:
+- `native_occurrences` and the ts-host agent account an `in-context-text` receipt for its read occurrence. Before
+  this, RL capture binding refused such reads ("whole-episode state capture differs").
+- States whose values are replaced (optimizer derivations, gradient leaves, learned fits) drop `producer_kind`, so
+  they splice. The derivation checks in Python and ts-host ignore the parent's kind.
+- Splice-mechanics tests opt out of in-context reads. Several of them had been failing on main since 21:30.
+
+**Fork release (f9bee8f6c).** llama.cpp-neuralese 1a7f5015f is released as natlang-b12092 and pinned through
+`update_llama_runtime.mjs --fork`. `native_state_registry::resolve` applies the same in-context rule. `producer_kind`
+is validated, every produced span carries "span", and in-page replies now carry import receipts. The fork's C++
+tests pass (32/32 new assertions), as do its end-to-end tests on the step-0 Q8_0 GGUF (4/4), and the content id
+cross-checks against the Python decoder. `llama-runtime.test.mjs` had hard-coded build 12081 and failed on main; it
+now reads the pin.
+
+**For aei1 (coordinator), each at a round boundary:**
+- marker text init, row LR, FP32 master rows: learner-side; the next round's SFT launched from a pin with 0462075ea
+  applies them (no flag needed; the first published policy carries the new rows; held measures it);
+- produce spans in context and `producer_kind`: serving-side; the collection actors (DGX and Colab SGLang fronts) and
+  the held engines need a pin with d6b3218e7, and the managed llama-server/page the runtime pin noted in ENGINE_PARITY;
+  it changes the ids of newly written text and span states only;
+- the ts-host receipt fix, the occurrence binding and the consume-marker ban ride with the same pin (cd6d9c3dc).
+  Learners score the recorded bans, so the learner pin must include cd6d9c3dc as soon as collection does.
+- the managed llama-server and the page need runtime natlang-b12092 (f9bee8f6c), and the next GGUF export for the
+  ban.
+
+**Not checked:** CUDA-only tests of `test_lfm3_lora_core.py` (compile and FP8; the ledger's CUDA cap on this shared DGX
+OOMed at 6–8 GB) ran CPU-only; spontaneous marker emission at temperature 1 (the probe is greedy); the
+collection's read-back rate on a pin with these changes; multi-state reads; the held effect of the new rows; a probe
+rerun of the spliced arm with the ban (a hard logit mask, so 0 refusals is expected by construction); the learner
+HeadMask cost now that every sample records bans; the in-page wllama smoke against the b12092 wasm and a CUDA build
+of the fork. Pre-existing failures seen and left open, because they fail on the base too:
+`test_native_typed_harness[recorded]` (StopIteration from the scripted sampler) and
+`test_serving_close_boundary[5-*]`.

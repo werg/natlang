@@ -3,6 +3,53 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — replies never sample a Neuralese consume marker
+
+- **What changed.** Every draw on every engine bans `<|neuralese_consume|>` and `<|/neuralese_consume|>`. The engine
+  places these markers around an imported state itself, so a sampled one was always the protocol error
+  `neuralese-native-state-consume-marker`. Once the marker rows were initialised from text, a reader copying a
+  spliced state's markers sampled one in 3 of 8 greedy probe reads. Each engine applies the ban this way:
+  - Python native: in the law (`engine.role_bans`).
+  - SGLang: `sglang_banned` logit bias.
+  - llama-server and the page: the GGUF export's `serving.logit_bias`, from the next export.
+
+  Samples record `banned_token_ids`, so learners score the same law. Opt-out: `NATLANG_BAN_CONSUME_MARKERS=0`
+  (cd6d9c3dc).
+
+### 2026-11-23 — a produce span another call reads is read as its tokens in the reader's context; states record how they were produced
+
+- **What changed.** A produce span (`native.capture`, the grammar capture, a span sampled in generation) consumed by
+  another call is now fed as its exact token ids inline where the reader reads it, with no consume markers, as text
+  writes have been since d16437be8/f109bedfd. Before, its KV, computed in the producer's call, was spliced into the
+  reader, which could not use it (probe: DECISIONS 2026-11-23 "marker rows, produce spans, producer kind").
+- **How engines know.** The native-state header has a new optional field `producer_kind` ('text' for a text write,
+  'span' for a produce span; part of the content id). Every engine applies one rule: an exact state with no adapter
+  binding and no derivation whose header has a producer kind is read in context (receipt `in-context-text`); a text
+  write stored before the field existed is still known from its store's `text-writes` marks. A state carried to
+  another engine's store now reads the same there. Contextual bodies, optimized, derived and soft states splice as
+  before.
+- Opt-outs: `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0` (spans), `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0` (text writes), on the
+  serving engine. ts-host accepts the receipt for scoped states, implicit read occurrences and native-gradient
+  bindings (an in-context read binds no native input).
+
+### 2026-11-23 — the four Neuralese role-marker rows start from text and train at 10x the LR
+
+- **What changed.** `<|neuralese_produce|>`, `<|/neuralese_produce|>`, `<|neuralese_consume|>` and
+  `<|/neuralese_consume|>` (125033–125036) were the base model's generic reserved-token row in every policy through
+  sft-v9, bit-identical to each other (the pre-c9932d915 trainer froze them). A learner whose start rows are still
+  indistinguishable (pairwise cosine > 0.999) now initialises them from the phrases " Write the value:",
+  " (value written)", " Quoted value:" and " (quote ends)" (`lfm3_learner.MARKER_PHRASES`): the phrase's mean
+  embedding, its deviation from the mean ordinary row scaled to an ordinary row's. The served policy changes at the
+  first round a learner with this code publishes (the tied head scores the markers like ordinary tokens from then on).
+  Trained rows are never reset. Opt-out: `exp0_sft.py`/`grpo.py train --marker-init none`.
+- **Row learning rate.** The trainable rows (markers and the reasoning-boundary overrides) have their own AdamW group
+  at 10x the step's LR (`--row-lr-scale`, 1 = the old single group). A learner state saved with one group resumes
+  into two.
+- **Precision.** Merged checkpoints keep the rows' FP32 master copy (`trainable_rows_fp32`) beside the BF16 interface
+  rows the engines load, and the next learner starts from it (`NATLANG_MERGED_ROW_DTYPE=source` opts out).
+- Measurement: the probe numbers in the DECISIONS entry; held-out evaluation of the first round trained with it shows
+  any regression.
+
 ### 2026-11-23 — tool calls decode under their schemas on the Python engine and the SGLang actor
 
 - **What changed.** Both training-collection engines constrain every reply to a request with tools by one xgrammar
