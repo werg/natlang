@@ -1,7 +1,7 @@
 /** What the invocation kernel gives each interpreter run: callables, inline lambdas, iteration, guards, analysis. */
 import type { NativeRuntimeHooks, NativeSession } from '../native/runtime.js';
 import { formatType } from '../native/types.js';
-import { analyzeEvalSnippet, checkEvalFields, type EvalImport, type EvalScopeDeclarations } from '../compiler/eval-check.js';
+import { analyzeEvalSnippet, checkEvalFields, lowerEvalRefinements, type EvalImport, type EvalScopeDeclarations } from '../compiler/eval-check.js';
 import { guard } from './context.js';
 import { callableTree } from './callable.js';
 import { finite, finiteArrayIterator, finiteAsync, inline, type CaptureAccessors } from './lowered.js';
@@ -22,6 +22,7 @@ export const kernelHooks: NativeRuntimeHooks = {
   guard: (id, fn, args) => guard(id, fn, args),
   analyze: (session, source) => analyzeEvalSnippet(source, evalDeclarations(session)),
   checkFields: (session, source) => checkEvalFields(source, evalDeclarations(session)),
+  lowerRefinements: (session, source) => lowerEvalRefinements(source, evalDeclarations(session)),
 };
 
 function importOf(name: string, record: ItemRecord, session: NativeSession): EvalImport {

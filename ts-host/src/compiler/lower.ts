@@ -20,6 +20,37 @@ export function refinementPredicates(checker: ts.TypeChecker, node: ts.TypeNode)
   return brand ? checker.getPropertiesOfType(checker.getTypeOfSymbol(brand)).map(property => property.name) : [];
 }
 
+/**
+ * `refine<Is<T, "p">>(value[, options])` and `assume<R>(value)` written as source text: the same calls with the type
+ * argument's predicate as the second argument (`refine(value, "p"[, options])`), as the project lowering below makes
+ * them. For compilers that transform a separate parse of the text (callable-folder modules) or no TypeScript AST at all
+ * (eval): they lower the rewritten text. `file` is `prefix + text` in `program`; calls that do not resolve to the
+ * intrinsics, or whose type carries no predicate, are left alone (the runtime refuses those with one sentence).
+ */
+export function lowerTypedRefinementText(program: ts.Program, file: ts.SourceFile, text: string, prefix = 0): string {
+  const checker = program.getTypeChecker();
+  const edits: { start: number; end: number; text: string }[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && node.typeArguments?.length === 1 && (node.arguments.length === 1 || node.arguments.length === 2)) {
+      const name = resolveIntrinsic(checker, node.expression);
+      if (name === 'refine' || (name === 'assume' && node.arguments.length === 1)) {
+        const predicates = refinementPredicates(checker, node.typeArguments[0]!);
+        if (predicates.length) {
+          edits.push({ start: node.typeArguments.pos - 1 - prefix, end: node.typeArguments.end + 1 - prefix, text: '' });
+          edits.push({ start: node.arguments[0]!.getEnd() - prefix, end: node.arguments[0]!.getEnd() - prefix,
+            text: `, ${JSON.stringify(predicates.join('; and '))}` });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  let out = text;
+  for (const edit of edits.filter(edit => edit.start >= 0 && edit.end <= text.length).sort((a, b) => b.start - a.start))
+    out = out.slice(0, edit.start) + edit.text + out.slice(edit.end);
+  return out;
+}
+
 export type LowerOptions = {
   /** Plans for this file, keyed by `start:end` of the tagged template in the original source. */
   plans: ReadonlyMap<string, InlineLambdaPlan>;

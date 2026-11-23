@@ -49,7 +49,7 @@ By default the program's model judges every value once and the verdict is cached
 
 ## In crisp TypeScript
 
-A refined `nl` result is a refined value. To pass a plain `string` where `Is<string, P>` is expected, check it with `await refine(value, "predicate")`, which throws `refinement-unsatisfied` when it fails; `assume(value, "predicate")` is the explicit, unchecked, traced alternative, for values the program has established some other way.
+A refined `nl` result is a refined value. To pass a plain `string` where `Is<string, P>` is expected, check it with `await refine(value, "predicate")`, which throws `refinement-unsatisfied` when it fails; `assume(value, "predicate")` is the explicit, unchecked, traced alternative, for values the program has established some other way. `refine<Is<string, "p">>(value)` (or a refined alias as the type argument) is the same call, in eval and in callable-folder TypeScript as in a project.
 
 ## Check the result
 

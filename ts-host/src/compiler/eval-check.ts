@@ -4,6 +4,7 @@
  */
 import ts from 'typescript';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
+import { lowerTypedRefinementText } from './lower.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan, type InlineRebindSite, type NatlangDiagnostic } from './inline.js';
 import { hexDigest } from '../native/hash.js';
 import { formatTypeScript, parseTypeCached } from '../native/types.js';
@@ -105,6 +106,17 @@ function serviceNamespace(name: string, declaration: string): string {
   if (!namespace.startsWith(`declare namespace ${name} `) || !own.test(namespace)) return namespace;
   const types = `__natlang_service_${name}`;
   return `${namespace.replace(`declare namespace ${name} `, `declare namespace ${types} `)}\ndeclare const ${name}: typeof ${types}.${name};`;
+}
+
+/**
+ * The snippet with `refine<Is<T, "p">>(value)` / `assume<R>(value)` in their predicate form (lower.ts
+ * lowerTypedRefinementText), typed against this call's scope; unchanged when it has none.
+ */
+export function lowerEvalRefinements(source: string, scope: EvalScopeDeclarations): string {
+  if (!/(?<![.\w$])(?:refine|assume)\s*</.test(source)) return source;
+  const prefix = evalWrapperPrefix(scope.returns === undefined ? undefined : typeScriptText(scope.returns, new Set(Object.keys(scope.types))));
+  const program = createVirtualProgram({ [SCOPE_FILE]: scopeDeclarations(scope), [SNIPPET_FILE]: `${prefix}${source}\n}\n` }, EVAL_COMPILER_OPTIONS);
+  return lowerTypedRefinementText(program, program.getSourceFile(SNIPPET_FILE)!, source, prefix.length);
 }
 
 /** Cheap test for whether a snippet needs the checked pass. */
