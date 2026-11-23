@@ -92,6 +92,8 @@ def signature(path=None):
 def write_entries(repo, entries, *, replace=False) -> list[str]:
     """Write ENTRIES as their own files (atomically). An existing different entry needs ``replace``. Returns the ids
     whose file changed."""
+    from .data_registry import assert_registry_writable
+    repo = assert_registry_writable(repo_of(repo))
     changed = []
     for entry in entries:
         path = entry_path(repo, entry['id'])
@@ -114,7 +116,8 @@ def write_entries(repo, entries, *, replace=False) -> list[str]:
 def save(path, document: dict) -> list[str]:
     """Write a whole registry document (a reader that edited ``load()``'s result): every entry that changed, and the
     removal of entries no longer present. Returns the changed ids."""
-    repo = repo_of(path)
+    from .data_registry import assert_registry_writable
+    repo = assert_registry_writable(repo_of(path))
     meta = {k: v for k, v in document.items() if k != 'corpora'}
     meta_path = repo / META
     meta_text = json.dumps(meta, indent=2, ensure_ascii=False) + '\n'

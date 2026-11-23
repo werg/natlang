@@ -29,6 +29,7 @@ import hashlib
 import json
 import os
 import socket
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -65,17 +66,66 @@ def registry_dir() -> Path:
     return Path(override) if override else root('data_nvme') / 'data-registry'
 
 
+def assert_registry_writable(path) -> Path:
+    """Refuse registry mutations anywhere inside a marked immutable code pin.
+
+    Resolve links and inspect every ancestor before mkdir, Git fetch/sync, entry,
+    manifest or symlink changes. An invalid/dangling marker is still a pin.
+    """
+    resolved = Path(path).expanduser().resolve()
+    for parent in (resolved, *resolved.parents):
+        marker = parent / '.natlang-pin.json'
+        if marker.exists() or marker.is_symlink():
+            raise ValueError(f'registry writes cannot mutate immutable code pin {parent}; '
+                             'select the canonical registry owner')
+    return resolved
+
+
+def canonical_checkout_repo(repo=None) -> Path:
+    """The mutable primary checkout for a code repository, never another pin.
+
+    Git's common worktree registration remains authoritative after an earlier
+    pin in a marker.source chain has been retired. Marker-only directory views
+    follow and validate every source hop rather than stopping after one pin.
+    """
+    current = Path(repo if repo is not None else code_repo()).expanduser().resolve()
+    visited = set()
+    while True:
+        if current in visited:
+            raise ValueError('cyclic immutable pin source chain')
+        visited.add(current)
+        git_marker = current / '.git'
+        if git_marker.exists() or git_marker.is_symlink():
+            env = {key: value for key, value in os.environ.items()
+                   if key not in {'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE'}}
+            result = subprocess.run(['git', '-C', str(current), 'worktree', 'list', '--porcelain', '-z'],
+                                    capture_output=True, text=True, env=env, check=True)
+            records = [dict(field.split(' ', 1) if ' ' in field else (field, '')
+                            for field in record.split('\0') if field)
+                       for record in result.stdout.split('\0\0') if record]
+            primary = next((row['worktree'] for row in records if 'worktree' in row and 'bare' not in row), None)
+            if primary is None:
+                raise ValueError('Git repository has no mutable primary worktree')
+            return assert_registry_writable(primary)
+        marker = current / '.natlang-pin.json'
+        if not marker.exists() and not marker.is_symlink():
+            return assert_registry_writable(current)
+        metadata = json.loads(marker.read_text())
+        source = metadata.get('source')
+        if not isinstance(source, str) or not source:
+            raise ValueError(f'immutable pin lacks a source checkout: {current}')
+        current = Path(source).expanduser().resolve()
+
+
+def registry_owner_repo() -> Path:
+    """Default Git registry WRITE owner; code identity and pinned reads stay separate."""
+    explicit = os.environ.get('NATLANG_REGISTRY_REPO')
+    return assert_registry_writable(explicit) if explicit else canonical_checkout_repo(code_repo())
+
+
 def canonical_repo() -> Path:
-    """The canonical checkout: repo-relative registry paths (``runs/...``) live there, also when a pin runs. A pin's
-    launch sets ``NATLANG_REPO`` to the pin (AGENTS.md "Pinning"); its ``.natlang-pin.json`` names the checkout it was
-    made from, which holds ``runs/``."""
-    repo = root('repo')
-    marker = repo / '.natlang-pin.json'
-    if marker.exists():
-        source = json.loads(marker.read_text()).get('source')
-        if source:
-            return Path(source)
-    return repo
+    """Mutable data anchor independent of an immutable code pin or registry override."""
+    return canonical_checkout_repo(root('repo'))
 
 
 def code_repo() -> Path:
