@@ -7,7 +7,7 @@ import { neuraleseServerModelTurn } from '../dist/model/neuralese-server.js';
 import { ModelTurnRecorder, setRecorderSource } from '../dist/native/model-recording.js';
 import { nativeStateFixture } from './fixtures/native-state.mjs';
 
-async function fixtureServer(state, identity = state.metadata) {
+async function fixtureServer(state, identity = state.metadata, mode = 'exact-native-state') {
   let requestBody;
   const server = createServer(async (request, response) => {
     const chunks = [];
@@ -31,10 +31,14 @@ async function fixtureServer(state, identity = state.metadata) {
       return send(201, { id: state.id });
     if (request.url === '/v1/chat/completions') {
       requestBody = JSON.parse(body.toString());
+      const receipt = { id: state.id, mode, observed_native_state_id: state.id };
+      // an in-context read stands in the prompt as the state's own tokens, not as a native_state occurrence
+      const part = mode === 'in-context-text' ? { kind: 'tokens', token_ids: [7, 8], producing: [false, false] }
+        : { kind: 'native_state', id: state.id };
       return send(200, { choices: [{ message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }],
-        native_state: { imports: [{ id: state.id, mode: 'exact-native-state', observed_native_state_id: state.id }] },
-        x_natlang_rl_capture: { schema: 'natlang.native-rl-sampling/1', prompt: [{ kind: 'native_state', id: state.id }],
-          samples: [], native_state_imports: [{ id: state.id, mode: 'exact-native-state', observed_native_state_id: state.id }] } });
+        native_state: { imports: [receipt] },
+        x_natlang_rl_capture: { schema: 'natlang.native-rl-sampling/1', prompt: [part],
+          samples: [], native_state_imports: [receipt] } });
     }
     return send(404, { error: { code: 'not-found' } });
   });
@@ -57,6 +61,20 @@ test('withNativeStates sends state only and retains the server import receipt', 
     assert.deepEqual(recorder.turns[0].native.sampling.native_state_imports,
       [{ id: state.id, mode: 'exact-native-state', observed_native_state_id: state.id }]);
     assert.ok(!JSON.stringify(server.body().messages).includes('the balance is 42'), 'stored provenance text must not enter the prompt');
+  } finally { setRecorderSource(() => undefined); await server.close(); }
+});
+
+test('withNativeStates accepts a state the engine read as its own tokens in context (in-context-text)', async () => {
+  const store = new MemoryNeuraleseStore();
+  const state = await store.putNativeState(nativeStateFixture());
+  const server = await fixtureServer(state, state.metadata, 'in-context-text');
+  try {
+    const recorder = new ModelTurnRecorder();
+    setRecorderSource(() => recorder);
+    const driver = neuraleseServerModelTurn({ endpoint: server.endpoint, model: 'fixture', store });
+    await withNativeStates(state.id, () => driver({ messages: [{ role: 'user', content: 'Answer.' }], tools: [] }));
+    assert.deepEqual(recorder.turns[0].native.sampling.native_state_imports,
+      [{ id: state.id, mode: 'in-context-text', observed_native_state_id: state.id }]);
   } finally { setRecorderSource(() => undefined); await server.close(); }
 });
 

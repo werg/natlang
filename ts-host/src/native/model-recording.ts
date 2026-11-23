@@ -187,6 +187,15 @@ export function nativeCaptureGraphBinding(name:string,capture:Record<string,unkn
   const capturedWrites=(capture.writes??[]) as {state_id:string}[];
   const capturedReads=((capture.prompt??[]) as Record<string,unknown>[]).filter(segment=>segment.kind==='native_state');
   const fail=(message:string):never=>{throw Object.assign(new Error(`neuralese-native-grad-invalid: ${message}`),{code:'neuralese-native-grad-invalid'});};
+  // A read the engine fed as the state's own tokens (`in-context-text`) is text in the prompt: it has no native input
+  // to bind and carries no state gradient.
+  for(const receipt of (capture.native_state_imports??[]) as Record<string,unknown>[]){
+    if(receipt.mode!=='in-context-text')continue;
+    const at=reads.findIndex(event=>event.block===receipt.id&&(event.stop_gradient===true)===(receipt.stop_gradient===true)&&(receipt.source_occurrence===undefined||
+      (Array.isArray(event.inputs)&&(event.inputs as Record<string,unknown>[]).some(edge=>edge.block===receipt.id&&edge.node===receipt.source_occurrence))));
+    if(at<0)fail('an in-context read names no read occurrence of its state');
+    reads.splice(at,1);
+  }
   const source=(event:Record<string,unknown>):string=>{
     const edges=Array.isArray(event.inputs)?event.inputs as Record<string,unknown>[]:[];
     const sources=edges.filter(edge=>edge.block===event.block).map(edge=>edge.node);

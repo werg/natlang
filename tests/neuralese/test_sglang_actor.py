@@ -296,7 +296,10 @@ def _import_fixture(tmp_path):
     make = lambda: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0, max_tokens=32,
                                      rl_capture=True, rl_top_k=2, native_recording=True, request_id='r', seed=1)
     _scripted(native, front, tokens, make)
-    block = stored['native'][0]
+    assert stored['native'][0].producer_kind == 'span'
+    # the splice path: the same tensors with no producer kind (a contextual or soft state, which splices as stored)
+    import dataclasses
+    block = dataclasses.replace(stored['native'][0], producer_kind=None)
     block_id = native.store.put_native_state(block).id
     assert front.store.put_native_state(block).id == block_id
     messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': block_id},
@@ -388,15 +391,74 @@ def test_text_written_state_is_read_as_its_tokens_in_the_readers_context(tmp_pat
     script = iter(reply)
     assert native.generate(later())['native_state']['imports'][0]['mode'] == 'exact-native-state'
     monkeypatch.delenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT')
-    # The front's store records its text writes: a restarted front (empty memory) still reads them in context.
+    # The state's header says it was written from text: an engine with no memory of the write and no store marks (a
+    # restarted front, another engine's store the file was carried to) still reads it in context.
+    import dataclasses
+    import shutil
+    stored_block = native.store.get_native_state(block_id).block
+    assert stored_block.producer_kind == 'text' and front.stored_native_state(block_id).producer_kind == 'text'
     front._text_written_states.clear()
-    assert front.text_write_in_context(block_id)
     native._text_written_states.clear()
-    if native._text_write_marks() is not None:
-        import shutil
-        shutil.rmtree(native._text_write_marks())
+    for engine in (native, front):
+        if engine._text_write_marks() is not None:
+            shutil.rmtree(engine._text_write_marks(), ignore_errors=True)
+    script = iter(reply)
+    assert native.generate(later())['native_state']['imports'][0]['mode'] == 'in-context-text'
+    assert front.reads_in_context(block_id, front.stored_native_state(block_id))
+    # A text write stored before the header field existed reads in context only where its store marked it.
+    legacy_id = native.store.put_native_state(dataclasses.replace(stored_block, producer_kind=None)).id
+    assert legacy_id != block_id
+    old = lambda: GenerationRequest(messages=[{'role': 'user', 'content': [
+        {'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': legacy_id}, {'type': 'text', 'text': ' t5'}]}],
+        temperature=1.0, max_tokens=8, rl_capture=True, rl_top_k=2, native_recording=True, request_id='r3', seed=2)
+    script = iter(reply)
+    assert native.generate(old())['native_state']['imports'][0]['mode'] == 'exact-native-state'
+    native._note_text_write(legacy_id)
+    script = iter(reply)
+    assert native.generate(old())['native_state']['imports'][0]['mode'] == 'in-context-text'
+
+
+def test_produce_span_is_read_as_its_tokens_in_the_readers_context(tmp_path, monkeypatch):
+    """A produce span read by another call (here sampled in generation; `native.capture` stores the same kind) is
+    consumed as its exact tokens inline on both engines, like a text write: its header carries `producer_kind` 'span'
+    and the receipt is `in-context-text`, with no consume markers and no import. NATLANG_NEURALESE_SPAN_IN_CONTEXT=0
+    splices it as stored."""
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    tokens = word('t4') + [roles.produce_open] + word('t6 t7') + [roles.produce_close] + [sorted(front.stop_ids)[0]]
+    make = lambda: GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=1.0, max_tokens=32,
+                                     rl_capture=True, rl_top_k=2, native_recording=True, request_id='r', seed=1)
+    _scripted(native, front, tokens, make)
+    block = stored['native'][0]
+    assert block.producer_kind == 'span' and stored['front'][0].producer_kind == 'span'
+    block_id = native.store.put_native_state(block).id
+    assert front.store.put_native_state(block).id == block_id
+    span = list(block.token_ids.tolist())
+    assert span == word('t6 t7')
+    messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': block_id},
+                                             {'type': 'text', 'text': ' t5'}]}]
+    later = lambda: GenerationRequest(messages=messages, temperature=1.0, max_tokens=8, rl_capture=True, rl_top_k=2,
+                                      native_recording=True, request_id='r2', seed=2)
+    reply = word('t8') + [sorted(front.stop_ids)[0]]
+    script = iter(reply)
+    native._native_token = lambda seq: (next(script), -0.5)
+    expected = native.generate(later())
+    records = [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in reply]
+    sent = []
+    front._sglang_generate = lambda body: (sent.append(body), {'output_ids': reply, 'meta_info': {'natlang_top_k': records}})[1]
+    actual = front.generate(later())
+    receipt = {'id': block_id, 'mode': 'in-context-text', 'observed_native_state_id': block_id}
+    assert expected['native_state']['imports'] == actual['native_state']['imports'] == [receipt]
+    assert actual['x_natlang_rl_capture']['prompt'] == expected['x_natlang_rl_capture']['prompt']
+    ids = sent[0]['input_ids']
+    assert roles.consume_open not in ids and roles.consume_close not in ids
+    assert any(ids[i:i + len(span)] == span for i in range(len(ids)))
+    assert 'natlang_import' not in sent[0]['sampling_params'].get('custom_params', {})
+    monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
     script = iter(reply)
     assert native.generate(later())['native_state']['imports'][0]['mode'] == 'exact-native-state'
+    sent.clear()
+    assert front.generate(later())['native_state']['imports'][0]['mode'] == 'exact-native-state'
+    assert sent[0]['sampling_params']['custom_params']['natlang_import']
 
 
 def test_same_base_adapter_state_mode_imports_with_the_native_receipt(tmp_path):

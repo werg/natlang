@@ -253,11 +253,25 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
             restored, restored_id = decode_native_state(response.read())
         assert restored_id == record.id and restored.token_ids.tolist() == [5]
 
+        # a produce span is read as its own tokens in the reader's context (`in-context-text`, the default) ...
+        assert record.block.producer_kind == 'span'
+        inline = iter([(2, -.5)])
+        monkeypatch.setattr(engine, '_native_token', lambda _seq: next(inline))
+        read = post({'messages': [{'role': 'user', 'content': [
+            {'type': 'text', 'text': 'use '}, {'type': 'native_state', 'id': record.id}]}],
+            'max_tokens': 2, 'temperature': 1.0, 'seed': 14, 'x_natlang_rl_capture': True})
+        assert read['native_state']['imports'] == [{'id': record.id, 'mode': 'in-context-text',
+            'observed_native_state_id': record.id}]
+        assert {'kind': 'tokens', 'token_ids': [5], 'producing': [False]} in read['x_natlang_rl_capture']['prompt']
+        assert not [s for s in read['x_natlang_rl_capture']['prompt'] if s['kind'] == 'native_state']
+        # ... and spliced exactly between the consume markers with NATLANG_NEURALESE_SPAN_IN_CONTEXT=0
+        monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
         second = iter([(2, -.5)])
         monkeypatch.setattr(engine, '_native_token', lambda _seq: next(second))
         read = post({'messages': [{'role': 'user', 'content': [
             {'type': 'text', 'text': 'use '}, {'type': 'native_state', 'id': record.id}]}],
             'max_tokens': 2, 'temperature': 1.0, 'seed': 14, 'x_natlang_rl_capture': True})
+        monkeypatch.delenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT')
         assert read['native_state']['imports'] == [{'id': record.id, 'mode': 'exact-native-state',
             'observed_native_state_id': record.id}]
         prompt = read['x_natlang_rl_capture']['prompt']

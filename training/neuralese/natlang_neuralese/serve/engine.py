@@ -25,8 +25,24 @@ from .native_protocol import capture_enabled
 from ..common.sampling import behavior_top_k_declaration
 from .store import TensorStore
 
-# A text-written state consumed as its exact tokens in the consumer's own context (Engine.text_write_in_context).
+# A text-written state or produce span consumed as its exact tokens in the consumer's own context (Engine.reads_in_context).
 TEXT_IN_CONTEXT_MODE = 'in-context-text'
+
+
+def reads_in_context(block, *, marked=lambda: False):
+    """The `in-context-text` rule shared by every Python engine (`Engine.reads_in_context`): an exact state (the caller
+    checks) with no adapter binding and no derivation whose header says it is the plain forward of its own tokens
+    (`producer_kind` 'text' or 'span'), or, for a header without the field, a text write this store marked
+    (``marked()``). Opt-outs: NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 (text writes), NATLANG_NEURALESE_SPAN_IN_CONTEXT=0
+    (produce spans)."""
+    if getattr(block, 'adapter_binding', None) is not None or getattr(block, 'derivation', None) is not None:
+        return False
+    kind = getattr(block, 'producer_kind', None)
+    if kind == 'span':
+        return os.environ.get('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '1') != '0'
+    if os.environ.get('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '1') == '0':
+        return False
+    return kind == 'text' or (kind is None and marked())
 
 
 def derive_seed(*parts) -> int:
@@ -667,7 +683,7 @@ class Engine:
         exact = self._native_exact(block)
         state_receipt = None
         declared_mode = (seq.request.native_state_modes or {}).get(block_id)
-        if exact and declared_mode is None and self.text_write_in_context(block_id):
+        if exact and declared_mode is None and self.reads_in_context(block_id, block):
             return self._native_consume_text_in_context(seq, block_id, block)
         if declared_mode is not None:
             from ..model.native_adapters import adapter_state_input_receipt, SAME_BASE_STATE_MODE
@@ -734,18 +750,23 @@ class Engine:
                                    **({'observed_native_state_id': observed_id} if observed_id is not None else {}),
                                    **({'adapter_state_consumption': state_receipt} if state_receipt is not None else {})})
 
-    def text_write_in_context(self, block_id):
+    def reads_in_context(self, block_id, block):
         """Whether an import of `block_id` is fed as its exact tokens, inline, in the consumer's own context (`in-context-text`).
 
-        A state this engine wrote from text (`native_write_text`, no adapters) holds that text's KV computed at
-        positions 0.. with nothing before it: no BOS, no call. Spliced into a reader's call, the reader could not tell it
-        from noise (2026-11-23: 1 of 87 held read-backs returned the producer's text; the same text captured in the
-        reader's own context reads back exactly). The text-primed state of a value is therefore its tokens computed
-        where the consumer reads them; with the identity producer adapter this is the inline text. States written
-        otherwise (in-context captures, contextual bodies, optimized or derived states) still splice exactly.
-        NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices text writes too (the pre-2026-11-23 behaviour)."""
-        if os.environ.get('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '1') == '0':
-            return False
+        A state whose tensors are the plain forward of its own tokens in some other context: a text write (`native_write_text`:
+        the text at positions 0.. with nothing before it, no BOS, no call) or a produce span in its producer's call
+        (`native.capture`, a produce span sampled in generation). Spliced into a reader's call, the reader could not use
+        that KV (2026-11-23: 1 of 87 held read-backs returned the producer's text; the same text in the reader's own
+        context reads back exactly, and a span captured in a producer call read back like the context-free write,
+        DECISIONS 2026-11-23 "marker rows"). The text-primed state of a value is therefore its tokens computed where the
+        consumer reads them; with the identity producer adapter this is the inline text. The kind is the state header's
+        `producer_kind` (so a state carried to another engine's store reads the same); a text write stored before that
+        field existed is known from this store's `text-writes` marks. States with an adapter binding or a derivation,
+        and contextual bodies, optimized or soft states, still splice exactly. NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices
+        text writes, NATLANG_NEURALESE_SPAN_IN_CONTEXT=0 produce spans (the behaviour before 2026-11-23)."""
+        return reads_in_context(block, marked=lambda: self._text_write_marked(block_id))
+
+    def _text_write_marked(self, block_id):
         if block_id in self.__dict__.get('_text_written_states', ()):
             return True
         marks = self._text_write_marks()
@@ -1140,7 +1161,7 @@ class Engine:
         block, record = self._native_store_capture(
             seq.native_capture_ids, seq.native_capture_chunks,
             text=self.tokenizer.decode(seq.native_capture_ids, skip_special_tokens=False),
-            owner=seq.request.native_store_owner)
+            owner=seq.request.native_store_owner, producer_kind='span')
         seq.blocks.append(record)
         seq.items.append(record)
         seq.native_item_positions.append(seq.native_write_start_own)
@@ -1170,8 +1191,10 @@ class Engine:
         if seq.request.on_delta is not None and seq.guide is None:
             seq.request.on_delta({"native_state": record.meta()})
 
-    def _native_store_capture(self, token_ids, chunks, *, text, owner=None):
-        """Store one actual producer span through the common versioned native-state path."""
+    def _native_store_capture(self, token_ids, chunks, *, text, owner=None, producer_kind=None):
+        """Store one actual producer span through the common versioned native-state path. ``producer_kind``
+        (`state_block.PRODUCER_KINDS`): 'text' for a text write, 'span' for a produce span in its producer's call;
+        None for a contextual body."""
         from ..model.state_block import NativeStateBlock
         from ..model.shared_state import concatenate_captures
         fields = concatenate_captures(chunks)
@@ -1185,7 +1208,8 @@ class Engine:
                                  embedding_weight_sha256=self.embedding_weight_sha256,
                                  architecture=self.model_config.get("architecture") or self.backbone.config.model_type,
                                  adapter_binding=({'schema': ADAPTER_SCHEMA, 'base_native_identity': self.native_identity,
-                                                   'adapters': bindings} if bindings else None), **fields)
+                                                   'adapters': bindings} if bindings else None),
+                                 producer_kind=producer_kind, **fields)
         block.validate()
         return block, self.store.put_native_state(block, owner=owner)
 
@@ -1321,7 +1345,7 @@ class Engine:
             opened = native_step(self.shared_model, tensor(prefix[last:]), cache)
             capture = native_step(self.shared_model, tensor(span), opened["cache"], producing=True)
         text = self.tokenizer.decode(span, skip_special_tokens=False)
-        block, record = self._native_store_capture(span, [capture], text=text)
+        block, record = self._native_store_capture(span, [capture], text=text, producer_kind='span')
         return self._capture_result(block, record, prefix, span, value_type, imports, blocks)
 
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
@@ -1526,7 +1550,7 @@ class Engine:
                                   opened["cache"], producing=True)
             native_step(self.shared_model, torch.tensor([[self.role_tokens.produce_close]],
                 dtype=torch.long, device=self.device), capture["cache"])
-        block, record = self._native_store_capture(ids, [capture], text=text)
+        block, record = self._native_store_capture(ids, [capture], text=text, producer_kind='text')
         meta = record.meta()
         if value_type is not None:
             meta["type"] = value_type
