@@ -8777,3 +8777,85 @@ The async driver's `prepare` recorded only `stages/prepared.done`, so every driv
 **For r0001:** the coordinator stopped the 14:26 driver and the duplicate data stage, and marked frontier and data done, since their outputs had completed at 13:57.
 
 **Rule:** only the coordinator restarts the aei1 driver, and only at a round boundary unless a fix requires otherwise.
+
+## 2026-11-23 instant readout collapse (B14 C-instant 4/28): the readout scored a reply form the checkpoint does not answer in
+
+**Observations (B14, b0fe8d310).** `examples/triage` at 19844f4d on the `bench-base` native profile (checkpoint
+5ff07638, Python reference engine, GB10): instant decisions 4/28 units, reasoned 26/28, Luna 56/56; instant gave
+`billing` for every spam ticket and P(urgent) 0.89-0.91 on every ticket; the calibration hunt (10 record prompts,
+sft-v8) found instant agreeing with reasoned on 7-8/10.
+
+**Cause.** The instant readout scores each option right after the empty think block (`<think></think>` + option +
+`<|im_end|>`, `decision_items`; `</think>` is shared, so prompt). 5ff07638 does not answer there: after `</think>` it
+opens a tool call (greedy `<tool_call>` on all 56 readouts; p 0.97 on the spam ticket probed); the bare value's first token gets ~e^-8 (`"`) and
+`true`/`false` e^-13/e^-15. Among those improbable continuations what separates the options is not the ticket:
+- urgency: `true` beats `false` by 1.96-2.49 nats on all 28 tickets (input-independent: P(urgent) 0.89-0.91);
+- label: `"spam"` is tokenized `"sp`+`am` (canonical BPE of the rendered reply) while `"billing"` is `"`+`b`+`illing`;
+  `"sp` costs ~10 nats there, so the first-listed `billing` wins every spam ticket (billing and technical tickets were
+  labelled right: 17/28 labels).
+The same model in `{"result": VALUE}` (the existing stock-model frame) reads the tickets: 26/28 units on the exact B14
+prompts (classify 26, is_urgent 28/28), as many as reasoned. The calibration hunt did not collapse because its readouts
+were records (`{"label":...}`): the shared `{"` opening is prompt, so the fields are scored where the model writes JSON,
+and sft-v8 was trained on bare-value readout rows. 5ff07638 is not stock LFM3 either: its checkpoint is a
+`natlang.neuralese-native-sft-training/1` save (whole-trajectory teacher-program rows), the one the machine's stale
+`lfm-latest` profile still serves (current-policy is sft-v6 dc95f29d); B14 labels it "base".
+
+Evidence (scratchpad scripts, per-ticket JSON: `/home/werg/data/semantic-fp-bench/triage-instant-20261123/evidence/`):
+the exact readout request captured through a logging proxy (`natlang call` on the llama.cpp fork, CPU, same checkpoint
+as GGUF Q8_0) reproduced `billing` for a spam ticket; per-token log-probs of every option; the same 28 tickets scored in
+both forms on the fork (value 4/28 units, P(urgent) 0.84-0.96; object 26/28, P(urgent) 0.00-1.00); the trained
+contrast on aei1's collection policy e15b20a8 (Colab SGLang front): after `</think>` the bare value holds ~all of the
+mass (log-sum -0.00 vs -0.2 for the object), value 21/28, object 18/28 (its 7 instant misses are spam -> billing: its
+no-reasoning answer; reasoning fixes them).
+
+**Engines (ruled out).** Python native (bench traces) vs llama.cpp fork on the 56 B14 readouts: argmax 56/56, TV mean
+0.005 (max 0.036); the per-option shift between them is the fork build's unshared `</think>` (median spread 0.29 nats).
+The collapse is the model at that position, not an engine. SGLang was compared on a different checkpoint only (the
+Colab front serves e15b20a8), not on 5ff07638.
+
+**Fix (defaults, opt-outs, tests).**
+- `decisionReply: 'auto'` is the default of every profile but a managed stock model (that keeps `result-object`):
+  a joint readout without reasoning is scored in both forms and each option alone; the form whose lone scores sum to
+  more probability is read (`decision-frame.ts` `autoFramedScores`, one round of 2+2K items; trace `reply_frame`,
+  `reply_masses`). Opt-outs: profile `decisionReply: 'value'`, `NATLANG_DECISION_REPLY=value`. On the fork mirror of
+  the rule (`auto_eval.py`): 5ff07638 26/28 units (the object form chosen on 56/56 readouts); e15b20a8 21/28 (value
+  on 55/56 readouts: unchanged).
+- Reasoning samples are drawn at the call's temperature, else T=1 (`decisionReasoningTemperature`): with none set they
+  took the backend default, greedy on the native engine, so B14's C-reasoned drew the same reasoning 4 times (identical
+  texts and conditionals in the traces): 4x the decode for one draw, and a floor read one conditional. Opt-out
+  `NATLANG_DECISION_REASONING_TEMPERATURE=backend`.
+- Inventory of the reply-form mechanism: `model/local-server.ts` decide (managed llama-server, external endpoints and
+  the native engine and SGLang front behind them, all through `createResolvedModelSession`), `browser/local-model.ts`
+  (in-page engine: it applied no frame at all, so the stock page model was read in the bare value; now `auto`). Not
+  applicable: Pi providers (no scorer, `local-server.ts` decide throws `decision-unsupported`); the engines (the form
+  is the request's messages and options, rendered by each engine as any item); the learner: decision rows are built
+  from the recorded turn (`sft_sources` decision rows read `decision_graph.decision_replies(messages)`, the runtime's
+  bare-value request, target the chosen value), so training keeps teaching the bare value and captures record what was
+  scored. Not changed here: the Vibestudio gateway driver (`@workspace/natlang`, another repository) frames with its own
+  setting.
+
+**Found, not changed.** Canonical tokenization of an option (`"sp`+`am`) is not the model's own (it writes `"`,
+`spam`, `"` when it generates); on e15b20a8, which was trained on canonical rows, splitting at the options' shared
+characters lowered value-form instant from 21 to 18/28, and it splits ` true` into ` `+`true` in the object form, so
+neither tokenization is right for every model: summing both tokenizations per option is the exact fix and needs an
+item field on all four engines and the learner (open).
+
+**Re-measure (bench.py, C-instant, same program 19844f4d + this commit's runtime, 5ff07638 native, 28 held units).**
+Runtime: the build of b1340c3e7's change on b0fe8d310 (the bench started before the rebase; the dist was kept),
+work dir `/home/werg/data/semantic-fp-bench/triage-instant-20261123` (evidence/ holds the offline scripts and data).
+- after (default `auto`): **23/28** (0.821, unit-bootstrap CI [0.68, 0.96]); label 0.82, urgency 0.93; every readout
+  read in `{"result": VALUE}`; p50 latency 13.9 s (B14 instant 743 s, reasoned 103 s), $1.04 per 100 units (B14 instant
+  7.94, reasoned 3.28; 37.6 busy GPU-s/unit). vs B14 C-instant: +67.9 pts, CI [+42.9, +89.3], permutation p 0.0001,
+  21 units better, 2 worse; vs B14 C-reasoned: -10.7 pts, CI [-25.0, +3.6], p 0.37 (4 vs 1 units).
+  Misses: 3 spam tickets labelled billing (loans, mortgage refinance, translation services) and 2 urgent units whose
+  `natlang run` exited 0 with non-JSON stdout (both readouts and the summary were right in their traces; a rerun of
+  one printed the correct report; cause not established: bench.py now keeps such stdout in the unit).
+- before (the same runtime with `NATLANG_DECISION_REPLY=value`): B14's 4/28 stands as the baseline. The opt-out run
+  reproduced B14 unit for unit on the 5 units it finished (same labels, P(urgent) 0.88-0.92, the same 2 passes) and was
+  stopped there to give the ledger back its 16 GB (the rest would re-measure B14's arm).
+
+**Not checked.** SGLang on 5ff07638; the bench on the policy (arm D); the in-page engine end to end (unit test of the
+wrapper only); field-by-field record readouts under `auto` (they keep the bare value); other checkpoints' preferred
+form beyond 5ff07638 and
+e15b20a8; C-reasoned after the T=1 change (its result moves: reasoning is now sampled); whether the stale `lfm-latest`
+profile should be refreshed to sft-v6 (left as is: B14's arms are defined on it).
