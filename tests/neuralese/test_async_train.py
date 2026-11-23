@@ -919,6 +919,14 @@ def test_a_dgx_sft_stops_only_the_dgx_collection_and_keeps_the_remote_one_collec
     monkeypatch.setattr(d.c, 'wait', wait)
     d.train_sft(rd, cur)
     assert ensured == [cur['sha256']] * 2
+    # a restarted driver joining the running learner still stops the DGX collection its round start queued again
+    (rd / 'sft' / 'factors' / 'policy_manifest.json').unlink()
+    stops = []
+    monkeypatch.setattr(d, 'stop_collections', lambda **kw: stops.append(kw))
+    monkeypatch.setattr(d.c, 'active', lambda u: u.endswith('-sft'))
+    monkeypatch.setattr(d, 'launch_sft', lambda *a, **kw: (_ for _ in ()).throw(AssertionError('relaunched')))
+    d.train_sft(rd, cur)
+    assert stops == [{'remote': False}]
 
 
 def test_cycle_wait_calls_between_and_survives_its_failure(tmp_path, monkeypatch):

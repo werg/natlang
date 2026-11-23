@@ -9124,4 +9124,6 @@ what the collection leaves of the 128 running and the 2.1M-token KV. Before, the
 unconditionally, and a 64-slot collection beside it would have queued FCFS behind them.
 
 **Also fixed.** `ledger_queued` treated a ledger status with no output as an error it did not catch (a Cycle collect
-test failed on it since 71095362c).
+test failed on it since 71095362c). A driver restarted during a round's DGX SFT queued the DGX collection again at the
+round start and only a fresh launch stopped it: the SFT stage now stops it before joining a running learner too, so the
+driver can be restarted mid-round (it joins the learner and starts the remote collection at once).

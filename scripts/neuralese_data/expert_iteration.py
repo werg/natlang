@@ -2733,11 +2733,12 @@ class AsyncRoundDriver:
             if (factors / 'policy_manifest.json').exists():
                 return factors
         unit = f'{self.a.name}-{round_dir.name}-sft'
+        # the standing DGX collection (74 GB beside a ~64-80 GB learner on 121 GB) yields for the whole SFT: the
+        # ledger would preempt it (COLLECTION_PRIORITY) but then relaunch it beside the learner whenever room appears;
+        # stopped (and cancelled if requeued) here, the next round's collection restarts it. Also when a restarted
+        # driver joins a running learner: the round's start just queued the DGX collection again
+        self.stop_collections(remote=False)
         if not self.c.active(unit):
-            # the standing DGX collection (74 GB beside a ~100 GB learner on 128 GB) yields for the whole SFT: the
-            # ledger would preempt it (COLLECTION_PRIORITY) but then relaunch it beside the learner whenever room
-            # appears; stopped (and cancelled if requeued) here, the next round's collection restarts it
-            self.stop_collections(remote=False)
             self.launch_sft(round_dir, policy, activation_gb=self.a.sft_activation_gb, preflight_only=False)
         # the remote actors keep collecting the policy the round trains from for the whole SFT; a session the keeper
         # replaced (and served again) gets its collector back, one that was down at the round's start gets one
