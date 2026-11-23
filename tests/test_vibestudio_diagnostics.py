@@ -40,6 +40,10 @@ def test_all_instances_and_workspace_streams_remain_source_bound(tmp_path):
     assert (output / 'instances/first/supervisor.log').read_text() == 'supervisor:first'
     assert again['instances'][0]['record_missing'] is True
     assert len(again['instances'][0]['retained']) == 4
+    for source in (capture / 'cases').glob('*/source.json'):
+        source.unlink()
+    retired = retain_instance_diagnostics(capture, host, output, profile)
+    assert {group['instance'] for group in retired['instances']} == {'first', 'last'}
 
 
 def test_missing_exact_source_never_selects_neighbor(tmp_path):

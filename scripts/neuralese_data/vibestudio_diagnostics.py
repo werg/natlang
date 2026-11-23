@@ -57,6 +57,17 @@ def retain_instance_diagnostics(capture, host, output, profile):
                                 'sha256': hashlib.sha256(pins.read_bytes()).hexdigest(),
                                 'workspace': source.get('workspace', 'system'),
                                 'run_id': source.get('run_id')})
+    previous_index = output / 'instances.json'
+    if previous_index.is_file():
+        previous = json.loads(previous_index.read_text())
+        if (previous.get('schema') != 'natlang.vibestudio-instance-diagnostics/1' or
+                previous.get('capture') != str(capture) or previous.get('repo_key') != repo_key):
+            raise ValueError('Existing diagnostics belong to another capture or host')
+        for group in previous['instances']:
+            instance = group['instance']
+            if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', instance):
+                raise ValueError('Invalid retained diagnostic instance')
+            groups.setdefault(instance, {**group, 'logs': []})
     for instance, group in groups.items():
         destination = output / 'instances' / instance
         supervisor = profile / 'instance-state' / repo_key / 'system-test-logs' / f'{instance}.log'
