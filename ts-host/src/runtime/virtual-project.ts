@@ -83,7 +83,7 @@ export function loadVirtualCallables(files: Record<string, string>, dir = '', ro
 
 export type CompiledProject = BuildResult & { require(path: string): Record<string, unknown> };
 
-export type VirtualProjectOptions = { platform: Platform; constrained?: boolean; programId?: string; guidance?: string;
+export type VirtualProjectOptions = { inlineRecords?: boolean; platform: Platform; constrained?: boolean; programId?: string; guidance?: string;
   importedGuidancePrograms?: readonly string[]; services?: ProgramDescriptor['services']; runtimeSpecifiers?: string[];
   target?: 'node' | 'browser'; modules?: Record<string, unknown>;
   /** Validate source and produce declarations without emitting JavaScript. */
@@ -121,7 +121,7 @@ export function compileVirtualProjectProduct(project: VirtualProject, options: V
   const specifiers = [...(options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'])];
   const build = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
     guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
-    target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
+    inlineRecords:options.inlineRecords,target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
   return { schema: 'natlang.virtual-project-product/1', project: snapshot, runtimeSpecifiers: specifiers, build };
 }
 

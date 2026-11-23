@@ -69,13 +69,28 @@ on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-ca
 
 ## Held failure taxonomy (2026-11-23, `plans/neuralese/HELD_FAILURES_20261123.md`)
 
-- **Neuralese read-back loses the content.** `natlang:model-read/1` returned the producer's text in 1 of 87
-  read-backs (sft-v7), 1/87 (sft-v9), 0/24 (sft-v6 held-v4) and 13/465 in aei1's DGX collection. The state is imported
-  (`exact-native-state`, producer's id), yet a two-line string reads back as `jinja2`. Spec-following episodes fail on
-  it, while bypassing episodes pass (33% vs 64% pass rate), so expert iteration rewards not following the program.
-  Find where the content is lost: the producer's state vs a text-primed span, the import positions, the template
-  readout, or an untrained reader. Episodes: `ops/ei/sft-v9/held/failure-taxonomy-20261123/readback.py`. Owner:
-  coordinator assigns a bug hunt, ahead of more Neuralese-variant collection.
+- **Neuralese read-back: fixed (d16437be8, f109bedfd; DECISIONS 2026-11-23 21:30).** A text-written state was encoded with no
+  context and could not be read. Engines now read it as its tokens, inline in the reader's context with no markers
+  (`in-context-text`, opt-out `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0`). Native probe: 11/12 after, against 0/12 before
+  on the live SGLang front. Follow-ups:
+  - **Re-enable Neuralese variants in aei1's collection and SFT mix** at the next pin with d16437be8. Measure the
+    collection's read-back rate with the failure-taxonomy `readback.py`. Owner: coordinator.
+  - **Marker rows** (125033–125036): bit-identical to the base's reserved row through sft-v9 (the legacy freeze). The
+    current learner trains them, but they start identical and `produce_close` never occurs in training data. Do these
+    at a round boundary, each with an opt-out:
+    - text-initialise the four rows from distinct phrases, scaled to ordinary row norm. This changes the tied head's
+      marker logits: measure spontaneous marker emission on the probe.
+    - give the rows their own optimizer group with an LR multiplier.
+    - find why producer documents lack `produce_close`.
+    - keep the rows in FP32 in merged checkpoints (`merge_policy_state` `sparse_row_dtype`).
+    - delete the dead `exp0_sft.write_checkpoint`.
+
+    Owner: learner agent, next round.
+  - **Produce spans the model emits and another call reads** are still spliced from the producer's context, which is
+    the same out-of-context problem. Decide between in-context reading of every text-primed state and trained readers,
+    with `neuralese_readback_probe.py` as the acceptance test. Owner: Neuralese agent.
+  - **A text-written state moved between engines** is spliced as stored (ENGINE_PARITY gap row). Blocked on a durable
+    producer-kind field in the state header.
 - **Harness messages found, not changed** (`HELD_FAILURES` 3.8). Owner: runtime-messages agent, next session:
   - the "cut off" footer after a `console.log` that printed the whole value;
   - a rejected service write that reads as a partial write;
@@ -145,6 +160,15 @@ admitting the batch.
 
 ## Operations
 
+- **aei1 round 1 -> 2 boundary checklist (coordinator, about 06:00 on 2026-11-24):**
+  1. Move the driver to a pin at or after 78fb05054: read-back fix, decision-budget fix, memetic leak fix, Colab-via-Drive.
+  2. Re-enable Neuralese variants once the L4 actor runs the read-back fix (rollout agent, 2026-11-23 21:45).
+  3. Take the marker-row and produce-span changes once they land (Neuralese learner agent).
+  4. Admit the new task batch from briefs A-D (authoring agent).
+  5. The typed-contract pool replaces prose `Output contract:` tasks (typed-contract agent).
+  6. Rerun bench arm D and the GRPO gradient bench.
+  7. The held reference (sft-v9) is re-measured on the new scoring series.
+- **GRPO decision-reasoning gradient bench:** `gdr-bench-9` (20 GB, low priority) was cancelled at 20:20 on 2026-11-23 because it held the DGX ledger head for 2 h behind round 1's SFT. Rerun `/home/werg/data/lfm3-rl-dgx-20261029/ops/gdr-bench/bench.sh` after the r0001 SFT finishes; its pin `pin-91b26036f` is kept until then. Owner: coordinator.
 - **Neuralese variants are off in aei1's collection** (`--no-neuralese-variants`, driver restarted 19:15 on 2026-11-23). Read-back of Neuralese values is broken: the reader gets the producer's content in about 1% of read-backs (HELD_FAILURES_20261123 finding 1), so variant groups were teaching the policy to skip program functions. Two investigators are on it: a live hunt and an independent static analysis (`NEURALESE_READBACK_STATIC_20261123.md`). Turn variants back on at the round boundary after their fix lands and read-back accuracy is re-measured. Owner: coordinator.
 - **Benchmark arm D (specialize, tune, escalate on sft-v9):** its 24 GB tune job (`bench-tune-b2`) was cancelled at 18:40. It sat at the head of the DGX ledger during round 1's SFT and froze 18 jobs behind it. Rerun arm D (`/home/werg/data/semantic-fp-bench/triage-20261123b/driver.sh`) after the r0001 SFT finishes. Owner: coordinator.
 - **Constrained-decoding rollout (9ab63c622, SGLang fork 17e3458c2e):**

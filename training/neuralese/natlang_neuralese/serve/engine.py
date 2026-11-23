@@ -735,7 +735,7 @@ class Engine:
                                    **({'adapter_state_consumption': state_receipt} if state_receipt is not None else {})})
 
     def text_write_in_context(self, block_id):
-        """Whether an import of `block_id` is fed as its exact tokens in the consumer's own context (`in-context-text`).
+        """Whether an import of `block_id` is fed as its exact tokens, inline, in the consumer's own context (`in-context-text`).
 
         A state this engine wrote from text (`native_write_text`, no adapters) holds that text's KV computed at
         positions 0.. with nothing before it: no BOS, no call. Spliced into a reader's call, the reader could not tell it
@@ -771,19 +771,19 @@ class Engine:
             open(os.path.join(marks, block_id), 'a').close()
 
     def _native_consume_text_in_context(self, seq, block_id, block):
-        """`in-context-text` consumption: consume_open, the block's exact token ids prefilled in this call's context,
-        consume_close. The receipt names the block it read (`observed_native_state_id`); the recorded prompt holds the
-        tokens, so learners replay exactly what was computed."""
+        """`in-context-text` consumption: the block's exact token ids prefilled where the reader reads them, as its text
+        inline, with no consume markers around them. The marker rows were the base model's untrained reserved-token row
+        through sft-v9 (bit-identical, frozen by the legacy trainer); around the text the reader echoed them as stray
+        tokens ("影院 Gate C opens at 06:40.影院", 2026-11-23). The receipt names the block it read
+        (`observed_native_state_id`); the recorded prompt holds the tokens, so learners replay exactly what was computed."""
         ids = [int(token) for token in block.token_ids.tolist()]
-        span = [self.role_tokens.consume_open, *ids, self.role_tokens.consume_close]
-        out = self._native_prefill_forward(span, seq.cache)
-        seq.cache = out["cache"]
-        if capture_enabled(seq):
-            for part in ([span[0]], ids, [span[-1]]):
-                if part:
-                    seq.native_rl_prompt.append({"kind": "tokens", "token_ids": part, "producing": [False] * len(part)})
-        seq.native_own_position += len(span)
-        seq.logits = self._native_logits(out["h_final"])
+        if ids:
+            out = self._native_prefill_forward(ids, seq.cache)
+            seq.cache = out["cache"]
+            if capture_enabled(seq):
+                seq.native_rl_prompt.append({"kind": "tokens", "token_ids": ids, "producing": [False] * len(ids)})
+            seq.native_own_position += len(ids)
+            seq.logits = self._native_logits(out["h_final"])
         seq.native_imports.append({"id": block_id, "mode": TEXT_IN_CONTEXT_MODE, "observed_native_state_id": block_id,
                                    **({'state_derivation': block.derivation} if block.derivation is not None else {})})
 

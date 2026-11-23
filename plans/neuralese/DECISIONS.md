@@ -9449,3 +9449,90 @@ all 582 failed episodes from their trajectories: outcome, cause, construct, evid
   - unfinished held-v4 episodes;
   - a second reader per episode;
   - labels of passing episodes, beyond the flips read for comparison.
+
+## 2026-11-23 21:30 Neuralese read-back: the text write had no context; readers now read a text-written state in their own context (d16437be8, f109bedfd)
+
+Follow-up to "Held failure taxonomy" (19:00, finding 1: 1 of 87 held read-backs returned the producer's text).
+
+**Cause.** `native.text-write` (`engine._native_write_text_impl`, `sglang_actor._sglang_write_text`) encodes a value's
+text as `[produce_open] text` from position 0: no BOS, no call around it. That KV is unusable for the reader. Every
+typed text or JSON result and argument written as `Neuralese<T>` goes through this write, as do writeGuidance and
+memetic guidance. Evidence:
+- **Splicing is exact.** On the Colab SGLang front (e15b20a8), the same text captured in the reader's own prompt and
+  re-imported gives the inline continuation token for token. The fork's import, placeholders, RoPE and conv window are
+  not where the content is lost.
+- **The context-free write fails on both engines.** The SGLang write imported into the reader gives the same
+  text-independent output for every text ("Referencelink: Referencelink: …"). The Python native engine's own round
+  trip (sft-v9 checkpoint, BF16, GB10) also reads 0 of 4 back, against 4 of 4 inline.
+- **The producer adapter is not the cause.** It is the identity (`up` = 0); the export's producer table equals the
+  embedding table.
+- **On 15 real held natlang.read prompts** (fork, greedy, the text found in the answer):
+
+  | What the reader sees | Read back |
+  |---|---|
+  | The text inline (exactly the ids the fixed front now sends) | 13 |
+  | The current write | 0 |
+  | Fixed write contexts: BOS + text | 1 |
+  | Fixed write contexts: BOS + marker + text | 0 |
+  | Fixed write contexts: a chat user frame | 3 |
+  | Fixed write contexts: the reader's tool frame | 2 |
+
+  No fixed context rescues the state; only the reader's own context does.
+
+**Fix, default on** (`NATLANG_NEURALESE_TEXT_IN_CONTEXT=0` opts out). A state an engine wrote from text, with no
+adapters, is consumed as its exact token ids, inline where the reader reads them, with no consume markers:
+- The receipt is `mode: in-context-text` with `observed_native_state_id`.
+- The RL capture records the tokens, so learners replay what was computed.
+- The engine remembers its text writes in memory and as `text-writes/<id>` in its store, so a restarted front still
+  reads them in context.
+- This is the owner's "text-init in the real rendered call, never bare text", applied to values.
+- Both the Python native engine and the SGLang actor implement it, and ts-host accepts the receipt. The managed
+  llama-server and the page serve no text write. Gap row in ENGINE_PARITY: a text-written state moved to another
+  engine's store is spliced as stored.
+- With the identity producer adapter, this is the inline text.
+- **Why no markers** (second commit): with them, the native engine read the text but echoed the untrained marker rows as
+  a stray token ("影院 Gate C opens at 06:40.影院"). Produce spans, contextual bodies and optimized,
+  derived or soft states still splice exactly.
+
+Targeted test: `test_sglang_actor.py::test_text_written_state_is_read_as_its_tokens_in_the_readers_context`. It checks
+that both engines record the same receipt and prompt, that SGLang gets the tokens with no `natlang_import`, that the
+reader's logits equal the inline prompt's, and that the opt-out and unmarked states still splice. It fails on the old
+code (the receipt mode). `scripts/neuralese_data/neuralese_readback_probe.py` is the acceptance probe: state vs the
+same text inline vs a shuffled state, through any front's public API, on synthetic texts.
+
+**Read-back before and after**, 12 synthetic texts, greedy, the runtime's `natlang.read` prompt, exact `return_result`:
+| Engine | Code | State | Same text inline | Shuffled state |
+|---|---|---|---|---|
+| SGLang (Colab front, e15b20a8) | before (live front) | 0/12 | 10/12 | 0/12 |
+| SGLang | after (the patched front feeds the inline ids; the fork measurement on 15 real held reader prompts is above) | = inline | 10/12 | - |
+| Python native engine (sft-v9, BF16, GB10) | before (own round trip, 4 texts, a simple copy prompt) | 0/4 | 4/4 | - |
+| Python native engine | after (c5d93d54a, served and probed) | 11/12 | 10/12 | 0/12 |
+
+The native miss after the fix appended the tool footer ("Declared value for the rest of this call") to the
+returned text. With the consume markers (d16437be8 alone), the native reader echoed them as a stray token around the
+text, hence the second commit.
+
+**Marker rows (coordinator lead 1, investigated by an independent subagent).** The four marker rows (125033–125036)
+in sft-v6 through sft-v9 are bit-identical to the HF base's generic reserved-token row:
+- **Cause:** the pre-c9932d915 `exp0_sft` and `grpo` froze them on purpose, saving them before each step, zeroing
+  their gradient and restoring them after `optimizer.step()` (`0724bd76:scripts/neuralese_data/exp0_sft.py:923,989,994`).
+- **The current lora+rows learner (aei1 rounds) trains them.** At r0001 step 189 they had moved 1.4–5.8% and their
+  `trainable_rows` grad norm was nonzero on every logged step.
+- **The merge and export keep them** (`factor_tensors`, `merge_policy_state`, `native_hf.merged_state`, the actor
+  rebind).
+- **Two problems remain:**
+  - They start identical, with no text initialisation.
+  - `produce_close` occurs in no training chain or producer document. It moved least (1.4%), because its only
+    gradient comes from the tied head.
+
+  Text initialisation and a row LR multiplier change the tied head's marker logits, which is model-facing. They enter
+  at a round boundary as OPEN_ITEMS, not in this push.
+
+**Not checked:**
+- the aei1 collection rate after the fix (it needs a pin with d16437be8 and Neuralese variants back on);
+- sampling at temperature 1 (reads are sampled at T=1 top-p 0.95 like every call; unchanged);
+- states moved between engines;
+- multi-state reads;
+- in-generation produce spans read by another call (they are still spliced from the producer's context);
+- the llama-server/wllama consumption of text-written states (no such states reach them);
+- the cold vs warm prefix-cache consumer forward on SGLang beyond the parity test.

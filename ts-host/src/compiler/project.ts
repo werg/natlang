@@ -11,6 +11,7 @@ import { checkSequentialNlLoops } from './sequential-loops.js';
 import { checkFixedCursorIterations, checkNlIdiomsIn } from './idiom.js';
 import { refinedSlotsOf, type RefinedSlot } from './refined-slots.js';
 import ts from 'typescript';
+import {withSourceLoadSession} from '../runtime/source-session.js';
 import { REWRITE_RULES, RewriteGate, rewriteCombinators, type RewriteRecord, type RewriteRule, type RuleMeasurement } from './rewrites.js';
 import { describeProgram, namedDescriptor, inlineDescriptor } from '../adaptation/inventory.js';
 import type { ComponentDescriptor, ProgramDescriptor } from '../adaptation/types.js';
@@ -64,6 +65,8 @@ function sourceFiles(files: ProjectFiles, root: string): SourceFiles {
 export { NEUTRAL_RUNTIME_SPECIFIER };
 
 export type BuildOptions = {
+  /** Opt out of shared generated record modules (diagnostic/reference mode). */
+  inlineRecords?: boolean;
   /** Enforce the finite generated-program profile on every editable application module. */
   constrained?: boolean;
   services?: ProgramDescriptor['services'];
@@ -203,7 +206,9 @@ function itemType(record: ItemRecord, known: ReadonlySet<string>, references?: R
 export function natlangDeclaration(record: NatlangRecord, runtimeSpecifier: string,
     references?: ReadonlyMap<ItemRecord, DeclarationReference>): string {
   const collect: Record<string, string> = {};
+  const gathered=new Set<ItemRecord>();
   const gather = (item: ItemRecord) => {
+    if(gathered.has(item))return;gathered.add(item);
     if (item.kind !== 'namespace') Object.assign(collect, item.types);
     for (const child of Object.values(item.codebase)) if (!references?.has(child)) gather(child);
   };
@@ -408,10 +413,13 @@ function findTsconfig(files: ProjectFiles, project: string): { configPath?: stri
 
 /** Check and optionally compile a project. File access comes from `options.files`. */
 export function compileProject(options: BuildOptions): BuildResult {
+  const files=sourceFiles(options.files,findTsconfig(options.files,options.project).root);
+  return withSourceLoadSession(files,()=>compileProjectInSession(options,files));
+}
+function compileProjectInSession(options: BuildOptions, files: SourceFiles): BuildResult {
   const fs = options.files;
   const { configPath, root } = findTsconfig(fs, options.project);
   const diagnostics: NatlangDiagnostic[] = [];
-  const files = sourceFiles(fs, root);
   const rel = (path: string) => relative(root, path);
   const problem = (file: string, message: string, code: NatlangDiagnostic['code'] = 'callable-scope', line = 1, hint?: string) =>
     diagnostics.push({ file, start: 0, end: 0, line, column: 1, code, message, severity: 'error', ...(hint ? { hint } : {}) });
@@ -461,9 +469,19 @@ export function compileProject(options: BuildOptions): BuildResult {
     if (promoted && visitedSources.delete(path)) pendingSources.push(path);
     if (!importedSources.has(path)) { importedSources.add(path); pendingSources.push(path); }
   };
+  const scannedRecords=new Set<ItemRecord>();
   const scanCodebase = (level: Record<string, ItemRecord>): void => {
     for (const record of Object.values(level)) {
+      if(scannedRecords.has(record))continue;scannedRecords.add(record);
       if (record.kind === 'module') enqueue(resolve(root, record.source));
+      if(record.kind==='natlang'){
+        const path=resolve(root,record.source),owner=packageRoot(dirname(path),files)??root;
+        let ownedLayout=packageLayouts.get(owner);
+        if(!ownedLayout){ownedLayout=callableFolders(fs,owner);packageLayouts.set(owner,ownedLayout);}
+        // Public shared dependencies receive their own declaration and lexical
+        // alias environment. Private children remain members of their owner.
+        if(ownedLayout.named.includes(path)&&!namedRecords.has(path)){namedRecords.set(path,record);enqueue(path);}
+      }
       scanCodebase(record.codebase);
     }
   };
@@ -506,8 +524,10 @@ export function compileProject(options: BuildOptions): BuildResult {
     described.add(record.source);
     optimizationComponents.push(namedDescriptor(programId, record));
   };
+  const checkedItems=new Set<ItemRecord>();
   const checkModules = (level: Record<string, ItemRecord>) => {
     for (const item of Object.values(level)) {
+      if(checkedItems.has(item))continue;checkedItems.add(item);
       if (item.kind !== 'namespace') item.programId = programId;
       if (collectAdaptation && item.kind !== 'namespace') optimizationSources[item.source] = item.text;
       if (item.kind === 'natlang') describeNamed(item);
@@ -773,6 +793,14 @@ export function compileProject(options: BuildOptions): BuildResult {
     };
     const specifierFor = (commonjs: boolean) => bound ? (commonjs && bound.path ? bound.path : bound.url) : runtimeSpecifier;
     const byFile = new Map(sources.map(file => [file.fileName, file]));
+    const sharedRecords = !options.inlineRecords && (globalThis as {process?:{env?:Record<string,string|undefined>}}).process?.env?.NATLANG_INLINE_SOURCE_RECORDS !== '1';
+    const graphNodes:ItemRecord[]=[], graphIds=new Map<ItemRecord,number>(),graphModes=new Set<boolean>();
+    const graphId=(record:ItemRecord):number=>{const prior=graphIds.get(record);if(prior!==undefined)return prior;const id=graphNodes.length;graphIds.set(record,id);graphNodes.push(record);for(const child of Object.values(record.codebase))graphId(child);return id;};
+    for(const record of namedRecords.values())graphId(record);
+    const contextIds=new Map([...contextRecords].map(([path,codebase])=>[path,graphId({kind:'namespace',name:basename(path),source:rel(path),codebase})]));
+    const graphPath=(commonjs:boolean)=>join(outDir,`.natlang-records.${commonjs?'cjs':'mjs'}`);
+    const graphSpecifier=(from:string,commonjs:boolean)=>{graphModes.add(commonjs);const path=relative(dirname(from),graphPath(commonjs));return path.startsWith('./')||path.startsWith('../')?path:`./${path}`;};
+
     const transformer: ts.TransformerFactory<ts.SourceFile> = context => file => {
       const source = byFile.get(file.fileName);
       if (!source) return file;
@@ -782,14 +810,25 @@ export function compileProject(options: BuildOptions): BuildResult {
       const commonjs = source.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS;
       const rewriteFor = new Map([...[...rewrite.keys()].map(specifier => [specifier, specifierFor(commonjs)] as const),
         ...stdSpecifiers.map(specifier => [specifier, commonjs && stdModule!.path ? stdModule!.path : stdModule!.url] as const)]);
-      return natlangTransformer({
+      const contextIndex=contextDir?contextIds.get(contextDir):undefined;
+      let contextName='__natlang_context_records';while(source.text.includes(contextName))contextName+='_';
+      const emittedPath=join(outDir,relative(compilerOptions.rootDir!,source.fileName)).replace(/\.[cm]?tsx?$/,'.js');
+      const graph=contextIndex!==undefined&&sharedRecords?graphSpecifier(emittedPath,commonjs):undefined;
+      const transformed=natlangTransformer({
         ...analysisLowering({ plans: filePlans, readouts: fileReadouts, instantiations: instantiations.get(source) ?? [] },
           item => `${rel(file.fileName)}:${item.line}`),
         fusionSites: fusionSitesOf(source),
         checker: program.getTypeChecker(), runtime: '__natlang',
-        context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
+        context: graph ? (commonjs?`require(${JSON.stringify(graph)}).records[${contextIndex}].codebase`:`${contextName}[${contextIndex}].codebase`) : contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
         constrained: options.constrained ?? false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',
         module: { natlangImports: importsBySource.get(source) ?? noNatlangImports, rewrite: rewriteFor } })(context)(file);
+      if(graph&&!commonjs){
+        const imported=ts.factory.createImportDeclaration(undefined,ts.factory.createImportClause(false,undefined,ts.factory.createNamedImports([
+          ts.factory.createImportSpecifier(false,ts.factory.createIdentifier('records'),ts.factory.createIdentifier(contextName))
+        ])),ts.factory.createStringLiteral(graph),undefined);
+        return ts.factory.updateSourceFile(transformed,[imported,...transformed.statements]);
+      }
+      return transformed;
     };
     const rewriteGate = options.rewriteGate ?? loadRewriteGate(fs, root);
     const emit = (fileName: string, text: string) => {
@@ -820,7 +859,9 @@ export function compileProject(options: BuildOptions): BuildResult {
       return undefined;
     };
     for (const [path, { record, commonjs, target }] of generated) {
-      const specifier = JSON.stringify(specifierFor(commonjs)), json = JSON.stringify(record);
+      const specifier = JSON.stringify(specifierFor(commonjs));
+      const graph=sharedRecords?JSON.stringify(graphSpecifier(path,commonjs)):undefined;
+      const json=sharedRecords?`__records[${graphId(record)}]`:JSON.stringify(record);
       const crisp = refinementsFor(target);
       let local = '';
       if (crisp) {
@@ -830,10 +871,25 @@ export function compileProject(options: BuildOptions): BuildResult {
       }
       emit(path, commonjs ?
         `"use strict";\nObject.defineProperty(exports, "__esModule", { value: true });\n` +
+          (graph?`const __records=require(${graph}).records;\n`:'')+
           (crisp ? `require(${specifier}).__natlang.registerCrisp(require(${local}).refinements, ${local});\n` : '') +
           `exports.default = require(${specifier}).__natlang.named(${JSON.stringify(record.name)}, ${json});\n` :
-        `import { __natlang } from ${specifier};\n` + (crisp ? `import { refinements as __crisp } from ${local};\n__natlang.registerCrisp(__crisp, ${local});\n` : '') +
+        `import { __natlang } from ${specifier};\n` + (graph?`import {records as __records} from ${graph};\n`:'') + (crisp ? `import { refinements as __crisp } from ${local};\n__natlang.registerCrisp(__crisp, ${local});\n` : '') +
           `export default __natlang.named(${JSON.stringify(record.name)}, ${json});\n`);
+    }
+    if(sharedRecords)for(const commonjs of graphModes){
+      const aliases:string[]=[],aliasIds=new Map<string,number>();
+      const rows=graphNodes.map(record=>{
+        const {codebase,...body}=record;
+        if('types' in body){const text=JSON.stringify(body.types);if(!aliasIds.has(text)){aliasIds.set(text,aliases.length);aliases.push(text);}delete (body as Partial<typeof body>).types;}
+        return body;
+      });
+      let text=`const __types=[${aliases.join(',')}];\nconst records=${JSON.stringify(rows)};\n`;
+      graphNodes.forEach((record,index)=>{
+        text+=`records[${index}].codebase={${Object.entries(record.codebase).map(([key,child])=>`${JSON.stringify(key)}:records[${graphId(child)}]`).join(',')}};\n`;
+        if('types' in record)text+=`records[${index}].types={...__types[${aliasIds.get(JSON.stringify(record.types))}]};\n`;
+      });
+      emit(graphPath(commonjs),text+(commonjs?'exports.records=records;\n':'export {records};\n'));
     }
     for (const [path, { bytes, commonjs }] of generatedNz) {
       const specifier = JSON.stringify(specifierFor(commonjs));

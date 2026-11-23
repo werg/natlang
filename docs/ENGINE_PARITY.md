@@ -142,8 +142,9 @@ managed backend by default (`tune.softStates: false` opts out; `tune/pipeline.ts
 a value's text from position 0 with nothing before it (no BOS, no call), and a reader that splices that state cannot
 use it: 1 of 87 held read-backs returned the producer's text (DECISIONS 2026-11-23 "Neuralese read-back"). The
 Python native engine and the SGLang actor therefore consume a state they wrote from text (`native_write_text` without
-adapters; recorded in memory and as `text-writes/<id>` in the store) as consume_open, the state's exact token ids
-prefilled in the reader's own context, consume_close. The receipt is `{"mode": "in-context-text",
+adapters; recorded in memory and as `text-writes/<id>` in the store) as the state's exact token ids, inline in the
+reader's own context, with no consume markers (their rows were the base's untrained reserved-token row through sft-v9,
+and the reader echoed them as stray tokens around the text). The receipt is `{"mode": "in-context-text",
 "observed_native_state_id": id}` and the RL capture records the tokens, so learners replay what was computed
 (`engine.py` `text_write_in_context`, `_native_consume_text_in_context`; `sglang_actor.py` `_sglang_import`;
 `test_sglang_actor.py` `test_text_written_state_is_read_as_its_tokens_in_the_readers_context`).
@@ -260,3 +261,23 @@ then content, `common/chat-auto-parser-generator.cpp` 137-167); Python native an
 generates is a second one. The parser starts from the generation prompt's suffix from `<think>` (`p.prefix(generation_prompt,
 reasoning_start)`, line 133), so the prompt's own `<think></think>` is the parsed (empty) reasoning block and a generated
 close stays in the content there too (read from the code; not run against a page build).
+
+### Source graph loading and generated module ownership
+
+The project compiler, named-function loader and callable-folder loader use one synchronous source-load session
+(`runtime/source-session.ts`). The session shares completed named records and parsed portable type aliases within
+that immutable input, then releases its cache. A later load re-reads its source revision; private callable children
+retain their lexical owner. `SourceFiles.sourceGraphReuse=false` or `NATLANG_SOURCE_GRAPH_REUSE=0` opts out.
+
+Reachable public NL dependencies receive independent declarations rather than repeated inline copies of their
+entire hierarchy. The existing `inlineUses` compiler option / `NATLANG_INLINE_USES_DECLARATIONS=1` retains the
+reference declaration mode. Emitted NL wrappers and inline callable contexts import an owner-local generated record
+graph; shared aliases are transported once and reconstructed into separate record maps. Only serializable frontend
+products can be shared by Host's `NativeCompilerProducts`; runtime services, module instances and model state are
+never shared. `inlineRecords:true` / `NATLANG_INLINE_SOURCE_RECORDS=1` retains inline record emission.
+
+These mechanisms are common compiler/runtime code used by Node, Workerd, browser/wllama, Pi and llama CLI SDKs.
+Managed llama-server, Python native and SGLang receive model requests from that runtime and do not load source
+records or implement compiler emission. The five Vibe SDK vendors must stage the same Core revision. Actual compiled
+Node and Workerd tests exercise diamond dependencies, inline contexts, source edits, lexical types, cycle rejection,
+record opt-outs and exact native child lineage; an actual Node ESM import covers the separate ESM graph module.
