@@ -737,15 +737,22 @@ def latest_base(results, samples, host='pop'):
 # ---- cycle -----------------------------------------------------------------------------------------------------------
 TEACHER_POOLS = [OPS / 'teacher-gen-20261115' / p for p in ('pool-v1', 'pool-v2-rich', 'pool-progtune-decisions')] + [
     OPS / 'teacher-gen-20261119' / 'gap-v1']
-# the teacher campaign's teachers (DECISIONS 2026-11-21 teacher yield): Haiku retires itself while the Anthropic account
-# has no credit; Luna at medium effort (low failed most reading families); GPT-6.1 Sol, the stronger model on the same
-# Codex subscription, only on tasks another teacher failed (min_failed); family routing and --attempts in teacher_gen
+# the provider key files the campaign's launch script sources (~/.config/natlang/NAME.env)
+TEACHER_ENV_FILES = ('nvidia', 'gemini', 'anthropic', 'openrouter')
+NIM = 'https://integrate.api.nvidia.com/v1'
+# the teacher campaign's teachers (DECISIONS 2026-11-21 teacher yield, 2026-11-24 teacher providers; ops/ei/teachers.json
+# overrides at each launch): Haiku retires itself while the Anthropic account has no credit; Luna at medium effort; GPT-6.1
+# Sol, the stronger model on the same Codex subscription, only on tasks another teacher failed (min_failed); the free
+# raw-reasoning models: Nemotron 3.5 Super and 3 Ultra on NIM (one account-wide rate limit: few slots), ERNIE 5.5 Flash
+# on OpenRouter's free tier (1,000 requests a day, ~26 episodes); family routing and --attempts in teacher_gen
 TEACHERS = [
     {'model_id': 'claude-haiku-5-5', 'provider': 'anthropic', 'reasoning_effort': 'medium', 'slots': 4},
-    {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 4},
-    {'model_id': 'gpt-6.1-sol', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 2, 'min_failed': 1},
-    {'model_id': 'nvidia/nemotron-3-ultra-550b-a55b', 'endpoint': 'https://integrate.api.nvidia.com/v1',
-     'api_key_env': 'NVIDIA_API_KEY', 'slots': 1}]
+    {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 6},
+    {'model_id': 'gpt-6.1-sol', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 4, 'min_failed': 1},
+    {'model_id': 'nvidia/nemotron-3.5-super-vl-120b-a12b', 'endpoint': NIM, 'api_key_env': 'NVIDIA_API_KEY', 'slots': 2},
+    {'model_id': 'nvidia/nemotron-3-ultra-550b-a55b', 'endpoint': NIM, 'api_key_env': 'NVIDIA_API_KEY', 'slots': 1},
+    {'model_id': 'baidu/ernie-5.5-flash-preview:free', 'endpoint': 'https://openrouter.ai/api/v1',
+     'api_key_env': 'OPENROUTER_API_KEY', 'slots': 1}]
 
 
 def frontier_rare(frontier_path, rate=0.25):
@@ -763,7 +770,22 @@ def teacher_command(pin, work, covered, student_groups, limit):
             *[x for c in covered if Path(c) != Path(work) and (Path(c) / 'manifest.jsonl').exists()
               for x in ('--covered-by', str(c))],
             *[x for g in student_groups for x in ('--student-groups', str(g))], '--rare-rate', '0.25',
-            '--limit', str(limit), '--attempts', '3', *[x for t in TEACHERS for x in ('--teacher', json.dumps(t))]]
+            '--limit', str(limit), '--attempts', '3', *[x for t in teachers() for x in ('--teacher', json.dumps(t))]]
+
+
+TEACHERS_FILE = OPS / 'ei' / 'teachers.json'
+
+
+def teachers():
+    """The teacher campaign's specs: ``ops/ei/teachers.json`` (a JSON list of teacher_gen --teacher specs) when it
+    exists, read at each campaign launch, so a teacher change reaches the standing campaign's next launch without a
+    driver restart; else TEACHERS."""
+    if TEACHERS_FILE.exists():
+        specs = json.loads(TEACHERS_FILE.read_text())
+        if not isinstance(specs, list) or not specs or not all(isinstance(t, dict) and t.get('model_id') for t in specs):
+            raise SystemExit(f'{TEACHERS_FILE}: a non-empty JSON list of teacher specs')
+        return specs
+    return TEACHERS
 
 
 def launch_teacher(runner, work, frontier_path, student_groups, unit, covered_extra=()):
@@ -778,7 +800,7 @@ def launch_teacher(runner, work, frontier_path, student_groups, unit, covered_ex
     command = teacher_command(runner.pin, work, covered, student_groups, len(rare))
     script = work / 'launch.sh'
     script.write_text('#!/bin/bash\n# expert-iteration teacher frontier (expert_iteration.py launch_teacher)\nset -u\n'
-                      f'set -a; for f in nvidia gemini anthropic; do . {Path.home()}/.config/natlang/$f.env; done; set +a\n'
+                      f'set -a; for f in {" ".join(TEACHER_ENV_FILES)}; do . {Path.home()}/.config/natlang/$f.env; done; set +a\n'
                       f'cd {runner.pin}\nexec ' + ' '.join(map(_quote, command)) + '\n')
     script.chmod(0o755)
     # CPU/API-bound, ~4 GB at 20 slots: medium so medium-priority smokes and evals do not preempt it (each preemption
