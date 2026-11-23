@@ -72,6 +72,29 @@ export function nativeStateSentinel(id: string, stopGradient = false, sourceOccu
   return `${NATIVE_SENTINEL_OPEN}${id}${stopGradient ? '!' : ''}${sourceOccurrence ? '@'+encodeURIComponent(sourceOccurrence) : ''}${NATIVE_SENTINEL_CLOSE}`;
 }
 
+/**
+ * `value` (messages, parts, sentinel text, tool-call argument JSON) with each native-state use's `source_occurrence`
+ * dropped where `known(id, occurrence)` is false. A recorded trajectory names only writers it contains: a state whose
+ * writer ran outside the record (an earlier task, a context item, a .nz file) is an external input
+ * (spec/NEURALESE_GRAPH.md, "Record"), so the request, the server's capture and the graph events all agree on it.
+ */
+export function localNativeOccurrences<T>(value: T, known: (id: string, occurrence: string) => boolean): T {
+  const visit = (item: unknown): unknown => {
+    if (typeof item === 'string') return item.includes(NATIVE_SENTINEL_OPEN) ? item.replace(NATIVE_SENTINEL, (whole, id: string, stop?: string, occurrence?: string) =>
+      occurrence !== undefined && !known(id, decodeURIComponent(occurrence)) ? nativeStateSentinel(id, !!stop) : whole) : item;
+    if (Array.isArray(item)) return item.map(visit);
+    if (!item || typeof item !== 'object') return item;
+    const record = item as Record<string, unknown>;
+    if (record.type === 'native_state' && typeof record.id === 'string' && typeof record.source_occurrence === 'string' &&
+        !known(record.id, record.source_occurrence)) {
+      const { source_occurrence: _dropped, ...rest } = record;
+      return rest;
+    }
+    return Object.fromEntries(Object.entries(record).map(([key, entry]) => [key, visit(entry)]));
+  };
+  return visit(value) as T;
+}
+
 export function nativeStateSentinelIds(text: string): string[] {
   return [...text.matchAll(NATIVE_SENTINEL)].map(match => match[1]!);
 }

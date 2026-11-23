@@ -34,3 +34,29 @@ test('a unique external native-state root retains its differentiable read occurr
   assert.deepEqual(binding.read_bindings,{});
   assert.deepEqual(binding.read_occurrences,[{index:0,id,source_state_id:id,node:'external-read',source:'external'}]);
 });
+
+test('a recorded request names only writers its trajectory holds; a foreign writer occurrence becomes an external use', async () => {
+  const { localNativeOccurrences, nativeStateSentinel, runtimeTextToParts } = await import('../dist/native/neuralese.js');
+  const id = 'nzs1_' + 'b'.repeat(52);
+  const known = (_block, occurrence) => occurrence === 'task-2/1#3';
+  const messages = [
+    { role: 'user', content: `skill ${nativeStateSentinel(id, false, 'task-1/1#6')} and ${nativeStateSentinel(id, true, 'task-2/1#3')}` },
+    { role: 'user', content: [{ type: 'native_state', id, source_occurrence: 'task-1/1#6' }, { type: 'native_state', id, stop_gradient: true }] },
+    { role: 'assistant', content: null, tool_calls: [{ function: { name: 'eval', arguments: JSON.stringify({ code: nativeStateSentinel(id, false, 'task-1/1#6') }) } }] },
+  ];
+  const local = localNativeOccurrences(messages, known);
+  assert.deepEqual(runtimeTextToParts(local[0].content).filter(part => part.type === 'native_state'),
+    [{ type: 'native_state', id }, { type: 'native_state', id, stop_gradient: true, source_occurrence: 'task-2/1#3' }]);
+  assert.deepEqual(local[1].content, [{ type: 'native_state', id }, { type: 'native_state', id, stop_gradient: true }]);
+  assert.deepEqual(runtimeTextToParts(JSON.parse(local[2].tool_calls[0].function.arguments).code), [{ type: 'native_state', id }]);
+  assert.equal(messages[1].content[0].source_occurrence, 'task-1/1#6', 'the input is not modified');
+});
+
+test('an arrow-function model driver records the actor id "model", not an empty name', async () => {
+  const { createNatlangRuntime, defineNatlang } = await import('../dist/index.js');
+  const traces = [];
+  const runtime = createNatlangRuntime({ model: () => ({ calls: [['return_result', { status: 'success', value: 'ok' }]] }), trace: trace => traces.push(trace) });
+  assert.equal(await runtime.run(() => defineNatlang('---\nreturns: string\n---\nSay ok.\n', { name: 'say' })()), 'ok');
+  const turns = traces.flatMap(trace => trace.events).filter(event => event.kind === 'model_turn');
+  assert.ok(turns.length && turns.every(event => event.actor?.id === 'model'), JSON.stringify(turns.map(event => event.actor)));
+});

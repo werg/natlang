@@ -253,3 +253,31 @@ def test_state_optimizer_cpu_transfer_retains_exact_outer_derivative(tmp_path,fa
         torch.testing.assert_close(actual,expected,rtol=2e-5,atol=3e-6)
         assert (actual-expected).double().norm()/expected.double().norm()<2e-5
     finally:engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm'])
+def test_first_order_program_treats_inner_gradients_as_constants(tmp_path,family):
+    """`order` 1: with plain SGD the update a' = a - lr*g has Jacobian I at constant g, so the outer gradient equals
+    the outer objective's gradient at the final updated actor; order 2 differs from it."""
+    from natlang_neuralese.model.native_derivative_contract import validate_finite_program
+    engine=engine_fixture(tmp_path,family)
+    adapter,name=nonzero_adapter(engine)
+    try:
+        source=program(engine,adapter,'sgd')
+        for node in source['nodes']:
+            if node['kind']=='optimizer':node['optimizer']={'name':'sgd','learning_rate':.5}
+        first=execute_derivative_program(engine,{**copy.deepcopy(source),'order':1})
+        second=execute_derivative_program(engine,copy.deepcopy(source))
+        final={'schema':PROGRAM,'arithmetic':source['arithmetic'],'inputs':{'a':{'kind':'adapter','id':first['outputs']['a2']}},
+            'nodes':[],'outer':{'request':{**copy.deepcopy(source['outer']['request']),'adapters':[first['outputs']['a2']]},'bindings':{}},'wrt':['a']}
+        at_final=execute_derivative_program(engine,final)
+        tensor=lambda result:engine.store.get_native_tensor_artifact(result['gradients']['a']['id']).artifact.tensors[name]
+        assert tensor(first).norm()>0
+        assert torch.allclose(tensor(first),tensor(at_final),rtol=1e-4,atol=1e-7)
+        assert not torch.allclose(tensor(second),tensor(first),rtol=1e-4,atol=1e-7)
+        for bad in (0,3,'1',True):
+            with pytest.raises(ValueError,match='finite input/node/outer contract'):
+                validate_finite_program({**copy.deepcopy(source),'order':bad})
+        recorded=copy.deepcopy(source);recorded['nodes'][1]['recorded']='not-an-id'
+        with pytest.raises(ValueError,match='update gradient belongs'):validate_finite_program(recorded)
+    finally:engine.store.close()

@@ -109,6 +109,8 @@ export async function nativeDerivativeProgramGradient(endpoint: string, store: N
   schema: 'natlang.native-derivative-program/1'; inputs: Record<string, { kind: string; id: string; names?: string[] }>;
   nodes: readonly Record<string, unknown>[]; outer: Record<string, unknown>; wrt: readonly string[];
   arithmetic: { schema: 'natlang.native-reference-arithmetic/1'; query_chunk_tokens: number };
+  /** 1: inner gradient nodes are constants (first-order nesting); absent: differentiated (order 2). */
+  order?: 1;
 }, headers?: Record<string, string>): Promise<{ loss: number; gradients: Record<string, NativeTensorArtifact>; execution_id: string }> {
   const remote = new HttpNeuraleseStore(endpoint, headers);
   const adapterIds = Object.values(program.inputs).filter(input => input.kind === 'adapter').map(input => input.id);

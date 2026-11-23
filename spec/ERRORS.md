@@ -65,6 +65,7 @@ for the codes it answers. Each code was checked with `grep` against those source
 | `neuralese-native-protocol-integrity` | A server's marker-failure observation lacks its typed failed turn or receipt | call time | `native/native-protocol.ts`, `native/agent.ts` |
 | `neuralese-native-gradient-binding` | A returned gradient does not belong to its exact target root and actor | call time | `neuralese/native-learning-client.ts` |
 | `neuralese-native-update-binding` | An optimizer result does not belong to the published update or checkpoint | call time | `neuralese/native-learning-client.ts` |
+| `learning-unavailable` | `natlang:learning` (`grad`, `valueAndGrad`, optimizers, `save`) called by code whose task was not given the learning service ([learning](ext/learning.md)); in the browser the module itself is unavailable (`ModuleUnavailableError`) | call time | `neuralese/learning.ts` |
 | `learning-native-target` | A gradient or optimizer step without archived native targets (`nzs1_` states, `nnt1_` coefficients) ([learning](ext/learning.md)) | call time | `neuralese/learning.ts` |
 | `learning-privilege-leak` | `conditionedDistill`: the student's view contains the privileged text | call time | `neuralese/learning.ts` |
 | `learning-teacher-unconditioned` | `conditionedDistill`: the teacher saw exactly what the student saw | call time | `neuralese/learning.ts` |

@@ -26,7 +26,7 @@ import { serves } from './neuralese-info.js';
 import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBindings,coefficientStateModes} from './native-coefficient-policy.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
   isNativeStateId, runtimeTextToParts, type RuntimeContentPart } from '../native/neuralese.js';
-import { nativeStateConsumerFromInfo } from '../native/neuralese.js';
+import { localNativeOccurrences, nativeStateConsumerFromInfo } from '../native/neuralese.js';
 import { decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeArtifactFrom, archiveNativeTensorFrom,
   nativeTensorArtifactBlockMeta, nativeModelIdentityEqual, type NeuraleseBlockMeta,
@@ -546,6 +546,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     if (scopedNativeStates.length) body = { ...body,
       messages: await bindNativeStateContext(body.messages as unknown[], scopedNativeStates, capabilities) };
     const recorder=activeRecorder();
+    // A recorded request names only writers its trajectory holds; a foreign writer's state is an external input.
+    if (recorder?.nativeStateWriters) body = { ...body, messages: localNativeOccurrences(body.messages,
+      (id, occurrence) => recorder.nativeStateWriters!(id).includes(occurrence)) };
     const nativeRecording=(!!recorder||scopedNativeStates.length>0)&&(capabilities?.native_state as {enabled?:boolean}|undefined)?.enabled===true;
     if(nativeRecording)body={...body,x_natlang_native_recording:true};
     if(Array.isArray(capabilities?.capabilities)&&capabilities.capabilities.includes('native.protocol-recovery'))body={...body,x_natlang_native_protocol_recovery:true};

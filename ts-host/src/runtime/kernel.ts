@@ -781,7 +781,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   if (fallbacks.some((fallback, index) => fallbacks.slice(0, index).some(previous =>
     previous.id === fallback.id || previous.driver === fallback.driver)))
     throw new Error('escalation model chain repeats an actor');
-  const primaryActorId = model ? model.id ?? (model.driver as { model?: string }).model ?? executorModel(task) ?? model.driver.name ?? 'model' : undefined;
+  const primaryActorId = model ? model.id ?? (model.driver as { model?: string }).model ?? executorModel(task) ?? (model.driver.name || 'model') : undefined;  // an arrow driver's name is ''
   const currentFallback = fallbacks.findIndex(fallback => fallback.driver === model?.driver || fallback.id === primaryActorId);
   const remainingFallbacks = fallbacks.slice(currentFallback + 1).filter(fallback => fallback.driver !== model?.driver && fallback.id !== primaryActorId);
   const nativeOptions = task.runtime.options.neuralese;
