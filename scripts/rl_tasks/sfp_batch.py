@@ -4,7 +4,7 @@
   sfp_batch.py qualify BATCH_DIR --runtime TS_HOST [--n N] [--concurrency C]
   sfp_batch.py blind BATCH_DIR ANSWERS.json [--n N]
   sfp_batch.py status BATCH_DIR [BATCH_DIR ...]
-  sfp_batch.py supply OUT_DIR --min-worker N --max-worker M --stamp TAG
+  sfp_batch.py supply OUT_DIR --min-worker N --max-worker M --stamp TAG [--drop-related RELATED.json]
 
 ``qualify`` runs, on BATCH_DIR/tasks.jsonl, each step writing under BATCH_DIR:
  1. qualify_authored.py   convert, collector replay (reference, wrong answers, aliases, keyword baseline that must run
@@ -142,10 +142,11 @@ def blind(batch, answers, n):
 HELD_V3 = Path(resolve_str('data_nvme', 'lfm3-rl-dgx-20261029/ops/held-v3'))
 
 
-def supply(out, min_worker, max_worker, stamp):
+def supply(out, min_worker, max_worker, stamp, drop_related=None):
     out.mkdir(parents=True, exist_ok=True)
     checks = {'out': str(out), 'workers': [min_worker, max_worker], 'stamp': stamp}
-    checks['build_supply'] = run([PY, HERE / 'build_supply.py', out, '--min-worker', min_worker, '--max-worker', max_worker],
+    checks['build_supply'] = run([PY, HERE / 'build_supply.py', out, '--min-worker', min_worker, '--max-worker', max_worker,
+                                  *(['--drop-related', drop_related] if drop_related else [])],
                                  out / 'build_supply.log')
     checks['register_held'] = run([PY, HERE / 'register_authored_held.py', '--stamp', stamp], out / 'register_held.log')
     cases = rows(out / 'cases.jsonl')
@@ -222,13 +223,14 @@ def main(argv=None):
     u.add_argument('--min-worker', type=int, required=True)
     u.add_argument('--max-worker', type=int, required=True)
     u.add_argument('--stamp', required=True)
+    u.add_argument('--drop-related', help='JSON {"related": [case ids]}: train rows left out (build_supply.py --drop-related)')
     args = ap.parse_args(argv)
     if args.cmd == 'qualify':
         return qualify(Path(args.batch), args.runtime, args.n, args.concurrency)
     if args.cmd == 'blind':
         return blind(Path(args.batch), Path(args.answers), args.n)
     if args.cmd == 'supply':
-        return supply(Path(args.out), args.min_worker, args.max_worker, args.stamp)
+        return supply(Path(args.out), args.min_worker, args.max_worker, args.stamp, args.drop_related)
     return status(args.batches)
 
 

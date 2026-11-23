@@ -128,64 +128,44 @@ authoring rule (a prose `Output contract:` paragraph is an error), the migrated 
 - **Decision-readout tie-break:** three 2–2 ties of the four samples all went to needs-review, wrong each time
   (held-v4 design-brief gates). Check the tie rule. Owner: B10 agent.
 
-### Task-authoring briefs (owner: next task-author batch)
+### Task-authoring briefs A–E: first batch admitted (DECISIONS 2026-11-23 23:45 "Held-failure task batch")
 
-Seed from new domains and existing datasets, never from held inputs or their siblings (`held_eval.exclusion_ids()`).
-Each task gets an exact oracle with reference, negative and alias replay. Measure repetition against the pool before
-admitting the batch.
+343 verifier-judged tasks (w440–w459) are qualified and blind-solved. `natlang-rl-task-supply-20261123hfb` holds 242
+train rows in `grpo-pool`; the held rows are in `natlang-rl-authored-{dev,confirmation}-20261123hfb`.
 
-- **A. Directory reducers with exact effects.** Programs that read a folder of notes and must move, not copy, each
-  note into destination folders at the folder root, write a summary file in an exact line template, and return a
-  count. Vary:
-  - where destinations live (root vs nested, stated explicitly);
-  - move vs copy vs delete;
-  - cut-off rules ("stop when …");
-  - null or absent fields that select a default branch;
-  - name vs path in output lines;
-  - literal words in the template that must appear verbatim;
-  - a final newline.
+| Brief | Admitted | Train rows |
+|---|---|---|
+| A | 67 | 42 |
+| B | 49 | 39 |
+| C | 60 | 50 |
+| D | 66 | 44 |
+| E | 101 | 67 |
 
-  Negative replays: the right summary with no moves; moves into nested folders; a copied file left behind; a dropped
-  template word. Domains: depots, clinics, archives, workshops, municipal permits, school rosters (not courts, ferries,
-  harbours, claims or bike docks).
-- **B. Child-call discipline in eval.** Programs whose root loops over items and calls a named child function once per
-  item, then aggregates. Construct pressure:
-  - results stored once and reused in the next eval (an oracle on the model-call count: at most N + small);
-  - children that answer directly rather than calling themselves or a new `nl` with the same instructions;
-  - 3–5-level chains where each level does one step;
-  - `Promise.all` over async children;
-  - `for … of await folder.files(…)`.
-
-  Negative replays: re-running the loop (budget), a self-call, by-hand computation where the child is the specified
-  path (`hinted_technique` oracle).
-- **C. Exhaustive codebase exploration with exact paths.** Callable-program exploration tasks: leaves under nested
-  namespaces, direct children excluding the parent, functions whose instructions mention an exact identifier
-  (not substring, not frontmatter args), parameter-type users including the root. Answers are full dotted paths from
-  the root. Programs have 12–20 functions over 3–4 levels, so passing needs reading all of them. Use new program
-  domains, not `codebases-design-briefs-0xx`.
-- **D. Decision-readout calibration on hard negatives.** `decide`/`readout: decision` tasks whose label sets have
-  near-miss out-of-scope requests, fine-grained question types, money words in personal (ham) messages, and
-  two-team routing where the request names one team's symptom and the other's remedy. Roughly 30% of items should be
-  the out-of-scope or near-miss class. Sources: intent and classification datasets outside held source groups.
-- **E. Fresh siblings of the zero-rate capabilities** (held families with 0% historic pool rate). These are written
-  from the capability, not the held task:
-  - an obligation carried across sections of a long register into per-section notes;
-  - request-to-service-call queues with conditional reject reasons;
-  - reconciliation over damaged or missing folder entries;
-  - an edit stream applied to a document;
-  - choosing a procedure from a skill library;
-  - multi-round state games with a stop rule.
-
-  Give each a Neuralese-free variant until the read-back defect above is fixed, so own successes and teacher
-  demonstrations are possible.
+Brief E covered only the Neuralese-free capabilities. Open:
+- **The current policy's pass rate on the 242 rows.** The Colab front was lost after 13 episodes (3 scored, 0 passed).
+  Measure on the next actor: `runs/hfb/make_measure_manifest.py <supply cases> <dir>`, then `held_eval measure
+  --allow-other-engine` from a pin. Owner: coordinator, with round 2's collection health report (families
+  `auth_depot_folder_dispatch` … `auth_multi_round_state_games`).
+- **Declare the hfb folder tasks' files in `writes:`** (A, and the folder programs of B, D and E). They are verifier
+  tasks, which rule 6 exempts, and their file formats sit in the numbered steps. Do it once collection pins read
+  `writes:`; the migration must declare conditional files too. Owner: typed-contract agent or the next author batch.
+- **Brief E with Neuralese:** the capabilities above with Neuralese variants, now that read-back is fixed (d16437be8).
+  Owner: next task-author batch.
+- **`register_authored_held.py` and `build_supply.py` write under the running checkout's `runs/`.** From a worktree, the
+  packets land in the worktree, and custody loses them when it is removed. Resolve `runs` to the canonical data root, or
+  refuse a worktree. Owner: next task-author batch.
+- **The static verifier controls lack `read_code`**, which the collector replay has. Keyword baselines that explore code
+  must inline the sources. Owner: next task-author batch.
 
 ## Operations
 
+- **aei1 remote collector runs old code:** `aei1-collect-v0000-remote0` was started at 19:15 on 2026-11-23 from pin 108cd84. Its ts-host lacks 98651c669, so against an actor serving the read-back fix it throws `neuralese-native-grad-invalid` on in-context reads. Replace it with a collector at the driver pin at the round boundary, or when the A100 actor is served again after round 1's SFT. Owner: coordinator.
+- **aei1 driver controller owned by the Vibestudio session since 22:41 on 2026-11-23:** `resume-semantic-reader-owner.py` replaced the coordinator's driver with the same argv (pin bdf4c8721, variants on), with controller code from 97e82bcd5 on origin/main and `--data-repo`/`--fill-repo` at its reader pin. The coordinator accepted this: the code contains the hand-back. Its unit is `aei1-drive-reader-v14-final-20261123`. Coordinate before restarting it.
 - **aei1 round 1 -> 2 boundary checklist (coordinator, about 06:00 on 2026-11-24):**
   1. Move the driver to a pin at or after 78fb05054: read-back fix, decision-budget fix, memetic leak fix, Colab-via-Drive.
   2. Re-enable Neuralese variants once the L4 actor runs the read-back fix (rollout agent, 2026-11-23 21:45).
   3. Take the marker-row and produce-span changes once they land (Neuralese learner agent).
-  4. Admit the new task batch from briefs A-D (authoring agent).
+  4. Admit the new task batch from briefs A-D (authoring agent): done, `natlang-rl-task-supply-20261123hfb` is in grpo-pool (242 rows; briefs A–E).
   5. The typed-contract pool replaces prose `Output contract:` tasks (typed-contract agent).
   6. Rerun bench arm D and the GRPO gradient bench.
   7. The held reference (sft-v9) is re-measured on the new scoring series.

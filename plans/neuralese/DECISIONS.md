@@ -9587,8 +9587,13 @@ checker required it.
 - **Found and fixed on the way:** the collector never bound a root function's `ensures:` (the kernel binds them to the
   calls it runs; the collector prepares the root itself), so no root postcondition was checked in collection, held eval
   or qualification. `ensuresGate` is now shared. No pool root declares one today.
-- **Measurement** (30 tasks, one per family, 2 samples, sft-v9 on the Colab front, same seeds, prose vs typed, same
-  runtime): in flight; appended below when it finishes.
+- **Measurement** (30 tasks, one per family, 2 samples, sft-v9, same seeds, prose vs typed, same runtime): in
+  flight. The Colab front dropped three times (aei1 moved its round-1 SFT there), so only 9 prose and 6 typed episodes
+  scored there. A ledger unit (`typedwt-measure-supervisor`, `ops/typed-contracts-20261123/driver/supervise.sh`)
+  measures both arms on the first endpoint that attests sft-v9, the Colab front or aei1's DGX actor, and reruns
+  episodes an actor loss cut off. Result: `ops/typed-contracts-20261123/measure-<endpoint>/<arm>/run/result.json`,
+  compared with `held_eval compare`. It runs from the `/home/werg/natlang-wt/typed-contracts` worktree; remove that
+  worktree when it finishes.
 - **Not checked:**
   - a blind solve of the migrated rows;
   - `held_eval verify` against the new sources (same ids and groups as the verified old ones);
@@ -9672,3 +9677,70 @@ objects (`natlang/colab/<run>/handback-state`) are replaced per move, not delete
 Tests: `tests/neuralese/test_async_train.py` (decision, move after verified push, no move when opted out,
 unfavourable, unsaved, unverified or blocked, VM state replaced only whole and verified, run-sft push rule, move
 estimate).
+
+## 2026-11-23 23:45 Held-failure task batch (hfb): briefs A–E, 343 tasks qualified, 242 train rows in grpo-pool
+
+The held failure taxonomy (`HELD_FAILURES_20261123.md`) asked for training tasks in five classes (OPEN_ITEMS briefs A–E).
+20 Opus authors (w440–w459) wrote one batch each. Brief E kept only the capabilities that need no Neuralese read. Common
+brief: `/mnt/external/natlang-rl-authoring/hfb/AUTHOR_TASK.md`; per-worker assignments are `hfb/brief-wNNN.md`.
+- **Format.** Every task is verifier-judged (kit sections 18–19): meaning-based judgments with at least 40% cue traps
+  per world, a keyword baseline that must fail, and smoke replays.
+  - Output formats are stated in types: a top-level `types.ts` with field doc comments, literal unions, `ensures:`
+    checks, and the trusted verifier. No `Output contract:` paragraph appears anywhere, and no task uses Neuralese.
+  - File formats sit in the numbered steps. `writes:` was not in the collection runtime when the authors started, and
+    the landed rule 6 (089ab8d15) exempts verifier tasks from it. Declaring their files in `writes:` is an OPEN_ITEMS
+    follow-up.
+- **Qualification.** Each author cleared `authored_checks.py` and the collector replay (`hfb/replay.sh`, on aei1's
+  collection runtime 1c177e3fc). Then `sfp_batch.py qualify` ran on a pin of 78fb05054:
+  - reference, wrong answers, aliases, keyword baselines and smoke replays all passed (0 wrong answers accepted, 0
+    keyword baselines accepted);
+  - custody, novelty (every family new), held-v3/held-v4 separation and repetition all passed;
+  - all 20 batches PASS.
+- **Blind solves.** Sonnet solvers worked from the packet alone; each answer was judged by the task's own verifier.
+  - 340 of 343 agreed on the first solve. w449's solver wrote paths with the root task's folder name in front; once
+    that prefix was stripped it agreed 21/21.
+  - The 3 disagreements were all w454: p5b term 5, p5c term 3, p6b section 5. Each was reworded to one reading,
+    requalified (qualified-2) and re-solved blind, and now agrees.
+- **Admission.** All 343 tasks were admitted (`admitted/admissions.jsonl`).
+  - Supply `natlang-rl-task-supply-20261123hfb` (e1219c0a6, `grpo-pool` order 21): 242 train rows.
+  - 100 held rows are registered evaluation-only: `natlang-rl-authored-{dev,confirmation}-20261123hfb`, 51 and 49 rows.
+  - One train row was dropped (`--drop-related`, now an `sfp_batch supply` option): w449-p1a-result-producers. Its whole
+    input `{type_name: "Quote"}` equals a held w447 row's input, and custody's input binding fails closed on it.
+  - Checks: custody 0, held-v3 verify 0/0 with and without exposure, held-v4 verify 0/0 (with exposure and
+    exposure-v2 too), training exclusion 0.
+
+  | Brief | Workers | Authored and admitted | Train rows |
+  |---|---|---|---|
+  | A: directory reducers with exact effects | w440–w443 | 67 | 42 |
+  | B: child-call discipline | w444–w446 | 49 | 39 |
+  | C: exhaustive codebase exploration | w447–w449 | 60 | 50 |
+  | D: decision calibration on hard negatives | w450–w453 | 66 | 44 |
+  | E: zero-rate capabilities, no Neuralese | w454–w459 | 101 | 67 |
+- **Repetition** (`measure_repetition.py` against the 37,584-row pool):
+  - 162 distinct programs (148.5 effective) and 42 structures (21.5 effective);
+  - 0 instruction, program or functional-program texts already in the pool;
+  - 7 of 42 structures are shared with the pool (60 rows);
+  - 199 of 242 rows are in families absent from the pool;
+  - the novelty gate passed for every batch's family (each family is new to the pool).
+- **Selection.** `simulate_selection --grpo` with the supply added: PASS (2,000 groups).
+- **Found and fixed.** A relative `uses:` into a cousin folder was rejected as a false cycle, because the loader reloaded
+  the owner chain mid-load. Two C authors hit it independently. The fix is e494bc5ca (loader binds the record of the tree
+  being loaded; package-root `uses:` without `natlang.json`; tests).
+- **Found, not fixed:**
+  - `register_authored_held.py` and `build_supply.py` write relative to the script's checkout. Run from a worktree, the
+    held packets landed in the worktree's own `runs/`. They were moved to `/home/werg/natlang/runs` and linked back.
+  - The static verifier controls run keyword baselines without `read_code`, while the collector replay has it.
+    Exploration baselines therefore inline the sources.
+  - A `types.ts` doc-comment example whose id is also a real item id makes every child opening match that item's
+    scripted answer (w445).
+- **Current policy on the new tasks.** Not measured. The measurement ran sft-v9 (e15b20a8) on the Colab front at 2
+  samples over the first 49 train rows. It lost the actor after 13 episodes, when the keeper replaced the L4 session with
+  an A100 at 22:15 and the new session's actor serve failed. 3 episodes were scored, 0 passed, mean graded reward 0.16.
+  One read: a brief-A run wrote the right summary and left every ticket unmoved, which is the targeted failure.
+  Re-measure on the next actor (`runs/hfb/make_measure_manifest.py` over the supply).
+- **Not checked:**
+  - the policy's pass rate (above);
+  - a model run of the depth-3 middles (replay scripts them);
+  - B worlds sized at about 28 requests per correct pass, which may be tight if children take several turns;
+  - a second blind solver;
+  - whether collection on a `writes:` runtime treats these tasks the same (they declare no `writes:`).
