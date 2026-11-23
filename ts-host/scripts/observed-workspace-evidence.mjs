@@ -70,7 +70,7 @@ export function declaredReturnSelectors(proof) {
       if(c.schema!=='natlang.application-return-contribution/1' || !['root','forwarded','projection'].includes(c.kind) ||
          typeof c.root_call_id!=='string'||typeof c.producer_call_id!=='string'||typeof c.root_value_json!=='string'||
          digest(c.root_value_json)!==c.root_sha256||!isDeepStrictEqual(JSON.parse(c.root_value_json),proof.actualResult)||
-         !Array.isArray(c.checks)||!c.checks.length||new Set(c.checks).size!==c.checks.length||c.checks.some(check=>failed[check]!==false)||
+         !Array.isArray(c.checks)||!c.checks.length||new Set(c.checks).size!==c.checks.length||c.checks.some(check=>typeof check!=='string'||failed[check]!==false)||
          ![c.root_path,c.producer_path].every(path=>Array.isArray(path)&&path.every(key=>typeof key==='string'||Number.isSafeInteger(key)&&key>=0))||
          !Array.isArray(c.lineage)||!c.lineage.length||c.lineage.some(id=>typeof id!=='string')||new Set(c.lineage).size!==c.lineage.length)
         throw new Error('invalid authored application return contribution');
@@ -98,7 +98,7 @@ export function validateReturnContribution(item, records, roots) {
       throw new Error('root contribution must identify its whole actual root return');
     return;
   }
-  if(producer===root||producer.executor?.kind==='crisp'||!producer.definition?.source?.endsWith('.nl')||
+  if(producer===root||!['agent','crisp-agent'].includes(producer.executor?.kind)||!producer.definition?.source?.endsWith('.nl')||
      !(producer.model_turns??[]).some(turn=>turn.kind==='generation'&&turn.reply&&!turn.error))
     throw new Error('forwarded or projected contribution needs an actual sampled NL producer');
   for(let index=0;index<c.lineage.length-1;index++){
