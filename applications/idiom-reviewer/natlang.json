@@ -12,7 +12,6 @@
     "main.ts",
     "package.json",
     "review.ts",
-    "stepKind.nl",
     "types.ts"
   ],
   "engines": {

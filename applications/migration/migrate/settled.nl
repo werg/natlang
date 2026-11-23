@@ -3,8 +3,9 @@ description: Migration stopping judgment. Whether the repair loop should stop - 
 args:
   state: RepairState
 returns: boolean
+readout: decision
 ---
-Decide whether the repair loop stops at state. Answer true when any of these holds, exactly in eval:
+Decide whether the repair loop stops at state. Answer true when any of these holds:
 
 1. state.validation is not null and its status is "passed".
 2. state.remaining is 0 (the budget of rounds is spent).

@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -5,8 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNatlangRuntime } from '../dist/index.js';
 import { RepositoryMigration, migrate } from '../../applications/dist/migration/index.js';
-import flow from '../../applications/dist/migration/migrate.nl.js';
-const settledCrisp = flow.settledCrisp;
+import settledCrisp from '../../applications/dist/migration/migrate/settledCrisp.js';
 import { readFileSync } from 'node:fs';
 import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
 
@@ -19,11 +19,12 @@ const source = {
 };
 // A repository whose scenario already fails at the base: it expects the new name.
 const pending = { ...source, 'test.mjs': "import { add } from './lib.mjs';\nimport { strict as assert } from 'node:assert';\nassert.equal(add(2, 3), 5);\n" };
+const AsyncFunction = (async () => {}).constructor;
 const CHECKS = [{ id: 'scenario', argv: [process.execPath, '--test', 'test.mjs'] }];
 
 // What an interpreter of each stage might write: the algorithm its instructions spell out, over the same data.
 const STAGES = [
-  ['Migrate the repository as request says', 'driver'], ['Restate request for the later stages', 'understand'],
+  ['Restate request for the later stages', 'understand'],
   ['Find the sites of intent at revision', 'survey'], ['Locate the site of hit at revision', 'locate'],
   ['Classify the use of intent.old', 'classify'], ['Plan the migration of intent over classified', 'plan'],
   ['Edit the site of classified at revision', 'edit'], ['Write the patches for classified.site', 'patch'],
@@ -33,30 +34,6 @@ const STAGES = [
 ];
 
 const DEFAULTS = {
-  driver: `const intent = await understand(request, snapshot, checks, seeds);
-const sites = await survey(intent, snapshot.revision);
-const usages = await Promise.all(sites.map(site => classify(intent, site)));
-const classified = sites.map((site, i) => ({ site, usage: usages[i] }));
-const planned = await plan(intent, classified);
-const edits = await Promise.all(classified.filter(c => planned.edits.includes(c.site.id)).map(c => edit(intent, c, snapshot.revision)));
-for (const l of planned.leave) edits.push({ site: l.site, usage: classified.find(c => c.site.id === l.site).usage, patches: [], status: 'left', note: l.reason });
-const patches = planned.edits.flatMap(id => edits.find(e => e.site === id).patches);
-let state = { snapshot, validation: null, rejected: '', findings: [], remaining: attempts, revisions: [snapshot.revision] };
-if (!patches.length) state = { ...state, rejected: 'no site produced a patch: ' + edits.filter(e => e.status === 'failed').map(e => e.note).join('; ') };
-else {
-  try {
-    const candidate = repository.apply(snapshot.revision, patches);
-    const validation = await repository.validate(candidate.revision);
-    state = { ...state, snapshot: candidate, validation, revisions: [snapshot.revision, candidate.revision] };
-  } catch (error) { state = { ...state, rejected: error.message }; }
-}
-let final;
-try { final = await round.iterateOn(state, intent).withMeasure(s => s.remaining).until(stop); }
-catch (error) { if (error.name === 'IterationLimitError') final = error.lastState; else throw error; }
-const validation = final.validation ?? await repository.validate(final.snapshot.revision);
-const report = repository.report(final.snapshot.revision, validation);
-const closing = await summarize(intent, planned, edits, final, report);
-return { report, intent, plan: planned, edits, findings: final.findings, rounds: attempts - final.remaining, summary: closing.summary, next: closing.next };`,
   understand: `return { summary: 'rename sum to add', old: 'sum', new: 'add', queries: [...new Set([...seeds, 'sum'])], invariants: ['total stays 5'] };`,
   survey: `const seen = new Set(); const hits = [];
 for (const q of intent.queries) for (const h of repository.search(q, revision).hits) { const k = h.path + ':' + h.offset; if (!seen.has(k)) { seen.add(k); hits.push(h); } }
@@ -150,8 +127,22 @@ async function run({ overrides = {}, policy, attempts = 3, files = Object.keys(s
     return base(request);
   }, {});
   const judged = withJudge(driver);
+  // `settled` is a `readout: decision`: the scripted model scores it by running the stage's script on the state the
+  // call shows; every other true/false readout goes to the refinement judge.
+  const judge = driver.decide;
+  driver.decide = async request => {
+    const text = request.messages.map(message => String(message.content ?? '')).join('\n');
+    if (!text.includes('Decide whether the repair loop stops')) return judge(request);
+    seen.push('settled');
+    const shown = /^state: [^\n]*? = ([^\n]+)$/m.exec(text)?.[1];
+    if (!shown) throw new Error(`settled: no state shown in ${text.slice(0, 400)}`);
+    const state = runInNewContext('(' + shown + ')', Object.create(null), { timeout: 100 });
+    const script = overrides.settled ?? DEFAULTS.settled;
+    const stop = Boolean(await new AsyncFunction('state', script)(state));
+    return { log_probs: request.options.map(option => Math.log(JSON.parse(option) === stop ? 0.97 : 0.03)) };
+  };
   const traces = [];
-  const runtime = createNatlangRuntime({ model: driver, calls: false, trace: trace => traces.push(trace) });
+  const runtime = createNatlangRuntime({ model: { driver, decisionSamples: 0 }, calls: false, trace: trace => traces.push(trace) });
   const result = await migrate(runtime, repository, 'Rename sum to add while preserving the calculation', { attempts, seeds, checks: ['scenario'] });
   const checks = traces.flatMap(trace => trace.events).filter(event => event.kind === 'refinement_check');
   return { result, root, repository, seen, openings, feedback, judged, checks };

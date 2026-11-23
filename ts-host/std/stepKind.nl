@@ -1,10 +1,10 @@
 ---
-description: What one step of a legacy natural-language function does.
+description: What one step of a natural-language function's instructions asks the model to do.
 args:
   step: string
   signature: string
   file: string
-returns: StepKind
+returns: "judgment" | "mechanism" | "guard-for-type" | "redundant"
 readout: decision
 ---
 step is one numbered step or paragraph of the instructions of file, a function with signature. Say what the step

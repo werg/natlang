@@ -11,9 +11,17 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
-import { pluggableMode, type NatlangRuntime, type PluggableMode, type PluggableSetting } from '@natlang/node';
-import migrateFlow from './migrate.nl';
-import type { Check, ChangedFile, Migration, MigrationReport, Patch, RepoSnapshot, SearchHit, SearchResult, Validation } from './types.js';
+import { IterationLimitError, pluggable, pluggableMode, type NatlangRuntime, type PluggableMode, type PluggableSetting } from '@natlang/node';
+import understand from './migrate/understand.nl';
+import survey from './migrate/survey.nl';
+import plan from './migrate/plan.nl';
+import round from './migrate/round.nl';
+import settled from './migrate/settled.nl';
+import settledCrisp from './migrate/settledCrisp.js';
+import summarize from './migrate/summarize.nl';
+import classify from './site/classify.nl';
+import edit from './site/edit.nl';
+import type { Check, ChangedFile, Migration, MigrationReport, Patch, RepairState, RepoSnapshot, SearchHit, SearchResult, SiteEdit, Validation } from './types.js';
 
 export type * from './types.js';
 export type CheckCommand = { id: string, argv: string[], timeoutMs?: number };
@@ -205,11 +213,47 @@ export function migrationServices(repository: RepositoryMigration) {
 }
 
 /**
- * Migrate the repository as the request says with the natural-language stages: at most `attempts` repair rounds after
- * the first candidate. seeds are extra search strings. The original checkout is untouched.
+ * Migrate the repository as the request says: at most `attempts` repair rounds after the first candidate. seeds are
+ * extra search strings. The order of the stages is fixed, so it is code; every decision is a stage (understand, survey,
+ * classify, plan, edit, round, settled, summarize). The original checkout is untouched.
  */
 export async function migrate(runtime: NatlangRuntime, repository: RepositoryMigration, request: string,
   { attempts = 3, seeds = [] as string[], checks = [] as string[] } = {}): Promise<Migration> {
   const snapshot = repository.snapshot();
-  return runtime.run(() => migrateFlow(request, snapshot, checks, seeds, attempts), migrationServices(repository));
+  const stop = (state: RepairState) => pluggable({ crisp: () => settledCrisp(state), nl: () => settled(state) },
+    repository.implementation('settled'), { name: 'migration.settled', serve: 'crisp' })();
+  return runtime.run(async () => {
+    const intent = await understand(request, snapshot, checks, seeds);
+    const sites = await survey(intent, snapshot.revision);
+    const usages = await Promise.all(sites.map(site => classify(intent, site)));
+    const classified = sites.map((site, index) => ({ site, usage: usages[index]! }));
+    const planned = await plan(intent, classified);
+    const edits: SiteEdit[] = await Promise.all(classified.filter(c => planned.edits.includes(c.site.id))
+      .map(c => edit(intent, c, snapshot.revision)));
+    for (const left of planned.leave) {
+      const usage = classified.find(c => c.site.id === left.site)?.usage;
+      if (usage) edits.push({ site: left.site, usage, patches: [], status: 'left', note: left.reason });
+    }
+    const patches = planned.edits.flatMap(id => edits.find(e => e.site === id)?.patches ?? []);
+    let state: RepairState = { snapshot, validation: null, rejected: '', findings: [], remaining: attempts, revisions: [snapshot.revision] };
+    if (!patches.length) state = { ...state, rejected: `no site produced a patch: ${edits.filter(e => e.status === 'failed').map(e => e.note).join('; ')}` };
+    else {
+      try {
+        const candidate = repository.apply(snapshot.revision, patches);
+        const validation = await repository.validate(candidate.revision);
+        state = { ...state, snapshot: candidate, validation, revisions: [snapshot.revision, candidate.revision] };
+      } catch (error) { state = { ...state, rejected: (error as Error).message }; }
+    }
+    let final: RepairState;
+    try { final = await round.iterateOn(state, intent).withMeasure(s => s.remaining).until(stop); }
+    catch (error) {
+      // The repair budget is spent: the last candidate is the honest result.
+      if (error instanceof IterationLimitError) final = error.lastState as RepairState; else throw error;
+    }
+    const validation = final.validation ?? await repository.validate(final.snapshot.revision);
+    const report = repository.report(final.snapshot.revision, validation);
+    const closing = await summarize(intent, planned, edits, final, report);
+    return { report, intent, plan: planned, edits, findings: final.findings, rounds: attempts - final.remaining,
+      summary: closing.summary, next: closing.next };
+  }, migrationServices(repository));
 }
