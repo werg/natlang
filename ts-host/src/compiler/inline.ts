@@ -150,20 +150,56 @@ const isTextType = (type: ts.Type): boolean => type.isUnion() ? type.types.every
 /**
  * The untrusted part of an interpolated expression, if any. The expression itself being \`Untrusted<T>\` counts. So does a
  * text-valued expression built from one (\`message.slice(0, 20)\`, \`\\\`[\${message}]\\\`\`): text derived from untrusted text is
- * untrusted. A number or boolean computed from one (\`message.length\`) is not text and passes.
+ * untrusted, also through a local that holds it (\`const part = message.slice(0, 20)\`; TypeScript drops the brand there,
+ * so the file's tainted bindings are tracked, untrustedBindings). A number or boolean computed from one
+ * (\`message.length\`) is not text and passes.
  */
-function untrustedSplice(checker: ts.TypeChecker, expression: ts.Expression): ts.Expression | undefined {
+function untrustedSplice(checker: ts.TypeChecker, expression: ts.Expression, tainted: ReadonlySet<ts.Symbol> = new Set()): ts.Expression | undefined {
+  const isTainted = (node: ts.Node) => ts.isIdentifier(node) && tainted.size > 0 && (() => {
+    const symbol = checker.getSymbolAtLocation(node);
+    return !!symbol && tainted.has(symbol);
+  })();
   const type = checker.getTypeAtLocation(expression);
-  if (isUntrustedType(checker, type)) return expression;
+  if (isUntrustedType(checker, type) || isTainted(expression)) return expression;
   if (!isTextType(type)) return undefined;
   let found: ts.Expression | undefined;
   const visit = (node: ts.Node): void => {
     if (found || ts.isFunctionLike(node)) return;
-    if (ts.isExpression(node) && node !== expression && isUntrustedType(checker, checker.getTypeAtLocation(node))) { found = node; return; }
+    if (ts.isExpression(node) && node !== expression && (isUntrustedType(checker, checker.getTypeAtLocation(node)) || isTainted(node))) { found = node; return; }
     ts.forEachChild(node, visit);
   };
   visit(expression);
   return found;
+}
+
+/**
+ * The bindings of `file` that hold untrusted text without an \`Untrusted<T>\` type: locals initialized or assigned from
+ * untrusted text (\`const part = message.slice(0, 20)\`), and names destructured from an untrusted value. Propagated to
+ * a fixed point, so a chain of locals keeps the taint.
+ */
+function untrustedBindings(checker: ts.TypeChecker, file: ts.SourceFile): Set<ts.Symbol> {
+  const tainted = new Set<ts.Symbol>();
+  const mark = (name: ts.BindingName): boolean => {
+    if (!ts.isIdentifier(name)) return name.elements.some(element => !ts.isOmittedExpression(element) && mark(element.name));
+    const symbol = checker.getSymbolAtLocation(name);
+    if (!symbol || tainted.has(symbol)) return false;
+    tainted.add(symbol);
+    return true;
+  };
+  for (let changed = true; changed;) {
+    changed = false;
+    const visit = (node: ts.Node): void => {
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        if (ts.isIdentifier(node.name) ? !!untrustedSplice(checker, node.initializer, tainted) :
+            isUntrustedType(checker, checker.getTypeAtLocation(node.initializer))) changed = mark(node.name) || changed;
+      } else if (ts.isBinaryExpression(node) && ts.isIdentifier(node.left) &&
+          (node.operatorToken.kind === ts.SyntaxKind.EqualsToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) &&
+          untrustedSplice(checker, node.right, tainted)) changed = mark(node.left) || changed;
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+  }
+  return tainted;
 }
 
 /** The suffix capture call in `nl<Result>`instructions`.with({ capture })`. */
@@ -265,6 +301,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   const displayPath = options.displayPath ?? (file => file.fileName);
   const excluded = new Set(['result', 'nl', 'iterateOn', 'self', 'live', '__neuralese', ...(options.excludedNames ?? [])]);
   const scopeFiles = new Set(options.scopeFiles ?? []);
+  const taintCache = new Map<ts.SourceFile, Set<ts.Symbol>>();
+  const taintedIn = (file: ts.SourceFile) => taintCache.get(file) ?? taintCache.set(file, untrustedBindings(checker, file)).get(file)!;
 
   const report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string, severity: 'error' | 'warning' = 'error') =>
     diagnostics.push({ ...spanOf(node, displayPath), code, message, severity });
@@ -813,7 +851,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       });
     // Instruction text is the author's. An `Untrusted<T>` value reaches the model as an argument, shown as data.
     if (!ts.isNoSubstitutionTemplateLiteral(template)) for (const span of template.templateSpans) {
-      const culprit = untrustedSplice(checker, span.expression);
+      const culprit = untrustedSplice(checker, span.expression, taintedIn(file));
       if (culprit) report(culprit, 'untrusted-instruction', `\`${culprit.getText(file)}\` is untrusted data (Untrusted<T>) and cannot be interpolated into the ` +
         'text of an `nl` call; pass it as an argument instead, as in nl`Summarize the message.`(message), so the model reads it as quoted data.');
     }

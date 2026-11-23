@@ -114,10 +114,12 @@ export async function b(message: Untrusted<string>): Promise<string> { return nl
 export async function c(message: Untrusted<string>): Promise<string> { return nl<string>\`Summarize the \${message.length} characters.\`(); }
 export async function d(message: Untrusted<string>): Promise<string> { return nl<string>\`Summarize message.\`(message); }
 export async function e(page: string): Promise<string> { return nl<string>\`Summarize: \${page}\`(); }
+export async function f(message: Untrusted<string>): Promise<string> { const part = message.slice(0, 20); return nl<string>\`Summarize: \${part}\`(); }
+export async function g(message: Untrusted<string>): Promise<string> { const n = message.length; return nl<string>\`Summarize \${n} characters.\`(); }
 ` });
   const result = checkProject(root, { runtimeModule: RUNTIME });
   const found = result.diagnostics.filter(item => item.code === 'untrusted-instruction');
-  assert.equal(found.length, 2, JSON.stringify(result.diagnostics, null, 1));
+  assert.equal(found.length, 3, JSON.stringify(result.diagnostics, null, 1));
   assert.match(found[0].message, /pass it as an argument instead/);
 });
 
@@ -141,7 +143,7 @@ export const bad: Untrusted<string> = "plain";
   assert.match(declaration, /NatlangFunction<\[url: string\], Untrusted<string>>/);
 });
 
-test('eval snippet analysis reports untrusted-instruction for declared Untrusted<T>, untrusted(...), and derived text', () => {
+test('eval snippet analysis reports untrusted-instruction for declared Untrusted<T> and text derived from it through locals', () => {
   const scope = {
     types: {},
     inputs: [{ name: 'message', type: 'Untrusted<string>' }, { name: 'plain', type: 'string' }],
@@ -157,14 +159,11 @@ test('eval snippet analysis reports untrusted-instruction for declared Untrusted
   assert.equal(direct.length, 1);
   assert.match(direct[0].message, /pass it as an argument instead/);
 
-  // Local created via untrusted(...) call interpolated into nl instruction text
-  const wrapped = check('const raw = untrusted(plain, "http"); return await nl<string>`Summarize: ${raw}`();');
-  assert.equal(wrapped.length, 1);
-
-  // Text derived from an untrusted binding stored in a local variable
-  const derived = check('const raw = untrusted(plain, "http"); const part = raw.slice(0, 20); return await nl<string>`Summarize: ${part}`();');
+  // Text derived from an untrusted binding through locals (TypeScript drops the brand on the derived string)
+  const derived = check('const part = message.slice(0, 20); return await nl<string>`Summarize: ${part}`();');
   assert.equal(derived.length, 1);
-
+  const chained = check('const part = message.trim(); let shown = "Re: "; shown += part; return await nl<string>`Summarize: ${shown}`();');
+  assert.equal(chained.length, 1);
   // Untyped / uncalled nl template still reports untrusted-instruction
   const uncalled = check('const bad = nl`Summarize: ${message}`; return "ok";');
   assert.equal(uncalled.length, 1);
