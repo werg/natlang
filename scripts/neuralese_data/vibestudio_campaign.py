@@ -17,6 +17,7 @@ from natlang_neuralese.common import data_registry
 from natlang_neuralese.common.code_provenance import code_provenance
 
 from live_teacher_sources import load_episode
+from observed_graph_metrics import graph_metrics, aggregate_graph_metrics
 from sft_sources import ZstdWriter, held_closure, held_hit, live_holdout_registry, require_registered_open_goal
 
 
@@ -212,18 +213,67 @@ def export_trajectories(archive, receipt, held, training):
         return _export_trajectories(archive, receipt, held, training)
 
 
+def write_graph_telemetry(archive, receipt, admitted=None):
+    """Describe retained attempts without admitting, rejecting or rewriting any capture."""
+    captures = []
+    for name, result in receipt.items():
+        outcome = (admitted or {}).get(name) or {}
+        category = ('partial' if outcome.get('status') == 'partial' else 'completed') if result['status'] == 'verified' else 'preserved_failure'
+        metrics = outcome.get('graph_metrics')
+        source, error = None, None
+        if result.get('manifest'):
+            manifest = archive / 'capture' / result['manifest']
+            if manifest.is_file():
+                source = {'path': str(manifest.relative_to(archive)), 'sha256': hashlib.sha256(manifest.read_bytes()).hexdigest()}
+                if not outcome:
+                    try:
+                        spec = read(manifest)
+                        verification = read(manifest.parent / spec['verification']['path'])
+                        if verification.get('status') == 'partial':
+                            category = 'partial'
+                    except (OSError, ValueError, KeyError, TypeError) as failure:
+                        error = str(failure)
+        if metrics is None:
+            raw = archive / 'capture' / result['raw'] if result.get('raw') else None
+            if raw is None and result.get('manifest'):
+                directory = (archive / 'capture' / result['manifest']).parent.parent
+                raw = next(directory.glob(f'st_*/trajectory-{name}-full.json.gz'), None)
+                if raw is None:
+                    raw = next(directory.glob(f'st_*/failure-evidence/trajectory-{name}-full.json.gz'), None)
+            records = []
+            if raw is not None and raw.is_file():
+                source = {'path': str(raw.relative_to(archive)), 'sha256': hashlib.sha256(raw.read_bytes()).hexdigest()}
+                try:
+                    with gzip.open(raw, 'rt') as stream:
+                        packet = json.load(stream)
+                    teacher = ((packet.get('execution') or {}).get('diagnostics') or {}).get('natlangTeacher') or {}
+                    records = [call['record'] for call in teacher.get('calls') or [] if isinstance(call.get('record'), dict)]
+                except (OSError, ValueError, TypeError) as failure:
+                    error = str(failure)
+            metrics = graph_metrics(records)
+        captures.append({'case': name, 'status': result['status'], 'category': category, 'metrics': metrics,
+                         **({'source': source} if source else {}), **({'telemetry_error': error} if error else {})})
+    summary = aggregate_graph_metrics(captures)
+    publish(archive / 'graph-metrics.json', {**summary, 'captures': captures})
+    return summary
+
+
 def _export_trajectories(archive, receipt, held, training):
     final = archive / 'trajectory.native.jsonl.zst'
     marker = archive / 'exported.json'
     if marker.exists():
+        if not (archive / 'graph-metrics.json').exists():
+            write_graph_telemetry(archive, receipt)
         return
+    admitted = {}
     output = ZstdWriter(final)
     counts = {'completed_goals': 0, 'partial_trajectories': 0, 'supervised_decisions': 0, 'evidence_only': 0}
     try:
-        for result in receipt.values():
+        for name, result in receipt.items():
             if result['status'] == 'verified':
                 episode = verified_episode(archive / 'capture' / result['manifest'], held, training)
                 outcome = episode['trajectory_ir']['outcome']
+                admitted[name] = outcome
                 counts['completed_goals'] += outcome.get('task_completed', outcome['status'] == 'passed') is True
                 counts['partial_trajectories'] += outcome['status'] == 'partial'
                 counts['supervised_decisions'] += len(episode['turns'])
@@ -233,13 +283,14 @@ def _export_trajectories(archive, receipt, held, training):
         output.close(publish=False)
         raise
     output.close()
+    graph_summary = write_graph_telemetry(archive, receipt, admitted)
     dataset = None
     if output.rows:
         dataset = data_registry.record_dataset(f'vibestudio-{archive.parent.name}-{archive.name}'.lower(), archive,
                                                kind='teacher-demos', format='native Vibestudio Luna trajectories and capture evidence',
-                                               include=['capture/**', 'receipt.json', final.name,
+                                               include=['capture/**', 'receipt.json', final.name, 'graph-metrics.json',
                                                         *(['wave.json'] if (archive / 'wave.json').is_file() else [])], rows=output.rows,
-                                               extra={'trajectory_counts': counts})
+                                               extra={'trajectory_counts': counts, 'observed_graph_metrics': graph_summary})
     publish(marker, {'verified': output.rows, 'dataset': dataset['id'] if dataset else None, **counts})
 
 

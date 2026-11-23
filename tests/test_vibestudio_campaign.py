@@ -352,3 +352,26 @@ def test_inventory_partial_does_not_reserve_the_later_completed_goal(tmp_path, m
     result = inventory.inventory([tmp_path], set(), {}, 'luna')
     assert [row['status'] for row in result['manifests']] == ['ready-for-partial-extraction', 'ready-for-extraction']
     assert [row['task_completed'] for row in result['manifests']] == [False, True]
+
+
+def test_graph_telemetry_retains_failed_and_missing_captures_separately(tmp_path):
+    import gzip
+    import json
+    import hashlib
+    raw = tmp_path / 'capture' / 'failed.json.gz'
+    raw.parent.mkdir()
+    records = [{'record': {'call_id': 'root', 'parent_call_id': None, 'program_root': 'skills/browser',
+                           'definition': {'name': 'inspect', 'source': 'inspect.nl'}}},
+               {'record': {'call_id': 'child', 'parent_call_id': 'root', 'program_root': 'skills/editor',
+                           'definition': {'name': 'change', 'source': 'change.nl'}}}]
+    with gzip.open(raw, 'wt') as stream:
+        json.dump({'execution': {'diagnostics': {'natlangTeacher': {'calls': records}}}}, stream)
+    summary = vibestudio_campaign.write_graph_telemetry(tmp_path, {
+        'failed': {'status': 'test-failed', 'raw': 'failed.json.gz'}, 'absent': {'status': 'no-capture'}})
+    assert summary['categories']['preserved_failure']['captures'] == 2
+    assert summary['categories']['preserved_failure']['invocations'] == 2
+    assert summary['categories']['preserved_failure']['captures_without_graph'] == 1
+    assert summary['categories']['completed']['captures'] == 0
+    saved = vibestudio_campaign.read(tmp_path / 'graph-metrics.json')
+    assert saved['captures'][0]['metrics']['max_depth'] == 1
+    assert saved['captures'][0]['source']['sha256'] == hashlib.sha256(raw.read_bytes()).hexdigest()
