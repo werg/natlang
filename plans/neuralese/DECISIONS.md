@@ -9056,3 +9056,81 @@ The managed llama-server and the page still drop the tool grammar under `x_natla
 row: exact replay needs xgrammar in the fork). Collection actors adopt the grammar when the DGX and Colab SGLang
 checkouts move to 17e3458c2e at their next boundary; held results with and without the grammar are separate engine
 settings (`serving_engine.tool_grammar`, not a pairing field).
+
+
+## 2026-11-23 18:00 Colab collection through DGX round SFT; async round size
+
+**Situation.** No A100: the Colab session is an L4 (`colab_sft_fit` refuses it), so every aei1 round trains on the DGX
+and stops the DGX collection for the whole SFT. r0001 is not the 684-step sft-v9 size: its mix is 37.4M weighted target
+tokens, 1150 optimizer steps, ~11.8 h at 36.8 s/step. The L4 serves e15b20a8 (front DGX 127.0.0.1:18731, SGLang 19731)
+and ran only the backlog fill.
+
+**Found (static reading of the driver, then the live ledger).**
+- The driver never collected on the L4: aei1 runs without `--rebind-actor`. With it, `stop_collections(remote=False)`
+  already spared the remote collector, but nothing restarted one that was down at the round's start, a failed rebind was
+  never retried (the actor kept the old policy, and with it no collection, for the whole round), and a session the
+  keeper replaced was served again at the policy in its *first* serve record (`colab-actor-colab-g4.json`), whatever
+  it had been rebound to since.
+- Identity: a single-endpoint collection ran grpo's slot, which never checks the actor after an episode; the
+  multi-endpoint copy of the slot did, but lacked memetic preparation and actor lag. An episode against a replaced
+  session serving another policy would have been recorded under the collection's sha.
+- The next round's snapshot (`prepare`, run ahead at the round's start) waited only on the DGX collection unit; a DGX
+  SFT stops it minutes later, so the snapshot (and the newest policy's frontier) froze at those minutes.
+- DGX held priority claims shrank a remote collection's slots, though held never runs on the remote actor.
+- Ledger: the DGX SFT's fixed 100 GB claim (cgroup 63 GB measured at r0001's first steps, activation 56) preempted the
+  L4 fill's 4 GB DGX client, the teacher campaign and r0002's data stage at once; a 64-slot remote collector (23 GB
+  budget) could never be admitted beside it.
+
+**Changes (default on).**
+- `grpo.Collector.slot` gains two hooks: `endpoint_for_slot` may return None (the slot idles) and `episode_valid`
+  (default True). `FrontierCollector` drops its slot copy and overrides both: with `verify` (any remote actor,
+  `collect --actor`), a finished episode whose actor no longer answers or serves the collected sha is abandoned, its
+  task requeued at the front, the endpoint dropped and retried every 2 min. A remote collection ignores DGX held claims.
+- The DGX SFT wait calls `ensure_remote_collection` every poll (`Cycle.wait(between=)`); `ensure_remote_collection`
+  first rebinds an actor not serving the lineage head when that head is a round publication (`ensure_remote_policy`,
+  at most every 20 min; `rebind_remote` skips actors already serving it and raises after trying all). Earlier
+  policies' remote collectors stop with their DGX collection.
+- `rebind_actor(checkpoint=)` rewrites the Colab actor record (`rebound_record`): policy id and `serve_args`
+  name the rebound policy's DGX checkpoint, so `restore_colab_actor` and the session keeper's re-serve after a
+  replacement serve it (on a fresh VM it ships, ~24 min; the next rebind merges from factors again).
+- The snapshot waits `--snapshot-min-hours` from the earliest start of any of the policy's collections while any of
+  them (DGX or remote) runs.
+- `async-drive --dry-run` prints the remote collectors (unit, endpoint, whether it serves the policy, budget, argv)
+  and the DGX SFT sizing.
+
+**Round size (decision).** An async round should train roughly the new data of one round interval plus a bounded
+replay, not the whole growing pool: the filled part is `share=all`, so each round re-trained every filled chain ever
+made (r0001: 27.9k filled chains, 45% of the loss) and rounds grew with the fill backlog. New data per ~5 h interval
+is ~4-6M weighted target tokens (fills ~300-400/h x ~1.5k; own successes the build admits ~20 episodes/h x ~8.7k at
+the DGX collection's rate; teacher campaign). Rounds also cannot usefully be shorter than the next round's snapshot
+plus preparation (frontier + data + build: ~2.5 h measured on r0001). Default `async-drive --round-target-tokens
+12000000` (`sft_sources build --max-target-tokens`): ~360 steps, ~3.7 h of DGX SFT, ~1 h on an A100; new data is then
+about half of each round. The cap keeps every part's share (own, teacher, each aux part scaled by the same fraction),
+drops whole episodes, takes unseen episodes first within each part (otherwise the build's admission order), records the
+dropped episode keys (`build.json target_cap`) so `admitted_episode_keys`, round.json and the next build's
+prefer-unseen treat them as untrained. `--round-target-tokens 0` opts out.
+
+**SFT claim.** `async-drive --sft-budget` defaults to 80 (was 100, a fixed claim): r0001 at activation 56 measured a
+cgroup peak of 63.9 GB at steps 1-6 (CUDA 53-55.5 GB by phase, Ambient steps included). 80 plus a 64-slot remote
+collector (23 GB budget) plus the fill client fits the 121 GB box. The running r0001 learner's claim was lowered to 80
+by `memory_ledger.py adopt --hold-budget` (accounting only: its MemoryMax stays 100), which admitted r0002's data stage
+at once; the L4 fill's DGX client and the teacher campaign were still queued behind other units at the time of writing.
+
+**L4 split.** Own on-policy successes are the top data tier, so collection has priority on the L4: the remote collector
+takes 64 slots (the minimum a standalone actor needs to stay decode-bound, AGENTS "SGLang actor"; more slots would not
+fit in DGX memory beside the SFT), and the backlog fill runs `--polite` (`--min-inflight 16 --max-inflight 128
+--max-running 128`): it starts a draw only while SGLang has no waiting request and a free running slot, so it takes
+what the collection leaves of the 128 running and the 2.1M-token KV. Before, the fill held 128 draws in flight
+unconditionally, and a 64-slot collection beside it would have queued FCFS behind them.
+
+**Also fixed.** `ledger_queued` treated a ledger status with no output as an error it did not catch (a Cycle collect
+test failed on it since 71095362c). A driver restarted during a round's DGX SFT queued the DGX collection again at the
+round start and only a fresh launch stopped it: the SFT stage now stops it before joining a running learner too, so the
+driver can be restarted mid-round (it joins the learner and starts the remote collection at once).
+
+**Applied to r0001 (17:22).** Rather than wait for a driver restart, `aei1-collect-v0000-remote0` runs the driver's own
+`collect --actor http://127.0.0.1:18731=64` command for e15b20a8 from pin-1c177e3fc609 (ledger high, 15 GB) into
+`collect/v0000-e15b20a86f1c-remote0`, the layout `collections_of` reads and the new driver joins (and stops at the
+next publication). The r0001 SFT claim went to 72 GB (`adopt --hold-budget`; peak 64.7 GB at step 19) to admit it.
+The backlog fill was relaunched polite as `colab-g4a-fill-backlog-polite-20261123`. A same-policy rebind of the L4
+over the tunnel attested all routes in 30 s and rewrote the actor record (`rebound`).
