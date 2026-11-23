@@ -1,0 +1,24 @@
+[
+  {
+    "name": "security blocker blocks merge",
+    "function": "merge_verdict.nl",
+    "inputs": {
+      "findings": [
+        {
+          "file": "src/db/invoices.ts",
+          "quote": "return db.query(`SELECT * FROM invoices WHERE id = '${id}'`);",
+          "rule": "tenant-and-sql-safety",
+          "severity": "blocker",
+          "fix": "Use parameterized query with tenant_id filter."
+        }
+      ]
+    },
+    "expected": "block"
+  },
+  {
+    "name": "no findings approves merge",
+    "function": "merge_verdict.nl",
+    "inputs": { "findings": [] },
+    "expected": "approve"
+  }
+]

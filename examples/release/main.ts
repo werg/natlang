@@ -20,12 +20,14 @@ export async function main(context: TargetContext): Promise<number> {
   const project = join(context.stateDirectory, 'project');
   mkdirSync(project, { recursive: true });
   if (!existsSync(join(project, 'README.md'))) writeFileSync(join(project, 'README.md'), '# Sync\n');
+  if (!existsSync(join(project, 'CHANGELOG.md'))) writeFileSync(join(project, 'CHANGELOG.md'), '## 2.4.0\n- #390 Initial resumable upload support.\n');
   const folder = openFolder(project, 'overlay');
   const report = await context.runtime.run(async () => {
     const drafted = await draftNotes(changes);
     const [summary, release] = await Promise.all([summarize(drafted.notes), mergeRelease(base, ours, theirs)]);
     const version = release.value.version;
-    const section = await publish(folder, version, drafted.notes);
+    const breaking = changes.filter(change => change.breaking);
+    const section = await publish(folder, version, drafted.notes, breaking);
     const announcement = await announce(folder, drafted.notes);
     return { notes: drafted, summary, release, section: { accepted: section.accepted, problems: section.problems, attempts: section.attempts },
       announcement: { chosen: announcement.chosen, text: announcement.value } };

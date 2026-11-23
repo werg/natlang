@@ -5,7 +5,7 @@
  * Every natlang function also has the standard `iterateOn` method.
  */
 import { RESERVED_CALLABLE_PROPERTIES, reservedNameMessage } from '../compiler/intrinsics.js';
-import { APPLY_TO_FOLDER, type FolderHandle } from '../native/scoped-fs.js';
+import { APPLY_TO_FOLDER, Folder, FolderHandle } from '../native/scoped-fs.js';
 import { NatlangContextError, currentFrame, runInFrame, startedCalls, type Frame } from './context.js';
 import { invokeDefinition, type CallableDefinition, type CaptureCell, type Instantiation } from './kernel.js';
 import { checkRepresentation, type Representation } from '../native/representation.js';
@@ -37,7 +37,7 @@ export type CallableMeta = {
   rebindInline?: (captures: Record<string, unknown>, origin?: import('./lowered.js').InlineInstructionOrigin,
     sources?: Record<string, 'input' | 'local' | 'block' | 'handle'>) => NatlangCallable;
   /** Run a call; `at` is the representation its result is used as (a compiled call site's, or a host's `invokeAt`). */
-  invoke(args: unknown[], frame: Frame, at?: Instantiation): Promise<unknown>;
+  invoke(args: unknown[], frame: Frame, at?: Instantiation, folder?: import('./kernel.js').InvokeOptions['folder']): Promise<unknown>;
   /** `fn.in(context)` for a callable derived from another (`partial`): the derivation applied to the rebound original. */
   inContext?: (context: unknown) => NatlangCallable;
 };
@@ -136,7 +136,7 @@ function onModel(meta: CallableMeta, options: { model: string }): NatlangCallabl
     throw new TypeError('on takes { model: NAME }, where NAME is a model of the runtime (as `model:` frontmatter names one)');
   const rebind = meta.rebindInline, inContext = meta.inContext;
   return makeCallable({ ...meta, definition: { ...meta.definition, model },
-    invoke: (args, frame, at) => meta.invoke(args, { ...frame, model }, at),
+    invoke: (args, frame, at, folder) => meta.invoke(args, { ...frame, model }, at, folder),
     ...(rebind ? { rebindInline: (...args: Parameters<typeof rebind>) => onModel(callableMeta(rebind(...args))!, { model }) } : {}),
     ...(inContext ? { inContext: (context: unknown) => onModel(callableMeta(inContext(context))!, { model }) } : {}) });
 }
@@ -160,8 +160,14 @@ function partialCallable(original: NatlangCallable, meta: CallableMeta, bound: u
   }
   const values = [...bound];
   const rebind = meta.rebindInline;
+  const isReducer = definition.subtype === 'directory-reducer';
   return makeCallable({ ...meta, definition: { ...definition, params: definition.params.slice(values.length) },
-    invoke: (args, frame, at) => meta.invoke([...values, ...args], frame, at),
+    invoke: (args, frame, at, folder) => {
+      // Directory reducers take their Folder/FolderHandle first, before declared `args:`; keep it in front of bound args.
+      const combined = isReducer && (folder || args[0] instanceof Folder || args[0] instanceof FolderHandle)
+        ? [args[0], ...values, ...args.slice(1)] : [...values, ...args];
+      return meta.invoke(combined, frame, at, folder);
+    },
     inContext: context => partialOf((original as unknown as { in(context: unknown): NatlangCallable }).in(context), values),
     ...(rebind ? { rebindInline: (...args: Parameters<typeof rebind>) => partialOf(rebind(...args), values) } : {}) });
 }
@@ -200,6 +206,10 @@ export function makeCallable(meta: CallableMeta): NatlangCallable {
     if (!rebinder) throw new Error('contexts are not available in this runtime build');
     return rebinder(fn as unknown as NatlangCallable, context);
   } });
+  if (meta.definition.subtype === 'directory-reducer')
+    Object.defineProperty(fn, APPLY_TO_FOLDER, { value: async (folder: FolderHandle, args: unknown[]) =>
+      meta.invoke([folder, ...args], meta.bound ?? resolveFrame(), undefined,
+        { transaction: await folder.beginTransaction(true), mode: 'apply' }) });
   return fn as unknown as NatlangCallable;
 }
 
@@ -226,14 +236,10 @@ export function namedCallable(name: string, record: NatlangRecord, bound?: Frame
   const dataBinding = () => cells === null ? (cells = dataCellsOf(record)) : cells;
   const captures = () => dataBinding()?.captures;
   const meta: CallableMeta = { definition, kind: 'named', bound,
-    invoke: (args, frame, at) => invokeDefinition(frame, definition, args, { ...(record.contextData ? { captures: captures()!,
-      ...(dataBinding()?.skillFiles ? { skillFiles: dataBinding()!.skillFiles } : {}) } : {}), ...(at ? { at } : {}) }) };
+    invoke: (args, frame, at, folder) => invokeDefinition(frame, definition, args, { ...(record.contextData ? { captures: captures()!,
+      ...(dataBinding()?.skillFiles ? { skillFiles: dataBinding()!.skillFiles } : {}) } : {}), ...(at ? { at } : {}), ...(folder ? { folder } : {}) }) };
   if (record.contextData) Object.defineProperty(meta, 'captures', { get: captures, enumerable: true });
   const fn = makeCallable(meta);
-  if (definition.subtype === 'directory-reducer')
-    Object.defineProperty(fn, APPLY_TO_FOLDER, { value: async (folder: FolderHandle, args: unknown[]) =>
-      invokeDefinition(bound ?? resolveFrame(), definition, [folder, ...args],
-        { folder: { transaction: await folder.beginTransaction(true), mode: 'apply' } }) });
   attachChildren(fn, record.codebase, bound, home);
   rememberRecord(fn, record);
   return fn;

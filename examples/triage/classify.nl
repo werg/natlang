@@ -1,7 +1,7 @@
 ---
 description: Label one ticket using the rubric.
 args:
-  ticket: string
+  ticket: Untrusted<string>
   rubric: string
 returns: Label
 readout: decision

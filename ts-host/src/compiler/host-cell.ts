@@ -77,7 +77,7 @@ const NO_FILES: CompilerFiles = { readFile: () => undefined, fileExists: () => f
 // A cell that never writes `nl`, `iterateOn`, `Neuralese` or a call of `read` has nothing for natlang to plan: no program
 // is built for it (unless the host says its scope holds Neuralese values).
 const MENTIONS_NL = /(?<![\w$])nl(?![\w$])/;
-const MENTIONS_OTHER = /(?<![\w$])(?:iterateOn|Neuralese)(?![\w$])|(?<![\w$.])read\s*[(<]/;
+const MENTIONS_OTHER = /(?<![\w$])(?:iterateOn|Neuralese)(?![\w$])|(?<![\w$.])read\s*[(<]|(?<![\w$.])(?:refine|assume)\s*</;
 // The binding through which lowered code reaches the runtime support functions, as in project builds.
 const RUNTIME = '__natlang';
 const NL_CALL = /\bnl\s*(?:<[^()]*>)?\s*\(/;

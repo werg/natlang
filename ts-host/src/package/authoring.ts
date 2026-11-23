@@ -13,8 +13,8 @@ const starter = {
 const quoted = (text: string) => `'${text.replace(/'/g, "''")}'`;
 
 /**
- * A program's `answer.nl`. The starter is a finite classification, so it declares `readout: decision`: the model scores
- * each label instead of reasoning in a tool loop (measured on the local LFM3 1.7B: 18.7 s instead of 136 s, same label).
+ * A program's `answer.nl`. The starter is a finite classification, so it declares `readout: decision`: the model reasons
+ * and scores each label instead of running a tool loop.
  * Instructions supplied by the caller (the dashboard Playground) take one `input` and return `returns`.
  */
 export const answerSource = (custom?: { instruction: string; returns: string }) => {
@@ -47,8 +47,8 @@ const tick = '\x60';
 /**
  * The default program (plans/semantic-fp/04_DOCS_EXAMPLES_AND_AUTHORING.md section 2): an inbox planner whose types,
  * data and exact steps are TypeScript and whose judgments are typed natural-language functions. `route.nl` is a
- * decision readout (one scored pass, calibrated probabilities through `decide`); the reply draft is an inline `nl`
- * with a checked property type, called only for the messages that need a reply.
+ * decision readout (reason, then score; calibrated probabilities through `decide`, escalating unsure messages), and the
+ * reply draft is an inline `nl` with a checked property type, called only for the messages that need a reply.
  */
 function inboxProgram(name: string, profile?: string): Record<string, string> {
   // The bundled messages need no reply, so the first run is three scored decisions: about a minute on a CPU. A
@@ -109,19 +109,21 @@ the reader does not need.
 
 const MAIN_TS = `import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { decide, nl, type TargetContext } from '@natlang/node';
+import { decide, nl, untrusted, type TargetContext } from '@natlang/node';
 import route from './route.nl';
 import type { Message, Plan, Reply } from './types.js';
 
-/** Plan the reader's inbox: route every message, draft replies for the ones that need one. */
+/** Plan the reader's inbox: route every message, escalate unsure ones, and draft replies where needed. */
 export async function plan(messages: Message[]): Promise<Plan[]> {
-  // Independent judgments run together; each is one scored decision on the local model.
+  // Independent judgments run together; each is a calibrated decision on the local model.
   const decisions = await Promise.all(messages.map(message => decide(route, message)));
   const draft = nl<Reply>${tick}Draft a reply to message for its reader.${tick};
   return Promise.all(messages.map(async (message, i) => {
     const { value, confidence } = decisions[i]!;
-    const planned: Plan = { from: message.from, subject: message.subject, route: value, confidence };
-    if (value === 'reply') planned.reply = await draft(message);
+    // Unsure messages escalate to the stronger model; high-confidence ones settle locally.
+    const chosen = confidence >= 0.8 ? value : await route.on({ model: 'teacher' })(message);
+    const planned: Plan = { from: message.from, subject: message.subject, route: chosen, confidence };
+    if (chosen === 'reply') planned.reply = await draft(message);
     return planned;
   }));
 }
@@ -129,7 +131,8 @@ export async function plan(messages: Message[]): Promise<Plan[]> {
 /** ${tick}natlang run${tick}: plan the messages given as JSON, or the bundled messages.json. */
 export async function main(context: TargetContext): Promise<number> {
   const given = context.arguments.messages as Message[] | undefined;
-  const messages = given ?? JSON.parse(readFileSync(join(context.package?.root ?? context.workspace, 'messages.json'), 'utf8')) as Message[];
+  const raw = given ?? JSON.parse(readFileSync(join(context.package?.root ?? context.workspace, 'messages.json'), 'utf8')) as Message[];
+  const messages = raw.map(message => ({ ...message, body: untrusted(message.body, ${tick}message from \${message.from}${tick}) }));
   context.io.output.write(JSON.stringify(await context.runtime.run(() => plan(messages)), null, 2) + '\\n');
   return 0;
 }
@@ -320,9 +323,9 @@ OpenAI-compatible endpoint. \`natlang doctor --json\` reports the setup.
 
 - Exact work (arithmetic, parsing, sorting, I/O) belongs in TypeScript; judgment belongs in instructions.
 - Put constraints in types: a string-literal union or a record in \`returns\` beats a sentence asking for a format.
-- \`readout: decision\` (in answer.nl) makes the model score each value of a finite \`returns\` (a literal union or
-  \`boolean\`) instead of reasoning step by step: fast and calibrated, for a choice that gates what happens next. Such a
-  call gets no tools, so a function that must call helpers or compute first leaves it out.
+- \`readout: decision\` (in answer.nl) makes the model reason, then score each value of a finite \`returns\` (a literal union,
+  \`boolean\`, or finite record): calibrated, for a choice that gates what happens next (\`readout: instant\` skips reasoning
+  on hot paths). Such a call gets no tools, so a function that must call helpers or compute first leaves it out.
 - Helpers the function may call go in its companion folder, \`answer/\` (\`answer/lookup.ts\`, \`answer/summarize.nl\`).
 - When the instructions are several steps of judgment, number them and name the data each step uses; the executing
   model may be small. Exact steps go in a TypeScript helper instead.

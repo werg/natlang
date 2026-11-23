@@ -119,9 +119,6 @@ export function lowerEvalRefinements(source: string, scope: EvalScopeDeclaration
   return lowerTypedRefinementText(program, program.getSourceFile(SNIPPET_FILE)!, source, prefix.length);
 }
 
-/** Cheap test for whether a snippet needs the checked pass. */
-export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\bnl\.with\b|\biterateOn\b|\b__neuralese[(.]/.test(source);
-
 /**
  * Analyze `nl` expressions in an eval snippet. Spans in the returned plans and diagnostics are
  * relative to the snippet text.

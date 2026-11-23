@@ -71,11 +71,16 @@ async function openExample(template) {
   message(`Opened ${template.name} · your editable copy is saved locally`);
   if (applicationSource(next) && !template.modelRequired) await runLive();
 }
+/** Whether a playground project invokes a model (any `.nl` file or inline `nl` template in TS). */
+const projectUsesModel = candidate =>
+  Object.keys(candidate?.files ?? {}).some(path => path.endsWith('.nl')) ||
+  Object.values(candidate?.files ?? {}).some(source => /(?<![\w$])nl(?:\.with\s*\([^)]*\))?(?:<[^`]*>)?\s*`/.test(source));
+
 function renderExperience() {
   const template = examples.find(item => item.name === project.name && item.root === project.root);
   const appSource = applicationSource(project);
   const isApp = Boolean(appSource);
-  const needsModel = project.root.endsWith('.nl') || Boolean(appSource?.reducer.endsWith('.nl'));
+  const needsModel = projectUsesModel(project) || Boolean(appSource?.reducer.endsWith('.nl'));
   document.querySelector('.workspace').classList.toggle('live-project', isApp);
   $('experimentTitle').textContent = project.name;
   $('experimentDescription').textContent = template?.description ?? 'Your own space to write, run, and explore a typed program.';
@@ -552,7 +557,7 @@ async function run() {
   try { inputs = currentInputs(); }
   catch (error) { $('inputError').textContent = error.message; $('inputError').hidden = false; message(error.message, true); return; }
   const appSource = applicationSource(project);
-  if ((project.root.endsWith('.nl') || appSource?.reducer.endsWith('.nl')) && !model?.loaded) {
+  if ((projectUsesModel(project) || appSource?.reducer.endsWith('.nl')) && !model?.loaded) {
     requireModel(() => run()); return;
   }
   if (appSource) return runLive();
@@ -570,7 +575,7 @@ async function run() {
 }
 
 async function executeProject(snapshot) {
-    if (snapshot.root.endsWith('.nl') && !model?.loaded) throw new Error('Load a local model to run natural instructions');
+    if (projectUsesModel(snapshot) && !model?.loaded) throw new Error('Load a local model to run natural instructions');
     busy = true; abort = new AbortController();
     $('runButton').disabled = true; $('stopButton').disabled = false;
     message(`Running revision ${snapshot.revision.slice(0, 8)}…`);
@@ -584,7 +589,7 @@ async function runCase(item) {
     const snapshot = { ...project, id: item.projectId, name: item.name, root: item.source.root,
       files: structuredClone(item.source.files), inputs: structuredClone(item.inputs),
       expected: structuredClone(item.expected.value), revision: item.revision };
-    if (snapshot.root.endsWith('.nl') && !model?.loaded) { requireModel(() => runCase(item)); return; }
+    if (projectUsesModel(snapshot) && !model?.loaded) { requireModel(() => runCase(item)); return; }
     const record = await executeProject(snapshot);
     runs.unshift(record); await storage.put('runs', record);
     Object.assign(item, { runId: record.id, trace: record.trace, observed: {

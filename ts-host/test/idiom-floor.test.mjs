@@ -20,15 +20,20 @@ const floor = files => idioms(compileProject({ project: '/p', files: virtualProj
 const iterate = body => checkFixedCursorIterations(ts.createSourceFile('a.ts',
   `import { iterateOn, nl } from '@natlang/node';\nimport judge from './judge.nl';\n${body}`, ts.ScriptTarget.ES2022, true));
 
-test('a leaf .nl with a finite result and no readout gets the decision-readout warning (playground feedback-tone)', () => {
+test('a leaf .nl with a finite result (enum, boolean, or finite record) and no readout gets the decision-readout warning', () => {
   const tone = naturalExamples.find(item => item.id === 'feedback-tone');
-  const found = floor({ 'natlang.json': '{}', ...tone.files });
-  assert.deepEqual(found.map(item => [item.code, item.file, item.line, item.severity]),
-    [['idiom-decision-readout', 'feedback/tone.nl', 4, 'warning']]);
+  // The shipped playground example itself declares readout: decision, so it has no idiom warnings.
+  assert.deepEqual(floor({ 'natlang.json': '{}', ...tone.files }), []);
+  // Removing readout: decision from a leaf finite judgment triggers the warning at the returns line.
+  const withoutReadout = { ...tone.files, 'feedback/tone.nl': tone.files['feedback/tone.nl'].replace(/^readout:\s*decision\n/m, '') };
+  const found = floor({ 'natlang.json': '{}', ...withoutReadout });
+  assert.deepEqual(found.map(item => [item.code, item.file, item.severity]),
+    [['idiom-decision-readout', 'feedback/tone.nl', 'warning']]);
   assert.equal(found[0].message, '`tone.nl` returns one of 3 values: add `readout: decision` so the model reasons and scores them, ' +
     'or keep the tool loop if it must call helpers first.');
-  // boolean is finite too; a declared readout, a companion folder, uses:, a Folder parameter or a non-finite result is not flagged.
+  // boolean and finite records are finite too; a declared readout, a companion folder, uses:, a Folder parameter or a non-finite result is not flagged.
   assert.equal(floor({ 'natlang.json': '{}', 'ok.nl': '---\nargs:\n  x: string\nreturns: boolean\n---\nJudge x.\n' })[0]?.code, 'idiom-decision-readout');
+  assert.equal(floor({ 'natlang.json': '{}', 'rec.nl': '---\nargs:\n  x: string\nreturns: "{ urgent: boolean; kind: \\"bug\\" | \\"billing\\" }"\n---\nClassify x.\n' })[0]?.code, 'idiom-decision-readout');
   for (const files of [
     { 'a.nl': '---\nargs:\n  x: string\nreturns: boolean\nreadout: decision\n---\nJudge x.\n' },
     { 'a.nl': '---\nargs:\n  x: string\nreturns: boolean\n---\nJudge x with norm.\n', 'a/norm.ts': 'export default function norm(x: string): string { return x.trim(); }\n' },

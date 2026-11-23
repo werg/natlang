@@ -52,7 +52,11 @@ test('proposeAndVerify installs nothing when no proposal passes', async () => {
 test('branchAndSelect: each branch on its own copy, failing ones dropped, the goal judged pairwise by beats', async () => {
   const folder = Folder.fromFiles({ 'README.md': '# app\n' }, 'write');
   const verify = async proposal => (await proposal.folder.readText('ANNOUNCE.md')).includes('TODO') ? ['The announcement has a TODO.'] : [];
-  const local = localModel(() => null, (options, prompt) => /serves goal better/.test(prompt) && /Breaking/.test(prompt) ? [0.8, 0.2] : [0.3, 0.7]);
+  const firstHas = (prompt, pattern) => {
+    const start = prompt.lastIndexOf('first:'), end = prompt.lastIndexOf('second:');
+    return pattern.test(start >= 0 && end > start ? prompt.slice(start, end) : prompt);
+  };
+  const local = localModel(() => null, (options, prompt) => /serves goal better/.test(prompt) && firstHas(prompt, /Breaking/) ? [0.85, 0.15] : [0.15, 0.85]);
   const traces = [];
   const result = await createNatlangRuntime({ model: local.driver, trace: trace => traces.push(trace) }).run(() => branchAndSelect(folder, [
     write('ANNOUNCE.md', 'Uploads resume.\n'),
@@ -62,7 +66,8 @@ test('branchAndSelect: each branch on its own copy, failing ones dropped, the go
   assert.deepEqual(result.candidates.map(candidate => candidate.problems.length), [0, 1, 0]);
   assert.equal(result.chosen, 2);
   assert.equal(await folder.readText('ANNOUNCE.md'), 'Breaking: /v1 is gone. Uploads resume.\n');
-  assert.equal(local.decisions.filter(decision => /serves goal better/.test(decision.prompt)).length, 1, 'one pairwise judgment for two passing branches');
+  const beatPrompts = new Set(local.decisions.filter(decision => /serves goal better/.test(decision.prompt)).map(d => d.prompt));
+  assert.equal(beatPrompts.size, 2, 'debiased pairwise judgment compares both orders (a, b) and (b, a)');
   const span = traces.find(trace => trace.definitionId === 'std:branchAndSelect');
   assert.deepEqual(span.events.filter(event => event.kind === 'std_stage').map(event => event.stage), ['propose', 'verify', 'select', 'accept']);
   // Without a goal the first passing branch is taken; select chooses instead when given; nothing passing installs nothing.
@@ -114,27 +119,36 @@ test('the browser bundle ships std.js beside natlang.js, sharing its chunks', ()
   assert.ok(chunks.some(chunk => natlang.includes(chunk)), 'natlang.js imports the same chunk');
 });
 
-test('examples/release publish: the release section through proposeAndVerify, the announcement through branchAndSelect', async () => {
+test('examples/release publish: CHANGELOG + MIGRATION through proposeAndVerify, announcement through branchAndSelect', async () => {
   const load = await buildExample('release');
-  const { publish, announce, sectionProblems } = await load('publish.js');
+  const { publish, announce, releaseDocProblems } = await load('publish.js');
   const notes = ['#412 Uploads resume after a dropped connection.', '#418 /v1/sync is removed; use /v2/sync.'];
-  let sections = 0;
+  const breaking = [{ id: '#418', title: 'Remove /v1/sync', description: 'Use /v2/sync.', breaking: true }];
+  let drafts = 0;
   const local = localModel(opening => {
-    // The first section forgets the heading; the retry, shown its problems, writes it.
-    if (opening.includes('Write the release section')) return ++sections === 1 ? 'return notes.map(note => "- " + note).join("\\n")' :
-      'return "## " + version + "\\n" + notes.map(note => "- " + note).join("\\n")';
+    // The first migration guide forgets to mention #418; the retry sees the verifier problem and fixes it.
+    if (opening.includes('concise upgrade guide')) return ++drafts === 1 ? 'return "Upgrade to /v2/sync."' :
+      'return "Breaking change #418 removes /v1/sync; switch all clients to /v2/sync."';
     if (opening.includes('release announcement')) return 'return style.startsWith("plain") ? "Version 3.0 removes /v1/sync: move to /v2/sync. Uploads also resume." : notes.map(note => "* " + note).join("\\n")';
     return null;
-  }, (options, prompt) => /serves goal better/.test(prompt) ? [0.3, 0.7] : [0.5, 0.5]);
-  const folder = Folder.fromFiles({ 'README.md': '# Sync\n' }, 'write');
+  }, (options, prompt) => {
+    if (!/serves goal better/.test(prompt)) return [0.5, 0.5];
+    const start = prompt.lastIndexOf('first:'), end = prompt.lastIndexOf('second:');
+    const firstPart = start >= 0 && end > start ? prompt.slice(start, end) : prompt;
+    return /Version 3\.0 removes/.test(firstPart) ? [0.85, 0.15] : [0.15, 0.85];
+  });
+  const folder = Folder.fromFiles({ 'README.md': '# Sync\n', 'CHANGELOG.md': '## 2.4.0\n- #390 Initial uploads.\n' }, 'write');
   const runtime = createNatlangRuntime({ model: local.driver });
-  const section = await runtime.run(() => publish(folder, '3.0.0', notes));
-  assert.equal(section.accepted, true); assert.equal(section.attempts, 1);
-  assert.match(section.history[0][0], /not "## 3\.0\.0"/);
-  assert.match(await folder.readText('releases/3.0.0.md'), /^## 3\.0\.0\n- #412/);
-  assert.ok(local.openings.some(opening => opening.includes('The first line is')), 'the retry saw the verifier problem');
+  const docs = await runtime.run(() => publish(folder, '3.0.0', notes, breaking));
+  assert.equal(docs.accepted, true); assert.equal(docs.attempts, 1);
+  assert.match(docs.history[0][0], /does not reference breaking change #418/);
+  const changelog = await folder.readText('CHANGELOG.md');
+  assert.match(changelog, /^## 3\.0\.0\n- #412/);
+  assert.match(changelog, /## 2\.4\.0\n- #390 Initial uploads\./, 'prior release preserved verbatim');
+  assert.match(await folder.readText('MIGRATION.md'), /#418/);
+  assert.ok(local.openings.some(opening => opening.includes('does not reference breaking change #418')), 'the retry saw the verifier problem');
   const announcement = await runtime.run(() => announce(folder, notes));
-  assert.equal(announcement.chosen, 0, 'beats kept the plain announcement that leads with the breaking change');
+  assert.equal(announcement.chosen, 0, 'debiased beats kept the plain announcement leading with the breaking change');
   assert.match(await folder.readText('ANNOUNCEMENT.md'), /removes \/v1\/sync/);
-  assert.equal(typeof sectionProblems, 'function');
+  assert.equal(typeof releaseDocProblems, 'function');
 });

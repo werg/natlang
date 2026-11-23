@@ -205,7 +205,8 @@ export async function semanticMerge<T>(base: T, ours: T, theirs: T, options: Mer
       const [oursIntent, theirsIntent] = await Promise.all([span.run(() => intentOf(conflict.base, conflict.ours)),
         span.run(() => intentOf(conflict.base, conflict.theirs))]);
       const intents = { ours: oursIntent, theirs: theirsIntent };
-      const edits: [Edit, Edit] = [{ after: conflict.ours, intent: oursIntent }, { after: conflict.theirs, intent: theirsIntent }];
+      const editOf = (value: unknown, intent: Intent): Edit => value === undefined ? { removed: true, intent } : { after: value, intent };
+      const edits: [Edit, Edit] = [editOf(conflict.ours, oursIntent), editOf(conflict.theirs, theirsIntent)];
       const decision = await decideInFrame(span.frame, compatible, [conflict.base, ...edits]);
       const compatibility = decision.probabilities.find(item => item.value === true)?.probability ?? 0;
       const keep = () => resolution.set(conflict, conflict[options.keep ?? 'base']);
@@ -214,8 +215,9 @@ export async function semanticMerge<T>(base: T, ours: T, theirs: T, options: Mer
         return keep();
       }
       const value = await span.run(() => combine(conflict.base, ...edits));
-      const kinds = [conflict.ours, conflict.theirs].map(kindOf);
-      const problems = kinds.includes(kindOf(value)) ? options.check ? problemsOf(await span.run(() => options.check!(value, conflict.path)), 'check') : [] :
+      const kinds = [conflict.ours, conflict.theirs].filter(item => item !== undefined).map(kindOf);
+      const kindOk = !kinds.length || kinds.includes(kindOf(value));
+      const problems = kindOk ? options.check ? problemsOf(await span.run(() => options.check!(value, conflict.path)), 'check') : [] :
         [`The combined value is ${kindOf(value)}; the edits are ${[...new Set(kinds)].join(' and ')}.`];
       if (problems.length) {
         unresolved.push({ ...conflict, reason: 'check', intents, compatibility, problems });
@@ -231,7 +233,10 @@ export async function semanticMerge<T>(base: T, ours: T, theirs: T, options: Mer
         return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, fill(item)]).filter(([, item]) => item !== undefined));
       return value;
     };
-    const byPath = (a: { path: string[] }, b: { path: string[] }) => a.path.join('\0') < b.path.join('\0') ? -1 : 1;
+    const byPath = (a: { path: string[] }, b: { path: string[] }) => {
+      const left = a.path.join('\0'), right = b.path.join('\0');
+      return left < right ? -1 : left > right ? 1 : 0;
+    };
     return { value: fill(draft) as T, merged: merged.sort(byPath), unresolved: unresolved.sort(byPath) };
   }, result => `${result.merged.length} merged, ${result.unresolved.length} unresolved`);
 }

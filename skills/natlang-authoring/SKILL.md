@@ -40,32 +40,35 @@ A program can pin its model in `natlang.json` (`"model": { "profile": NAME }` or
 
 ```text
 review/
-  types.ts            type aliases, visible to the functions here and below
-  review.nl           the function
+  types.ts            type aliases (`Untrusted<string>`, `Is<string, "...">`), visible below
+  review.nl           the function: synthesizes the overall conclusion from the exact tally
   review/             its callable folder: what review.nl may call
+    summarize.ts      exact TypeScript helper: runs assess concurrently with Promise.all and counts verdicts
     assess.nl         a natural-language helper
     assess/
       verdict.nl      its own helper: a typed decision (readout: decision), testable exactly
-    summarize.ts      an exact TypeScript helper (default export)
 ```
 
+<!-- from: examples/review/review.nl -->
 ```yaml
 ---
-description: Assess each observation and count the verdicts.
+description: Assess observations against a criterion, tally verdicts in code, and synthesize an overall conclusion.
 args:
   observations: Untrusted<string>[]
   criterion: string
 returns: Report
 ---
-Assess every observation against the criterion with assess; the assessments are independent, so they can run
-together. Then return summarize of the assessments, in the original order.
+Call summarize(observations, criterion) to run the per-observation assessments concurrently and tally the verdicts.
+Weigh the returned assessments and counts to write a one-sentence conclusion stating whether criterion holds overall
+(naming any contradicting observation, or noting when no evidence supports it), and return the tally together with
+conclusion.
 ```
 
 `Untrusted<string>` marks outside text: the model sees it as quoted data, never as instructions. Types in front
 matter are TypeScript type text read verbatim, so no YAML comments after them. A complete version is in
 [assets/review/](assets/review/) (copy the whole directory). Front matter keys: `description`,
-`args`, `returns`, `types`, `generic`, `kind`, `readout`, `model`, `uses`, `withhold`, `budget`; see
-`args`, `returns`, `types`, `generic`, `kind`, `readout`, `model`, `uses`, `withhold`, `protect`, `budget`; see
+`args`, `returns`, `types`, `generic`, `kind`, `readout`, `model`, `uses`, `withhold`, `protect`, `budget`,
+`recursive`, `measure`, `ensures`; see
 [language and source contracts](references/language.md).
 
 **Callable folders.** A function calls exactly the items in its companion folder (`foo/` beside `foo.nl`), and their
@@ -103,9 +106,12 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
    model reasons, then every value is scored, and `decide(fn, ...args)` returns the probabilities. Gate actions on
    confidence, and escalate the unsure cases with `fn.on({ model })`. `readout: instant` scores without reasoning, in
    one pass, for calls where latency matters more than accuracy.
-5. **Compose.** Map a judgment over a collection with `Promise.all`. Pass semantic functions as arguments. Rebind a
-   function's context with `fn.in(context)`. Use `pluggable({ crisp, nl })` where a rule and a judgment compete
-   ([composition](references/composition.md)).
+5. **Compose with `@natlang/node/std`.** Use the standard library's typed combinators instead of hand-rolling loops:
+   collections (`semanticMap`, `semanticFilter`, `semanticPartition`, `semanticReduce`, `semanticMatch`,
+   `semanticRank`), convergence (`semanticRepair`, `fixedPoint`, `semanticMerge`), policy (`escalate`, `withContext`,
+   `compileRule`), and verified workspaces (`proposeAndVerify`, `branchAndSelect`). Pass semantic functions as
+   arguments, bind leading args with `.partial(...)`, and use `pluggable({ crisp, nl })` where a rule and a judgment
+   compete ([composition](references/composition.md)).
 6. **Iterate structurally.** `iterateOn(step, state).until(check)`, where the check can be code or `nl`; recursion
    only on a smaller argument; `for...of`, `for...in` over a record's keys, counted `for` loops whose bound is read
    once (`p <= store.pages()`) and array methods. There are no while loops. A TypeScript check needs

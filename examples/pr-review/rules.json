@@ -1,0 +1,10 @@
+[
+  {
+    "name": "tenant-and-sql-safety",
+    "guidance": "All SQL queries must use parameterized placeholders and enforce tenant_id isolation."
+  },
+  {
+    "name": "constant-time-secrets",
+    "guidance": "Secret or signature comparisons must use constant-time comparison (never === or ==)."
+  }
+]

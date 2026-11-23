@@ -292,9 +292,13 @@ SEMANTIC_FP_CHECKS = {
     # @natlang/std combinators: the program imports the combinator from the standard library and calls it.
     **{construct: (rf'@natlang/(?:node|browser)/std[\s\S]*\b{name}(?:<[^>()]*>)?\(|\b{name}(?:<[^>()]*>)?\([\s\S]*@natlang/(?:node|browser)/std', 'program',
                    f'{construct}: no program file imports {name} from @natlang/node/std and calls it')
-       for construct, name in (('semantic_merge', 'semanticMerge'), ('semantic_repair', 'semanticRepair'),
-                               ('fixed_point', 'fixedPoint'), ('propose_and_verify', 'proposeAndVerify'),
-                               ('branch_and_select', 'branchAndSelect'))},
+       for construct, name in (('semantic_map', 'semanticMap'), ('semantic_filter', 'semanticFilter'),
+                               ('semantic_partition', 'semanticPartition'), ('semantic_reduce', 'semanticReduce'),
+                               ('semantic_match', 'semanticMatch'), ('semantic_rank', 'semanticRank'),
+                               ('semantic_merge', 'semanticMerge'), ('semantic_repair', 'semanticRepair'),
+                               ('fixed_point', 'fixedPoint'), ('escalate', 'escalate'),
+                               ('with_context', 'withContext'), ('compile_rule', 'compileRule'),
+                               ('propose_and_verify', 'proposeAndVerify'), ('branch_and_select', 'branchAndSelect'))},
 }
 
 
@@ -443,10 +447,11 @@ def blind_failure_modes(task, functions):
                     warnings.append(f'heuristic: {path}: "{sentence.strip()[:70]}..." names a reopened / corrected / reversed item '
                                     'without saying whether its earlier record is cleared or kept')
                     break
-    # 6. Output contract present and consistent with the numbered steps.
+    # 6. Output contract present and consistent with the numbered steps (legacy exact desks only; verifier tasks specify
+    # their contract via types, ensures:, and executable verifiers rather than a prose Output contract block).
     contract = CONTRACT.search(root_body)
     if not contract:
-        if strict:
+        if strict and task.get('oracle') != 'verifier':
             errors.append('the root has no `Output contract:` paragraph (paths, line templates, separators, number format, '
                           'empty case, sort key and tie-break, counted cases)')
     else:

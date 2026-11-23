@@ -330,7 +330,7 @@ export declare function pluggable<A extends unknown[], R>(implementations: Plugg
 /** Module declaration text for packages that export the natlang surface. */
 export const INTRINSICS_MODULE_DTS = `${DECLARATIONS.replace(/\n(interface|type) /g, '\nexport $1 ')}\n` +
   '/** The runtime package\'s context value (\`NatlangContext\` in eval scope). */\nexport type Context = NatlangContext;\n' +
-  'export declare const Context: { empty(): NatlangContext };\n' +
+  'export declare const Context: { empty(): NatlangContext; ofCallable(fn: NatlangFunction<any, any>): NatlangContext };\n' +
   FUNCTIONS.replace(/\n(function|const) /g, '\nexport declare $1 ') + PLUGGABLE_MODULE_DTS;
 
 /**
@@ -341,7 +341,25 @@ export const STD_MODULE_DTS = `
 type Maybe<T> = T | Promise<T>;
 export type Problems = readonly string[];
 export type Intent = string;
-export type Edit<T = unknown> = { after: T; intent: Intent };
+export type Edit<T = unknown> = { after?: T; removed?: boolean; intent: Intent };
+export type MapOptions = { concurrency?: number };
+export declare function semanticMap<T, R>(items: readonly T[], fn: (item: T, index: number) => Maybe<R>, options?: MapOptions): Promise<R[]>;
+export type FilterOptions<T> = { floor?: number; concurrency?: number; meets?: (criterion: string, item: T) => Promise<boolean> };
+export declare function semanticFilter<T>(items: readonly T[], predicate: string | ((item: T, index: number) => Maybe<boolean>), options?: FilterOptions<T>): Promise<T[]>;
+export type PartitionOptions = { floor?: number; concurrency?: number };
+export type Partition<T, K extends string = string> = { groups: Record<K, T[]>; uncertain: { item: T; label: K; confidence: number }[] };
+export declare function semanticPartition<T, K extends string = string>(items: readonly T[], classifier: (item: T) => Maybe<K>, options?: PartitionOptions): Promise<Partition<T, K>>;
+export type ReduceOptions<S> = { mode?: 'linear' | 'tree'; combine?: (left: S, right: S) => Maybe<S>; concurrency?: number };
+export declare function semanticReduce<T, S>(items: readonly T[], initial: S, step: (state: S, item: T, index: number) => Maybe<S>, options?: ReduceOptions<S>): Promise<S>;
+export type MatchOptions<L, R> = { relation?: string; match?: (left: L, right: R) => Maybe<boolean>; block?: (left: L, right: R) => boolean;
+  floor?: number; concurrency?: number; relates?: (relation: string, left: L, right: R) => Promise<boolean> };
+export type MatchPair<L, R> = { left: L; right: R; leftIndex: number; rightIndex: number; confidence: number };
+export type MatchResult<L, R> = { pairs: MatchPair<L, R>[]; unmatchedLeft: L[]; unmatchedRight: R[] };
+export declare function semanticMatch<L, R>(left: readonly L[], right: readonly R[], options: MatchOptions<L, R>): Promise<MatchResult<L, R>>;
+export type RankOptions<T> = { beats?: (goal: string, first: T, second: T) => Promise<boolean>; debiased?: boolean; concurrency?: number };
+export type RankedEntry<T> = { item: T; index: number; wins: number; score: number };
+export type Ranking<T> = { ranked: T[]; scores: RankedEntry<T>[] };
+export declare function semanticRank<T>(items: readonly T[], goal: string, options?: RankOptions<T>): Promise<Ranking<T>>;
 export type RepairAttempt<T> = { value: T; problems: string[] };
 export type Repair<T> = { ok: boolean; value: T; problems: string[]; attempts: number; history: RepairAttempt<T>[] };
 export type RepairOptions<T> = { check: (value: T) => Maybe<Problems>; fix: (value: T, problems: string[]) => Maybe<T>; attempts: number; identity?: (value: T) => string };
@@ -355,9 +373,18 @@ export type Merged = MergeConflict & { value: unknown; intents: { ours: Intent; 
 export type Unresolved = MergeConflict & { reason: 'incompatible' | 'unsure' | 'check'; intents: { ours: Intent; theirs: Intent }; compatibility: number; problems?: string[] };
 export type Merge<T> = { value: T; merged: Merged[]; unresolved: Unresolved[] };
 export type MergeOptions = { floor?: number; check?: (value: unknown, path: string[]) => Maybe<Problems>; keep?: 'base' | 'ours' | 'theirs';
-  intentOf?: (before: unknown, after: unknown) => Promise<Intent>; compatible?: (base: unknown, ours: Edit, theirs: Edit) => Promise<boolean>;
+  intentOf?: (before?: unknown, after?: unknown) => Promise<Intent>; compatible?: (base: unknown, ours: Edit, theirs: Edit) => Promise<boolean>;
   combine?: (base: unknown, ours: Edit, theirs: Edit) => Promise<unknown> };
 export declare function semanticMerge<T>(base: T, ours: T, theirs: T, options?: MergeOptions): Promise<Merge<T>>;
+export type EscalateOptions<R> = { to: string; floor?: number; risk?: Record<string, number>; shouldEscalate?: (decision: any) => Maybe<boolean> };
+export type Escalated<R> = { value: R; probabilities: { value: R; probability: number }[]; confidence: number; scored: boolean;
+  reasoned?: number; fields?: Record<string, { value: unknown; probability: number }[]>; escalated: boolean; reason?: string; initialValue?: R };
+export declare function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, options: EscalateOptions<R>): (...args: A) => Promise<Escalated<R>>;
+export declare function withContext<F extends NatlangFunction<any, any>>(fn: F, entries: Record<string, unknown>): F;
+export type RuleExample<I, O> = { input: I; expected: O; name?: string };
+export type CompileRuleOptions<I, O> = { examples?: readonly RuleExample<I, O>[]; check?: (fn: (item: I) => Promise<O>) => Maybe<Problems>;
+  attempts?: number; same?: (received: O, expected: O) => boolean; compiler?: (rule: string, problems?: string[]) => Promise<(item: I) => Promise<O>> };
+export declare function compileRule<I = unknown, O = unknown>(rule: string, options?: CompileRuleOptions<I, O>): Promise<(item: I) => Promise<O>>;
 export type Workspace = { propose(reducer: any, ...args: any[]): Promise<FolderProposal<any>>; accept(proposal: FolderProposal<any>): Promise<unknown> };
 export type Reducer = unknown;
 export type ProposeOptions<R> = { verify: (proposal: FolderProposal<R>) => Maybe<Problems>; attempts: number; args?: unknown[] };
@@ -366,14 +393,17 @@ export declare function proposeAndVerify<R = unknown>(folder: Workspace, reducer
 export type Branch = Reducer | { reducer: Reducer; args?: unknown[] };
 export type Candidate<R> = { index: number; proposal: FolderProposal<R>; value: R; problems: string[] };
 export type SelectOptions<R> = { verify?: (proposal: FolderProposal<R>) => Maybe<Problems>; goal?: string; select?: (candidates: Candidate<R>[]) => Maybe<number>;
-  beats?: (goal: string, first: unknown, second: unknown) => Promise<boolean> };
+  beats?: (goal: string, first: unknown, second: unknown) => Promise<boolean>; debiased?: boolean };
 export type Selected<R> = { chosen: number | null; proposal?: FolderProposal<R>; value?: R; candidates: Candidate<R>[] };
 export declare function branchAndSelect<R = unknown>(folder: Workspace, branches: Branch[], options?: SelectOptions<R>): Promise<Selected<R>>;
-export declare const intentOf: NatlangFunction<[before: unknown, after: unknown], Intent>;
+export declare const intentOf: NatlangFunction<[before?: unknown, after?: unknown], Intent>;
 export declare const compatible: NatlangFunction<[base: unknown, ours: Edit, theirs: Edit], boolean>;
 export declare const combine: NatlangFunction<[base: unknown, ours: Edit, theirs: Edit], unknown>;
 export declare const settled: NatlangFunction<[revision: { previous: unknown; current: unknown }], boolean>;
 export declare const beats: NatlangFunction<[goal: string, first: unknown, second: unknown], boolean>;
+export declare const meets: NatlangFunction<[criterion: string, item: unknown], boolean>;
+export declare const relates: NatlangFunction<[relation: string, left: unknown, right: unknown], boolean>;
+export declare const compileRuleFn: NatlangFunction<[rule: string, problems?: string[]], (item: unknown) => Promise<unknown>>;
 `;
 /** Module form of the standard library, resolved for `@natlang/<runtime>/std` imports in virtual programs. */
 export const STD_MODULE_FILE = '/__natlang__/std.d.ts';

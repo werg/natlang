@@ -138,6 +138,14 @@ const checkedPredicate = (predicate: unknown): string => {
     'Is<T, P> takes a nonempty string literal as P, for example refine(subject, "one line of at most 60 characters").');
   return text;
 };
+const checkedPredicates = (predicate: unknown): string[] => {
+  if (Array.isArray(predicate)) {
+    if (!predicate.length) throw new RefinementError('refinement-predicate-invalid',
+      'Is<T, P> takes a nonempty string literal as P, for example refine(subject, "one line of at most 60 characters").');
+    return [...new Set(predicate.map(checkedPredicate))];
+  }
+  return [checkedPredicate(predicate)];
+};
 const emitRefinement = (frame: ReturnType<typeof resolveFrame>, kind: string, data: Record<string, unknown>) => {
   const trace = traceFor(frame.parentCallId);
   if (trace) trace.emit(kind, data); else frame.task.refinementEvents.push({ kind, data });
@@ -149,19 +157,20 @@ export type RefineOptions = { context?: Record<string, unknown> };
 /**
  * Check `value` against `predicate` with the judge and return it as an `Is<T, P>`; throws `refinement-unsatisfied` (or
  * `refinement-undecided` inside the uncertainty band). Must run inside a natlang task. `refine<Is<T, "p">>(value)` is
- * lowered by the compiler to `refine(value, "p")`.
+ * lowered by the compiler to `refine(value, "p")` (and stacked `Is<Is<T, "a">, "b">` to separate obligations).
  * @natlangIntrinsic refine
  */
 export async function refine<T, P extends string>(value: T, predicate: P, options?: RefineOptions): Promise<Is<T, P>>;
 export async function refine<R extends Is<unknown, string>>(value: unknown, options?: RefineOptions): Promise<R>;
-export async function refine(value: unknown, predicate?: string | RefineOptions, options?: RefineOptions): Promise<unknown> {
-  const text = checkedPredicate(predicate);
+export async function refine(value: unknown, predicate?: string | readonly string[] | RefineOptions, options?: RefineOptions): Promise<unknown> {
+  const predicates = checkedPredicates(predicate);
   const frame = resolveFrame();
   const task = frame.task;
   const context = options?.context;
   if (context !== undefined && (!context || typeof context !== 'object' || Array.isArray(context)))
     throw new TypeError('refine takes { context: { name: value, ... } }: the values the predicate refers to by name');
-  const failures = await task.refinementChecker().check([{ path: 'value', predicate: text, value, ...(context ? { context } : {}) }],
+  const obligations = predicates.map(text => ({ path: 'value', predicate: text, value, ...(context ? { context } : {}) }));
+  const failures = await task.refinementChecker().check(obligations,
     { phase: 'refine', ...task.refinementJudges(task.model(), frame), callId: frame.parentCallId ?? null, signal: frame.signal ?? task.signal,
       untrusted: scopedUntrusted(task), emit: (kind, data) => emitRefinement(frame, kind, data) });
   if (failures.length) throw failureError(failures[0]!);
@@ -174,12 +183,15 @@ export async function refine(value: unknown, predicate?: string | RefineOptions,
  */
 export function assume<T, P extends string>(value: T, predicate: P): Is<T, P>;
 export function assume<R extends Is<unknown, string>>(value: unknown): R;
-export function assume(value: unknown, predicate?: string): unknown {
-  const text = checkedPredicate(predicate);
+export function assume(value: unknown, predicate?: string | readonly string[]): unknown {
+  const predicates = checkedPredicates(predicate);
   const frame = resolveFrame();
   const shown = canonicalValue(value);
-  emitRefinement(frame, 'refinement_assumed', { call_id: frame.parentCallId ?? null, predicate: text,
-    value: shown.length > 400 ? `${shown.slice(0, 400)} … (${shown.length} chars)` : shown, value_sha256: hexDigest(shown) });
+  const valuePreview = shown.length > 400 ? `${shown.slice(0, 400)} … (${shown.length} chars)` : shown;
+  const digest = hexDigest(shown);
+  for (const text of predicates)
+    emitRefinement(frame, 'refinement_assumed', { call_id: frame.parentCallId ?? null, predicate: text,
+      value: valuePreview, value_sha256: digest });
   return value;
 }
 

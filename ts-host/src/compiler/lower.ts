@@ -36,9 +36,15 @@ export function lowerTypedRefinementText(program: ts.Program, file: ts.SourceFil
       if (name === 'refine' || (name === 'assume' && node.arguments.length === 1)) {
         const predicates = refinementPredicates(checker, node.typeArguments[0]!);
         if (predicates.length) {
-          edits.push({ start: node.typeArguments.pos - 1 - prefix, end: node.typeArguments.end + 1 - prefix, text: '' });
-          edits.push({ start: node.arguments[0]!.getEnd() - prefix, end: node.arguments[0]!.getEnd() - prefix,
-            text: `, ${JSON.stringify(predicates.join('; and '))}` });
+          // Locate the actual `<` and `>` tokens around the type argument so whitespace like `refine< Is<...> >(x)` works.
+          const openAt = text.indexOf('<', node.expression.getEnd() - prefix);
+          const closeAt = text.lastIndexOf('>', node.arguments.pos - prefix);
+          if (openAt >= 0 && closeAt > openAt) {
+            edits.push({ start: openAt, end: closeAt + 1, text: '' });
+            const predicateArg = predicates.length === 1 ? JSON.stringify(predicates[0]) : JSON.stringify(predicates);
+            edits.push({ start: node.arguments[0]!.getEnd() - prefix, end: node.arguments[0]!.getEnd() - prefix,
+              text: `, ${predicateArg}` });
+          }
         }
       }
     }
@@ -526,9 +532,14 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
           source.arguments.length === 2) ? resolveIntrinsic(options.checker, callee) : undefined;
         if (options.checker && (refinement === 'refine' || (refinement === 'assume' && source.arguments.length === 1))) {
           const predicates = refinementPredicates(options.checker, source.typeArguments![0]!);
-          if (predicates.length) return f.createCallExpression(ts.visitNode(callee, visit) as ts.Expression, undefined,
-            [ts.visitNode(node.arguments[0]!, visit) as ts.Expression, f.createStringLiteral(predicates.join('; and ')),
-              ...node.arguments.slice(1).map(argument => ts.visitNode(argument, visit) as ts.Expression)]);
+          if (predicates.length) {
+            const predicateExpr = predicates.length === 1
+              ? f.createStringLiteral(predicates[0]!)
+              : f.createArrayLiteralExpression(predicates.map(predicate => f.createStringLiteral(predicate)));
+            return f.createCallExpression(ts.visitNode(callee, visit) as ts.Expression, undefined,
+              [ts.visitNode(node.arguments[0]!, visit) as ts.Expression, predicateExpr,
+                ...node.arguments.slice(1).map(argument => ts.visitNode(argument, visit) as ts.Expression)]);
+          }
         }
         const isMethod = ts.isPropertyAccessExpression(callee) && callee.name.text === 'iterateOn';
         const isFree = !isMethod && options.checker && resolveIntrinsic(options.checker, callee) === 'iterateOn';

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "concrete database experience meets requirement",
+    "function": "meets.nl",
+    "inputs": {
+      "requirement": "3+ years operating PostgreSQL in production",
+      "application": { "id": "a1", "text": "Operated primary PostgreSQL clusters handling 40k TPS at Acme Payments for 5 years." }
+    },
+    "expected": true
+  },
+  {
+    "name": "willingness to learn does not meet requirement",
+    "function": "meets.nl",
+    "inputs": {
+      "requirement": "3+ years operating PostgreSQL in production",
+      "application": { "id": "a2", "text": "Mostly built React frontends, happy to learn PostgreSQL on the job." }
+    },
+    "expected": false
+  }
+]

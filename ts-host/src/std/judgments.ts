@@ -12,16 +12,22 @@ const load = <A extends unknown[], R>(name: string) => loadVirtualNatlang(FILES,
 
 /** What one change of a value is for: one sentence. */
 export type Intent = string;
-/** One side of a merge: the value an edit produced and what it is for. */
-export type Edit<T = unknown> = { after: T; intent: Intent };
+/** One side of a merge: the value an edit produced (or `removed: true` when deleted) and what it is for. */
+export type Edit<T = unknown> = { after?: T; removed?: boolean; intent: Intent };
 
-/** `intentOf(before, after)`: what the edit from `before` to `after` is for. */
-export const intentOf = load<[before: unknown, after: unknown], Intent>('intentOf');
-/** `compatible(base, ours, theirs)` (`readout: decision`): whether one value can keep both edits. */
+/** `intentOf(before?, after?)`: what the edit from `before` to `after` is for. */
+export const intentOf = load<[before?: unknown, after?: unknown], Intent>('intentOf');
+/** `compatible(base?, ours, theirs)` (`readout: decision`): whether one value can keep both edits. */
 export const compatible = load<[base: unknown, ours: Edit, theirs: Edit], boolean>('compatible');
-/** `combine(base, ours, theirs)`: the value that makes both edits of `base`. */
+/** `combine(base?, ours, theirs)`: the value that makes both edits of `base`. */
 export const combine = load<[base: unknown, ours: Edit, theirs: Edit], unknown>('combine');
 /** `settled({ previous, current })` (`readout: decision`): whether the revision only reworded its value. */
 export const settled = load<[revision: { previous: unknown; current: unknown }], boolean>('settled');
 /** `beats(goal, first, second)` (`readout: decision`): whether `first` serves `goal` better than `second`. */
 export const beats = load<[goal: string, first: unknown, second: unknown], boolean>('beats');
+/** `meets(criterion, item)` (`readout: decision`): whether `item` satisfies `criterion`. */
+export const meets = load<[criterion: string, item: unknown], boolean>('meets');
+/** `relates(relation, left, right)` (`readout: decision`): whether `left` and `right` match under `relation`. */
+export const relates = load<[relation: string, left: unknown, right: unknown], boolean>('relates');
+/** `compileRuleFn(rule, problems?)`: synthesize a typed judgment function implementing `rule`. */
+export const compileRuleFn = load<[rule: string, problems?: string[]], (item: unknown) => Promise<unknown>>('compileRule');

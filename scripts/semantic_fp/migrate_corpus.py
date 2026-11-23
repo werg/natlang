@@ -290,7 +290,7 @@ def package(decision_rows, out, *, reserved=frozenset()):
     return rows, skipped
 
 
-def program_tasks(case_rows, decision_rows, out, *, reserved=frozenset(), oracles=('exact',)):
+def program_tasks(case_rows, decision_rows, out, *, reserved=frozenset(), oracles=('exact', 'verifier')):
     """The accepted programs' own cases as ordinary ``natlang.program/2`` tasks whose root is the migrated program
     (07 §5 "an idiomatic program for the RL pool"): the measured candidate rows, with their original split restored,
     an id of their own (the split group, and so held exclusion by group, is unchanged) and the migration recorded."""
@@ -359,7 +359,7 @@ def main(argv=None):
     t.add_argument('--decisions', type=Path, action='append', required=True)
     t.add_argument('--out', type=Path, required=True)
     t.add_argument('--exclude-reserved', type=Path)
-    t.add_argument('--oracle', action='append', help='oracle levels to keep (default: exact)')
+    t.add_argument('--oracle', action='append', help='oracle levels to keep (default: exact and verifier)')
     args = parser.parse_args(argv)
 
     if args.command == 'units':
@@ -401,7 +401,7 @@ def main(argv=None):
         cases = [row for directory in args.cases for row in read_jsonl(directory / 'cases.jsonl')]
         decisions = [d for path in args.decisions for d in read_jsonl(path)]
         reserved = reserved_programs(args.exclude_reserved) if args.exclude_reserved else frozenset()
-        rows = program_tasks(cases, decisions, args.out, reserved=reserved, oracles=tuple(args.oracle or ['exact']))
+        rows = program_tasks(cases, decisions, args.out, reserved=reserved, oracles=tuple(args.oracle or ['exact', 'verifier']))
         # Every held set's exclusion (held-v3, held-v4 and its reservations, by id and split group), as trainers apply it.
         from natlang_neuralese.rl import held_eval
         excluded = held_eval.training_exclusion_ids(rows)

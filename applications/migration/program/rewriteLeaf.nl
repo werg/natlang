@@ -4,6 +4,7 @@ args:
   instructions: string
   steps: KindedStep[]
   signature: string
+  previous?: string
   problems: string[]
 returns: string
 ---
@@ -17,5 +18,5 @@ same instructions split into steps, each with what it does. Write the new instru
 3. When there are several judgment steps, number them; otherwise write one paragraph.
 4. Write only the instructions: no front matter, no code fence, no heading.
 
-problems are what an exact check found wrong with your last answer; fix every one of them. Return the new
-instructions as text.
+If previous is provided, it is your earlier rewrite and problems are what an exact check found wrong with it; fix every
+problem while keeping what already worked. Return the new instructions as text.

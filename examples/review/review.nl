@@ -1,10 +1,11 @@
 ---
-description: Assess each observation and retain its reason alongside exact counts.
+description: Assess observations against a criterion, tally verdicts in code, and synthesize an overall conclusion.
 args:
   observations: Untrusted<string>[]
   criterion: string
 returns: Report
 ---
-Assess every observation against the criterion with assess; the assessments are
-independent, so they can run together. Then return summarize of the assessments,
-in the original order.
+Call summarize(observations, criterion) to run the per-observation assessments concurrently and tally the verdicts.
+Weigh the returned assessments and counts to write a one-sentence conclusion stating whether criterion holds overall
+(naming any contradicting observation, or noting when no evidence supports it), and return the tally together with
+conclusion.

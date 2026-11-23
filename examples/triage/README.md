@@ -1,6 +1,6 @@
 # Support-ticket triage
 
-A small application: two typed decisions and an inline summary do the judgment, TypeScript does the bookkeeping.
+A small application: two typed decisions and an inline summary do the judgment, TypeScript and `@natlang/node/std` do the bookkeeping, escalation, and repair.
 
 ```sh
 natlang run examples/triage                                   # the bundled tickets.json
@@ -14,25 +14,20 @@ natlang test examples/triage                                  # the saved exampl
 - **types.ts**: the shared types. `Label` is `"billing" | "technical" | "spam"`: every classification is one of these
   three, whatever the rubric says. `Summary` is `Is<string, "...">`: a property the runtime checks on every summary
   the model writes. `Report` is what the application prints.
-- **classify.nl**: `(ticket, rubric) => Label` with `readout: decision`: the model scores the three labels in one
-  pass. The rubric explains what belongs in each label; changing it changes how tickets are sorted, not which labels
-  exist. To add a label, change `Label` in types.ts and the rubric together.
-- **is_urgent.nl**: `(ticket) => boolean`, also a decision, with the urgency rule in its instructions.
-- **triage.ts**: ordinary TypeScript that imports the two `.nl` files as functions. `decide(classify, ticket, rubric)`
-  returns each label with its probability; a ticket below 0.8 is classified again by
-  `classify.on({ model: 'teacher' })`, the same function on a stronger model (`teacher` is the profile your model
-  profile names as `escalate`; without one it runs on the default model). It checks urgency for the tickets that are
-  not spam, counts labels, and writes a short summary of the urgent ones with an inline `nl` function.
-- **main.ts**: the `triage` target in natlang.json. `natlang run` calls `main(context)` with a `TargetContext`:
-  `context.arguments` holds the declared arguments (`file`, `rubric`, `tickets`) already read and type-checked, with the
-  rubric's default applied; `context.package.root` is this folder (for the bundled tickets.json);
-  `context.runtime.run(...)` runs natlang calls with the selected model; `context.io.output` is where the report goes.
+- **classify.nl**: `(ticket: Untrusted<string>, rubric) => Label` with `readout: decision`: the model reasons, then
+  scores the three labels. The rubric explains what belongs in each label; changing it changes how tickets are sorted,
+  not which labels exist. To add a label, change `Label` in types.ts and the rubric together.
+- **is_urgent.nl**: `(ticket: Untrusted<string>) => boolean`, also a decision, with the urgency rule in its instructions.
+- **triage.ts**: ordinary TypeScript that imports the two `.nl` files as functions. `escalate(classify, { to: 'teacher', floor: 0.8 })`
+  from `@natlang/node/std` scores locally and sends only tickets below 0.8 confidence to the stronger model (`teacher` is
+  the profile your model profile names as `escalate`; without one it runs on the default model). It checks urgency for
+  non-spam tickets, counts labels in code, and shortens the refined inline `nl` summary with `semanticRepair`.
+- **main.ts**: the `triage` target in natlang.json. Wraps incoming ticket strings with `untrusted(...)` and calls `triage`.
 - **natlang.json**: the package: its files, the `triage` target and its arguments, the model, and warm-up calls.
 - **examples.json**: saved inputs with expected results for `natlang test`.
 
-## Why the summary uses `withLimit`
+## Why the summary uses `semanticRepair`
 
-The summary is shortened with `iterateOn(shorten, draft).until(text => words(text) <= 60)`: rewrite until it is short
-enough. Nothing guarantees a model's rewrite gets shorter each time, so the loop needs a bound it can always reach.
-`withLimit({ maxSteps: 3 })` stops after three rewrites with an `IterationLimitError`, and triage.ts then keeps the last
-(shortest honest) summary instead of failing the whole report.
+The summary is shortened with `semanticRepair(draft, { check, fix, attempts: 3 })` from `@natlang/node/std`: an exact
+word-count check drives up to three rewrites through `iterateOn(...).withLimit({ maxSteps: 3 })`, and if the bound is
+reached it returns the closest honest summary instead of failing the report.

@@ -144,24 +144,26 @@
       <pre class="code" data-hl="nl">---
 description: Label one ticket using the rubric.
 args:
-  ticket: string
+  ticket: Untrusted&lt;string&gt;
   rubric: string
 returns: Label
 readout: decision
 ---
 Pick the label from rubric that fits ticket.</pre>
       <span class="fname">examples/triage/triage.ts</span>
-      <pre class="code" data-hl>import classify from './classify.nl';
+      <pre class="code" data-hl>import { escalate } from '@natlang/node/std';
+import classify from './classify.nl';
 
 export async function triage(
-  tickets: string[], rubric: string,
+  tickets: Untrusted&lt;string&gt;[], rubric: string,
 ) {
-  const labels = await Promise.all(
-    tickets.map(ticket =&gt; classify(ticket, rubric)));
-  // labels: Label[], checked before this line runs
+  const classifyTicket = escalate(classify, { to: 'teacher', floor: 0.8 });
+  const labels = (await Promise.all(
+    tickets.map(ticket =&gt; classifyTicket(ticket, rubric)))).map(r =&gt; r.value);
+  // labels: Label[], checked locally and escalated only when unsure
   …
 }</pre>
-      <p class="plate-cap"><b>0</b><span>classify.nl is a natural-language function. triage.ts imports it and calls it like any other async function.</span></p>
+      <p class="plate-cap"><b>0</b><span>classify.nl is a calibrated natural-language function. triage.ts composes it with @natlang/node/std like any other async function.</span></p>
     </div>
   </div>
 
@@ -234,12 +236,12 @@ const flags = await Promise.all(
       <pre class="code" data-hl="nl">---
 description: Label one ticket using the rubric.
 args:
-  ticket: string
+  ticket: Untrusted&lt;string&gt;
   rubric: string
 returns: Label
+readout: decision
 ---
-Pick the label from rubric that fits ticket. If no rule in the rubric covers
-the ticket, report an error saying what is missing.</pre>
+Pick the label from rubric that fits ticket.</pre>
       <div class="rule" style="margin-top: 22px"><div class="frac">
         <div class="pre"><span><i>Γ</i> ⊢ <span class="t">(x₁: τ₁, …) ⇒ τ</span></span><span><span class="kw">body</span> ∈ Prose</span></div>
         <div class="post"><i>Γ</i> ⊢ <span class="t">nl`<span class="kw">body</span>`</span> : <span class="t">(x₁: τ₁, …) ⇒ Promise&lt;τ&gt;</span></div>
@@ -492,10 +494,10 @@ the ticket, report an error saying what is missing.</pre>
   </header>
   <div class="cols">
     <div class="read">
-      <p>When a function returns one of a few values, such as a label, it can declare <code>readout: decision</code>. The model then scores every allowed value instead of writing an answer, and the call returns the most likely value together with the whole distribution:</p>
-      <pre class="code" data-hl>const d = await runtime.decide(classify, ticket, rubric);
+      <p>When a function returns a finite type (a literal union, <code>boolean</code>, or a finite record), it can declare <code>readout: decision</code>. The model reasons, then scores every allowed value (use <code>readout: instant</code> on hot paths to skip reasoning), and <code>decide</code> returns the most likely value together with calibrated probabilities:</p>
+      <pre class="code" data-hl>const d = await decide(classify, ticket, rubric);
 // { value, probabilities: [{ value, probability }],
-//   confidence, scored }</pre>
+//   confidence, scored, fields? }</pre>
       <p style="margin-top: 16px">A distribution can be graded with proper scoring rules. In the exhibit, set the probabilities, pick the true label and compare the scores: log loss punishes a confident mistake far more than the Brier score does.</p>
     </div>
     <div class="ex">
@@ -517,7 +519,7 @@ the ticket, report an error saying what is missing.</pre>
   </div>
   <div class="cols full" style="margin-top: 48px">
     <div class="read">
-      <p>A type can also carry a condition written in English: <code>Is&lt;string, "a reply to the customer that is polite and does not blame them"&gt;</code>. The value is still a <code>string</code>. The condition is checked when the value is returned, passed as an argument or wrapped with <code>refine()</code>; <code>assume()</code> skips the check and records that it did.</p>
+      <p>A type can also carry a condition written in English: <code>Is&lt;string, "a reply to the customer that is polite and does not blame them"&gt;</code>, and a <code>.nl</code> function can declare relational <code>ensures:</code> postconditions (crisp <code>check:</code> expressions and semantic <code>predicate:</code> clauses checked against its arguments). The value is still a <code>string</code>. Refinements are checked on return, at argument boundaries, or via <code>refine()</code>; <code>assume()</code> skips the check and records that it did.</p>
       <p>The check asks a model for the probability that the condition holds and compares it with a threshold. Close calls can be accepted, rejected or sent to a stronger model. A failed return goes back to the executing model to fix, up to three times by default, and each verdict is cached.</p>
       <div class="rule"><div class="frac">
         <div class="pre"><span><i>Γ</i> ⊢ v : <span class="t">T</span></span><span>judge(v, <span class="kw">P</span>) ≥ θ</span></div>
@@ -691,7 +693,7 @@ const choose = pluggable(
         <li>Never show a wrong form in a prompt, because it primes the model to produce it. Handle it in the runtime and explain the fix in a one-line error.</li>
         <li>Add a resource limit only after a real problem; termination comes from structure (chapter V).</li>
         <li>Test any change the model sees, such as a prompt or an error message, on the live model, about 48 samples per variant, before adopting it.</li>
-        <li>Assume the model is small: put the algorithm and the data contracts in the source, as numbered steps.</li>
+        <li>Assume the model is small: keep algorithms, exact checks, and collection/retry loops in TypeScript and <code>@natlang/node/std</code> (<code>semanticFilter</code>, <code>semanticRank</code>, <code>semanticRepair</code>, <code>semanticMerge</code>, <code>escalate</code>, <code>proposeAndVerify</code>), and give each natural-language function one narrow typed judgment.</li>
         <li>Make ordinary JavaScript idioms work rather than inventing new names.</li>
       </ul>
       <p>Most applications in the repository record, part by part, what became an English function and what stayed code, in a <code>DECOMPOSITION.md</code>.</p>
@@ -703,7 +705,7 @@ const choose = pluggable(
     <div class="app"><h3>wiki</h3><p>A collaborative wiki whose edit pipeline is written in natural language: change summaries, conflict detection, merge planning, verification against each edit's intent, and repair with iterateOn.</p><div class="files">merge.nl · maintain.nl · cells.nl · index.ts</div></div>
     <div class="app"><h3>specializer</h3><p>Compiles recorded calls into guarded TypeScript cases, as described in chapter VII. Its own decisions are natural-language functions.</p><div class="files">worthLooking.nl · chooseCondition.nl · promote.nl</div></div>
     <div class="app"><h3>evidence</h3><p>A question-answering console that checks citations: it plans a search, selects sources, extracts claims, finds gaps and writes an answer.</p><div class="files">plan_search.nl · claims.nl · gaps.nl</div></div>
-    <div class="app"><h3>More in applications/</h3><p>A notebook, logs, a terminal, a publisher, a migration tool, a program improver, a scheduler and a treaty-obligation ledger.</p><div class="files">git clone, then natlang run applications/&lt;name&gt;</div></div>
+    <div class="app"><h3>More in examples/ &amp; applications/</h3><p>PR review with grounded quotes and risk escalation, multi-shop refunds with <code>.in(context)</code>, release publishing with <code>@natlang/node/std</code>, higher-order screening, recursive document outlines, notebook, helpdesk, logs, terminal, and program improver.</p><div class="files">git clone, then natlang run examples/pr-review</div></div>
   </div>
 </section>
 

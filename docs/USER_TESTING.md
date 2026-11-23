@@ -21,7 +21,7 @@ or an OpenAI-compatible endpoint, configured on the Models page) tests the langu
 model latency dominating the session. The managed local model is a separate track: on a CPU-only machine its
 first call can take minutes (a 1.8 GB download, then a prompt of several thousand tokens to prefill), so time
 it on the participant's hardware and report it apart from the authoring tasks. A new program's `route.nl`
-uses `readout: decision`, so the model scores its routes instead of writing an answer, and the bundled messages need
+uses `readout: decision`, so the model reasons and then scores its routes with calibrated probabilities, and the bundled messages need
 no drafted reply: keep them for the timed first run. A participant's own function that writes free text
 or code takes as long as the model needs on that hardware; time it with a hosted model unless the local track is the
 subject.

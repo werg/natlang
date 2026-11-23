@@ -106,8 +106,9 @@ $$('pre[data-hl]').forEach(p => {
   const NL_SRC = `---
 description: Does this ticket need attention within the hour?
 args:
-  ticket: string
+  ticket: Untrusted<string>
 returns: boolean
+readout: decision
 ---
 A ticket is urgent when many customers are affected right now, money is being
 lost, or security is at risk. Requests, suggestions and cosmetic problems are

@@ -9,6 +9,7 @@ import type { EvalEnvironment } from '../native/evaluator.js';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from '../compiler/host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan } from '../compiler/inline.js';
 import { lowerTypedRefinementText, natlangTransformer } from '../compiler/lower.js';
+import { desugarNlCalls } from '../compiler/nl-call.js';
 import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { STD_MODULE_FILE, STD_SPECIFIERS } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
@@ -127,12 +128,15 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   const softTypes = JSON.stringify(record.types);
   // A sibling with a representation-generic result: its call sites need the checker to pick their instance.
   const generic = Object.values(level).some(item => item.kind === 'natlang' && !!item.generic);
-  const parsed = ts.createSourceFile(path, record.text, ts.ScriptTarget.ES2022, true);
+  // Desugar nl("...") / nl(`...`, x) before parsing and transpiling so both analysis and lowering see tagged templates.
+  let text = /\b(?:function|const|let|var|class)\s+nl\b/.test(record.text) ? record.text : desugarNlCalls(record.text);
+  const parsed = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true);
   // `refine<Is<T, "p">>(value)` / `assume<R>(value)`: lowering reads the predicate from the type argument.
-  const typedRefinement = /\b(?:refine|assume)\s*</.test(record.text);
-  let text = record.text;
-  if (containsTaggedTemplate(parsed) || FOR_OF.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`) || generic || typedRefinement) {
-    const files: Record<string, string> = { [path]: record.text };
+  const typedRefinement = /\b(?:refine|assume)\s*</.test(text);
+  // A non-literal `nl(expr)` call stays a CallExpression after desugarNlCalls and still needs analysis to report `nl-not-tag`.
+  const callsNl = /\bnl\s*(?:<[^()]*>)?\s*\(/.test(text);
+  if (containsTaggedTemplate(parsed) || callsNl || FOR_OF.test(text) || /\bNeuralese\s*</.test(`${text}\n${softTypes}`) || generic || typedRefinement) {
+    const files: Record<string, string> = { [path]: text };
     for (const [name, item] of Object.entries(level)) {
       if (name === record.name) continue;
       if (item.kind === 'module') files[`${FOLDER}/${name}.ts`] = item.text;

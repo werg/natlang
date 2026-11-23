@@ -21,8 +21,8 @@ test('the library is one module: @natlang/node/std, the std namespace of @natlan
   assert.deepEqual(declared, exported, 'intrinsics STD_MODULE_DTS declares exactly what src/std exports');
   // The shipped judgments are the files in ts-host/std, byte for byte, and load under @natlang/std/.
   for (const [name, source] of Object.entries(STD_SOURCES)) assert.equal(readFileSync(join(repo, 'ts-host/std', name), 'utf8'), source);
-  assert.deepEqual(Object.keys(STD_SOURCES).sort(), ['beats.nl', 'combine.nl', 'compatible.nl', 'intentOf.nl', 'settled.nl']);
-  for (const name of ['intentOf', 'compatible', 'combine', 'settled', 'beats']) {
+  assert.deepEqual(Object.keys(STD_SOURCES).sort(), ['beats.nl', 'combine.nl', 'compatible.nl', 'compileRule.nl', 'intentOf.nl', 'meets.nl', 'relates.nl', 'settled.nl']);
+  for (const name of ['intentOf', 'compatible', 'combine', 'settled', 'beats', 'meets', 'relates', 'compileRuleFn']) {
     assert.equal(typeof std[name], 'function');
     assert.equal(typeof std[name].in, 'function', `${name} is a natlang function (.in, .on)`);
   }

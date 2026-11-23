@@ -51,7 +51,9 @@ SEMANTIC_FP_CONSTRUCTS = frozenset({'inline_nl', 'nl_with_context', 'library_dis
                                     'context_lens', 'folder_transaction', 'untrusted_contract', 'refinement_contract',
                                     'ensures_contract', 'structural_recursion',
                                     'semantic_merge', 'semantic_repair', 'fixed_point', 'propose_and_verify',
-                                    'branch_and_select'})
+                                    'branch_and_select', 'semantic_map', 'semantic_filter', 'semantic_partition',
+                                    'semantic_reduce', 'semantic_match', 'semantic_rank', 'escalate', 'with_context',
+                                    'compile_rule'})
 CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'neuralese_fan_in', 'iterate',
                         'iterate_neuralese', 'folder_reducer', 'decision_readout', 'skills', 'multi_operation_codebase',
                         'effect_state'}) | SEMANTIC_FP_CONSTRUCTS
