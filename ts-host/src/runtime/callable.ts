@@ -1,3 +1,4 @@
+import {invokeNativeEntry} from './native-entry.js';
 /**
  * Natlang callable objects. One builder turns a record tree into callables for host code and for
  * eval alike: `.nl` items are asynchronous functions invoked through the kernel; TypeScript modules
@@ -225,7 +226,7 @@ function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bo
       const target = exports[exportName];
       if (typeof target !== 'function')throw new TypeError(
         `Module ${record.source} has no callable ${exportName} export`);
-      return target(...args);
+      return invokeNativeEntry(record,exportName,args,()=>target(...args));
     };
     const value = instance();
     const result = value instanceof Promise ? value.then(invokeExport) : invokeExport(value);

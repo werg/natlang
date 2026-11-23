@@ -1,3 +1,4 @@
+import {invokeNativeEntry} from './native-entry.js';
 /**
  * Compile and execute a project held in memory (browser playground, Studio workers, tests).
  * The project compiles to CommonJS and runs through a small module loader in this realm, so it
@@ -5,7 +6,7 @@
  */
 import { compileProject, type BuildResult, type ProjectFiles } from '../compiler/project.js';
 import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
-import { loadCallableFolder, loadNamedFunction, type SourceFiles } from './loader.js';
+import { loadCallableFolder, loadNamedFunction, parseModule, type SourceFiles } from './loader.js';
 import { joinSourcePath } from './source-path.js';
 import { callableTree, namedCallable, type NatlangCallable } from './callable.js';
 import { builtinModule, hasBuiltinModule, moduleTarget, platformModuleRealm } from './modules.js';
@@ -130,9 +131,29 @@ export function compileVirtualProject(project: VirtualProject, runtime: Record<s
     platformModuleRealm(platform).evaluateModule(text, { exports: module.exports, require, module });
     return module.exports;
   };
+  const exported = new Map<string,Record<string,unknown>>();
   return { ...result, require: (path: string) => {
     const absolute = path.startsWith('/') ? path : `${root}/${path}`;
     const emitted = `${root}/.natlang/build/${absolute.slice(root.length + 1)}`.replace(/\.m?ts$/, '.js');
-    return load(emitted);
+    const prior=exported.get(absolute);if(prior)return prior;
+    const raw=load(emitted),source=project.files[absolute]??project.files[absolute.slice(root.length+1)];
+    if(source===undefined)return raw;
+    const record=parseModule(absolute,source,{},virtualSourceFiles(project.files,root),{compiled:true});
+    const bound=Object.create(Object.getPrototypeOf(raw)),wrappers=new Map<string,WeakMap<Function,Function>>();
+    const wrap=(key:string,value:unknown)=>{
+      if(typeof value!=='function')return value;
+      let cache=wrappers.get(key);if(!cache){cache=new WeakMap();wrappers.set(key,cache);}
+      let wrapped=cache.get(value);if(!wrapped){wrapped=new Proxy(value,{apply(fn,thisArg,args){return invokeNativeEntry(record,key,args,()=>Reflect.apply(fn,thisArg,args));}});cache.set(value,wrapped);}
+      return wrapped;
+    };
+    for(const key of Reflect.ownKeys(raw)){
+      const descriptor=Object.getOwnPropertyDescriptor(raw,key)!;
+      if(typeof key==='string'){
+        if('value' in descriptor)descriptor.value=wrap(key,descriptor.value);
+        else if(descriptor.get){const get=descriptor.get;descriptor.get=function(){return wrap(key,Reflect.apply(get,this,[]));};}
+      }
+      Object.defineProperty(bound,key,descriptor);
+    }
+    exported.set(absolute,bound);return bound;
   } };
 }
