@@ -1,0 +1,499 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "vibestudio-natlang-vibestudio-full-luna-campaign-yci2lb1n-0032",
+  "owner": "dgx",
+  "path": "data_hdd:natlang-vibestudio-full-luna-campaign-yci2LB1N/0032",
+  "files": [
+    {
+      "path": "capture/cases/open-goal-adventure-journey-letter-in-hand/source.json",
+      "bytes": 1385,
+      "sha256": "0121b73b54da0755b10c951cc37e2f6bc985229d95ed703e23fd437fc15687dd"
+    },
+    {
+      "path": "capture/cases/open-goal-adventure-journey-letter-in-hand/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-adventure-journey-letter-in-hand-full.json.gz",
+      "bytes": 698754,
+      "sha256": "6116e9d3c41d5b53d7908ffc3de731cf87bc89434a4b3a644a78466c1cf7eed6"
+    },
+    {
+      "path": "capture/cases/open-goal-api-readiness-required-inventory-optional-status/source.json",
+      "bytes": 1385,
+      "sha256": "71d5bec7bcf536bf4df422aeb302bb62fb87edd3911e98459deeaf0de0c8b2e1"
+    },
+    {
+      "path": "capture/cases/open-goal-api-readiness-required-inventory-optional-status/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-api-readiness-required-inventory-optional-status-full.json.gz",
+      "bytes": 1902310,
+      "sha256": "af6b37a4bc1a48632bf6ba4ed0bba766b6af677e8b85b74c32f4fcc002b9c941"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/source.json",
+      "bytes": 1385,
+      "sha256": "bb5ebfc698b8c6e76638e6daf11a35b5981cced8dae5f0df9aea5ad077e972b6"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-asset-integrity-deleted-legal-fixture-full.json.gz",
+      "bytes": 1531456,
+      "sha256": "27269b505ed076f07118dd3260d63a1e40d85fd61010d5955f8fa0089010b558"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-0.json",
+      "bytes": 268892,
+      "sha256": "bd6ecd92d486d848baf89cea31a0042f5c52ecc3afecada31cee1389c7e1c1a0"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-1.json",
+      "bytes": 565262,
+      "sha256": "62783fe8be487d17bf48d28edce8eb3a56315a3248ed4e616d6db6d187b23157"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-10.json",
+      "bytes": 264801,
+      "sha256": "eae354aec1769dad9bb10ad6c742c1b32da6ebf676bac3a978cb6eab215d49fd"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-11.json",
+      "bytes": 259273,
+      "sha256": "c6aed9745667b239fe26a2e58b51cafa1fd916b339a36ec607e0cd15ca7d8bf7"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-12.json",
+      "bytes": 319861,
+      "sha256": "9499dd457e8784d627001b4819521169b7e2f575648ace7edb798dbb5abbe931"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-13.json",
+      "bytes": 269822,
+      "sha256": "92bdac91ac9787c87adf24933985875a77da60f2d1aa8a580bf76345064d54f6"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-14.json",
+      "bytes": 264901,
+      "sha256": "14fc78914a37c1457112a1c2c59c20a830db39da21550b1dd9e81a853ac6db88"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-15.json",
+      "bytes": 264828,
+      "sha256": "4fe1f3dd2688f4cf0a9de4a6b16181b94d2b54ef55e2c5705a32ef35950e37a3"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-16.json",
+      "bytes": 259269,
+      "sha256": "cda36ad8a93e442051a179827d91d086762fcd207375f3cd8f513b6caf31095f"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-17.json",
+      "bytes": 320293,
+      "sha256": "2d2e5e1db34a73f2424c8b306899180a6ba63278a23df2c8365a9ced48c33dd4"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-18.json",
+      "bytes": 256595,
+      "sha256": "d95c154e1e5be965408fd91c661e09463409bc2d4f65e9870318e4116948cd23"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-19.json",
+      "bytes": 1565067,
+      "sha256": "0048a3caa0c4014c85bbb4806a0ce2d770b40e558f519535f589c332c13faa13"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-2.json",
+      "bytes": 327890,
+      "sha256": "4de150d23ae2178ea265d0277d9ad3c7fbb05f5f0f1e7398e01edd183767db9f"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-3.json",
+      "bytes": 326053,
+      "sha256": "fd1d4c8b31c2cf5d402b722a3dcfd6c02c0b8c56eb086b92614560ffbdf1518b"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-4.json",
+      "bytes": 271438,
+      "sha256": "3a1fddcd60b16081b0872abeae306630136a1c063bd4702eaaca87702e2c8365"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-5.json",
+      "bytes": 266730,
+      "sha256": "e2fa6679d6569c8df64cd6e933e287c147708ef0559d8b605030910f412ffe01"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-6.json",
+      "bytes": 258655,
+      "sha256": "342e0ad11f74226131ce0a662175f7924381f790fdd393dd7ae59e8cf94575b5"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-7.json",
+      "bytes": 313629,
+      "sha256": "e084474546995aa282ee1d6662639b86ff74621e4485f0bd3602d5953f8736a1"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-8.json",
+      "bytes": 269802,
+      "sha256": "0569a27430db7f974ef461e45d89a62ea01e5f1b16693d707f11fc05004a8fb0"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/call-9.json",
+      "bytes": 264862,
+      "sha256": "3b96efc52d100ce35ccbf52affcf25db35473b2169ba80069c1cb14f8fa157d6"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/manifest.json",
+      "bytes": 4969,
+      "sha256": "fae8599a43a2c6d4f5f02c8ededbc39e70432ba4dadf3a39ff089ad894dca7e5"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/open-goal-asset-integrity-managed.ts",
+      "bytes": 27776,
+      "sha256": "dbdda7684df1368e82443a5995ffb336c2f31e8e982095be32f5d7a50d2d3f85"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/verification.json",
+      "bytes": 7080,
+      "sha256": "c4e3693d4aaed5a2be31737c6014acc93386dbb6e4a731f5ae7f3f164d6a3037"
+    },
+    {
+      "path": "capture/cases/open-goal-asset-integrity-deleted-legal-fixture/verified/workspace.json",
+      "bytes": 21073,
+      "sha256": "6fb379695d0e34b4a3ec3772fc6e53f2def43fdb0e33ba3c44f6ba2a3e6743b4"
+    },
+    {
+      "path": "capture/cases/open-goal-eval-handoff-night-dispatch-committed-despite-error/source.json",
+      "bytes": 1385,
+      "sha256": "fefd27d851476c06c1319aad80c6f9fd4ead1e7d436cc3f60a472837e72b8f1e"
+    },
+    {
+      "path": "capture/cases/open-goal-eval-handoff-night-dispatch-committed-despite-error/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-eval-handoff-night-dispatch-committed-despite-error-full.json.gz",
+      "bytes": 1330332,
+      "sha256": "3c66c799bb3024ef2812b53d7327022c197c25257a3b5901cfefc3108fa62e67"
+    },
+    {
+      "path": "capture/cases/open-goal-find-pending-captions/source.json",
+      "bytes": 1385,
+      "sha256": "7ed98f0279db44063cc772c52a357858886f349956fcba09a158ff90820973de"
+    },
+    {
+      "path": "capture/cases/open-goal-find-pending-captions/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-find-pending-captions-full.json.gz",
+      "bytes": 153999,
+      "sha256": "c28bf2aea6ba8353e989e3f3bec994205a4f6bda518a6f73609ad77abf086aef"
+    },
+    {
+      "path": "capture/cases/open-goal-find-pending-captions/verified/call-0.json",
+      "bytes": 261570,
+      "sha256": "14b4a851bd3b780440ee637a2aeaf75101aefeef22b2e9a654d36a04ec053dfd"
+    },
+    {
+      "path": "capture/cases/open-goal-find-pending-captions/verified/call-1.json",
+      "bytes": 394736,
+      "sha256": "2759087b2f5bea7aeaae69da923d905c82ace462fbb850455c489ab87fc01ea4"
+    },
+    {
+      "path": "capture/cases/open-goal-find-pending-captions/verified/cdp.json",
+      "bytes": 5068,
+      "sha256": "1be5322ac79b68f1504899671df5750c982ed28e1f5f1af77d08fb5ccb866d37"
+    },
+    {
+      "path": "capture/cases/open-goal-find-pending-captions/verified/manifest.json",
+      "bytes": 2534,
+      "sha256": "1ce4612a9b5b9d7893fc8ec48c2aa87f0735c1378fb92a9fed54c9c43d43ee09"
+    },
+    {
+      "path": "capture/cases/open-goal-find-pending-captions/verified/open-goal-browser-managed.ts",
+      "bytes": 9294,
+      "sha256": "36fa6705eb6d385176a04a9036a84d412bb53deaf01c2c7f60ec0d7f921e0c7d"
+    },
+    {
+      "path": "capture/cases/open-goal-find-pending-captions/verified/verification.json",
+      "bytes": 2525,
+      "sha256": "7cc0c2d7dbe7f25a4e401a98d0e74656e4d8f59cf0ea4fb1d7088e35c537612a"
+    },
+    {
+      "path": "capture/cases/open-goal-find-pending-captions/verified/workspace.json",
+      "bytes": 7868,
+      "sha256": "0b38a22a1ccf8ed0bc4d32d4d00019540ddf6384f8277d016abd12e846f97c1e"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/source.json",
+      "bytes": 1385,
+      "sha256": "7ed98f0279db44063cc772c52a357858886f349956fcba09a158ff90820973de"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-route-temperature-flagged-shipment-full.json.gz",
+      "bytes": 588315,
+      "sha256": "3573ae5ca450121b77ccc408a609388b7eef69328272fe736929ea90be058cf7"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-0.json",
+      "bytes": 110216,
+      "sha256": "19bcd9f43b24958ecdca908b881d4ef972718aa8e93197847e81687bda18d5f7"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-1.json",
+      "bytes": 109742,
+      "sha256": "8dd7e8820983c14f3672814a5d66f21637013251341b101ee486adc39dbb188b"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-10.json",
+      "bytes": 106776,
+      "sha256": "437be35cdbeb7e1e05e0b8fe7ded4306f8787efb13e7e198c02e20e4d4e2a81b"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-11.json",
+      "bytes": 111308,
+      "sha256": "44bc2d77c405856d965cfb9016945b1ce94c82d7041ce74c6cc7bf21f9477133"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-12.json",
+      "bytes": 103478,
+      "sha256": "dd6f2dfa96c4d2bcab3ddf145db3865e787e33a3ba08a720f11adc7eae7ef4d5"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-13.json",
+      "bytes": 104782,
+      "sha256": "2c13a3ef72a464f3ddbeb5d4e06bd5d2e1e39e1bf09042668c76a98db1642056"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-14.json",
+      "bytes": 105116,
+      "sha256": "9c11114b9d78b0d15a04ecb1215634546717609ba322ee3eddb886c12e6b9f03"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-15.json",
+      "bytes": 103248,
+      "sha256": "ff9f39a73eec2172afd6a4be3ff2f35eb6b06b45b1bc5939e8a7b848ed499f8e"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-16.json",
+      "bytes": 593404,
+      "sha256": "63484de7a767341c573abbfe4e999a73ed4de488f32e1dae7566fe6fc0c707f6"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-17.json",
+      "bytes": 117792,
+      "sha256": "5f8bc741fc7c66fccf35e9babe73085eb7061bf01e8f900f7884c81e410f03e9"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-18.json",
+      "bytes": 266312,
+      "sha256": "386d4bb04e76c51fa383ea089ce52f6ed4386232b995895307b1555772f7e65e"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-19.json",
+      "bytes": 532381,
+      "sha256": "3f778217ac41f74e654dc488f103417c90e1d17a29856aa91db28738d63a9ac0"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-2.json",
+      "bytes": 104869,
+      "sha256": "3de492aa5b17998f59eb608e84c3037ff6126b31a37ee7b181aabdb09f98761c"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-3.json",
+      "bytes": 110863,
+      "sha256": "adc7e255026cf6331b7c536305d0f21667b9df5820b563cdeb10818154bad024"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-4.json",
+      "bytes": 100288,
+      "sha256": "a1c8c8287e4da3df898382992edd02298b4dd5ca3768b4ab2b337742974090f9"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-5.json",
+      "bytes": 102433,
+      "sha256": "bb9731ddf3568ed6224a3cf061eeeedb12ad7b2ffce7213bfad343149c440b45"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-6.json",
+      "bytes": 109488,
+      "sha256": "2f00cad972dc5d5da04a7389f67ff75a3db2ede339032f52da75dac6d2773b7c"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-7.json",
+      "bytes": 105637,
+      "sha256": "6dc16ad0c094abe356795c2218c168a88b4fd4101acd7a805c6d826e80695155"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-8.json",
+      "bytes": 105383,
+      "sha256": "49f9faad1dd90129eba5be1baa5eb3cdaf69a6dc301a85ab51d40353ae2878e6"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/call-9.json",
+      "bytes": 106961,
+      "sha256": "2aae28f6afef4fcc39d51b4fbef0d24e231fe2a90bfeea4c3d2f1799212f8c71"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/cdp.json",
+      "bytes": 7060,
+      "sha256": "e175d27dab634f5fbd0c25e76c42178b6e1038fca2bef8447dd08a8366fb0796"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/manifest.json",
+      "bytes": 4873,
+      "sha256": "1c084c44b9e96bd7382730a9375a1adcb6d4b2f67a24fc40767f87190c5e0cfd"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/open-goal-browser-managed.ts",
+      "bytes": 9294,
+      "sha256": "36fa6705eb6d385176a04a9036a84d412bb53deaf01c2c7f60ec0d7f921e0c7d"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/verification.json",
+      "bytes": 7137,
+      "sha256": "41cbf23262795f87583edafccd4bb52dc5ef4d29cc2b96e37bf5f9e9632447fc"
+    },
+    {
+      "path": "capture/cases/open-goal-route-temperature-flagged-shipment/verified/workspace.json",
+      "bytes": 9870,
+      "sha256": "52cb3148506ecae6b4286b7d0a82dc262422d31b1bbb37a2c6074aa154fe6091"
+    },
+    {
+      "path": "capture/cases/open-goal-skill-maintenance-board-priorities-typed-batch/source.json",
+      "bytes": 1385,
+      "sha256": "23c1e08d30e51b126bc7d57e59e619ff9fa7038ed2b9f3c11db8ef25a7995787"
+    },
+    {
+      "path": "capture/cases/open-goal-skill-maintenance-board-priorities-typed-batch/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-skill-maintenance-board-priorities-typed-batch-full.json.gz",
+      "bytes": 1201120,
+      "sha256": "9a8c4e4f3186e41609f0a150b56af02a9c592141366240fe9fc007ce9e4d5d71"
+    },
+    {
+      "path": "capture/cases/open-goal-tendril-route-capture-supply-label/source.json",
+      "bytes": 1385,
+      "sha256": "41d1e43c558bbe831d851b437e24bded9823def29be8cc86097ae69e06537486"
+    },
+    {
+      "path": "capture/cases/open-goal-tendril-route-capture-supply-label/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-tendril-route-capture-supply-label-full.json.gz",
+      "bytes": 1579533,
+      "sha256": "47b13140779a1ad8bbdc04068dbd42ffd79bd844b1a68993dc8c595d5f86e21d"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/inspect-open-goal-adventure-journey-letter-in-hand.json",
+      "bytes": 3420,
+      "sha256": "35e54d462b59630e1b88599b46b1d286d94c586a1330c64881f7c466f6f95b97"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/inspect-open-goal-api-readiness-required-inventory-optional-status.json",
+      "bytes": 3466,
+      "sha256": "d5f76ca739a4546d1f5e51c0196583bc291688dacd71a2637cdffb36444a20fb"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/inspect-open-goal-eval-handoff-night-dispatch-committed-despite-error.json",
+      "bytes": 3523,
+      "sha256": "9500e4fb59f96c8037443be5d3b09faa8b311466417c70a4efca282f85d26bc9"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/inspect-open-goal-skill-maintenance-board-priorities-typed-batch.json",
+      "bytes": 3522,
+      "sha256": "68659aa9aaed0165deff10b8261a677197e651d63ee3b3ea0ee1a782f1777887"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/inspect-open-goal-tendril-route-capture-supply-label.json",
+      "bytes": 3400,
+      "sha256": "994de22e27e99b93ab422383ba48d6c3ea4e190f44cd1927c9ba9b7564defb12"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/inspect.json",
+      "bytes": 14817,
+      "sha256": "1585039ced59eef7f08a724aebdff733469d49657f0b91ff83b3c19c5b85d3e4"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-adventure-journey-letter-in-hand-full.json.gz",
+      "bytes": 698754,
+      "sha256": "6116e9d3c41d5b53d7908ffc3de731cf87bc89434a4b3a644a78466c1cf7eed6"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-adventure-journey-letter-in-hand.json",
+      "bytes": 3420,
+      "sha256": "35e54d462b59630e1b88599b46b1d286d94c586a1330c64881f7c466f6f95b97"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-api-readiness-required-inventory-optional-status-full.json.gz",
+      "bytes": 1902310,
+      "sha256": "af6b37a4bc1a48632bf6ba4ed0bba766b6af677e8b85b74c32f4fcc002b9c941"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-api-readiness-required-inventory-optional-status.json",
+      "bytes": 3466,
+      "sha256": "d5f76ca739a4546d1f5e51c0196583bc291688dacd71a2637cdffb36444a20fb"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-eval-handoff-night-dispatch-committed-despite-error-full.json.gz",
+      "bytes": 1330332,
+      "sha256": "3c66c799bb3024ef2812b53d7327022c197c25257a3b5901cfefc3108fa62e67"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-eval-handoff-night-dispatch-committed-despite-error.json",
+      "bytes": 3523,
+      "sha256": "9500e4fb59f96c8037443be5d3b09faa8b311466417c70a4efca282f85d26bc9"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-skill-maintenance-board-priorities-typed-batch-full.json.gz",
+      "bytes": 1201120,
+      "sha256": "9a8c4e4f3186e41609f0a150b56af02a9c592141366240fe9fc007ce9e4d5d71"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-skill-maintenance-board-priorities-typed-batch.json",
+      "bytes": 3522,
+      "sha256": "68659aa9aaed0165deff10b8261a677197e651d63ee3b3ea0ee1a782f1777887"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-tendril-route-capture-supply-label-full.json.gz",
+      "bytes": 1579533,
+      "sha256": "47b13140779a1ad8bbdc04068dbd42ffd79bd844b1a68993dc8c595d5f86e21d"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/failure-evidence/trajectory-open-goal-tendril-route-capture-supply-label.json",
+      "bytes": 3400,
+      "sha256": "994de22e27e99b93ab422383ba48d6c3ea4e190f44cd1927c9ba9b7564defb12"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/run.json",
+      "bytes": 1525,
+      "sha256": "fae4a5d45dc6ee0d6459e73e2db27bc6775ac077ca6f4644125c918cb61db7f1"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/summary.json",
+      "bytes": 623,
+      "sha256": "bead154407f5c8f4c27934c8dbaf657b6a55a51697d443847588c7905632ebca"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-asset-integrity-deleted-legal-fixture-full.json.gz",
+      "bytes": 1531456,
+      "sha256": "27269b505ed076f07118dd3260d63a1e40d85fd61010d5955f8fa0089010b558"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-find-pending-captions-full.json.gz",
+      "bytes": 153999,
+      "sha256": "c28bf2aea6ba8353e989e3f3bec994205a4f6bda518a6f73609ad77abf086aef"
+    },
+    {
+      "path": "capture/managed-IALGkq/st_9a116305e7a3475fabba2a8061447c24/trajectory-open-goal-route-temperature-flagged-shipment-full.json.gz",
+      "bytes": 588315,
+      "sha256": "3573ae5ca450121b77ccc408a609388b7eef69328272fe736929ea90be058cf7"
+    },
+    {
+      "path": "capture/source.json",
+      "bytes": 1751,
+      "sha256": "bbf275e0765dfe63f36e8cdd92a7954510ea414bdfef7e9c26a03869c3ab434d"
+    },
+    {
+      "path": "graph-metrics.json",
+      "bytes": 69019,
+      "sha256": "5a5f27efcffeb3287374c5995c4039e84495b3a7446aa86c3497e2814e418ed5"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2540,
+      "sha256": "cf7cb340f4cf71a6c54243140ddbd5944c853e9b75f85cd2bade50724d3e5de1"
+    },
+    {
+      "path": "trajectory.native.jsonl.zst",
+      "bytes": 122337,
+      "sha256": "c9aacd283ba3f7d442aecec4c737c29840eca0d941f4507cc7cea848dfe150b6"
+    },
+    {
+      "path": "wave.json",
+      "bytes": 4673,
+      "sha256": "4011737740966d6c4a7790b5e43af2a65164412cbf32150b5d7dd7cb5877afd3"
+    }
+  ],
+  "bytes": 29405792
+}
