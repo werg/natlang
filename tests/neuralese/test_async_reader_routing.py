@@ -83,7 +83,7 @@ def test_resume_does_not_overwrite_an_active_data_plan(tmp_path,monkeypatch):
     runs=d.collect_dir(d.controller.current);runs.mkdir(parents=True)
     (runs/'runs.jsonl').write_text(json.dumps({'started':0})+'\n')
     monkeypatch.setattr(ei,'record_collection',lambda *a,**kw:None)
-    monkeypatch.setattr(d,'collections_of',lambda policies:[])
+    monkeypatch.setattr(d,'collections_of',lambda policies:[runs])
     monkeypatch.setattr(d,'prepare_plan',lambda *args:(['frontier'],[['new-reader']],['new-build']))
     monkeypatch.setattr(d.c,'present',lambda unit:unit=='aei-r0001-data')
     monkeypatch.setattr(d.c,'work_tokenizer',lambda:None)
