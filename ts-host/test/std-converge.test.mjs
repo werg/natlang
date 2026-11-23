@@ -72,8 +72,8 @@ test('semanticRepair with an inline nl fix: the problems reach the model as the 
 
 test('fixedPoint: the shipped settled judgment ends the loop without a step bound; an exact settled test needs maxSteps', async () => {
   // settled.nl: the first revision still changed the text, the second only reworded it.
-  let judgments = 0;
-  const local = localModel(() => null, () => ++judgments === 1 ? [0.1, 0.9] : [0.9, 0.1]);
+  // Keyed on the judged values, not on call order: a reasoned readout scores its options once per reasoning sample.
+  const local = localModel(() => null, (options, prompt) => /draft two\./.test(prompt) ? [0.9, 0.1] : [0.1, 0.9]);
   const traces = [];
   const runtime = createNatlangRuntime({ model: local.driver, trace: trace => traces.push(trace) });
   const steps = ['draft', 'draft two', 'draft two.'];
