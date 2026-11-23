@@ -51,9 +51,19 @@ test('lambda construction keeps typed parameters, instructions, and a record cod
   assert.throws(() => buildPending({ $lambda: { type: '() => number', code: 'return 1;' } }), Reject);
 });
 
-test('function-typed slots hold live functions and live values dump by identity', () => {
-  const fn = () => 1;
-  assert.equal(coerce(fn, parseType('(x: number) => number'), new TypeEnv()), fn);
+// B9 (d4fd14edf, DECISIONS 2026-11-23 "Higher-order semantic functions"): a plain function at a function-typed slot is
+// wrapped, once per function and slot type, so each call checks its arguments and awaited result; `functions: 'keep'`
+// (an eval's own annotated locals) keeps it unwrapped.
+test('function-typed slots hold checked live functions and live values dump by identity', async () => {
+  const fn = x => x * 2;
+  const type = parseType('(x: number) => number');
+  const checked = coerce(fn, type, new TypeEnv());
+  assert.notEqual(checked, fn);
+  assert.equal(coerce(fn, type, new TypeEnv()), checked, 'one wrapper per function and slot type');
+  assert.equal(coerce(checked, type, new TypeEnv()), checked, 'a checked function fits its own slot unchanged');
+  assert.equal(await checked(3), 6);
+  await assert.rejects(async () => checked('3'), Reject);
+  assert.equal(coerce(fn, type, new TypeEnv(), '', { functions: 'keep' }), fn);
   assert.throws(() => coerce({ $lambda: {} }, parseType('() => number'), new TypeEnv()), Reject);
   const when = new Date(0);
   assert.equal(coerce(when, parseType('Date'), new TypeEnv()), when);

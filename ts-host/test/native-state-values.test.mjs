@@ -585,8 +585,14 @@ test('a child producer scope follows its actual parent without sharing episode b
   await agent.modelTurnNode(parent,[{role:'user',content:[part]}],{},1);
   const read=parent.runtime.trace.events.find(event=>event.kind==='block_read');
   assert.equal(read.inputs[0].node,writer);
+  // B16 (49c7f84f0, DECISIONS 2026-11-23 "natlang:learning conformance"): a writer outside this task's record reads
+  // as `external`, as blockInput binds it; it is refused only where the task has its own writers of that state.
   const unrelated=open({type:'() => boolean',instructions:'A different task.'},{neuralese:runtimeFor(store)}).session;
-  await assert.rejects(()=>agent.modelTurnNode(unrelated,[{role:'user',content:[part]}],{},1),
+  await agent.modelTurnNode(unrelated,[{role:'user',content:[part]}],{},1);
+  const detached=unrelated.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.equal(detached.inputs[0].node,'external','another task does not borrow the child writer');
+  graphNode(unrelated.runtime.trace,'block_write',{block:artifact.id,call_id:'unrelated'},[]);
+  await assert.rejects(()=>agent.modelTurnNode(unrelated,[{role:'user',content:[part]}],{},2),
     /names no matching in-episode writer/);
 });
 
@@ -657,7 +663,7 @@ test('captured prompt reconciles existing native reads and rejects unexplained g
   /request graph contains native reads absent from the captured model prompt/);
 });
 
-test('captured-only native reads bind a unique in-episode writer and reject an unknown declared writer', async () => {
+test('captured-only native reads bind a unique in-episode writer; an unknown declared writer is external, or refused beside a local writer', async () => {
   const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
   const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
   const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
@@ -669,9 +675,13 @@ test('captured-only native reads bind a unique in-episode writer and reject an u
   assert.equal(read.inputs[0].node,writer);
   const second = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
   const secondAgent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
-  await assert.rejects(()=>secondAgent.modelTurnNode(second,[],{
-    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id,source_occurrence:'missing#writer'}],writes:[]}},
-    text:'',calls:[]},1), /names no matching in-episode writer/);
+  const missing = {raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id,source_occurrence:'missing#writer'}],writes:[]}},
+    text:'',calls:[]};
+  // B16 (49c7f84f0): a declared writer outside this record (an earlier task, a context item) reads as external.
+  await secondAgent.modelTurnNode(second,[],missing,1);
+  assert.equal(second.runtime.trace.events.find(event=>event.kind==='block_read').inputs[0].node,'external');
+  graphNode(second.runtime.trace,'block_write',{call_id:'local',turn:'local#turn1',block:artifact.id},[],'local#write1');
+  await assert.rejects(()=>secondAgent.modelTurnNode(second,[],missing,2), /names no matching in-episode writer/);
 });
 
 test('graph inputs reject ambiguous active-episode native writers unless the exact occurrence is supplied', async t => {
@@ -718,7 +728,7 @@ test('inference reads resolve sibling writers from the task scope without a lear
     /multiple in-episode writers and no occurrence binding/);
 });
 
-test('captured native reads retain the exact completed sibling writer and reject a prior execution writer', async (t) => {
+test('captured native reads retain the exact completed sibling writer and read a prior execution writer as external', async (t) => {
   const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture('sibling-occurrence'));
   const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
   const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
@@ -746,9 +756,11 @@ test('captured native reads retain the exact completed sibling writer and reject
   const next = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store),
     runId:invocation.runtime.options.runId}).session;
   const nextAgent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
-  await assert.rejects(()=>nextAgent.modelTurnNode(next,[],{
+  // B16 (49c7f84f0): the released prior execution's writer is outside this record, so the read is external.
+  await nextAgent.modelTurnNode(next,[],{
     raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id,source_occurrence:firstWriter}],writes:[]}},
-    text:'',calls:[]},1), /names no matching in-episode writer/);
+    text:'',calls:[]},1);
+  assert.equal(next.runtime.trace.events.find(event=>event.kind==='block_read').inputs[0].node,'external');
 
   const conflictTrace = new NativeTraceRecorder({run_id:`${root}/conflict`});
   registerTrace(`${root}/conflict`, conflictTrace, invocation.runtime.episodeBudget);
