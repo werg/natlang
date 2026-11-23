@@ -1,7 +1,9 @@
 import {readFileSync,mkdirSync,writeFileSync,readdirSync,existsSync,statSync} from 'node:fs';
 import {resolve,join,dirname} from 'node:path';
 import {Folder} from '../native/scoped-fs.js';
-import {buildDirectoryCasePack,improveDirectory,improveProgram,type DirectoryProposal} from '../improvement/program.js';
+import {buildDirectoryCasePack,evaluateDirectorySplitWithModel,improveDirectory,improveProgram,protectedProgramPaths,type DirectoryProposal} from '../improvement/program.js';
+import {proposeFromRuns,type FunctionDecision} from '../improvement/propose-from-runs.js';
+import {createNatlangRuntime} from '../runtime/node.js';
 import {SourceEvaluator} from '../improvement/host.js';
 import {adoptSource,rollbackSource,recoverAdoption,type SourceManifest,type AdoptionRecord} from '../improvement/adoption.js';
 import {adoptCall,type AdoptionVerdict} from '../improvement/adopt-call.js';
@@ -131,9 +133,12 @@ async function adoptCallCommand(rest:string[],option:(name:string,fallback?:stri
 }
 
 /**
- * `natlang improve DIR --proposal FILE [--model MODEL] [--store DIR] [--seed N] [--record FILE] [--dry-run] [--json]` (WS8 N4):
- * builds the deterministic support/dev/confirmation case pack from `<DIR>/examples.json` + recorded calls in CallStore,
- * verifies a proposed change set through a temp-copy check + split evaluation transaction, and installs via adoptSource.
+ * `natlang improve DIR [--proposal FILE] [--model MODEL] [--store DIR] [--seed N] [--max-functions N] [--record FILE] [--dry-run] [--json]`
+ * (WS8 N4): builds the deterministic support/dev/confirmation case pack from `<DIR>/examples.json` + recorded calls in
+ * the CallStore. Without --proposal, the natural-language improver (propose-from-runs.ts) reads the program's recorded
+ * failures, escalations, repairs and feedback plus the support examples it answers wrongly, and proposes a change set
+ * on MODEL. Either change set is verified through a temp-copy check + split evaluation transaction and installed via
+ * adoptSource.
  */
 async function improveDirectoryCommand(directory:string,option:(name:string,fallback?:string)=>string|undefined,flags:string[]):Promise<number>{
  const json=flags.includes('--json'),dryRun=flags.includes('--dry-run');
@@ -147,7 +152,8 @@ async function improveDirectoryCommand(directory:string,option:(name:string,fall
  const provider=option('--provider'),model=option('--model'),server=option('--server','http://127.0.0.1:8081');
  const backend=provider&&model?createPiModelBackend(provider,model):undefined;
  try{
-  if(!proposalPath&&dryRun){
+  // --dry-run without a change set or a model to propose one: show the case splits the gate would use.
+  if(!proposalPath&&!model&&dryRun){
    const casePack=buildDirectoryCasePack(directory,{store,seed});
    const checked=buildProject({project:directory,write:false,emit:false,writeDeclarations:false});
    const report={directory,seed,ok:checked.ok,diagnostics:checked.diagnostics.filter(row=>row.severity==='error').map(row=>row.message),
@@ -163,16 +169,31 @@ async function improveDirectoryCommand(directory:string,option:(name:string,fall
     {files:raw.files as Record<string,string|null>,...(typeof raw.summary==='string'?{summary:raw.summary}:{})}:
     {files:raw as Record<string,string|null>};
   }
-  if(!proposal)throw Error('natlang improve DIR checks and adopts a change set it is given: pass --proposal FILE ({ "files": { "PATH": "new text" or null } }) '+
-   '(with --model MODEL to run the case splits), or --dry-run alone to see the splits; to have the improver propose changes, use natlang improve init DIR and natlang improve CASE.json --out OUT');
+  if(!proposal&&!model)throw Error('natlang improve DIR proposes a change from the program\'s recorded runs on a model: pass --model MODEL '+
+   '(with --server URL or --provider ID), or --proposal FILE ({ "files": { "PATH": "new text" or null } }) to check and adopt a change set you wrote');
+  const maxRaw=option('--max-functions','3')!,maxFunctions=Number(maxRaw);
+  if(!Number.isSafeInteger(maxFunctions)||maxFunctions<1)throw Error(`--max-functions must be a positive whole number, got ${maxRaw}`);
   await backend?.prepare();
   const driver=model?(backend?(request:ModelTurnRequest,signal?:AbortSignal,options?:ModelTurnOptions)=>backend.turn(request,signal,options):openAICompatibleModelTurn({endpoint:server!,model})):undefined;
-  const result=await improveDirectory({directory,store,seed,proposal,model:driver,recordPath,dryRun});
+  let decisions:FunctionDecision[]=[];
+  const propose=proposal?undefined:async(context:Parameters<NonNullable<Parameters<typeof improveDirectory>[0]['propose']>>[0])=>{
+   // The improver's calls are ordinary recorded calls (training data for its stages), on the same model.
+   const runtime=createNatlangRuntime({model:driver!});
+   const proposed=await runtime.run(()=>proposeFromRuns(context,{store:store as never,maxFunctions,protectedPaths:protectedProgramPaths(directory),
+    evaluateSupport:cases=>evaluateDirectorySplitWithModel(directory,cases,driver!)}));
+   decisions=proposed?.decisions??[];
+   return proposed;
+  };
+  const result=await improveDirectory({directory,store,seed,...(proposal?{proposal}:{propose}),model:driver,recordPath,dryRun});
   if(json){
    console.log(JSON.stringify({status:result.status,directory:result.directory,changed:result.changed,reasons:result.reasons,summary:result.summary??null,
     splits:{support:result.casePack.splits.support.length,dev:result.casePack.splits.dev.length,confirmation:result.casePack.splits.confirmation.length},
-    sources:result.casePack.sources,check:result.check??null,baseline:result.baseline??null,proposed:result.proposed??null,record:result.recordPath??null},null,2));
-  }else if(result.status==='accepted'){
+    sources:result.casePack.sources,check:result.check??null,baseline:result.baseline??null,proposed:result.proposed??null,record:result.recordPath??null,
+    ...(proposal?{}:{improver:decisions})},null,2));
+   return result.status==='rejected'?1:0;
+  }
+  for(const decision of decisions)console.log(`${decision.path}: ${decision.changed?'revised':decision.problem?`not revised (${decision.problem})`:'left as is'} - ${decision.diagnosis}`);
+  if(result.status==='accepted'){
    console.log(`adopted ${result.changed.join(', ')} into ${result.directory}\nnatlang improve rollback ${JSON.stringify(result.recordPath)} restores the previous source`);
   }else if(result.status==='checked'){
    console.log(`verified ${result.changed.join(', ')} (${result.casePack.cases.length} cases); run without --dry-run to install`);

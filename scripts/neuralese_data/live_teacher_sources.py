@@ -113,6 +113,32 @@ def declared_return_exclusions(proofs, records):
     return excluded
 
 
+def declared_decision_exclusions(proofs, details):
+    """Conservative quality holds bind exact captured call bytes and generation ordinals."""
+    calls = {detail['record']['call_id']: (binding, detail['record']) for binding, detail in details}
+    excluded = {}
+    for proof in proofs:
+        review = proof.get('decisionReview')
+        if review is None:
+            continue
+        if not isinstance(review, dict) or review.get('schema') != 'natlang.live-decision-review/1' or not isinstance(review.get('excluded'), list):
+            raise ValueError('invalid source-bound decision review')
+        for item in review['excluded']:
+            call_id, ordinal = item.get('call_id'), item.get('ordinal')
+            if call_id not in calls or type(ordinal) is not int or ordinal < 0 or not isinstance(item.get('reason'), str) or not item['reason'].strip():
+                raise ValueError('decision review lacks an exact original invocation and reason')
+            binding, record = calls[call_id]
+            turns = record.get('model_turns') or []
+            if (item.get('call_sha256') != binding['sha256'] or
+                    not same_json_value(item.get('definition'), record.get('definition')) or ordinal >= len(turns) or
+                    turns[ordinal].get('kind') != 'generation' or not isinstance(turns[ordinal].get('reply'), dict)):
+                raise ValueError('decision review differs from captured call bytes or generation')
+            if (call_id, ordinal) in excluded:
+                raise ValueError('duplicate source-bound decision review')
+            excluded[call_id, ordinal] = item
+    return excluded
+
+
 def verify_entry(interaction, root, *, partial=False):
     """Bind application inputs to the actual invocation, including historical routers."""
     entry = interaction.get('entry')
@@ -235,6 +261,26 @@ def bound_file(binding, root):
     return path
 
 
+def verify_original_rejection(packet, proof, root):
+    """Keep native failure and a later rejected review as distinct original facts."""
+    passed = packet.get('result', {}).get('passed')
+    bindings = [item for item in proof.get('evidence', []) if item.get('role') == 'original-rejected-review']
+    if not bindings:
+        return passed is False
+    if len(bindings) != 1 or not isinstance(passed, bool):
+        return False
+    review = json.loads(bound_file(bindings[0], root).read_text())
+    observed = packet.get('execution', {}).get('diagnostics', {}).get('openGoalVerification', {})
+    original_input = (observed.get('preparedContentProject') or {}).get('artifact', {}).get('semanticReviewInput') or observed.get('semanticReviewInput')
+    exchanges = [review.get('exchange'), *(review.get('exchanges') or [])]
+    captured_exchange = any(isinstance(item, dict) and isinstance(item.get('request'), dict) and
+                            isinstance(item.get('reply'), dict) for item in exchanges)
+    return (review.get('schema') == 'natlang.live-workflow-review/1' and
+            (review.get('verdict') or {}).get('accepted') is False and
+            isinstance(original_input, dict) and bool(original_input) and same_json_value(review.get('input'), original_input) and
+            captured_exchange)
+
+
 def verify_completed_reassessment(verification, spec, root):
     """Bind a later whole-outcome verdict to immutable original execution and checker evidence."""
     reassessment = verification.get('reassessment')
@@ -271,7 +317,7 @@ def verify_completed_reassessment(verification, spec, root):
     if (assessment.get('completed_outcome', {}).get('sha256') != validator['completed_outcome']['sha256'] or
             not same_json_value(normalize_bindings(proof), normalize_bindings(original_completed))):
         raise ValueError('completed reassessment differs from its bound independent verdict')
-    if (original.get('passed') is not False or not same_json_value(original, packet['result']) or
+    if (not verify_original_rejection(packet, proof, root) or not same_json_value(original, packet['result']) or
             assessment.get('schema') != 'natlang.live-reassessment/1' or
             assessment.get('task_id') != spec['id'] or assessment.get('original_sha256') != hashlib.sha256(packet_bytes).hexdigest() or
             proof.get('schema') != 'natlang.live-outcome-reassessment/1' or proof.get('passed') is not True or
@@ -503,6 +549,7 @@ def load_episode(path):
             current = records[current]['parent_call_id']
         ancestry[call_id] = list(reversed(chain))
     incorrect_returns = declared_return_exclusions(workspace_proofs, records)
+    reviewed_decisions = declared_decision_exclusions(workspace_proofs, details)
     if interaction is not None and incorrect_optional_return:
         for call_id in roots:
             generations = [index for index, exchange in enumerate(records[call_id].get('model_turns') or [])
@@ -566,6 +613,7 @@ def load_episode(path):
             if interaction is not None:
                 denial = ('invocation lacks independent outcome evidence' if training_scope is not None and call_id not in training_scope else
                           'decision lacks independent outcome evidence' if training_scope is not None and training_scope[call_id] is not None and index not in training_scope[call_id] else
+                          'source-bound decision quality review' if (call_id, index) in reviewed_decisions else
                           'application return failed independent outcome checks'
                           if incorrect_returns.get(call_id) == index else
                           'executor did not complete' if not selected_executor else
@@ -616,13 +664,14 @@ def load_episode(path):
                         **({'reassessment': verification['reassessment']} if verification.get('reassessment') else {}),
                         **({'excluded_return_decisions': [{'invocation_id': call_id, 'ordinal': ordinal}
                              for call_id, ordinal in incorrect_returns.items()]} if incorrect_returns else {}),
+                        **({'excluded_review_decisions': list(reviewed_decisions.values())} if reviewed_decisions else {}),
                         **({'training_scope': verification['training_scope']} if training_scope is not None else {}),
                         'graph_metrics': graph_metrics(records.values()),
                         'invocation_ledger': observed_graph(details, ancestry, scopes, exclusions)},
             'trajectory': decisions,
         }
         turns = observed_training_turns(trajectory)
-    if not turns and not (trajectory is not None and (incorrect_optional_return or incorrect_returns)):
+    if not turns and not (trajectory is not None and (incorrect_optional_return or incorrect_returns or reviewed_decisions)):
         raise ValueError('workflow call coverage incomplete or has no generated executor targets')
     return {'key': episode_key, 'source': 'teacher', 'run': str(path),
             'task_id': spec['id'], 'family': spec['family'], 'task': task, 'turns': turns,

@@ -1042,11 +1042,13 @@ def _prepare_remote_rebind_export(*, host, cfg, policy_id, version, export_dir=N
 
 def rebind_actor(*, front_url, policy_id, version, sglang_url=None, weights_sha256=None, tensor_identity=None,
                  export_dir=None, factors_dir=None, base_checkpoint=None, host=None, host_profile='colab',
-                 timeout=600):
+                 timeout=600, checkpoint=None):
     """In-place weight update + 4-route measured attestation of a standing SGLang actor (DGX local or remote G4/Pop).
     Pause (retract) -> ``update_weights_from_disk`` -> ``/v1/neuralese/rebind-policy`` -> ``attest_all_routes`` ->
     ``continue_generation`` (always resumed in ``finally``). When ``host`` and ``factors_dir`` are provided, ships only
-    FP32 LoRA factors and merges + exports on the remote host (async-train §5, §7.1)."""
+    FP32 LoRA factors and merges + exports on the remote host (async-train §5, §7.1). ``checkpoint``: the DGX path of
+    the merged ``policy_id``; a rebound Colab actor's record (``colab-actor-<host>.json``) then names it, so a session
+    the keeper replaces is served again at the policy it was rebound to (``rebound_record``)."""
     from natlang_neuralese.serve.sglang_actor import attest_all_routes
     started = time.time()
     front_url = front_url.rstrip('/')
@@ -1088,8 +1090,28 @@ def rebind_actor(*, front_url, policy_id, version, sglang_url=None, weights_sha2
     result = {'front_url': front_url, 'sglang_url': sglang_url, 'host': host, 'policy_id': policy_id,
               'version': version, 'export_dir': target_dir, 'weights_sha256': weights_sha256,
               'routes_attested': True, 'seconds': round(time.time() - started, 2)}
+    if host and profile_key(host_profile) == 'colab':
+        state_file = colab_state_path(host)
+        record = rebound_record(read_json(state_file), result, checkpoint)
+        if record is not None:
+            write_json(state_file, record)
     log(event='Actor rebound in place', **result)
     return result
+
+
+def rebound_record(record, rebound, checkpoint):
+    """A Colab actor record (``serve_colab``) after an in-place rebind: its policy and serve arguments name the rebound
+    policy (``checkpoint``, its DGX path), so ``restore_colab_actor`` and the session keeper's re-serve after a
+    replacement serve that policy, not the one the actor first loaded. None (the record stays) without a record, without
+    ``checkpoint`` (a rebind that names no DGX checkpoint cannot be served again), or for another front port."""
+    from urllib.parse import urlparse
+    serve = (record or {}).get('serve_args')
+    if not serve or not checkpoint or urlparse(rebound['front_url']).port != int(serve.get('port') or 0):
+        return None
+    return {**record, 'policy_id': rebound['policy_id'],
+            'serve_args': {**serve, 'checkpoint': str(checkpoint), 'policy_id': rebound['policy_id']},
+            'rebound': {k: rebound[k] for k in ('policy_id', 'version', 'export_dir', 'weights_sha256')} |
+                       {'at': time.time(), 'from_policy_id': record.get('policy_id')}}
 
 
 def serve_colab(args):
@@ -1652,6 +1674,8 @@ def main(argv=None):
     rb.add_argument('--host', help='remote SSH host alias (omit for local DGX actor)')
     rb.add_argument('--host-profile', choices=('pop', 'colab', 'colab_g4'), default='colab')
     rb.add_argument('--timeout', type=int, default=600)
+    rb.add_argument('--checkpoint', help="the DGX path of the rebound policy's merged checkpoint: a Colab actor's record "
+                                         'then names it (the session keeper serves it again after a replacement)')
     f = commands.add_parser('prefetch')
     f.add_argument('--checkpoint', required=True)
     f.add_argument('--policy-id', required=True)
@@ -1706,7 +1730,8 @@ def main(argv=None):
             front_url=args.front_url, sglang_url=args.sglang_url, policy_id=args.policy_id, version=args.version,
             weights_sha256=args.weights_sha256, tensor_identity=args.tensor_identity,
             export_dir=args.export_dir, factors_dir=args.factors_dir, base_checkpoint=args.base_checkpoint,
-            host=args.host, host_profile=args.host_profile, timeout=args.timeout)), flush=True)
+            host=args.host, host_profile=args.host_profile, timeout=args.timeout, checkpoint=args.checkpoint)),
+              flush=True)
         return 0
     if args.action == 'prefetch':
         prefetch(args)

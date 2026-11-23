@@ -647,3 +647,78 @@ def test_async_drive_passes_its_memetic_share_to_the_collection(tmp_path, monkey
     driver = ei.AsyncRoundDriver.__new__(ei.AsyncRoundDriver)
     driver.a, driver.root = seen[-1], tmp_path
     assert driver.cycle_args().memetic_share == 0.
+
+
+# ---- memetic groups under collection load (2026-11-23 aei1) -----------------------------------------------------------
+def _journal(path, seconds=None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [{'event': 'start', 'key': 'k'}] + [{'event': 'activity', 'pad': 'x' * 500}] * 50
+    if seconds is not None:
+        lines.append({'event': 'finish', 'key': 'k', 'status': 'complete', 'elapsed_seconds': seconds})
+    path.write_text(''.join(json.dumps(line) + '\n' for line in lines))
+
+
+def test_a_memetic_program_runs_only_when_its_family_fits_the_nested_wall_clock(tmp_path):
+    assert mw.fits([100.] * 8, 1440) and not mw.fits([100.] * 7, 1440)          # too few measured episodes
+    assert not mw.fits([100.] * 7 + [2000.] * 3, 1440)                          # its 0.9 quantile runs past
+    _journal(tmp_path / 'done.journal.jsonl', 812.5)
+    _journal(tmp_path / 'running.journal.jsonl')
+    assert mw.finish_seconds(tmp_path / 'done.journal.jsonl') == 812.5
+    assert mw.finish_seconds(tmp_path / 'running.journal.jsonl') is None
+    c = _staged_collector(tmp_path / 'c')
+    c.args.memetic_fit_quantile = 0.9
+    rows = [{**c.memetic_rows[0], 'id': f'memetic:{name}', 'curriculum': {'program_family': name}}
+            for name in ('slow', 'fast')]
+    c.memetic_rows, c.memetic_cursor = rows, 0
+    c.family_seconds = {'slow': [3000.] * 10}
+    assert c._memetic_row() is None                                             # nothing fits yet: an ordinary group
+    c.family_seconds['fast'] = [600.] * 10
+    assert c._memetic_row()['id'] == 'memetic:fast'
+    c.args.memetic_fit_quantile = 0
+    assert {c._memetic_row()['id'] for _ in range(2)} == {'memetic:slow', 'memetic:fast'}   # opt-out: every program
+
+
+def test_an_ordinary_groups_episode_seconds_feed_its_family_and_nested_runs_take_slots(tmp_path):
+    import time
+    c = _staged_collector(tmp_path)
+    c.family_seconds = __import__('collections').defaultdict(list)
+    directory = tmp_path / 'groups' / 'g000009'
+    for k, seconds in enumerate((300., 900.)):
+        _journal(directory / 'workers' / f's7-task-000-{k:02d}.journal.jsonl', seconds)
+    c._record_seconds(directory, 'fam')
+    assert sorted(c.family_seconds['fam']) == [300., 900.]
+    [(group, _)] = list(c.pending)
+    evals = c.groups[group]['dir'] / 'memetic' / 'evals' / 'support-x' / 'collection' / 'workers'
+    _journal(evals / 'a.journal.jsonl')
+    _journal(evals / 'b.journal.jsonl')
+    _journal(evals / 'c.journal.jsonl', 100.)
+    c.nested_seen = (0., 0)
+    assert c._nested_slots() == 2                                               # two running, one finished
+    _journal(evals / 'd.journal.jsonl')
+    assert c._nested_slots() == 2 and c.nested_seen[0] <= time.time()          # cached for 20 s
+    c.args.memetic_nested_slots = False
+    assert c._nested_slots() == 0
+
+
+def test_family_seconds_are_seeded_from_earlier_collections(tmp_path):
+    c = _staged_collector(tmp_path / 'collect' / 'v0001')
+    c.work = tmp_path / 'collect' / 'v0001'
+    c.memetic_rows = [{**c.memetic_rows[0], 'curriculum': {'program_family': 'fam'}}]
+    earlier = tmp_path / 'collect' / 'v0000' / 'groups' / 'g000001'
+    earlier.mkdir(parents=True)
+    (earlier / 'cases.jsonl').write_text(json.dumps({'id': 't', 'family': 'fam'}) + '\n')
+    _journal(earlier / 'workers' / 's7-task-000-00.journal.jsonl', 444.)
+    c.family_seconds = __import__('collections').defaultdict(list)
+    c._seed_family_seconds()
+    assert c.family_seconds['fam'] == [444.]
+
+
+def test_an_answer_the_program_or_support_inputs_already_name_is_no_leak():
+    query = [{'semantics': {'expected': 'grandmother'}}, {'semantics': {'expected': 'mother'}}]
+    candidate = {'guidance': [{'text': 'Answer with one kin word such as mother or father.'}], 'files': []}
+    assert mw.leaked_answers(candidate, query)
+    shown = mw.shown_text({'program': {'files': {'p.nl': 'Return the relation.'}},
+                           'support': [{'semantics': {'inputs': {'puzzle': 'Ann is the mother of Bob.'}}}]})
+    assert not mw.leaked_answers(candidate, query, shown)
+    copied = {'guidance': [{'text': 'The answer is grandmother.'}], 'files': []}
+    assert mw.leaked_answers(copied, query, shown)

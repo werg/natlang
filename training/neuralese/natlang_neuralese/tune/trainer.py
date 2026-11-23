@@ -97,6 +97,9 @@ class Recipe:
     # "rl"/"rft" episodes: a reply's second </think> and what follows it up to the action are never reinforced
     # ('context', default since 2026-11-19; tune.rl.RLEpisodes); 'train' opts out.
     rl_second_close: str = 'context'
+    # "rl"/"rft" episodes: a reasoned decision's action reasoning trains with its choice (default since 2026-11-23;
+    # tune.rl.RLEpisodes, as GRPO's); False opts out (the choice only).
+    rl_decision_reasoning: bool = True
     # Prefix-robust soft-state training (CSPD; tune.rows.lower_rows, default since 2026-11-20): on this share of the
     # rows that import soft states (content hash), a context prefix of soft_prefix_tokens [lo, hi] tokens from other
     # rows of the same component sits before the first imported state, weight 0. 0 opts out; an in-flight fit resuming
@@ -336,7 +339,8 @@ class JointTrainer:
                                                  mode='grpo' if kind == 'rl' else 'rft', min_quality=recipe.rft_min_quality,
                                                  policy_loss=self.rl_policy_loss if kind == 'rl' else None,
                                                  privileged=privileged if kind == 'rl' else None,
-                                                 second_close=recipe.rl_second_close)
+                                                 second_close=recipe.rl_second_close,
+                                                 decision_reasoning=recipe.rl_decision_reasoning)
             self._admit_rl()
         available = target_parameters(engine.shared_model)
         self.targets, self.target_classes = module_map(sorted(available), classes=recipe.target_classes)
@@ -417,9 +421,10 @@ class JointTrainer:
     @property
     def input_sha256(self):
         # The step budget is where to stop, not what a step does: extending it continues the same run. What
-        # `rl_second_close` masks is in the episodes' graphs (their target weights), so it binds through their digest.
+        # `rl_second_close` masks and the reasoning `rl_decision_reasoning` trains are in the episodes' graphs (their
+        # nodes and target weights), so they bind through their digest.
         recipe = {key: value for key, value in self.recipe.as_json().items()
-                  if key not in ('steps', 'epochs', 'rl_policy_loss', 'rl_second_close')}
+                  if key not in ('steps', 'epochs', 'rl_policy_loss', 'rl_second_close', 'rl_decision_reasoning')}
         if not recipe['soft_prefix_share']:   # off: the input of fits from before the setting is unchanged
             recipe = {key: value for key, value in recipe.items() if key not in ('soft_prefix_share', 'soft_prefix_tokens')}
         # The effective RL loss binds the input; the historical clipped loss keeps pre-2026-10-28 inputs unchanged.

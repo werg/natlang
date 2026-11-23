@@ -73,3 +73,10 @@ natlang run applications/migration --target program -- settle SETTLE.json
 the served model (or a teacher with `--provider`), the equivalence measurement of the candidates
 (`scripts/semantic_fp/equivalence.py`), acceptance by the 07 §4.2 rule, `settle` for rejections, and the commit and
 packaging of the accepted pairs.
+
+## Codemods (`codemod/`)
+
+`codemod/studio.ts` `migrateRepository(files, spec, { verify, crispRules, runtime })` applies deterministic codemod
+rules first (no model calls), runs this package's migration loop over the files the verifier still rejects (an
+in-memory repository validated by `verify`), and mines new crisp rules from the verified semantic pairs
+(`codemod/mineCrispRule.nl`), admitting one only when it replays on those pairs and clean files without a regression.

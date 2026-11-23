@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import shutil
 
-from live_teacher_sources import bound_file, load_episode, open_goal_fingerprint, same_json_value, validate_reassessment_check_roles
+from live_teacher_sources import bound_file, load_episode, same_json_value, validate_reassessment_check_roles, verify_original_rejection, verify_entry
 from sft_sources import ZstdWriter, held_closure, held_hit
 
 
@@ -40,7 +40,7 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
     digest = hashlib.sha256(Path(packet_path).read_bytes()).hexdigest()
     if (assessment.get('schema') != 'natlang.live-reassessment/1' or assessment.get('task_id') != task['taskId'] or
             assessment.get('original_sha256') != digest or not assessment.get('rationale') or
-            packet['result'].get('passed') is not False):
+            not isinstance(packet['result'].get('passed'), bool)):
         raise ValueError('reassessment must bind the original failed training capture')
     checks = original.get('checks') or {}
     completed = assessment.get('completed_outcome')
@@ -59,6 +59,8 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
                 not completed_proof.get('rationale') or not completed_proof.get('evidence') or
                 not completed_proof.get('checker_sources')):
             raise ValueError('completed reassessment must independently attest the exact original whole outcome')
+        if not verify_original_rejection(packet, completed_proof, proof_path.parent):
+            raise ValueError('completed reassessment needs its original native failure or bound rejected review')
         validate_reassessment_check_roles(completed_proof, checks, proof_path.parent)
         for binding in completed_proof['evidence'] + completed_proof['checker_sources']:
             bound_file(binding, proof_path.parent)
@@ -69,6 +71,8 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
         names = row.get('checks') or []
         if not isinstance(names, list) or not names or any(checks.get(name) is not True for name in names):
             raise ValueError('reassessment cites an absent or failed independent workspace check')
+    if completed is None and packet['result'].get('passed') is not False:
+        raise ValueError('partial reassessment requires its original native failure')
     if not selected and completed is None:
         raise ValueError('reassessment needs explicitly checked invocations')
     calls = exercise['calls']
@@ -77,9 +81,10 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
         raise ValueError('reassessment requires one complete original call tree')
     root = next(call['record'] for call in calls if call['callId'] == roots[0])
     goal = original['goal']
-    size, goal_hash = open_goal_fingerprint(goal)
-    if root.get('inputs', {}).get('goal') != {'complete': True, 'hash': goal_hash, 'bytes': size}:
-        raise ValueError('the captured user goal differs from the independent workspace goal')
+    interaction_entry={'kind':'open-user-goal','goal':goal,'program':exercise['programPath']}
+    if exercise.get('entry'):
+        interaction_entry['entry']=exercise['entry']
+    verify_entry(interaction_entry, root, partial=completed is None)
     if any(row.get('dirty') is not False for row in pins['repositories'].values()):
         raise ValueError('reassessment requires recorded clean code provenance')
     source_code = pins['repositories']['natlang']

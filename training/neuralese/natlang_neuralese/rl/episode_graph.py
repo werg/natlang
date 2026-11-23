@@ -81,11 +81,49 @@ def validate_rollout_graph(rollout):
     return names, nodes
 
 
-def whole_episode_turns(rollout):
+REASONING_SUFFIX = ':reasoning'
+
+
+def action_reasoning_capture(turn, think_close):
+    """A reasoned decision's action reasoning as an ordinary sampled capture, or None. The action entry of a reasoned
+    readout (``decision_reasoning.action``, with its sampling receipt) keeps its reasoning generation's exact capture
+    (``decision_reasoning.reasoning_sampling``: rl.task_rollouts.rollout_turns, ts-host tune/rollouts.ts). Its reasoning
+    is part of the sampled action: the capture is kept through the first ``think_close`` (``</think>``) included; the
+    free reply after it was never used. A capture that writes state, records a protocol failure or holds compact
+    columns is not cut (None), nor is any capture without ``think_close``."""
+    marker = turn.get('decision_reasoning')
+    if think_close is None or not isinstance(marker, dict) or marker.get('action') is not True:
+        return None
+    capture = marker.get('reasoning_sampling')
+    if (not isinstance(capture, dict) or not (turn.get('sampling') or {}).get('decision_sample')
+            or not isinstance(capture.get('samples'), list) or not capture['samples'] or capture.get('writes')
+            or capture.get('protocol_failure') or 'samples_columns' in capture):
+        return None
+    ids = [sample.get('token_id') for sample in capture['samples']]
+    stop = ids.index(think_close) + 1 if think_close in ids else len(ids)
+    inputs, kept_inputs, seen_sample = capture.get('generated_inputs') or [], [], False
+    for item in inputs:
+        index = item.get('sample_index')
+        if index is None and seen_sample:
+            return None                   # a forced input after a sampled one: not a plain generation
+        if index is not None:
+            seen_sample = True
+            if index >= stop:
+                continue
+        kept_inputs.append(item)
+    return {**capture, 'samples': capture['samples'][:stop], 'generated_inputs': kept_inputs}
+
+
+def whole_episode_turns(rollout, think_close=None):
     """Authenticate all captures and preserve explicit external-vs-local origins.
 
     Captures are returned as independent copies. They are JSON trees (no shared or cyclic references), so a
-    pickle round trip is an exact deep copy, several times faster than copy.deepcopy on per-token captures."""
+    pickle round trip is an exact deep copy, several times faster than copy.deepcopy on per-token captures.
+
+    ``think_close`` (the ``</think>`` id; None: off) adds each reasoned decision's action reasoning
+    (``action_reasoning_capture``) as one more sampled turn, ``graph_turn`` the action's with ``REASONING_SUFFIX``,
+    right before its action entry; its state reads bind as the action entry's do (one readout, one prompt).
+    ``native_replay.compile_replay`` counts its node among the action turn's nodes."""
     import pickle
     def copy_tree(value):
         return pickle.loads(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL))
@@ -97,6 +135,16 @@ def whole_episode_turns(rollout):
         captured_writers={event['node'] for event in nodes.values() if event.get('kind')=='block_write'}
         outside={block:node for block,node in binding['read_bindings'].items() if node not in captured_writers}
         binding['read_bindings']={block:node for block,node in binding['read_bindings'].items() if block not in outside}
+        reasoning = action_reasoning_capture(turn, think_close)
+        if reasoning is not None:
+            own = graph_binding(name, reasoning, nodes)
+            if own.get('written_nodes') or own.get('text_result_writes') or own.get('written_occurrences'):
+                raise ValueError('a reasoned decision\'s reasoning cannot write native state')
+            own['graph_turn'] = name + REASONING_SUFFIX
+            result.append({'messages': turn['messages'], 'tools': None,
+                           'reply': {'role': 'assistant', 'content': '',
+                                     'reasoning_content': (turn.get('target') or {}).get('reasoning_content') or ''},
+                           **own, 'external_read_bindings': {}, 'sampling': copy_tree(reasoning)})
         result.append({'messages': turn['messages'], 'tools': turn.get('tools'), 'reply': turn['target'],
             **({'response_tools':copy_tree(turn['response_tools']), 'native_xml_turn':copy_tree(turn['native_xml_turn'])} if turn.get('native_xml_turn') else {}),
             **binding,'external_read_bindings':outside,'sampling':copy_tree(turn.get('sampling') or {})})

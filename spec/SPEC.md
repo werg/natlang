@@ -141,7 +141,9 @@ type, `args: { q: string, n?: number }`. A value wrapped entirely in quotes is
 the quoted text, as in YAML, so `"string[]"` is `string[]`; a lone string
 literal type is written `'"yes"'`. The other keys are YAML. Application TypeScript imports a named
 function as a module default export; the build generates its declaration
-(`foo.d.nl.ts`).
+(`foo.d.nl.ts`). A `uses:` item that is itself a named function of the build is
+referenced there by an `import type` of its own declaration, so its type aliases
+stay its own (`NATLANG_INLINE_USES_DECLARATIONS=1` inlines it instead).
 
 ## Contexts
 
@@ -221,7 +223,9 @@ exported values are typed values. They may import sibling items, other `.ts`,
 `.js` and `.nl` files of their own package by relative path (inside the package
 root), exports a `natlang.json` `exports` map names, declared npm packages,
 `natlang:services`, and the natlang surface module; a relative import that leaves
-the package root is rejected. They follow the iteration and termination rules below. Application
+the package root is rejected. `import type` of a package file (`import type { Lot }
+from '../types.js'`) types the module's code, including the parameters of an inline
+`nl` it builds, and is erased at run time. They follow the iteration and termination rules below. Application
 TypeScript outside callable folders is unrestricted.
 
 ## Iteration and termination

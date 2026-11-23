@@ -48,6 +48,8 @@ CAPTURE_KEY = 'natlang_capture'
 IMPORT_KEY = 'natlang_import'
 ADAPTER_KEY = 'natlang_adapter'
 TRACK_INPUT_END_KEY = 'natlang_track_input_end'
+# The reply tokens a request's input already holds, which its grammar takes first (fork NATLANG_GRAMMAR_PREFIX).
+GRAMMAR_PREFIX_KEY = 'natlang_grammar_prefix'
 BAN_BIAS = -1e30
 
 
@@ -322,8 +324,13 @@ class SglangEngine(Engine):
     def bind_sglang(self, url, *, export_manifest, fork, adapter_slots=0, adapter_rank=32,
                     projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
                     weight_dtype='bfloat16', max_running=None, warm_openings=None, track_input_end=False,
-                    speculative=None, head_logits='bf16'):
+                    speculative=None, head_logits='bf16', tool_grammar=False, export_dir=None):
         self.sglang_url = url.rstrip('/')
+        # Tool calls decode under their schemas (common.tool_grammar) when the fork serves grammars to this token-id
+        # front and continues them across requests (NATLANG_GRAMMAR_PREFIX); NATLANG_TOOL_GRAMMAR=0 opts out.
+        from ..common import tool_grammar as _tool_grammar
+        self.sglang_tool_grammar = bool(tool_grammar) and export_dir is not None and _tool_grammar.enabled()
+        self.sglang_export_dir = export_dir
         self.__dict__.setdefault('_native_lock', threading.RLock())
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
@@ -396,9 +403,18 @@ class SglangEngine(Engine):
                 # n-gram speculative decoding (fork NATLANG_SPECULATIVE_NGRAM): the same sampling law, but the verify
                 # pass's batch shapes differ from plain decode's, so held results pair only within one setting
                 'speculative': None if not speculative else dict(speculative),
+                # tool calls drawn under their schemas' grammar (the capture's sampling_law.tool_grammar)
+                'tool_grammar': self.sglang_tool_grammar,
                 'banned_token_ids': list(self.sglang_banned)}
             binding['actor_export'] = dict(self.sglang_actor_export)
         return self
+
+    def _tool_grammar_info(self):
+        """The served export's tokenizer as SGLang's grammar backend loads it (common.tool_grammar.info_from_export)."""
+        if getattr(self, 'sglang_export_dir', None) is None:
+            return super()._tool_grammar_info()
+        from ..common import tool_grammar
+        return tool_grammar.info_from_export(self.sglang_export_dir)
 
     def rebind_in_place(self, policy_id, weights_sha256=None, version=None, *, export_dir=None, weights_path=None,
                         checkpoint_path=None, tensor_identity=None):
@@ -1059,6 +1075,9 @@ class SglangEngine(Engine):
         seq.native_served_policy = self._served_policy()
         ids = self._sglang_prompt(seq)
         template_prefix, template_suffix = self._native_template_plan(seq)
+        if getattr(self, 'sglang_tool_grammar', False):
+            # the front follows the reply under the same grammar: every SGLang token is checked against it
+            self._tool_grammar_begin(seq, template_prefix)
         open_position = (self._sglang_template_prefix(seq, ids, template_prefix, template_suffix)
                          if template_prefix is not None else None)
         sampling = request.temperature is not None and request.temperature > 0
@@ -1110,6 +1129,13 @@ class SglangEngine(Engine):
                     if bans:
                         sampling_params.update(max_new_tokens=1, logit_bias={
                             str(token): BAN_BIAS for token in sorted(set(bans) | set(self.sglang_banned))})
+                    if seq.tool_grammar is not None:
+                        # SGLang's xgrammar applies the mask before sampling and before its natlang records; a
+                        # continuation's grammar first takes the reply tokens its input already holds
+                        held = len(seq.tool_grammar_prefix) + len(state['fed'])
+                        sampling_params['structural_tag'] = seq.tool_grammar_law['grammar']
+                        sampling_params['custom_params'] = {**params['custom_params'],
+                                                            **({GRAMMAR_PREFIX_KEY: held} if held else {})}
                     body = {'input_ids': ids + state['fed'], 'rid': request.request_id + (f'-{part}' if part else ''),
                             'sampling_params': sampling_params}
                     self._sglang_sample(seq, body, k, sampling, state)

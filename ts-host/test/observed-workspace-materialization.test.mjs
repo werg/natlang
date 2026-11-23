@@ -5,7 +5,7 @@ import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {createHash} from 'node:crypto';
-import {verifyObservedWorkspaceEvidence} from '../scripts/observed-workspace-evidence.mjs';
+import {verifyObservedWorkspaceEvidence,verifyOriginalRejection,reviewedDecisionOrdinals} from '../scripts/observed-workspace-evidence.mjs';
 import {materializeNativeRows} from '../dist/teacher/native-materializer.js';
 const repo = resolve(import.meta.dirname, '../..');
 const python = join(repo, '.venv-neuralese/bin/python');
@@ -62,6 +62,12 @@ else:
    proof['outcomeDimensions']['incidentalValues']['incorrectReturns'].append({**selector,'definition':copy.deepcopy(child['record']['definition'])})
    spec['calls'][1]=artifact(root,'child.json',child)
   verification['evidence']=[{**artifact(root,'incidental.json',{'proof':proof}),'kind':'workspace'}]
+ if kind.startswith('decision-review'):
+  binding=artifact(root,'call.json',detail)
+  selector={'call_id':detail['record']['call_id'],'ordinal':0,'definition':copy.deepcopy(detail['record']['definition']),'call_sha256':binding['sha256'],'reason':'Source-bound semantic audit of this exact captured decision.'}
+  if kind=='decision-review-hash':selector['call_sha256']='0'*64
+  if kind=='decision-review-score':selector['ordinal']=1
+  verification['evidence']=[{**artifact(root,'decision-review.json',{'proof':{'decisionReview':{'schema':'natlang.live-decision-review/1','excluded':[selector]}}}),'kind':'workspace'}]
  if kind=='native-bridge':
   selected={'question':'Actual source-backed brief','statements':[]}
   actual={'results':[{'kind':'domain','report':selected}],'remaining':[]}
@@ -71,7 +77,7 @@ else:
  if kind in ('caught-child','incidental-nested'):
   spec['calls'][0]=artifact(root,'call.json',detail);spec['verification']=artifact(root,'verification.json',verification);path.write_text(json.dumps(spec))
  else:rewrite(root,spec,detail,verification)
-if kind in ('completed','completed-roles'):
+if kind in ('completed','completed-roles','completed-review'):
  import recheck_live_trajectories as recovery
  proof={'goal':interaction['goal'],'checks':{'native_state':True,'old_oracle':False}}
  packet={'test':{'name':'draft'},'result':{'passed':False},'execution':{'diagnostics':{
@@ -89,6 +95,13 @@ if kind in ('completed','completed-roles'):
   contract={'effects':{'checks':['native_state'],'rationale':'Native state.'},'returnedValue':{'checks':[],'required':False,'rationale':'No answer requested.'},'incidentalValues':{'checks':['old_oracle'],'rationale':'An old convention, with no incorrect emitted value.'}}
   outcome.update(checks={'native_state':True},outcomeContract=contract,outcomeDimensions={'effects':{'passed':True,'checks':{'native_state':True}},'returnedValue':{'required':False,'passed':True,'checks':{}},'incidentalValues':{'passed':False,'checks':{'old_oracle':False},'incorrectReturns':[]}})
   outcome['checker_sources'].append({**artifact(root,'contract.json',contract),'role':'outcome-contract'})
+ if kind=='completed-review':
+  native_input={'actual':{'documents':[{'path':'note.md','text':'Checked draft'}]},'expected':{'goal':interaction['goal']},'rubric':'Check content'}
+  packet['result']['passed']=True
+  packet['execution']['diagnostics']['openGoalVerification'].update(preparedContentProject={'artifact':{'semanticReviewInput':native_input}},checks={'native_state':True,'old_oracle':True})
+  raw=artifact(root,'original.json',packet);outcome['original_sha256']=raw['sha256']
+  review={'schema':'natlang.live-workflow-review/1','input':native_input,'verdict':{'accepted':False,'verdict':'Content is correct; baseline handle mistaken for a new commit.'},'exchange':{'request':{},'reply':{}}}
+  outcome['evidence'].append({**artifact(root,'original-review.json',review),'role':'original-rejected-review'})
  completed=artifact(root,'completed.json',outcome)
  artifact(root,'assessment.json',{'schema':'natlang.live-reassessment/1','task_id':'live-draft',
   'original_sha256':raw['sha256'],'rationale':outcome['rationale'],'completed_outcome':completed})
@@ -106,7 +119,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['legacy',1],['native-bridge',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['incidental',1],['incidental-nested',1]]) {
+for (const [kind, expected] of [['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['incidental',1],['incidental-nested',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {
@@ -207,8 +220,8 @@ test('partial original assessor bytes remain independently bound',async()=>{
  }finally{await rm(root,{recursive:true,force:true})}
 });
 
-for(const kind of ['incidental-forged-hash','incidental-foreign-call'])test(`rejects ${kind} output exclusion`,async()=>{
- await assert.rejects(fixture(kind),/incorrect return/);
+for(const kind of ['incidental-forged-hash','incidental-foreign-call','decision-review-hash','decision-review-score'])test(`rejects ${kind} output exclusion`,async()=>{
+ await assert.rejects(fixture(kind),/incorrect return|decision review/);
 });
 for(const mutation of ['hash','foreign-source','value'])test(`independent disk verifier rejects incidental ${mutation} forgery`,async()=>{
  const {root,row}=await fixture('incidental');
@@ -271,4 +284,32 @@ for (const mutation of ['root','hash','selected']) test(`native bridge disk veri
     row.provenance.verification=manifest.verification;
     await assert.rejects(verifyObservedWorkspaceEvidence(row),/application return|domain return/u);
   } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('disk verifier distinguishes rejected original review from original native success',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'rejected-review-boundary-'));
+ try{
+  const input={actual:{documents:[{text:'Actual draft'}]},expected:{goal:'Prepare draft'},rubric:'Check content'};
+  const packet={result:{passed:true},execution:{diagnostics:{openGoalVerification:{semanticReviewInput:input}}}};
+  const review={schema:'natlang.live-workflow-review/1',input,verdict:{accepted:false},exchange:{request:{},reply:{}}};
+  const file=join(root,'review.json');
+  async function binding(){await writeFile(file,JSON.stringify(review));return {evidence:[{role:'original-rejected-review',path:'review.json',sha256:createHash('sha256').update(await readFile(file)).digest('hex')}]};}
+  assert.equal(await verifyOriginalRejection(packet,await binding(),root),true);
+  review.verdict.accepted=true;assert.equal(await verifyOriginalRejection(packet,await binding(),root),false);
+  review.verdict.accepted=false;review.input={...input,expected:{goal:'Other goal'}};assert.equal(await verifyOriginalRejection(packet,await binding(),root),false);
+  review.input=input;review.exchange={};assert.equal(await verifyOriginalRejection(packet,await binding(),root),false);
+  review.exchange={request:{}};assert.equal(await verifyOriginalRejection(packet,await binding(),root),false);
+  assert.equal(await verifyOriginalRejection(packet,{evidence:[]},root),false);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+
+test('independent decision-quality holds bind exact captured bytes and cannot release or redirect targets',()=>{
+ const record={call_id:'actual',definition:{name:'judge',source:'judge.nl'},model_turns:[{kind:'generation',reply:{calls:[]}}]};
+ const artifact={sha256:'a'.repeat(64)};
+ const selector={call_id:'actual',definition:record.definition,ordinal:0,call_sha256:artifact.sha256,reason:'Unsupported actual decision'};
+ assert.deepEqual([...reviewedDecisionOrdinals([selector],record,artifact,new Set())],[0]);
+ for(const changed of [{...selector,call_sha256:'b'.repeat(64)},{...selector,ordinal:2},{...selector,definition:{name:'foreign'}},{...selector,reason:''}])
+  assert.throws(()=>reviewedDecisionOrdinals([changed],record,artifact,new Set()),/decision review/);
+ assert.throws(()=>reviewedDecisionOrdinals([selector,selector],record,artifact,new Set()),/decision review/);
 });

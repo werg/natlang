@@ -8867,3 +8867,438 @@ wrapper only); field-by-field record readouts under `auto` (they keep the bare v
 form beyond 5ff07638 and
 e15b20a8; C-reasoned after the T=1 change (its result moves: reasoning is now sampled); whether the stale `lfm-latest`
 profile should be refreshed to sft-v6 (left as is: B14's arms are defined on it).
+
+## 2026-11-23 16:30 Reference engine: memory-bounded admission, busy-tolerant supervision; lfm-latest = sft-v9; B14 triage rerun
+
+**Observations (B14, DECISIONS "B14 flagship benchmark harness").** The Python reference engine OOMed at its CUDA cap
+(9 GB policy server, 4 concurrent `natlang call`s: 10 OOMs in 7 min, all 74-92 MiB allocations with 8.0-8.3 GB
+allocated), and `natlang serve` killed it after one 10 s health timeout (14:27). Every `natlang call` then found no
+answer at the port and launched its own duplicate server (two ledger launchers for the same unit, the queue head at
+18.9 GB for 35 min), which left arm D's driver stalled on old code. Stopped: `d-driver.sh` (PID 860045),
+`bench-prepd-8`, the stale queued `natlang-native-dc95f29dd5a0-18471` claim.
+
+**Fixes (41fa2c044, a2ecee97f; default on, opt-out `--unbounded-admission`).**
+- Admission (`serve/engine.py`): queued requests wait in a FIFO and join the batch only while the running batch's
+  worst-case KV (bytes per token measured from finished prefills' caches, buffer headroom included, x prompt + remaining
+  allowance clamped to the context), the largest measured prefill workspace and the prefix cache's unspent budget fit
+  both the `--memory-gb` cap and the device's free memory, minus a 10% watermark; the oldest always runs; cancelled
+  waiters leave the queue. An OOM prefill that produced nothing is requeued as a fresh sequence (same request and seed)
+  while others run, and fails alone. Metrics: waiting, deferrals, OOM requeues, measured bytes/token and workspace.
+  Engine parity: llama-server admits by fixed slots, SGLang by its KV pool, wllama serves one sequence; only the
+  reference engine was unbounded.
+- Supervision: `natlang serve` ends only when the port stops listening (TCP connect; the kernel completes the
+  handshake for a process too busy to answer); an unanswered /health logs "busy" and keeps serving. A command that finds
+  a listening but unanswering server at its port waits instead of launching a duplicate; `natlang status` says `busy`.
+  Same flaw on the managed llama-server path: the shared supervisor counted an unanswered `/slots` as idle (could stop a
+  busy server once leases lapsed) and an acquirer that saw a live record fail /health started a second server; both
+  fixed. SGLang is not launched by `natlang serve` (`serveCommand` requires `managedNative`; `nativeServerCommand` always
+  runs `natlang_neuralese.serve`), so it has no such supervisor.
+- `natlang build`/`check` of a program outside a checkout resolves `@natlang/node/std` to the CLI's declarations (the
+  bench's copy of triage failed TS2307 after it began importing `escalate`/`semanticRepair`).
+- Health route: it never touched the engine (shown by a test with a blocked engine thread). The stall's root cause is
+  not established; under the rerun's load the probe answered 1,206/1,206 within 0.57 s (max), with 0 deferrals and 0
+  OOM requeues at concurrency 4 (7 active sequences peak, 4.4 GB allocated, 153.6 KB/token measured).
+
+**lfm-latest = sft-v9 (coordinator).** `ops/current-policy.json` now names sft-v9 (e15b20a86f1c, ops/ei/sft-v9/sft):
+held-v3 verdict neutral vs its start sft-v7 (+0.59 pts, p 0.85), +10.9 pts vs base (p 0.0005), adopted by the driver
+(`stages/verdict.done`); the sft-v6 pointer is kept as `current-policy.sft-v6.json`. `natlang setup --native lfm-latest`
+refreshed `lfm-latest` and `lfm-latest-gguf` (q8_0 44fca2f0); the setup removed the 5ff07638 pin, archived first to
+`/mnt/external/dgx-moved-20261123/native-pins/` (identical). sft-v9 has no compact actor view (it lacks a resumable
+native source); its server loads the full checkpoint.
+
+**B14 triage rerun** (program after 8e586c02e, pin 5fdccb128, WORK `/home/werg/data/semantic-fp-bench/triage-20261123b`,
+`examples/triage/bench/results/2026-11-23.json` regenerated; 28 held units):
+
+| arm | pass | vs A (CI, p) | p50 / p95 latency | $ / 100 units |
+|---|---|---|---|---|
+| A Luna loop (2 samples) | 55/56 = 0.982 | | 1.9 / 2.7 s | 0.006 |
+| B program on Luna (2 samples) | 56/56 = 1.000 | +1.8 [0, +5.4], p 1.0 | 2.9 / 29 s | 0.048 |
+| C program on sft-v9, reasoned | 27/28 = 0.964 | -1.8 [-10.7, +5.4], p 1.0 | 142 / 765 s | 1.38 (49.5 GPU-s/unit) |
+| C program on sft-v9, instant | 22/28 = 0.786 | -19.6 [-35.7, -7.1], p 0.0025 | 26 / 496 s | 0.67 (24.2 GPU-s/unit) |
+| D sft-v9 + specialize/tune + escalate | not measured yet | | | |
+
+Arm C is sft-v9, not base LFM3 (the first reading's "base" was 5ff07638). No arm beats A. C-instant's failures are 6
+labels and 1 urgency; not investigated here (instant readout owner). Arm D: `WORK/driver.sh` runs prepare-d (record,
+specialize, tune at 24 GB) and both D modes on sft-v9 once the policy server's ledger claim (18.9 GB, learned) is
+admitted, then writes `WORK/results-ABCD.json`.
+
+**Not checked:** the original health stall's cause (no py-spy capture of a stalled server; the 14:27 kill came after
+OOM storms); admission under a load that actually defers (the bench's concurrency 4 never filled the 10 GB cap);
+memory-bounded admission on a CPU device (bounded only on CUDA); the llama-server fixes against a real llama-server
+under load (fake-server tests only).
+
+## 2026-11-23 17:30 Semantic-FP language gaps and applications closed (language-gaps agent)
+
+- **`natlang improve DIR` proposes (WS8 N4).** Without `--proposal`, a natural-language improver on `--model` (three
+  built-in programs: `improveDiagnose.nl`, `improveShouldRevise.nl` with `readout: decision`, `improveRevise.nl`) reads
+  the program's own recorded runs (`improvement/run-evidence.ts`: failures with reasons, escalations with the
+  fallback's answer, `ensures:`/refinement repairs, testers' bad/fix verdicts) plus the support examples it answers
+  wrongly, and rewrites the instructions of at most `--max-functions` (3) functions, front matter byte-identical; the
+  existing gate checks and adopts. Found and fixed on the way: the case pack took an escalated decision's local answer
+  and a bad-marked call as expected results; now the fallback's answer and the tester's expected value stand.
+- **`escalate` reads its history (WS2 R4).** Each run leaves an `escalation` note on its local call; the `nl` policy gets
+  `{ totalCalls, escalationRate, disagreementRate }` and measured tier cost (ms) from those notes. Found and fixed:
+  std spans are never stored rows, so `natlang profile`'s escalation rate from the store was always 0 (it read
+  `std:escalate` rows that do not exist); it counts the notes now.
+- **`.d.nl.ts` `import type` for `uses:` (WS1 L6).** A used function of the build is referenced by its own declaration.
+- **`nl.with<T>` in a callable-folder factory showed `unknown`.** Cause: `import type` of package files (`../types.js`)
+  was dropped before the module was type-checked, so the type was `any`. Type-only imports now reach the checker (and
+  their own type imports); a factory returning a saved `nl` function takes its declared parameters.
+- **`natlang check --idiom` / `--idiom-strict`** run `applications/idiom-reviewer` (on M2's std `stepKind`) through
+  `natlang run` on the selected model; findings are `idiom-review-<kind>` diagnostics.
+- **Applications.** codemod-studio is now `applications/migration/codemod`: its semantic stage is the migration loop
+  (`migrate` over an in-memory `RepositoryMigration` with `contents` and a `validator`); `transformFile.nl` and the
+  separate package are gone. sem-grep-sql is now `applications/nldb/grep`: `askRepository` loads files and metadata
+  tables into SQLite and answers with nldb's `SqliteDatabase` (translate, judge once per value, verdicts kept);
+  `runQuery` stays for caller-written plans. ci-doctor: `bisectSettled.nl` stops a bisection that cannot find the
+  failure's cause (pluggable, default nl), and failures cluster by root cause with std `semanticMatch`.
+- **Found on the way.** The nldb folder-database test counted the 4 reasoning samples `readout: decision` draws since
+  fc842c0f9 as stages (its fixture now answers them); repository-question file content keeps its `Untrusted` fence
+  through SQLite (the fence is keyed by text), asserted in the test.
+- **Why merge packages.** Application TypeScript cannot import another package's sources in a per-package build (the
+  project compiler lowers only files under its root), and the plan wants flagships to extend their seeds rather than
+  fork them. Merging is one implementation without a new cross-package mechanism.
+## 2026-11-23 16:40 GRPO trains the action reasoning of reasoned decisions
+
+**Decision (GRPO-reasoning agent, brief from the coordinator; default on, `grpo.py --no-decision-reasoning` opts out;
+commit 91b26036f).** A reasoned readout (`readout: decision`, DECISIONS "reasoned decisions") samples k reasonings and,
+in RL collection, takes the choice of one seeded action sample. GRPO trained that choice but not the reasoning that
+produced it. The action sample's reasoning is now a trained per-call sequence like any other action. It uses the actor's
+exact prompt ids, sampled ids and behaviour log-probabilities, carries the episode's group-normalized advantage, is
+kept through its first `</think>` (the free reply after it was never used), and enters ratio, KL, tail floor, loss
+units and the SD replay as ordinary sampled tokens. The other k-1 samples stay untrained. Their choices were never
+executed, so the episode's reward says nothing about them, and giving them its advantage would bias the gradient.
+
+- **Mechanism inventory.**
+  - *Capture* (no change needed). Both collecting engines already record the reasoning turns with the full RL capture,
+    because the collector requests `x_natlang_rl_capture` on every turn (`ts-host/src/model/local-server.ts:158`). The
+    Python native engine builds it in `serve/engine.py` ~1790-1820 (prompt, samples with logp, `sampling_law`,
+    `finish_reason`). The SGLang actor delegates only generation and builds the same capture (`sglang_actor.py`
+    header). In aei1 r0000 the reasoning turns show T=1, top-p 0.95 and `post-temperature-untruncated`.
+    llama-server and wllama don't collect RL.
+  - *Rollouts* (`rl.task_rollouts.rollout_turns`). The action entry keeps `decision_reasoning.reasoning_sampling`.
+  - *Lowering* (`lower_rollout_turns.decision_reasoning_turns`, sharing `sampled_call` with `episode_turns`).
+  - *Learner* (`grpo.load_group`). The scored-group exchange `pack_scored_group` goes through it too.
+  - *Overlong filter* (`rollout_math.truncated_rollout`). An action reasoning cut by the cap ends its episode.
+  - *JOLT+ student form* (`jolt.student_form`). Guidance is stripped from the reasoning prompt too.
+  - *SFT* is unchanged. It already trains agreeing samples' reasoning (`exp0_sft`), and `sft_sources`' own-call path
+    uses `episode_turns`, which does not add these rows, so nothing trains twice.
+  - *Left out: tune RL* (`tune/rl.py`, `ts-host/src/tune/rollouts.ts`). It records every reasoning generation as an
+    ordinary turn, which does not match the graph's scored-entry nodes. This is a separate whole-graph objective and
+    is recorded in OPEN_ITEMS.
+  - *Not applicable:* held eval and the behaviour probe, which don't train.
+- **Telemetry.** `train.jsonl` `lowering` counts `decision_reasoning_rows`, `_tokens`, `_unclosed`, and whether the
+  action's scored prompt continues the reasoning's own prompt with exactly the kept ids (`_ids_exact` / `_ids_rendered`).
+- **Finding: the scorers re-tokenize the reasoning.** In aei1 r0000 (the 16 action readouts of g000689, g000696,
+  g000701 and g000720) the scored prompt left the sampled ids mid-reasoning in 4 of 16 readouts, after 847/3476,
+  531/1051, 535/2085 and 953/1687 tokens, with identical decoded text. Every engine scores after the reasoning *text*
+  re-encoded, so the choice was scored, and trains, after a tokenization the model never sampled. The GRPO choice term
+  stays self-consistent, because it uses the scored prompt that the behaviour scores came from, and the reasoning row
+  trains on the exact sampled ids. The fix is a cross-engine score-item field carrying the sampled ids (OPEN_ITEMS).
+- **Tests.** `tests/neuralese/test_grpo_decision_reasoning.py` (5). Also run and passing:
+  `test_reasoned_decision_training`, `test_grpo_jolt`, `test_grpo_replay_corpus`, `test_grpo_exchange` and
+  `test_rl_task_rollouts`. The quick gate passed.
+- **Learner bench: not completed.** The bench replays one aei1 group with spread (g000696, rewards 1/0/1/1, 4 reasoned
+  readouts, 6078 action-reasoning tokens) for one step from sft-v9, at pin 91b26036f. It compares arm A (default)
+  with arm B (`--no-decision-reasoning`) on `lowering`, `loss_tokens`, `sequences` and `grad_norm`. It was preempted
+  twice by `aei1-r0001-sft` (high priority, 100 GB) before step 1, and is stopped so as not to delay the round. The
+  script, the re-emitted rollouts and the pin are kept for a rerun once the DGX has about 20 GB free:
+  `ops/gdr-bench/pin-91b26036f` and the agent's `scratchpad/gdr/scripts/bench.sh`. The coordinator reruns it, or reads
+  the first real GRPO step's `lowering.decision_reasoning_*` counters. The offline lowering of the same groups with the
+  real tokenizer gives 16 rows and 22,988 reasoning tokens, all closed by `</think>` (`decision_reasoning_turns`).
+### 2026-11-23 — constrained decoding with an exact learner law (tool grammar on the Python engine and SGLang)
+
+**Decision.** The two training-collection engines decode tool calls under their schemas by default, with the same law
+the managed llama-server and the page already applied, and the learner scores every such token under the mask it was
+drawn with. This closes the ENGINE_PARITY gap row "Tool arguments decoded under their schema" (commit b7d0647e3), which
+was blocked on the learner scoring the unmasked policy (biased rho, KL and SFT targets on constrained tokens).
+
+**What was built.**
+- `common/tool_grammar.py`: one xgrammar structural tag per tool list (free text unconstrained; `<tool_call>` must name
+  a declared tool; its parameters follow the tool's JSON schema in the backbone's call format, `qwen_xml` for LFM3,
+  `json` for Qwen3; LFM2's pythonic form has none), its declaration in the capture (`sampling_law.tool_grammar`: the
+  tag, sha256, xgrammar version, tokenizer identity), and the exact replay of a reply's masks from its own tokens.
+- Python engine (`serve/engine.py`): masks the logits before guidance bans, temperature and the nucleus; the matcher
+  follows every fed token and guidance rewinds (`native_guidance.check`); a templated `decode` opening is fed first.
+- SGLang fork 17e3458c2e (`NATLANG_GRAMMAR_PREFIX`): the grammar backend loads the served tokenizer under
+  `--skip-tokenizer-init` (upstream had no backend there), and `custom_params.natlang_grammar_prefix` makes a
+  continuation request's grammar take the reply it already holds. The mask precedes the fork's natlang records, so the
+  recorded logp is the masked law. The front sends the same tag and checks every SGLang token with its own matcher.
+- Learner: `lower_rollout_turns.sampled_call` keeps the law (and guidance bans, which were recorded but never applied:
+  the same defect for bans), `exp0_sft.law_mask` builds a `lfm3_fast.HeadMask`, and the fused head NLL, its nucleus and
+  their gradients use the renormalized law at those rows: `grpo.py` policy, reference (so rho and the KL), `exp0_sft.py`
+  SFT, Ambient TM, validation and its parity tool. A law over another tokenizer or xgrammar version is refused.
+- Opt-outs: `NATLANG_TOOL_GRAMMAR=0` on a server, `x_natlang_tool_grammar: false` per request; a host without xgrammar
+  serves unconstrained (says so once); a fork without the marker serves unconstrained. Each records what it did.
+
+**Evidence (2026-11-23, sft-v9 e15b20a8 BF16, DGX, ledgered units).**
+- Forced decode (`scripts/neuralese_data/check_tool_grammar.py decode`, wllama_smoke's tuple cases, greedy): Python
+  engine and SGLang both return `["red", 2]` for `[string, number]` and `[string, number?]` asked for
+  `["red", "green", "blue"]`, and `["red"]` for the optional tail asked for `["red"]`; the unconstrained control returns
+  the three strings; llama-server and the page give the same values (b7d0647e3). Both engines declare the same grammar
+  sha256 per tool list (437d5524…, 2f7c80a4…).
+- Learner law (`check_tool_grammar.py learner`, the captured T=1/top-p 0.95 samples, learner at the capture's weights):
+  Python engine, calls 9, 4,406 sampled tokens, 270 constrained (the grammar allows fewer than the 125,037 real tokens free text allows). With the mask, log rho = learner - recorded has mean -0.0003 on the constrained tokens (|max| 0.20, BF16 engine vs learner noise) and -0.0002 on free text; unmasked, its mean on the constrained tokens is -0.979 (min -26.2 nats: tokens the grammar forced that the unmasked policy found unlikely), the bias a learner without the mask would have put on every constrained token; free-text tokens are unchanged by the mask (the padding rows it removes carry no measurable mass).
+  SGLang: its captures declared the same grammar (the 6 captures recorded before the ledger preempted the unit); the learner leg on them and the
+  throughput arms did not run (the ledger preempted the low-priority actor three times and then had no room beside aei1
+  r0001 SFT; the unit was cancelled).
+- Collection throughput: not measured (above). Expected cost: xgrammar fills the batch's masks on CPU threads while
+  the GPU decodes (SGLang overlaps them; free text reuses one cached mask); read `natlang_sglang_generated_tokens_total`
+  per hour at the first actor on 17e3458c2e against the previous round, and opt out per actor with NATLANG_TOOL_GRAMMAR=0
+  if it drops.
+
+**Not checked.** The grpo learner bench (`grpo.py train --replay`) on constrained rollouts (the DGX ledger had no room
+for a learner unit; the check above runs the learner's own scoring functions on the captures instead); a full
+collection episode on a natlang task (the check uses the tuple prompt); guidance-rewind continuations on live SGLang
+(`natlang_grammar_prefix` is covered by fork unit tests; RL collection runs without guidance); the Python engine
+throughput cost; Qwen3's json call format on a live model; Pop's serving image (no xgrammar there: unconstrained).
+The managed llama-server and the page still drop the tool grammar under `x_natlang_rl_capture` (ENGINE_PARITY gap
+row: exact replay needs xgrammar in the fork). Collection actors adopt the grammar when the DGX and Colab SGLang
+checkouts move to 17e3458c2e at their next boundary; held results with and without the grammar are separate engine
+settings (`serving_engine.tool_grammar`, not a pairing field).
+
+
+## 2026-11-23 18:00 Colab collection through DGX round SFT; async round size
+
+**Situation.** No A100: the Colab session is an L4 (`colab_sft_fit` refuses it), so every aei1 round trains on the DGX
+and stops the DGX collection for the whole SFT. r0001 is not the 684-step sft-v9 size: its mix is 37.4M weighted target
+tokens, 1150 optimizer steps, ~11.8 h at 36.8 s/step. The L4 serves e15b20a8 (front DGX 127.0.0.1:18731, SGLang 19731)
+and ran only the backlog fill.
+
+**Found (static reading of the driver, then the live ledger).**
+- The driver never collected on the L4: aei1 runs without `--rebind-actor`. With it, `stop_collections(remote=False)`
+  already spared the remote collector, but nothing restarted one that was down at the round's start, a failed rebind was
+  never retried (the actor kept the old policy, and with it no collection, for the whole round), and a session the
+  keeper replaced was served again at the policy in its *first* serve record (`colab-actor-colab-g4.json`), whatever
+  it had been rebound to since.
+- Identity: a single-endpoint collection ran grpo's slot, which never checks the actor after an episode; the
+  multi-endpoint copy of the slot did, but lacked memetic preparation and actor lag. An episode against a replaced
+  session serving another policy would have been recorded under the collection's sha.
+- The next round's snapshot (`prepare`, run ahead at the round's start) waited only on the DGX collection unit; a DGX
+  SFT stops it minutes later, so the snapshot (and the newest policy's frontier) froze at those minutes.
+- DGX held priority claims shrank a remote collection's slots, though held never runs on the remote actor.
+- Ledger: the DGX SFT's fixed 100 GB claim (cgroup 63 GB measured at r0001's first steps, activation 56) preempted the
+  L4 fill's 4 GB DGX client, the teacher campaign and r0002's data stage at once; a 64-slot remote collector (23 GB
+  budget) could never be admitted beside it.
+
+**Changes (default on).**
+- `grpo.Collector.slot` gains two hooks: `endpoint_for_slot` may return None (the slot idles) and `episode_valid`
+  (default True). `FrontierCollector` drops its slot copy and overrides both: with `verify` (any remote actor,
+  `collect --actor`), a finished episode whose actor no longer answers or serves the collected sha is abandoned, its
+  task requeued at the front, the endpoint dropped and retried every 2 min. A remote collection ignores DGX held claims.
+- The DGX SFT wait calls `ensure_remote_collection` every poll (`Cycle.wait(between=)`); `ensure_remote_collection`
+  first rebinds an actor not serving the lineage head when that head is a round publication (`ensure_remote_policy`,
+  at most every 20 min; `rebind_remote` skips actors already serving it and raises after trying all). Earlier
+  policies' remote collectors stop with their DGX collection.
+- `rebind_actor(checkpoint=)` rewrites the Colab actor record (`rebound_record`): policy id and `serve_args`
+  name the rebound policy's DGX checkpoint, so `restore_colab_actor` and the session keeper's re-serve after a
+  replacement serve it (on a fresh VM it ships, ~24 min; the next rebind merges from factors again).
+- The snapshot waits `--snapshot-min-hours` from the earliest start of any of the policy's collections while any of
+  them (DGX or remote) runs.
+- `async-drive --dry-run` prints the remote collectors (unit, endpoint, whether it serves the policy, budget, argv)
+  and the DGX SFT sizing.
+
+**Round size (decision).** An async round should train roughly the new data of one round interval plus a bounded
+replay, not the whole growing pool: the filled part is `share=all`, so each round re-trained every filled chain ever
+made (r0001: 27.9k filled chains, 45% of the loss) and rounds grew with the fill backlog. New data per ~5 h interval
+is ~4-6M weighted target tokens (fills ~300-400/h x ~1.5k; own successes the build admits ~20 episodes/h x ~8.7k at
+the DGX collection's rate; teacher campaign). Rounds also cannot usefully be shorter than the next round's snapshot
+plus preparation (frontier + data + build: ~2.5 h measured on r0001). Default `async-drive --round-target-tokens
+12000000` (`sft_sources build --max-target-tokens`): ~360 steps, ~3.7 h of DGX SFT, ~1 h on an A100; new data is then
+about half of each round. The cap keeps every part's share (own, teacher, each aux part scaled by the same fraction),
+drops whole episodes, takes unseen episodes first within each part (otherwise the build's admission order), records the
+dropped episode keys (`build.json target_cap`) so `admitted_episode_keys`, round.json and the next build's
+prefer-unseen treat them as untrained. `--round-target-tokens 0` opts out.
+
+**SFT claim.** `async-drive --sft-budget` defaults to 80 (was 100, a fixed claim): r0001 at activation 56 measured a
+cgroup peak of 63.9 GB at steps 1-6 (CUDA 53-55.5 GB by phase, Ambient steps included). 80 plus a 64-slot remote
+collector (23 GB budget) plus the fill client fits the 121 GB box. The running r0001 learner's claim was lowered to 80
+by `memory_ledger.py adopt --hold-budget` (accounting only: its MemoryMax stays 100), which admitted r0002's data stage
+at once; the L4 fill's DGX client and the teacher campaign were still queued behind other units at the time of writing.
+
+**L4 split.** Own on-policy successes are the top data tier, so collection has priority on the L4: the remote collector
+takes 64 slots (the minimum a standalone actor needs to stay decode-bound, AGENTS "SGLang actor"; more slots would not
+fit in DGX memory beside the SFT), and the backlog fill runs `--polite` (`--min-inflight 16 --max-inflight 128
+--max-running 128`): it starts a draw only while SGLang has no waiting request and a free running slot, so it takes
+what the collection leaves of the 128 running and the 2.1M-token KV. Before, the fill held 128 draws in flight
+unconditionally, and a 64-slot collection beside it would have queued FCFS behind them.
+
+**Also fixed.** `ledger_queued` treated a ledger status with no output as an error it did not catch (a Cycle collect
+test failed on it since 71095362c). A driver restarted during a round's DGX SFT queued the DGX collection again at the
+round start and only a fresh launch stopped it: the SFT stage now stops it before joining a running learner too, so the
+driver can be restarted mid-round (it joins the learner and starts the remote collection at once).
+
+**Applied to r0001 (17:22).** Rather than wait for a driver restart, `aei1-collect-v0000-remote0` runs the driver's own
+`collect --actor http://127.0.0.1:18731=64` command for e15b20a8 from pin-1c177e3fc609 (ledger high, 15 GB) into
+`collect/v0000-e15b20a86f1c-remote0`, the layout `collections_of` reads and the new driver joins (and stops at the
+next publication). The r0001 SFT claim went to 72 GB (`adopt --hold-budget`; peak 64.7 GB at step 19) to admit it.
+The backlog fill was relaunched polite as `colab-g4a-fill-backlog-polite-20261123`. A same-policy rebind of the L4
+over the tunnel attested all routes in 30 s and rewrote the actor record (`rebound`).
+
+**2026-11-23 17:10, storage pipeline restored; teacher pools recalled to the NVMe; Drive tier waits on the owner.**
+- **The sweep wedge.** `natlang-storage-sweep` failed every 30 min with "already holds a claim". There was no stale
+  claim: the ledger counts only active units. A live run had sat 40+ min in disk sleep.
+  - Cause: `prune_stale_checkouts.pin_dirs` globbed `~/data/*/*/*/.natlang-pin.json`, and `Path.glob` followed
+    `~/data`'s 261 symlinks into the HDD (`pool-v1/claims`, 9.5k entries).
+  - Fix: the walk uses `scandir`, never follows symlinks and stays on the root filesystem. The run took 3 s instead
+    of more than 40 min, with the same decisions. The watch-directory lookup has the same fix.
+  - Wedge-proofing: the sweep unit skips a start while its run is still active (`ExecCondition`). Each run is bounded
+    (`timeout 1500`, and the pin pass by `SWEEP_PIN_TIMEOUT`, 900 s). The archive and retention units have start
+    timeouts (55 min and 6 h; both were `infinity`, so one hung run would have blocked its timer for good). The
+    sweep's summary now counts the pins it frees.
+  - First run: 4.8 GB of pins and orphaned worktrees removed (`semantic-fp/pin-382bcb1ab`, `exp1-rft/{code,actor-code}`).
+    Test: `tests/test_prune_stale_checkouts.py::test_pin_walk_never_follows_symlinks`.
+- **`natlang-continuous-storage` removed** (script, test, policy, units, decomposition doc). It guarded the Oct-24
+  `lfm-local-recovery` cycles and the Mellum cache, both gone. Its timer had been stopped since 10-31.
+- **Mechanism state:**
+  - The sweep (30 min) works again. It freed 10.9 GB of scratch in the last week, plus today's 4.8 GB of pins.
+  - The archiver (hourly) moved 17 GB last week, then refused 7 runs at the HDD floor. It now finds no NVMe file of
+    at least 1 GB that is cold: the NVMe's cold data is many-small-file trees (OPEN_ITEMS).
+  - Retention (weekly) is a dry-run report; its 11-22 run took 2 h.
+- **HDD contention behind r0001's "2 h of I/O wait":** the HDD was 97% busy at 150 random reads/s (0.7 MB/s) under
+  three whole-tree walks:
+  - another session's `find / -name llama-server`, running for 2 h 18 min (pid 1852501);
+  - a `find / -name *.gguf` (pid 4131900);
+  - the wedged prune.
+
+  I killed all three by PID (AGENTS: any agent may stop any process). The HDD went idle, and the build, whose mix had
+  been written at 16:42, finished its final registry step within minutes. Its registry step had been in the
+  data-registry full-index fallback (`Registry._find_full` lists every registered directory, including HDD
+  `dgxops/acquired-*` trees). Of r0001's inputs, only the three `teacher-gen-20261115` pools take that fallback,
+  because their registered paths were the HDD spelling (12 s when idle). Search an agent shell's `find /` with
+  `-xdev` or a bounded root: a whole-tree walk of the 3.6 TB HDD runs for hours and starves every reader.
+- **Teacher pools back on the NVMe (OPEN_ITEMS item closed).** The decision is NVMe placement, not a packed file:
+  - None of the pool manifests has admission records, so a build reads only 3 manifests and 27,432 per-group
+    `cases.jsonl` (0.33 GB): random small-file reads, which NVMe removes at no reader change.
+  - A packed file would be a second representation needing new reader code in `teacher_coverage`/`check_record`.
+  - It also gives the pools a lexical NVMe path, so the registry no longer takes the full-index fallback.
+
+  Mechanism: `scripts/recall_to_nvme.py` (new; the inverse of an archive move).
+  - It rebuilds `ops/teacher-gen-20261115` as a real NVMe tree.
+  - It copies 274,683 hot files (1.59 GB) and verifies each by SHA-256.
+  - It leaves `claims/`, `episodes/*/row-*`, `rollouts.jsonl`, `results.jsonl` and the two smoke dirs on the HDD as
+    symlinks (54,907 paths; only `extract` reads rollouts, and these pools are closed).
+  - It writes `.keep-on-nvme` and appends registry records with the NVMe path. The HDD copy stays complete.
+
+  - Done 17:06-17:18, before aei1 r0002's build: r0002-data had started 17:13, and its build follows that stage.
+    0 of 274,683 files mismatched. The registry lookup is now lexical (0.0 s against the 12 s fallback). The build's
+    read set (3 manifests and 27k `cases.jsonl`, 352 MB) now reads in 4.8 s.
+  - The tool now hashes the source while it copies, so the HDD is read once (the first run re-read it to verify).
+
+  Test: `tests/test_recall_to_nvme.py`.
+- **HDD: the retired bf95 trees deleted** (`ops/storage/delete-20261123-external.sh`, exact paths):
+  - `dgx-moved-20261104/bf95-lowlr-1105` (147 GB) and `dgx-ops-archive-20261118/bf95-lowlr-1105` (57 GB), which the
+    11-19 pass missed.
+  - Checked first: process, unit, watch-script and registry references, and the pickled strings of the sft-v7/v8/v9
+    checkpoints.
+  - 218 GB deleted (157.7 + 60.8): the external disk went from 48 to 251 GB free, so the hourly archiver is out of its
+    floor again.
+- **NVMe: `~/hindsight-kb-recovery` relocated, not deleted (37.6 GB).** It is another project's Oct-24 recovery
+  tarballs and model files, untouched for a month. The files of 1 GB or more went to the HDD archive through
+  `archive_to_external.py --root` (verified copy and symlink back), the same relocation the 10-28 pass gave the
+  megatoken scratch. The paths still work.
+- **Drive cold tier: stopped at the credential, as briefed.**
+  - ADC holds `cloud-platform`, `colaboratory`, `userinfo.email` and `openid`, but no Drive scope (Drive API 403).
+  - Colab's `drivemount` uses dfs_ephemeral credential propagation, whose dry run asks for a browser consent: per
+    runtime, so it cannot serve unattended bootstraps.
+  - The owner adds `drive.file` to ADC once, keeping the four scopes Colab needs. In a DGX terminal (it prints a URL
+    and asks for the code):
+    `gcloud auth application-default login --no-launch-browser --scopes=openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/colaboratory,https://www.googleapis.com/auth/drive.file`
+    The DGX then uploads directly, and VMs get short-lived access tokens from the DGX, so no per-VM consent is needed.
+    If Google blocks the gcloud client for the Drive scope, the fallback is an OAuth client of project
+    awareness-481308 (`--client-id-file`).
+- **Drive plan, sized to the measured link:**
+  - Uplink 5.2-5.8 MB/s (2 x 200 MB to Cloudflare's upload sink); Google downlink 11.9 MB/s.
+  - Saturating the uplink would move about 475 GB/day but starve the Colab tunnel (2.4 MB/s up on the same uplink) and
+    teacher traffic. Uploads therefore cap at about 3 MB/s (about 260 GB/day) and pause during Colab transfers.
+  - HDD inflow was about 100 GB/day this week, so the tier keeps up. The backlog starts with HDD-cold natlang data.
+    Other projects' 591 GB (`bgkit-data`) is the owner's call.
+  - Colab: the first DGX -> Drive upload of a 3.4 GB checkpoint is still uplink-bound (about 630 s against the
+    tunnel's 968 s). Every later VM pulls it inside Google's network, and VM-written learner state never crosses the
+    tunnel. The before/after is measured once the scope exists.
+
+
+## 2026-11-23 17:30 Memetic groups under collection load: programs whose runs fit, nested runs take slots (e083ad5e5, 17d837704)
+
+The coordinator's round-1 health report (`ops/ei/aei1/r0001/health.json`) flagged 7 `memetic_improve` tasks without
+episodes after the staged layout (c64d250b2) entered at the 14:26 relaunch on `pin-96a02bd4abe1`.
+
+- **None of them ran the staged layout.** The 7 groups (g000138, g000145, g000216, g000281, g000401, g000605,
+  g000672) were all created before 14:18 on pin d29451b846ca (their `memetic-spec.json` has no `layout`): five ran out
+  the 7200 s clock in preparation (previous entry), and g000605/g000672 were not admitted (every support sample passed;
+  under the old layout the 4 supervisors then fail at `load`: `job:uncoded-error`, `finish:incomplete`). After 14:26
+  the relaunched collection (`--hours 72`, share 0.02, ~140 new groups) drew one memetic group, g000832, at 16:49:06
+  (`layout: staged`); at 16:49:54 the driver's round-1 SFT took over the DGX (`takeover: dgx`, Colab unfit) and stopped
+  the collection, which abandoned g000832's preparation stage (`group abandoned`, `memetic-prepare`, -15) 71 s in.
+  `memverify-dgx3` had been SIGTERMed at 14:42 and again at 16:50, before its first group.
+- **What would still have failed under real load** (aei1, 128 slots, measured over its 3,137 finished episodes):
+  ordinary episodes of the memetic families run median 1,156 s, p90 5,234 s; 44% exceed the staged nested clock of
+  1,440 s (55% of all episodes exceed 900 s). A memetic program whose runs do not fit leaves its nested evaluations
+  truncated, and the runs that finish are the short ones. And nested runs counted against no slot: aei1 serves 160
+  running for 128 slots, and two memetic groups add 30-50 nested streams.
+- **Fix (default, e083ad5e5):** (1) a memetic group only for a program whose family's ordinary episodes finish within
+  its nested clock (`memetic_workspace.fits`: at least 8 measured, the 0.9 quantile <= `nested_case_seconds`;
+  `--memetic-fit-quantile`, 0 opts out). The collector measures them from its own finished groups and seeds from the
+  sibling collections of its WORK (the async driver's earlier collections; `--memetic-seed-collection`); on aei1's
+  measurements 16 families qualify at once and more as families are measured. (2) Memetic nested runs in flight take
+  collector slots (`_nested_slots`, counted every 20 s from the evaluations' journals), so the actor serves about
+  `--slots` episodes (`--no-memetic-nested-slots` opts out). expert_iteration collect/cycle/async-drive pass both.
+- **Verified:** on the Colab L4 actor front (sft-v9 e15b20a86f1c, 128 running, sharing it with the
+  `colab-g4a-fill-backlog-after-v9` fill), a `grpo.Collector` on the VM (pin of e083ad5e5, 16 slots, staged layout,
+  fit 0.9 with aei1's family seconds, nested slots on) with two production memetic rows (support 4, query 6,
+  evaluations 2) beside ordinary episodes of their worlds (the driver made no new ordinary groups after 12 were
+  outstanding, so the second half ran beside the fill only). Both groups were fully scored, every nested run resolved
+  (scored = rollouts in all 21 evaluations; the longest evaluation 523 s of the 1440 s clock):
+  - g000000 `ext_reasoning-gym_family_relationships` (family p90 295 s): prepared in 108 s (support 0.625, admitted),
+    4 of 4 episodes `memetic_scored` (rewards 0.81, 0, 0, 0.76), group 3182 s from creation to score; anchor 0.833
+    (no change 0.833, default 0.833).
+  - g000001 `curriculum_contract_diagnosis` (p90 325 s): prepared in 204 s (support 0.875), 3 `memetic_scored`
+    (0.64, 0.89, 0.70) and 1 scored 0 at the 64-request budget, group 3582 s; anchor 0.917.
+  No commit beat its anchor (no memetic success yet). Supervisors used 1375-2297 s of their 7200 s.
+- **Found and fixed in the run (17d837704):** two of g000000's four commits were refused as leaks (reward 0) for
+  naming "mother", a query answer that is also a support answer and a word of every puzzle input. `leaked_answers` now
+  ignores an answer that occurs in what the supervisor is shown anyway (`shown_text`: program files, support inputs);
+  a copied answer the supervisor could not have read is still refused.
+- **Left:** a round boundary that stops the standing collection abandons every group in flight, memetic ones (up to
+  ~2.4 h) most often; families never measured on the actor get no memetic group until they are.
+
+## 2026-11-23 Tune RL trains the action reasoning of reasoned decisions (follow-up to "GRPO trains the action reasoning")
+
+**Defect, confirmed by a run.** A `readout: decision` root went through `runRollouts` (worktree build at 7e3d18520)
+and then through `validate_rollout_graph`, the check `tune/rl.py` applies through `whole_episode_turns`. Every episode
+was refused: "whole-episode graph model-turn inventory differs from captured turns". The tune rollout recorded k+1
+turns (the 4 reasoning generations plus the action entry) against the graph's 4 scored-entry nodes. So tune RL could
+not train any episode with a reasoned readout. Had the names matched, it would have trained all k reasonings with
+their unused free replies.
+
+**Fix, consistent with GRPO.** Default on; recipe `rl_decision_reasoning: false` opts out (the choice only).
+- `ts-host/src/tune/rollouts.ts`:
+  - Every scored entry is a turn, in the order the graph numbers them (a slot is taken before scoring), as
+    `rl.task_rollouts.rollout_turns` records collector episodes.
+  - Only the action entry carries the sampling receipt. The other entries are context, with no receipt.
+  - Reasoning generations are no longer turns. The action entry keeps its reasoning's exact capture
+    (`decision_reasoning.reasoning_sampling`).
+- `rl/episode_graph.whole_episode_turns(rollout, think_close)` adds that capture as one more sampled turn, cut
+  through its first `</think>` (`action_reasoning_capture`), named `<action turn>:reasoning`.
+- `rl/native_replay.compile_replay` counts its node among the action turn's nodes. The objective's turn inventory is
+  unchanged, and the node is recorded in `graph_nodes`.
+- `invocation_behavior_policy` and `prepare_objective` take the same `think_close`. `tune/rl.RLEpisodes` reads it
+  from the engine tokenizer.
+- The decision turns' choice term and the other samples' context are unchanged.
+
+**Tests.**
+- `tests/neuralese/test_tune_rl_decision_reasoning.py`: compile with and without `think_close`, folding of the
+  reasoning node, cut and refusal rules.
+- `ts-host/test/tune-rollouts.test.mjs` (11/11 with `decision-reasoning.test.mjs`, built and run on Pop while the DGX
+  ledger queue was frozen behind the round SFT): one turn per graph node, graph order under out-of-order scoring, only the
+  action entry has a receipt and a reasoning capture.
+- Also run: `test_rl_episode_graph`, `test_native_rl_replay` and `test_native_invocation_actors` (47 passed together
+  with the new file).
+
+## 2026-11-23 18:30 Async prepare never rewrites a running data script; held-v4 reference result
+
+**Data script race.** The 17:27 driver restart rewrote `r0002/data.sh` while the earlier driver's `aei1-r0002-data` unit was executing it. sh reads its script by byte offset, so it resumed mid-line in the new file (`data.sh: 6: es.py: not found`) and the data stage failed at 18:04.
+
+The fix: prepare no longer rewrites `data.sh` while its data unit is present (running or queued), and writes it atomically (temporary file plus `os.replace`), so a running shell keeps the old inode. A test covers it. The 1c177e3fc per-step markers introduced the rewrite path.
+
+**held-v4 reference.** sft-v6 (dc95f29d) on held-v4 (manifest c09720e1, 252 tasks), measured on Pop at 2 samples per task: 241 of 500 scored episodes pass (48.2%), with 3 timeouts. The run was resumed once after a collector preemption. This is the semantic-FP baseline; later policies are measured on the round cadence (every third round, or when held-v3 is significant or the health report flags a semantic-FP construct).

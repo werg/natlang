@@ -68,6 +68,11 @@ BASE_CKPT = str(root('data_hdd') / 'natlang-development-data/archive/data/lfm3-r
 BASE_SHA = '5ff07638bbedba7c8ec506f763ce5fb7511c7755ce8c045ef764bca00ddc1d6a'
 PY = str(REPO / '.venv-neuralese/bin/python')
 LEDGER = ['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py')]
+# An async round's size (DECISIONS 2026-11-23 "async round size"): ~12M weighted target tokens is ~360 steps at
+# 30k loss tokens per step, ~3.7 h of DGX SFT (36.8 s/step) or ~1 h on an A100: about the snapshot + prepare time
+# of the next round, and twice the new data one round interval adds (own successes, fills, teacher). The uncapped
+# build trains every filled chain ever made (share=all) each round: r0001 was 37.4M (1247 steps, ~12.7 h on the DGX).
+ROUND_TARGET_TOKENS = 12_000_000
 FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB); 6 kept the Pop fill out beside the SFT
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
@@ -243,12 +248,9 @@ def held_budget_gb(slots=HELD_SLOTS):
 
 
 def ledger_queued(unit):
-    """Whether the memory ledger holds ``unit`` waiting or requeued (a preempted resumable unit before its relaunch)."""
-    try:
-        status = json.loads(subprocess.run([*LEDGER, 'status'], capture_output=True, text=True, timeout=60).stdout)
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return False
-    return any(w.get('unit', '').removesuffix('.service') == unit for w in status.get('waiting') or ())
+    """Whether the ledger retains ownership, including preemption/requeue transitions."""
+    from scripts.memory_ledger import unit_owned
+    return unit_owned(unit)
 
 
 def _pid_alive(pid):
@@ -299,16 +301,22 @@ def endpoint_for_slot(endpoints, slot_index):
 def frontier_collector(base):
     class FrontierCollector(base):
         """grpo's Collector over a fixed task order: one group of ``--group`` samples per task, in order, no new group
-        after the deadline. Shards across several actor endpoints (Colab G4 sessions): an endpoint that stops answering
-        or serving the policy is dropped, its in-flight episodes are abandoned (their groups never scored: an episode
-        against a dead actor is no verdict on the task) and its slots idle until it serves again. A live DGX held
-        measurement (``priority_dir``) shrinks the active slots to ``priority_share``."""
+        after the deadline. Runs on remote actor endpoints too (Colab sessions, one or several; grpo's ``slot`` with
+        this class's ``endpoint_for_slot`` and ``episode_valid``): an endpoint that stops answering or serving the
+        policy is dropped, its in-flight episodes are abandoned (their groups never scored: an episode against a dead
+        actor, or one a replaced session serves under another policy, is no verdict on the task) and its slots idle until
+        it serves the policy again. A live DGX held measurement (``priority_dir``) shrinks the active slots to
+        ``priority_share``."""
 
-        def setup(self, order, deadline, endpoints=None, priority_dir=None, priority_share=HELD_PRIORITY_SHARE):
+        def setup(self, order, deadline, endpoints=None, priority_dir=None, priority_share=HELD_PRIORITY_SHARE,
+                  verify=None):
             self.order = collections.deque(t for t in order if t in self.by_id and t not in self.own)
             self.deadline = deadline
             self.endpoints = list(endpoints) if endpoints else [(getattr(self.args, 'actor', None),
                                                                  getattr(self.args, 'slots', 1))]
+            # verify each finished episode's actor (``episode_valid``): remote actors (several, or one this collector
+            # does not serve); default: when more than one endpoint shares the slots
+            self.verify = len(self.endpoints) > 1 if verify is None else bool(verify)
             self.dead, self.dead_checked = set(), {}
             self.priority_dir, self.priority_share, self.priority_read = priority_dir, priority_share, 0.
             self.full_slots = sum(count for _, count in self.endpoints)
@@ -380,78 +388,25 @@ def frontier_collector(base):
                 self.dead_checked[url] = time.time()
                 print(json.dumps({'event': 'endpoint dropped', 'endpoint': url}), flush=True)
 
-        def slot(self, index=0):
-            if len(self.endpoints) <= 1:
-                return super().slot(index)
-            sampling = self.work / 'sampling-config.json'
-            while not self.stop.is_set():
-                actor_url = endpoint_for_slot(self.live_endpoints(), index)
-                if index >= self.active_slots or actor_url is None:
-                    time.sleep(2)
-                    continue
-                item = self._take()
-                if item is None:
-                    time.sleep(2)
-                    continue
-                group, entry = item
-                info = self.groups[group]
-                workers = info['dir'] / 'workers'
-                workers.mkdir(exist_ok=True)
-                key = entry['key']
-                entry = {**entry, 'rl_endpoint': actor_url}
-                queue_file, journal = workers / f'{key}.queue.jsonl', workers / f'{key}.journal.jsonl'
-                queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
-                started = self.version
-                command = [sys.executable, str(REPO / 'scripts/run_bonsai_queue.py'), str(queue_file), str(journal),
-                           '--runtime', str(self.runtime), '--server', actor_url,
-                           '--chat-completions-url', actor_url + '/v1/chat/completions', '--model-id', 'natlang-rl',
-                           '--model-concurrency', '1', '--chat-request-config', str(sampling), '--neuralese-server']
-                with (workers / f'{key}.log').open('a') as handle:
-                    process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
-                                               start_new_session=True)
-                    with self.lock:
-                        self.running += 1
-                    try:
-                        while process.poll() is None:
-                            if self.stop.wait(2):
-                                os.killpg(process.pid, signal.SIGTERM)
-                                process.wait()
-                                return
-                    finally:
-                        with self.lock:
-                            self.running -= 1
-                if process.returncode < 0 or self.stop.is_set():
-                    self._abandon(group, key, process.returncode)
-                    if self.stop.is_set():
-                        return
-                    continue
-                # an episode that ran against an actor which no longer answers (or serves another policy) is no verdict
-                if actor_url in self.dead or not endpoint_alive(actor_url, self.policy_sha):
-                    self.mark_dead(actor_url)
-                    task = info.get('task_id')
-                    self._abandon(group, key, process.returncode)
-                    with self.lock:      # the task runs again on a live endpoint
-                        if task in self.by_id and task not in self.order and not self.stop.is_set():
-                            self.order.appendleft(task)
-                    continue
-                with self.lock:
-                    if info.get('abandoned'):
-                        continue
-                    info['done'] += 1
-                    info['versions'].append(started)
-                    wave_done = bool(info.get('held_back')) and info['done'] == info['wave']
-                    complete = info['done'] == info['size'] and not info.get('held_back')
-                if wave_done:
-                    complete = self._after_wave(group)
-                if complete:
-                    try:
-                        self._score(group)
-                    except Exception as error:
-                        print(json.dumps({'event': 'group scoring failed', 'group': group, 'error': repr(error)[:300]}),
-                              flush=True)
-                        with self.lock:
-                            self.outstanding -= 1
-                            self.groups.pop(group, None)
+        def endpoint_for_slot(self, index=0):
+            """Slot ``index``'s live endpoint (``endpoint_for_slot`` over ``live_endpoints``); None while its endpoint is
+            dropped or beyond the live endpoints' capacity (the slot idles: grpo's ``slot``)."""
+            return endpoint_for_slot(self.live_endpoints(), index)
+
+        def episode_valid(self, actor_url, info):
+            """With ``verify`` (remote actors, which this collector neither serves nor rebinds): an episode that ran
+            against an actor which no longer answers or serves another policy is no verdict. Its endpoint is dropped
+            (retried every 2 minutes, ``live_endpoints``) and its task runs again on a live one."""
+            if not self.verify:
+                return True
+            if actor_url not in self.dead and endpoint_alive(actor_url, self.policy_sha):
+                return True
+            self.mark_dead(actor_url)
+            task = info.get('task_id')
+            with self.lock:
+                if task in self.by_id and task not in self.order and not self.stop.is_set():
+                    self.order.appendleft(task)
+            return False
     return FrontierCollector
 
 
@@ -501,6 +456,9 @@ def collect(args):
     g.memetic_tasks = getattr(args, 'memetic_tasks', None) or (grpo.default_memetic_tasks() if memetic_share > 0 else None)
     g.memetic_max_groups = int(getattr(args, 'memetic_max_groups', MEMETIC_MAX_GROUPS))
     g.memetic_layout = getattr(args, 'memetic_layout', 'staged')
+    g.memetic_fit_quantile = float(getattr(args, 'memetic_fit_quantile', 0.9))
+    g.memetic_nested_slots = bool(getattr(args, 'memetic_nested_slots', True))
+    g.memetic_seed_collection = getattr(args, 'memetic_seed_collection', None)
     g.max_outstanding = args.slots // 2 + 8
     tasks, excluded = grpo.load_tasks(g, work)
     code = grpo.git_pin()
@@ -510,7 +468,8 @@ def collect(args):
            'argv': sys.argv, 'checkpoint': args.checkpoint, 'checkpoint_sha256': sha, 'k': args.k, 'hours': args.hours,
            'tasks_file': args.tasks, 'tasks_sha256': sha256_file_hex_cached(Path(args.tasks)), 'eligible': len(tasks),
            'memetic': {'share': memetic_share, 'tasks': g.memetic_tasks, 'max_groups': g.memetic_max_groups,
-                       'layout': g.memetic_layout},
+                       'layout': g.memetic_layout, 'fit_quantile': g.memetic_fit_quantile,
+                       'nested_slots': g.memetic_nested_slots},
            'excluded_ids': excluded, 'provenance': code_provenance()}
     with (work / 'runs.jsonl').open('a') as handle:
         handle.write(json.dumps(run, default=str) + '\n')
@@ -553,9 +512,10 @@ def collect(args):
                                                    first_group=max(existing, default=-1) + 1)
     g.neuralese_variants, g.neuralese_variant_share = args.neuralese_variants, args.neuralese_variant_share
     collector.variants = grpo.load_variants(g, tasks, work)
+    # a DGX held measurement takes slots of the DGX actor; a remote actor's collection keeps its own
     collector.setup(order, time.time() + args.hours * 3600, endpoints=endpoints,
-                    priority_dir=None if args.no_held_priority else Path(args.held_priority_dir),
-                    priority_share=args.held_priority_share)
+                    priority_dir=None if args.no_held_priority or actor is None else Path(args.held_priority_dir),
+                    priority_share=args.held_priority_share, verify=actor is None)
     log({'event': 'collect start', 'tasks': len(collector.order), 'already_scored': len(collector.own), 'k': args.k,
          'slots': total_slots, 'actor': url, 'endpoints': endpoints})
     stop = threading.Event()
@@ -837,7 +797,7 @@ def live_holdout_registry(live_works):
 
 
 def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None,
-                      live_registry=None):
+                      live_registry=None, max_target_tokens=0):
     """The mix build (``sft_sources build``) of a cycle or an async round: Ambient frontier build from WORK's replayed
     successes (own first, then teacher; observed-live teacher episodes against ``live_registry``), the teacher pools,
     aux parts and the lineage's prefer-unseen builds."""
@@ -850,7 +810,8 @@ def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_
             *[x for a in aux for x in ('--aux', a)],
             *[x for b in prefer_unseen for x in ('--prefer-unseen', b)],
             *(['--previous-policy', previous_policy] if previous_policy else []),
-            *(['--live-holdout-registry', live_registry] if live_registry else [])]
+            *(['--live-holdout-registry', live_registry] if live_registry else []),
+            *(['--max-target-tokens', max_target_tokens] if max_target_tokens else [])]
 
 
 def judge(vs_start, success_pts, fail_pts):
@@ -1013,11 +974,16 @@ class Cycle:
         """Whether ``unit`` runs or the ledger holds it (waiting, or requeued after a preemption until its relaunch)."""
         return self.active(unit) or ledger_queued(unit)
 
-    def wait(self, unit, poll=60):
+    def wait(self, unit, poll=60, between=None):
         """Until ``unit`` ends (a preempted, requeued unit has not ended); a failed unit ends the cycle (its stage must
-        not be marked done)."""
+        not be marked done). ``between``: called every poll while it runs (a failure is logged, never the wait's end)."""
         time.sleep(20)
         while self.present(unit):
+            if between is not None:
+                try:
+                    between()
+                except Exception as error:
+                    self.note(stage='wait', unit=unit, between_failed=repr(error)[:300])
             time.sleep(poll)
         if subprocess.run(['systemctl', '--user', 'is-failed', '-q', f'{unit}.service']).returncode == 0:
             raise SystemExit(f'{unit} failed: see its log; rerun the cycle to resume')
@@ -1213,6 +1179,9 @@ class Cycle:
                        '--collect-weight-dtype', collect_w_dtype, '--teacher-attempts', teacher_attempts,
                        '--memetic-share', getattr(self.a, 'memetic_share', MEMETIC_SHARE),
                        '--memetic-layout', getattr(self.a, 'memetic_layout', 'staged'),
+                       '--memetic-fit-quantile', getattr(self.a, 'memetic_fit_quantile', 0.9),
+                       '--memetic-nested-slots' if getattr(self.a, 'memetic_nested_slots', True)
+                       else '--no-memetic-nested-slots',
                        '--slots', slots, '--unit-prefix', unit, *actor)
 
     def serve_colab(self, hosts, start, sha, profile):
@@ -1487,8 +1456,34 @@ class Cycle:
         return ['--neuralese-variants', self.a.neuralese_variants, '--neuralese-variant-share',
                 self.a.neuralese_variant_share]
 
+    def data_repo(self):
+        return Path(getattr(self.a, 'data_repo', None) or self.pin)
+
     def fill_repo(self):
-        return Path(getattr(self.a, 'fill_repo', None) or self.pin)
+        return Path(getattr(self.a, 'fill_repo', None) or self.data_repo())
+
+    def require_data_readers(self):
+        minimum = getattr(self.a, 'minimum_data_reader_commit', None)
+        if not minimum:
+            return
+        for repo in {self.data_repo(), self.fill_repo()}:
+            marker = repo / '.natlang-pin.json'
+            recorded = json.loads(marker.read_text())
+            actual = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+            if recorded.get('commit') != actual:
+                raise ValueError(f'data reader pin identity differs: {repo}')
+            subprocess.run(['git', '-C', str(repo), 'merge-base', '--is-ancestor', minimum, actual], check=True)
+            subprocess.run(['git', '-C', str(repo), 'diff', '--quiet', 'HEAD', '--'], check=True)
+
+    def data_py(self, script, *args):
+        return [PY, str(self.data_repo() / 'scripts/neuralese_data' / script), *map(str, args)]
+
+    def fill_build_command(self, *args):
+        # A data stage may intentionally use different fill and mix readers.
+        repo = self.fill_repo()
+        return ['/usr/bin/env', 'NATLANG_REPO=' + str(repo),
+                f'PYTHONPATH={repo}/scripts/neuralese_data:{repo}/training/neuralese:{repo}',
+                PY, str(repo / 'scripts/neuralese_data/filled_reasoning.py'), 'build', *map(str, args)]
 
     def fill_alongside(self, collect_unit, sha=None):
         """Filled reasoning (filled_reasoning.py generate, the rationalization strand's tool) drawn from the same actor
@@ -1515,6 +1510,7 @@ class Cycle:
         that when the engine has spare slots), with twice as many episode workers so the cap is reached (each worker
         draws at most 4 candidates at a time and scores between them). In the fill window the dedicated actor's every
         slot (``--fill-window-inflight`` draws, ``--fill-window-workers`` episodes)."""
+        self.require_data_readers()
         from natlang_neuralese.common import data_registry
         live = [str(w) for w in getattr(self.a, 'live_work', None) or ()]
         works = list(dict.fromkeys([*live, *map(str, self.a.seed_work), *data_registry.role_paths('grpo-sd-teacher')]))
@@ -1575,6 +1571,7 @@ class Cycle:
             os.symlink(root('data_nvme') / 'sft-sources-20261118/tokenizer', self.work / 'tokenizer')
 
     def data_stage(self):
+        self.require_data_readers()
         w = self.work
         self.work_tokenizer()
         steps = []
@@ -1588,25 +1585,27 @@ class Cycle:
         link_live_works(w, getattr(self.a, 'live_work', None) or ())
         name = f'episodes-{self.a.name}'
         if not (w / f'{name}-extract.json').exists():
-            steps.append(self.py('sft_sources.py', 'extract', '--work', w, '--rl',
+            steps.append(self.data_py('sft_sources.py', 'extract', '--work', w, '--rl',
                                  # groups are read live from the run dir; the collection writes no zst archive, so
                                  # the archive is the (registered) collect dir itself
                                  f'{self.collect_dir}:{self.collect_dir}', '--out-name', name))
-        steps.append(self.py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
+        steps.append(self.data_py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
                              '--runtime-repo', self.pin))
         if self.a.fill and (Path(self.a.fill) / 'fills.jsonl').exists():
             failed = [x for p in self.failed_policies() for x in ('--exclude-policy', p)]
-            steps.append([PY, str(self.fill_repo() / 'scripts' / 'neuralese_data' / 'filled_reasoning.py'), 'build',
-                          '--out', str(self.a.fill), '--corpus', str(self.dir / 'filled'), *failed])
+            steps.append(self.fill_build_command('--out', self.a.fill, '--corpus', self.dir / 'filled', *failed))
         lines = [' '.join(map(_quote, s)) for s in steps]
         if not self.a.no_own_neuralese_graph:
             # a failure ends the stage (set -e): sft-v7's silently fell back to a mix without the student's own consumer
             # calls, the ran-out fix; --no-own-neuralese-graph is the deliberate opt-out
             lines.append(' '.join(map(_quote, self.own_neuralese_graph_command())))
         script = self.dir / 'data.sh'
-        script.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
+        if not self.present(f'{self.a.name}-data'):
+            tmp = script.with_name(script.name + '.tmp')
+            tmp.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
+            os.replace(tmp, script)
         # 12 GB: neuralese-graph's reader processes (sft_sources --workers, ~0.15 GB each) beside its ~7 GB parent
-        self.ledger(f'{self.a.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log')
+        self.ledger(f'{self.a.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log', repo=self.data_repo())
         self.mark('data')
 
     def failed_policies(self):
@@ -1625,7 +1624,7 @@ class Cycle:
         the state), so without this part a cycle's mix holds no consumer call of the student's own: held-v3 after
         sft-v5 (DECISIONS 2026-11-21 "ran-out") showed the student calling Neuralese consumers twice as often while
         they loop ~7.6 calls each. ``--no-own-neuralese-graph`` opts out."""
-        return self.py('sft_sources.py', 'neuralese-graph', '--work', self.work, '--out', self.dir / 'neuralese-graph-own',
+        return self.data_py('sft_sources.py', 'neuralese-graph', '--work', self.work, '--out', self.dir / 'neuralese-graph-own',
                        '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
                        # this cycle's collection ran on the cycle's pin: its surfaces are current
                        '--current-surface-run', '^rl:' + re.escape('/'.join(self.collect_dir.parts[-2:])) + '$')
@@ -1633,13 +1632,14 @@ class Cycle:
     def build_command(self):
         """The mix build (``sft_sources build``) and the checkout it runs from: ``--data-repo`` (data preparation,
         outside the held scoring series), else the pin."""
+        self.require_data_readers()
         aux = list(self.a.aux)
         if (self.dir / 'filled' / 'chains.pkl').exists():
             aux.append(f'filled={self.dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
         own_graph = self.dir / 'neuralese-graph-own' / 'chains.pkl'
         if not self.a.no_own_neuralese_graph and own_graph.exists():
             aux.append(f'own-neuralese-graph={own_graph},share={self.a.own_neuralese_graph_share},task_tokens=40000')
-        repo = Path(getattr(self.a, 'data_repo', None) or self.pin)
+        repo = self.data_repo()
         command = mix_build_command(repo, work=self.work, out=self.mix, frontier=self.dir / 'frontier.json', aux=aux,
                                     prefer_unseen=self.train_policy()[2], teacher_budget=self.a.teacher_budget,
                                     own_share=self.a.own_share,
@@ -2427,12 +2427,19 @@ class AsyncRoundDriver:
             neuralese_variant_share=a.neuralese_variant_share, no_neuralese_variants=a.no_neuralese_variants,
             collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts,
             memetic_share=getattr(a, 'memetic_share', MEMETIC_SHARE),
-            memetic_layout=getattr(a, 'memetic_layout', 'staged'), held_profile=getattr(a, 'held_profile', 'pop'),
+            memetic_layout=getattr(a, 'memetic_layout', 'staged'),
+            memetic_fit_quantile=getattr(a, 'memetic_fit_quantile', 0.9),
+            memetic_nested_slots=getattr(a, 'memetic_nested_slots', True), held_profile=getattr(a, 'held_profile', 'pop'),
             held_pin=a.held_pin, held_series_host=getattr(a, 'held_profile', 'pop'), held_samples=a.held_samples,
             held_slots=a.held_slots,
             no_held_reuse=False, strict_held_reuse=a.strict_held_reuse, colab_hosts=a.colab_hosts, fallback_wait_minutes=a.fallback_wait_minutes,
             collect_profile='dgx', sft_profile='dgx', select_args=a.select_args, prefer_unseen=[],
-            fill_repo=None, data_repo=None, success_pts=a.success_pts, fail_pts=a.fail_pts)
+            # The controller's immutable source supplies data tooling; the actor/learner
+            # keep --commit/--pin. Explicit old-pin paths opt out at a normal resume.
+            fill_repo=getattr(a, 'fill_repo', None) or getattr(a, 'data_repo', None) or str(REPO),
+            data_repo=getattr(a, 'data_repo', None) or str(REPO),
+            minimum_data_reader_commit=getattr(a, 'minimum_data_reader_commit', None),
+            success_pts=a.success_pts, fail_pts=a.fail_pts)
 
     def note(self, **record):
         self.c.note(stage='async', **record)
@@ -2461,10 +2468,12 @@ class AsyncRoundDriver:
         unit, work = self.collection_unit(policy), self.collect_dir(policy)
         for other in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists() else ():
             other_unit = f'{self.a.name}-collect-{other.name.split("-")[0]}'
-            if other_unit != unit and self.c.present(other_unit):
-                for u in (other_unit, f'{other_unit}-fill'):
+            if other_unit == unit:
+                continue
+            for u in (other_unit, f'{other_unit}-fill', *self.remote_units(other_unit)):
+                if self.c.present(u):
                     self.c.stop_unit(u)
-                self.note(collection_stopped=other_unit)
+                    self.note(collection_stopped=u)
         if self.c.present(unit):           # running, or preempted and requeued (the ledger relaunches it)
             return unit
         work.mkdir(parents=True, exist_ok=True)
@@ -2491,8 +2500,13 @@ class AsyncRoundDriver:
         if actor['checkpoint_sha256'] != policy['sha256']:
             return
         self.c.work_tokenizer()
-        self.c.ledger(f'{unit}-fill', FILL_GB, 'medium', self.c.fill_command(actor), work / 'fill.log', detach=True)
+        self.c.ledger(f'{unit}-fill', FILL_GB, 'medium', self.c.fill_command(actor), work / 'fill.log', detach=True,
+                      repo=self.c.fill_repo())
         self.note(fill_started=f'{unit}-fill', policy=policy['sha256'])
+
+    def remote_units(self, unit):
+        """The remote actors' collector units beside DGX collection unit ``unit`` (one per ``--rebind-actor``)."""
+        return [f'{unit}-remote{i}' for i in range(len(self.a.rebind_actor))]
 
     def remote_actors(self):
         """[(host, VM-local front URL, DGX-side endpoint)] of ``--rebind-actor HOST@URL`` targets (Colab actors
@@ -2508,7 +2522,9 @@ class AsyncRoundDriver:
 
     def ensure_remote_collection(self, policy):
         """A DGX-side collector per remote actor that serves ``policy`` (``collect --actor``): restarted with the
-        policy like the DGX collection (a rebound actor serves the new policy; the old collector drops it)."""
+        policy like the DGX collection (a rebound actor serves the new policy; the old collector drops it). An actor
+        not serving ``policy`` is rebound to it first (``ensure_remote_policy``)."""
+        self.ensure_remote_policy(policy)
         for i, (host, _front, endpoint) in enumerate(self.remote_actors()):
             unit = f'{self.collection_unit(policy)}-remote{i}'
             if self.c.present(unit) or not endpoint_alive(endpoint, policy['sha256']):
@@ -2531,8 +2547,7 @@ class AsyncRoundDriver:
         the remote actors' collection clients too."""
         for work in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists() else ():
             unit = f'{self.a.name}-collect-{work.name.split("-")[0]}'
-            remotes = [f'{unit}-remote{i}' for i in range(len(self.a.rebind_actor))] if remote else []
-            for u in (unit, f'{unit}-fill', *remotes):
+            for u in (unit, f'{unit}-fill', *(self.remote_units(unit) if remote else ())):
                 if self.c.present(u):          # a requeued one too, or the ledger relaunches it beside the learner
                     self.c.stop_unit(u)
 
@@ -2568,28 +2583,28 @@ class AsyncRoundDriver:
         lines = []
         rl = [*collections_, *[d for d in sorted(self.root.glob('r*/grpo')) if (d / 'groups').exists()]]
         teachers = [d for d in sorted(self.root.glob('teacher-*')) if (d / 'manifest.jsonl').exists()]
-        lines.append(self.c.py('sft_sources.py', 'extract', '--work', w,
+        lines.append(self.c.data_py('sft_sources.py', 'extract', '--work', w,
                                *[x for d in rl for x in ('--rl', f'{d}:{d}')], *[x for d in teachers for x in ('--teacher', d)],
                                '--out-name', f'episodes-{self.a.name}-{round_dir.name}'))
-        lines.append(self.c.py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
+        lines.append(self.c.data_py('sft_sources.py', 'replay', '--work', w, '--workers', self.a.replay_workers,
                                '--runtime-repo', self.c.pin))
         if self.a.fill and (Path(self.a.fill) / 'fills.jsonl').exists():
-            lines.append([PY, str(self.c.fill_repo() / 'scripts' / 'neuralese_data' / 'filled_reasoning.py'), 'build',
-                          '--out', str(self.a.fill), '--corpus', str(round_dir / 'filled'),
-                          *[x for s in self.failed_policies() for x in ('--exclude-policy', s)]])
+            lines.append(self.c.fill_build_command('--out', self.a.fill, '--corpus', round_dir / 'filled',
+                          *[x for s in self.failed_policies() for x in ('--exclude-policy', s)]))
         surfaces = '|'.join(re.escape('/'.join(Path(d).parts[-2:])) for d in collections_) or '(?!)'
-        lines.append(self.c.py('sft_sources.py', 'neuralese-graph', '--work', w, '--out', round_dir / 'neuralese-graph-own',
+        lines.append(self.c.data_py('sft_sources.py', 'neuralese-graph', '--work', w, '--out', round_dir / 'neuralese-graph-own',
                                '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
                                '--current-surface-run', f'^rl:({surfaces})$'))
         aux = list(self.a.aux)
         aux.append(f'filled={round_dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
         aux.append(f'own-neuralese-graph={round_dir / "neuralese-graph-own" / "chains.pkl"},'
                    f'share={self.a.own_neuralese_graph_share},task_tokens=40000')
-        build = mix_build_command(self.c.pin, work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
+        build = mix_build_command(self.c.data_repo(), work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
                                   aux=aux, prefer_unseen=self.controller.state['prefer_unseen'],
                                   teacher_budget=self.a.teacher_budget, own_share=self.a.own_share,
                                   previous_policy=prev['sha256'] if prev else None,
-                                  live_registry=live_holdout_registry(self.a.live_work))
+                                  live_registry=live_holdout_registry(self.a.live_work),
+                                  max_target_tokens=self.a.round_target_tokens)
         return list(map(str, frontier)), [list(map(str, x)) for x in lines], list(map(str, build))
 
     def failed_policies(self):
@@ -2609,14 +2624,17 @@ class AsyncRoundDriver:
             return json.loads((round_dir / 'round.json').read_text())
         (round_dir / 'stages').mkdir(parents=True, exist_ok=True)
         cur = policies[-1]
-        runs = self.collect_dir(cur) / 'runs.jsonl'
+        # the newest policy's collections: the DGX one and the remote actors' (which keep collecting while a DGX SFT
+        # holds the DGX collection stopped: the snapshot waits for them)
+        units = [self.collection_unit(cur), *self.remote_units(self.collection_unit(cur))]
         while True:
-            if runs.exists():
-                started = json.loads(runs.read_text().splitlines()[0])['started']
+            runs = [d / 'runs.jsonl' for d in self.collections_of([cur])]
+            if runs:
+                started = min(json.loads(r.read_text().splitlines()[0])['started'] for r in runs)
                 if time.time() - started >= 3600 * self.a.snapshot_min_hours:
                     break
-            if not self.c.present(self.collection_unit(cur)):
-                if runs.exists():
+            if not any(self.c.present(u) for u in units):
+                if runs:
                     break                   # stopped early (a rollback, a phase switch): what it scored is the snapshot
                 raise SystemExit(f'round {round_dir.name}: no collection of {cur["sha256"][:12]} ({self.collect_dir(cur)})')
             time.sleep(60)
@@ -2629,19 +2647,22 @@ class AsyncRoundDriver:
 
         # Each step records stages/<step>.done, so a driver restart resumes after the last finished step instead of
         # rerunning frontier and data (hours) beneath a build that may still be reading their outputs.
-        def step(name, budget, argv):
+        def step(name, budget, argv, repo=None):
             done = round_dir / 'stages' / f'{name}.done'
             if not done.exists():
                 self.c.ledger(f'{self.a.name}-{round_dir.name}-{name}', budget, STAGE_PRIORITY, argv,
-                              round_dir / f'{name}.log')
+                              round_dir / f'{name}.log', repo=repo)
                 done.write_text(json.dumps({'time': time.time()}) + '\n')
         step('frontier', 4, frontier)
         self.c.work_tokenizer()
         script = round_dir / 'data.sh'
-        if not (round_dir / 'stages' / 'data.done').exists():
-            script.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
-        step('data', 12, ['/bin/sh', str(script)])
-        step('build', 24, build)
+        # Preserve an admitted/requeued plan and atomically replace inactive plans.
+        if not (round_dir / 'stages' / 'data.done').exists() and not self.c.present(f'{self.a.name}-{round_dir.name}-data'):
+            tmp = script.with_name(script.name + '.tmp')
+            tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
+            os.replace(tmp, script)
+        step('data', 12, ['/bin/sh', str(script)], repo=self.c.data_repo())
+        step('build', 24, build, repo=self.c.data_repo())
         report = json.loads((round_dir / 'mix' / 'build.json').read_text())
         manifest = write_round_manifest(
             round_dir, round_id=round_dir.name, base_policy_sha=cur['sha256'],
@@ -2669,6 +2690,7 @@ class AsyncRoundDriver:
         """launch-sft.sh's environment for a round: the one recipe for the G4 and the DGX learner (launch-sft.sh
         writes ``--epochs 1 --warmup 10 --batch-loss-tokens 30000 --min-lr-fraction 0.1 --clip 1.0``; a resumed state
         indexes the same step list wherever it trains) plus the round's flags."""
+        self.c.require_data_readers()
         run = round_dir / 'sft'
         extra = ['--round-id', round_dir.name, '--export-factors-dir', str(run / 'factors'), '--factors-only', '--resume']
         vals = [v for v in ('val-own.pkl', 'val-teacher.pkl') if (round_dir / 'mix' / v).exists()]
@@ -2748,13 +2770,16 @@ class AsyncRoundDriver:
             if (factors / 'policy_manifest.json').exists():
                 return factors
         unit = f'{self.a.name}-{round_dir.name}-sft'
+        # the standing DGX collection (74 GB beside a ~64-80 GB learner on 121 GB) yields for the whole SFT: the
+        # ledger would preempt it (COLLECTION_PRIORITY) but then relaunch it beside the learner whenever room appears;
+        # stopped (and cancelled if requeued) here, the next round's collection restarts it. Also when a restarted
+        # driver joins a running learner: the round's start just queued the DGX collection again
+        self.stop_collections(remote=False)
         if not self.c.active(unit):
-            # the standing DGX collection (74 GB beside a ~100 GB learner on 128 GB) yields for the whole SFT: the
-            # ledger would preempt it (COLLECTION_PRIORITY) but then relaunch it beside the learner whenever room
-            # appears; stopped (and cancelled if requeued) here, the next round's collection restarts it
-            self.stop_collections(remote=False)
             self.launch_sft(round_dir, policy, activation_gb=self.a.sft_activation_gb, preflight_only=False)
-        self.c.wait(unit, poll=120)
+        # the remote actors keep collecting the policy the round trains from for the whole SFT; a session the keeper
+        # replaced (and served again) gets its collector back, one that was down at the round's start gets one
+        self.c.wait(unit, poll=120, between=lambda: self.ensure_remote_collection(policy))
         if not (factors / 'policy_manifest.json').exists():
             raise SystemExit(f'round {round_dir.name}: no factors after the SFT ({round_dir}/sft/train.log)')
         return factors
@@ -2801,12 +2826,47 @@ class AsyncRoundDriver:
         return json.loads(published.read_text())
 
     def rebind_remote(self, published, factors, version):
+        """Rebind every ``--rebind-actor`` that answers and does not serve the published policy yet (one already
+        rebound is skipped); the record each rebound Colab actor keeps then names the published checkpoint
+        (``pop_rl_actor.rebound_record``: a replaced session is served again at it). Every failure is raised after the
+        others were tried."""
         import pop_rl_actor
+        sha, errors = published['checkpoint_sha256'], []
+        endpoints = {(host, front): endpoint for host, front, endpoint in self.remote_actors()}
         for target in self.a.rebind_actor:
             host, _, front = target.rpartition('@')
-            pop_rl_actor.rebind_actor(front_url=front, policy_id=published['checkpoint_sha256'], version=version,
-                                      factors_dir=factors, host=host or None, host_profile='colab',
-                                      export_dir=None if host else published['sglang_export']['dir'])
+            if endpoint_alive(endpoints.get((host, front), front), sha):
+                continue
+            try:
+                pop_rl_actor.rebind_actor(front_url=front, policy_id=sha, version=version, factors_dir=factors,
+                                          host=host or None, host_profile='colab',
+                                          export_dir=None if host else published['sglang_export']['dir'],
+                                          checkpoint=published['checkpoint'])
+            except Exception as error:
+                errors.append(f'{target}: {error!r}'[:300])
+        if errors:
+            raise RuntimeError('; '.join(errors))
+
+    def ensure_remote_policy(self, policy, retry_seconds=1200):
+        """The remote actors serve ``policy`` (the lineage head): a rebind that failed at the publication, a driver
+        restarted after it, or a replaced session served again at an older policy is rebound here (at most every
+        ``retry_seconds``). Only a round's publication can be rebound (its factors); the start policy is served as
+        it is."""
+        published = self.round_dir(policy['round_id']) / 'policy' / 'published.json' if policy.get('round_id') else None
+        if not self.a.rebind_actor or published is None or not published.exists():
+            return
+        if all(endpoint_alive(endpoint, policy['sha256']) for _h, _f, endpoint in self.remote_actors()):
+            return
+        last = getattr(self, '_rebind_tried', {}).get(policy['sha256'], 0)
+        if time.time() - last < retry_seconds:
+            return
+        self.__dict__.setdefault('_rebind_tried', {})[policy['sha256']] = time.time()
+        record = json.loads(published.read_text())
+        try:
+            self.rebind_remote(record, record['factors_dir'], policy['version'])
+            self.note(rebound=policy['sha256'], version=policy['version'])
+        except Exception as error:
+            self.note(rebind_failed=repr(error)[:300], policy=policy['sha256'])
 
     # -- held ---------------------------------------------------------------------------------------------------------
     def held_name(self, policy):
@@ -2999,6 +3059,8 @@ class AsyncRoundDriver:
 
     def run(self):
         """Drive up to ``--max-rounds`` (0: continuous) rounds."""
+        self.c.require_data_readers()
+        self.record_reader_sources()
         self.c.pin_stage()
         threading.Thread(target=self.held_loop, daemon=True).start()
         self.held_wake.set()
@@ -3052,9 +3114,10 @@ class AsyncRoundDriver:
                     self.held_wake.set()
                 self.queue_held_v4(new, held_v4_reasons(self.held_v4_cadence,
                                                         round_number=len(self.controller.state['trained_rounds'])))
-            for i in range(len(self.a.rebind_actor)):     # a single-endpoint collector cannot tell a rebound actor
-                unit = f'{self.collection_unit(cur)}-remote{i}'
-                if self.c.active(unit):
+            # the old policy's remote collectors stop before the rebind (their episodes then would check a changed actor:
+            # each would be abandoned); the next round's ensure_remote_collection starts the new policy's
+            for unit in self.remote_units(self.collection_unit(cur)):
+                if self.c.present(unit):
                     self.c.stop_unit(unit)
             try:
                 self.rebind_remote(published, factors, new['version'])
@@ -3080,6 +3143,20 @@ class AsyncRoundDriver:
         print(message, file=sys.stderr, flush=True)
         return 3
 
+    def reader_sources(self):
+        from natlang_neuralese.common.code_provenance import code_provenance
+        return {role: {'path': str(repo), **code_provenance(repo)} for role, repo in (
+            ('controller', REPO), ('runtime', self.c.pin),
+            ('fill', self.c.fill_repo()), ('data', self.c.data_repo()))}
+
+    def record_reader_sources(self):
+        from natlang_neuralese.common.jsonio import write_json_durable
+        record = {'schema': 'natlang.async-reader-sources/1', 'sources': self.reader_sources(),
+                  'runtime_commit': self.a.commit,
+                  'minimum_data_reader_commit': getattr(self.a, 'minimum_data_reader_commit', None), 'time': time.time()}
+        write_json_durable(self.root / 'reader-sources.json', record)
+        self.note(reader_sources=record['sources'])
+
     def plan(self):
         """``--dry-run``: the commands one round of the current state would run, without running them."""
         cur = self.controller.current
@@ -3088,8 +3165,22 @@ class AsyncRoundDriver:
         self.c.collect_dir = self.collect_dir(cur)
         collect = self.c.collect_command(self.collection_unit(cur), cur['checkpoint'], cur['sha256'], self.a.slots)
         collect[collect.index('--tasks') + 1] = str(self.collect_dir(cur) / 'tasks.json')
+        remote = []
+        for i, (host, front, endpoint) in enumerate(self.remote_actors()):
+            unit = f'{self.collection_unit(cur)}-remote{i}'
+            self.c.collect_dir = self.collect_dir(cur).with_name(self.collect_dir(cur).name + f'-remote{i}')
+            argv = self.c.collect_command(unit, cur['checkpoint'], cur['sha256'], self.a.remote_slots,
+                                          endpoints=[f'{endpoint}={self.a.remote_slots}'])
+            argv[argv.index('--tasks') + 1] = str(self.collect_dir(cur) / 'tasks.json')
+            remote.append({'unit': unit, 'host': host, 'front': front, 'endpoint': endpoint,
+                           'serves_policy': endpoint_alive(endpoint, cur['sha256']),
+                           'budget_gb': max(8, round(self.a.remote_slots * COLLECTOR_SLOT_GB) + 4),
+                           'collect': list(map(str, argv))})
         plan = {'phase': self.controller.phase, 'policy': cur, 'pin': str(self.c.pin),
+                'reader_sources': self.reader_sources(),
                 'select': self.select_command(self.collect_dir(cur) / 'tasks.json'), 'collect': collect,
+                'remote_collect': remote, 'sft_dgx': {'activation_gb': self.a.sft_activation_gb,
+                                                      'budget_gb': self.a.sft_budget},
                 'frontier': frontier, 'data': lines, 'build': build,
                 'sft_launch': ['/bin/sh', str(OPS / 'grpo-v4' / 'launch-sft.sh'), str(self.c.pin)],
                 'colab_sft': self.colab_command(rd, (self.colab_hosts or ['HOST'])[0], argparse.Namespace(state_sync_minutes=15)),
@@ -3152,6 +3243,12 @@ def main():
                        help="a memetic group's layout (grpo --memetic-layout; rl/memetic_workspace.py bind_layout): "
                             'staged (default) prepares it as a collector stage and fits its nested runs in the '
                             "episode's wall clock; inline is the layout before 2026-11-23")
+        p.add_argument('--memetic-fit-quantile', type=float, default=0.9,
+                       help="grpo --memetic-fit-quantile: a memetic group only for a program whose family's ordinary "
+                            'episodes in the collection finish within its nested wall clock at this quantile (0: every '
+                            'program)')
+        p.add_argument('--memetic-nested-slots', action=argparse.BooleanOptionalAction, default=True,
+                       help='grpo --memetic-nested-slots: memetic nested runs in flight take collector slots')
     s = sub.add_parser('select')
     pool_flags(s)
     s.add_argument('--out', required=True)
@@ -3185,6 +3282,8 @@ def main():
     c.add_argument('--teacher-max-successes', type=int, default=0)
     memetic_flags(c)
     c.add_argument('--memetic-tasks', help="memetic task rows (default: the registry role grpo-memetic-tasks)")
+    c.add_argument('--memetic-seed-collection', action='append',
+                   help="grpo --memetic-seed-collection (default: the sibling collections of --work)")
     c.add_argument('--memetic-max-groups', type=int, default=MEMETIC_MAX_GROUPS,
                    help='memetic groups running at once (each sample runs ~30 nested rollouts beside its slot)')
     c.add_argument('--unit-prefix', default='ei-collect')
@@ -3250,6 +3349,7 @@ def main():
                    "cycle's mix until a Pop serve stops it)")
     y.add_argument('--fill-repo', help='checkout whose filled_reasoning.py runs (default the pin; fills are data '
                    'tooling outside the held scoring series)')
+    y.add_argument('--minimum-data-reader-commit', help='required ancestor of both immutable data/fill reader pins; runtime scoring pin unchanged')
     y.add_argument('--data-repo', help="checkout whose sft_sources.py builds the mix (default the pin; data preparation "
                    'outside the held scoring series, e.g. a faster build that keeps chains byte-identical)')
     y.add_argument('--speculative-after', help='previous cycle DIR whose SFT candidate is --start: collect while Pop '
@@ -3371,9 +3471,14 @@ def main():
                     help='a remote collection actor (its VM-local front URL), rebound to each published policy by '
                          'factors and collected from through the host\'s forwarded port (repeatable)')
     ad.add_argument('--remote-slots', type=int, default=64, help='collector slots per remote actor')
+    ad.add_argument('--round-target-tokens', type=int, default=ROUND_TARGET_TOKENS,
+                    help='a round mix\'s weighted target tokens (sft_sources build --max-target-tokens: every part '
+                         'scaled alike, unseen episodes first); 0: the uncapped build (r0001: 37.4M, 1247 steps)')
     ad.add_argument('--fallback-wait-minutes', type=float, default=30.0)
     ad.add_argument('--lr', default='5e-5', help='LoRA SFT learning rate (lfm3opti.md §5: 5e-5 at r=128)')
-    ad.add_argument('--sft-budget', type=int, default=100, help='DGX SFT ledger GB (cycle default)')
+    ad.add_argument('--sft-budget', type=int, default=80,
+                    help='DGX SFT ledger GB (a fixed claim): r0001 measured a 63.9 GB cgroup peak at activation 56 '
+                         '(CUDA 55.5); 100 starved the remote collector, the Colab fill client, teacher and next prepare')
     ad.add_argument('--sft-activation-gb', type=int, default=56, help='DGX exp0_sft --activation-gb (cycle default)')
     ad.add_argument('--sft-extra', default='')
     ad.add_argument('--teacher-budget', type=int, default=180_000_000)
@@ -3396,6 +3501,9 @@ def main():
     ad.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS)
     memetic_flags(ad)
     ad.add_argument('--fill', help='filled_reasoning.py OUT directory: fills on the standing collection actor')
+    ad.add_argument('--minimum-data-reader-commit', help='required ancestor of both immutable data/fill reader pins; checked at controller start and each SFT boundary')
+    ad.add_argument('--data-repo', help='immutable data-reader checkout (default: controller source); actor/learner --pin is unchanged')
+    ad.add_argument('--fill-repo', help='immutable fill-reader checkout (default: --data-repo or controller source); use --pin path to opt out')
     ad.add_argument('--fill-inflight', type=int, default=32)
     ad.add_argument('--no-teacher-campaign', action='store_true')
     ad.add_argument('--grpo-steps', type=int, default=20, help='GRPO steps per round in the polish phase')

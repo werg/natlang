@@ -502,16 +502,21 @@ def test_cycle_collect_on_colab_stops_for_a_recollection_and_still_stops_its_act
 
 
 class _ShardBase:
-    """The parts of grpo.Collector the sharded slot uses (``_abandon`` is grpo's own)."""
+    """The parts of grpo.Collector around its ``slot`` (grpo's own slot, ``_abandon``, versions and lag)."""
     _abandon = grpo.Collector._abandon
+    slot = grpo.Collector.slot
+    episode_valid = grpo.Collector.episode_valid
+    served_version = grpo.Collector.served_version
+    actor_lagging = grpo.Collector.actor_lagging
 
     def __init__(self, tasks, work):
         self.by_id = {t['id']: t for t in tasks}
         self.own, self.pending, self.lock, self.outstanding = {}, collections.deque(), threading.Lock(), 0
         self.paused, self.stop = threading.Event(), threading.Event()
-        self.args = types.SimpleNamespace(max_outstanding=8, actor=None, slots=2)
+        self.args = types.SimpleNamespace(max_outstanding=8, actor=None, slots=2, max_staleness=2)
         self.work = self.runtime = work
         self.env, self.groups, self.version, self.running, self.active_slots = {}, {}, 0, 0, 2
+        self.actor_versions = {}
         self.policy_sha, self.scored, self.made = 'p' * 64, [], 0
 
     def _learnable(self):
@@ -570,6 +575,48 @@ def test_sharded_slots_abandon_a_dead_endpoints_episodes_and_requeue_the_task(tm
     b.join(5)
     assert collector.scored == ['t1', 't2'] and seen.count('http://b') == 1
     assert collector.groups.get(0) is None          # the dead endpoint's group was dropped, never scored
+
+
+def test_a_single_remote_actor_serving_another_policy_is_no_verdict_and_its_slots_wait(tmp_path, monkeypatch):
+    """One remote actor (a Colab session) shares nothing with the collector: the keeper may replace the session and
+    serve it again at another policy, or the driver rebind it. Each finished episode checks the actor still serves the
+    collected policy; one that does not is abandoned (never scored under the wrong identity), its task goes back to
+    the front of the order and the slots idle until the actor serves the policy again. A local actor is not checked."""
+    collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}, {'id': 't2'}], tmp_path)
+    collector.setup(['t1', 't2'], time.time() + 3600, endpoints=[('http://a', 2)], verify=True)
+    serves = {'policy': 'q' * 64}                     # the session came back serving another policy
+
+    class Proc:
+        def __init__(self, argv, **kw):
+            self.pid, self.returncode = 1, 0
+
+        def poll(self):
+            return self.returncode
+    monkeypatch.setattr(ei.subprocess, 'Popen', Proc)
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: serves['policy'] == sha)
+    real_sleep = time.sleep
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: real_sleep(0.01))
+    a = threading.Thread(target=collector.slot, args=(0,))
+    a.start()
+    for _ in range(300):
+        if 'http://a' in collector.dead:
+            break
+        real_sleep(0.01)
+    assert collector.dead == {'http://a'} and not collector.scored and list(collector.order)[0] == 't1'
+    assert collector.endpoint_for_slot(0) is None and collector.endpoint_for_slot(1) is None   # slots idle
+    serves['policy'] = 'p' * 64                       # served again at the collected policy: back after its retry
+    collector.dead_checked['http://a'] = 0
+    for _ in range(500):
+        if len(collector.scored) == 2:
+            break
+        real_sleep(0.01)
+    collector.stop.set()
+    a.join(5)
+    assert sorted(collector.scored) == ['t1', 't2'] and not collector.dead
+    local = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    local.setup(['t1'], time.time() + 3600, endpoints=[('http://own', 2)], verify=False)
+    assert local.episode_valid('http://own', {'task_id': 't1'})      # the collector's own actor: no check
+    assert 'slot' not in vars(type(local))            # grpo's slot runs (memetic preparation, lag) for every actor
 
 
 def test_held_priority_claims_shrink_a_collection_and_expire(tmp_path):
