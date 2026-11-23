@@ -12,7 +12,6 @@ An item leaves the register when its fix lands on main. A finding reported by an
 | Decision option scoring under the standard tokenization only. The model may generate another split (`"`,`spam`,`"` vs `"sp`,`am`). Sum both tokenizations per option on all four engines and the learner (8b34839ab) | B10 agent, after the fork release |
 | Tool-call grammar on the collection actors: move the DGX and Colab SGLang checkouts to fork 17e3458c2e (`NATLANG_GRAMMAR_PREFIX`; `training/neuralese/sglang-fork.json`) at the next boundary with no live actor; the Python engine and the learner already apply it (DECISIONS 2026-11-23 "constrained decoding with an exact learner law"). Watch `law_masked_fraction` in `train.jsonl` and `natlang_tool_grammar_refused_openings_total` | coordinator, at the next actor boundary |
 | Managed llama-server and page drop the tool grammar under `x_natlang_rl_capture` (ENGINE_PARITY gap row): exact replay needs the fork to compile the same xgrammar structural tag (server and wasm build) and record it | unassigned (needs a fork release; no training source reads fork captures today) |
-| M2 migrator: one shared `stepKind`/`instructionsOf` in std, `migrate.nl` replaced by a TypeScript driver, P1/P2 measurements, pairs dataset | M2 agent |
 | Benchmark arm D on sft-v9 (specialize, tune, escalate); then regenerate `examples/triage/bench/results/2026-11-23.json` with D | armed driver `semantic-fp-bench/triage-20261123b/driver.sh` (waits for the policy server's 18.9 GB ledger claim); the coordinator commits its `results-ABCD.json` |
 | Memetic layout fix (c64d250b2) on a real actor | queued unit `memverify-dgx3`, then the round 1 health report |
 | held-v4 sft-v6 reference measurement | Pop unit `popheld-hv4-sft-v6`; the coordinator appends the result to DECISIONS |
@@ -28,6 +27,17 @@ Found by the GRPO-reasoning agent (DECISIONS 2026-11-23 "GRPO trains the action 
   text is the same). The choice is then scored, and trained, after a tokenization the model never produced. Fix: the
   score item carries the sampled reasoning ids, and every engine (Python native, SGLang, llama.cpp fork, wllama) uses
   them. GRPO's lowering counts it each step (`decision_reasoning_ids_rendered` in `train.jsonl` `lowering`).
+
+## Corpus migration (M2 follow-ups, DECISIONS 2026-11-23 18:30)
+
+Unowned until the coordinator assigns them:
+- The 6 rejected design-brief gates (012, 013, 017, 021, 026, 028): retry through `nextAttempt.nl` with the comparison's problems.
+- Driver pilots 036, 040 and 057 (Luna-written, type-checked): measure the judged workflow cases, then settle.
+- 061: rejected because the signature list changed.
+- LFM3 fails `rewriteDriver` on all 4 drivers: this is a training target.
+- The rest of the design-brief corpus (100 programs, 1,390 `.nl` files; 15 gate leaves are migrated) and all 11 Astra/Sol apps (their world baselines never completed).
+- 65 P2 candidate attempts ran on the Colab front (BF16) against DGX (FP8) originals: re-measure them on one engine.
+- Admitting `semantic-fp-migrated-tasks-m2-20261123` (42 rows) and the 14 pairs into expert iteration.
 
 ## Language and runtime gaps
 

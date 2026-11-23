@@ -130,3 +130,29 @@ def test_program_tasks_keep_accepted_unreserved_exact_and_verifier_cases_with_th
     assert [r['id'] for r in rows] == ['a:sfp-migrated', 'v:sfp-migrated']
     assert rows[0]['split'] == 'dev' and 'equivalence' not in rows[0] and rows[0]['semantic_fp_migration']['original_id'] == 'a'
     assert rows[1]['semantic_fp_migration']['original_id'] == 'v'
+
+
+def test_package_cli_leaves_out_pairs_of_held_programs(tmp_path, monkeypatch):
+    repo = tmp_path / 'repo'
+    roots = {}
+    for number in ('001', '033'):
+        root = roots[number] = repo / 'codebases' / 'design_briefs' / f'{number}-x'
+        root.mkdir(parents=True)
+        (root / 'a.nl').write_text('---\nreturns: V\n---\nold\n')
+    monkeypatch.setattr(mc, 'REPO', repo)
+    change = {'path': 'a.nl', 'before': 'old', 'after': '---\nreturns: V\nreadout: decision\n---\nnew\n', 'role': 'leaf'}
+    decisions = tmp_path / 'decisions.jsonl'
+    decisions.write_text(''.join(json.dumps({'program': f'design-brief:{n}', 'root': str(roots[n]), 'decision': 'accept',
+                                             'proposal': str(proposal_dir(tmp_path, f'design-brief:{n}', 'candidate', roots[n], [change])),
+                                             'findings': [], 'comparison': {'accepted': True}}) + '\n' for n in roots))
+    cases = tmp_path / 'cases'
+    cases.mkdir()
+    (cases / 'cases.jsonl').write_text(''.join(json.dumps({'id': f'c{n}', 'source_groups': [f'design-briefs:application-{n}'],
+                                                           'equivalence': {'program': f'design-brief:{n}'}}) + '\n' for n in roots))
+    from natlang_neuralese.rl import held_eval
+    seen = []
+    held = lambda rows: frozenset(r['id'] for r in rows if 'design-briefs:application-033' in r['source_groups'])
+    monkeypatch.setattr(held_eval, 'training_exclusion_ids', lambda rows: seen.append([r['source_groups'] for r in rows]) or held(rows))
+    mc.main(['package', '--decisions', str(decisions), '--out', str(tmp_path / 'out'), '--cases', str(cases)])
+    kept = [json.loads(line)['program'] for line in (tmp_path / 'out' / 'pairs.jsonl').read_text().splitlines()]
+    assert kept == ['design-brief:001'] and seen == [[['design-briefs:application-001'], ['design-briefs:application-033']]]

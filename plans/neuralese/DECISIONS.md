@@ -9302,3 +9302,65 @@ their unused free replies.
 The fix: prepare no longer rewrites `data.sh` while its data unit is present (running or queued), and writes it atomically (temporary file plus `os.replace`), so a running shell keeps the old inode. A test covers it. The 1c177e3fc per-step markers introduced the rewrite path.
 
 **held-v4 reference.** sft-v6 (dc95f29d) on held-v4 (manifest c09720e1, 252 tasks), measured on Pop at 2 samples per task: 241 of 500 scored episodes pass (48.2%), with 3 timeouts. The run was resumed once after a collector preemption. This is the semantic-FP baseline; later policies are measured on the round cadence (every third round, or when held-v3 is significant or the health report flags a semantic-FP construct).
+
+## 2026-11-23 18:30 Semantic-FP M2: the legacy-corpus migrator, and its first tranche of design-brief gates
+
+**What was built.** `applications/migration --target program` (DECOMPOSITION "Program migration"): crisp findings
+(`natlang check`'s idiom floor), the keep judgment (`worthKeeping.nl`, with a crisp floor that deletes a program none
+of whose measured cases passes), per-step classification (`@natlang/std` `stepKind`, shared with
+`applications/idiom-reviewer` since cea30c72a), `rewriteLeaf.nl` / `rewriteDriver.nl` under `semanticRepair` against
+exact checks (front matter unchanged except `readout`, signature list unchanged, idiom floor clean on changed files,
+`tsc` over generated `.d.nl.ts` shims for driver helpers), and `nextAttempt.nl` for retry or give-up.
+`scripts/semantic_fp/migrate_corpus.py` batches it: `units`, `propose`, `cases`, `settle` (07 §4.2 through B7's
+`equivalence.compare`), `apply`, `package` and `tasks`. The repository migrator's own `migrate.nl` prose driver became
+TypeScript in the same change.
+
+**Measurement.** Both versions of each program were measured on its B7 gate cases, 4 samples per case, on sft-v9
+(e15b20a8). `compare` refuses pairs from different policies. The originals and most candidates ran on the DGX expert-iteration actor (8470, FP8 weights). When aei1 moved to round r0002 the actor left. The last 65 of the 156
+P2 candidate attempts (and one P1 resample) then ran on the Colab front (18731, same policy, BF16 weights on the
+A100). Those pairs cross engines; I did not re-measure them on one engine. Requeue of finished-but-unscored and
+wall-clock-timed-out attempts (`equivalence.py requeue [--timeouts]`) recovered the actor outages without rerunning
+finished samples.
+
+**Results (design briefs only; 39 programs proposed).**
+- 35 leaf gate programs: LFM3 wrote every candidate itself (35/35 pass the exact checks, 0 repairs, no teacher).
+  - 14 are held-v4 reservations (004, 005, 009, 010, 014, 015, 019, 020, 024, 025, 029, 030, 034, 035). They were
+    not measured or applied: their pairs could never be trained on.
+  - 21 were measured. **15 accepted and committed:** 001, 002, 003, 006, 007, 008, 011 (868465c7d and the P2
+    commit), 016, 018, 022, 023, 027, 031, 032, 033.
+  - **6 rejected (give-up):** 012, 013, 017, 021, 026, 028. Each loses a case the original passes 4/4: 013 4/4 to 1/4, 017 4/4 to 1/4, 021 4/4 to 0/4; 012, 026 and 028 to 3/4.
+  - **0 deleted:** no measured original fails all its cases.
+  - Expected passing cases, original to migrated, summed over the 15 accepted: 29.5 to 32.25. Per program the change
+    ranges from 006 1.25 to 0.75 (accepted: §4.2 allows a drop that loses no fully passing case) to 008 2.0 to 3.0.
+- Cost: the migrated gates are `readout: decision`, so reasoned decisions draw 4 samples. Completion tokens per
+  case rose from 4-8k to 13-20k (about 3x), and wall time per case about 4x.
+- 4 driver pilots (036, 040, 057, 061): LFM3's `rewriteDriver` failed all 4 (its attempts are kept in
+  `a1/lfm3-driver-attempt/`). The escalation teacher (Luna) wrote 036, 040 and 057; they type-check and pass the
+  exact checks, but their judged workflow cases (about 1 h each) were not measured. They are not applied. 061 is
+  rejected: its signature list changed.
+- Astra/Sol apps: none migrated or deleted. Their world baselines never completed: the only attempts, sample 0 on
+  Colab, were all `quiesced`.
+
+**Data.**
+- `semantic-fp-migration-pairs-m2-20261123` (kind `edits`, 14 rows, `natlang.semantic-fp-migration-pair/1`) holds
+  the verified before/after program pairs.
+  - 033 is out because held-v3 holds its source group (`design-briefs:application-033`).
+  - `package` now carries the cases' `source_groups` on each pair and applies `training_exclusion_ids` to the pairs,
+    as `tasks` already did. Before this fix it compared only the split group and would have let 033 through.
+- `semantic-fp-migrated-tasks-m2-20261123` (kind `rl-tasks`, 42 rows) holds the accepted programs' exact gate cases
+  with the migrated root, 3 cases × 14 programs.
+- `held_eval verify` reports 0 id and 0 group overlap with held-v3 and with held-v4. On repetition, all 42 rows are
+  distinct across 14 programs and 5 structures.
+- Neither dataset is in `grpo-pool`. Admission is for expert iteration to decide.
+- Run data: `ops/semantic-fp/migration/m2-20261123/` (decisions-p1/p2.jsonl, run-p*-orig/cand, pairs/, tasks/).
+
+**Not checked.**
+- The 65 cross-engine P2 candidate attempts.
+- Driver workflow equivalence.
+- Retrying the 6 rejected programs through `nextAttempt.nl`: give-up was taken without running that judgment, with
+  0 attempts left.
+- The 14 reserved leaves.
+- The remaining design-brief stages (the corpus has 1,390 `.nl` files in 100 programs; this tranche touched one gate
+  leaf in each of 15 programs).
+- All 11 Astra/Sol apps.
+- Whether the 3x decision cost is worth the change on the full workflow rather than the gate alone.
