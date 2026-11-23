@@ -100,7 +100,9 @@ when it grants part of it, decline when it grants nothing.
 A data entry of the context (`policy`) is in scope for the call by its name. `Context.fromFolder(dir, nodeSourceFiles(root))` loads a
 whole folder as a context: its `.nl` and `.ts` items, and its other files as data. The new context must offer every
 item the function's instructions name, with the same signature; otherwise `.in` throws `context-interface-mismatch`
-naming the item. `.on` keeps the context, so the escalated call above reads the same policy.
+naming the item. `.on` keeps the context, so the escalated call above reads the same policy. A TypeScript helper in a
+callable folder binds the same way: `import { Context } from '@natlang/node'` and `import verdict from './verdict.nl'`,
+then a default-exported `under(shop)` returns `verdict.in(Context.empty().with({ policy }))` for its caller to call.
 
 ## A rule and a judgment behind one setting: `pluggable`
 

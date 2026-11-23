@@ -56,7 +56,8 @@ for (const [key, list] of chosen) for (const row of list) {
       const action = smoke.root[step++];
       return { calls: [action ?? ['return_result', { status: 'failed', reason: 'smoke script ended' }]] };
     }
-    let value = smoke.children[name];
+    // An inline nl call is named nl@<site>; a smoke script's inline judgments answer under the child name "nl".
+    let value = smoke.children[name] ?? (name.startsWith('nl@') ? smoke.children.nl : undefined);
     // {"$match": [{"match": "<text>" | [...], "value": v}, ...]}: per-item answers (e.g. one decision per folder file),
     // chosen by text the child's opening contains, like a reference child.
     if (value && typeof value === 'object' && Array.isArray(value.$match)) {

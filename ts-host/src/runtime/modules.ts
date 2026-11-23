@@ -10,6 +10,7 @@ import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from '../compiler/host.js
 import { analyzeInlineLambdas, type InlineLambdaPlan } from '../compiler/inline.js';
 import { natlangTransformer } from '../compiler/lower.js';
 import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
+import { STD_MODULE_FILE, STD_SPECIFIERS } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { typeScriptText } from '../compiler/eval-check.js';
 import { NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
@@ -30,11 +31,21 @@ export class ModuleUnavailableError extends Error {
     this.name = 'ModuleUnavailableError';
   }
 }
+/**
+ * Modules the runtime itself ships on every platform, by specifier: the standard library (`@natlang/node/std`,
+ * `@natlang/browser/std`), registered by src/std/index.ts when a runtime entry loads it. A platform's own module of
+ * the same specifier takes precedence.
+ */
+const shippedModules = new Map<string, () => unknown>();
+export function registerShippedModule(specifiers: readonly string[], factory: () => unknown): void {
+  for (const specifier of specifiers) shippedModules.set(specifier, factory);
+}
 export function hasBuiltinModule(platform: Platform, specifier: string): boolean {
-  return !!platform.builtinModules && Object.hasOwn(platform.builtinModules, specifier);
+  return (!!platform.builtinModules && Object.hasOwn(platform.builtinModules, specifier)) || shippedModules.has(specifier);
 }
 export function builtinModule(platform: Platform, specifier: string): unknown {
-  const factory = platform.builtinModules && Object.hasOwn(platform.builtinModules, specifier) ? platform.builtinModules[specifier] : undefined;
+  const factory = platform.builtinModules && Object.hasOwn(platform.builtinModules, specifier) ? platform.builtinModules[specifier] :
+    shippedModules.get(specifier);
   if (!factory) throw new ModuleUnavailableError(specifier, 'this platform registers no such module');
   return factory();
 }
@@ -143,6 +154,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
       .map(([specifier, names]) => `declare module ${JSON.stringify(specifier)} {\n${[...names].map(name =>
         `  export const ${name}: any;`).join('\n')}\n  const value: any;\n  export default value;\n}`).join('\n');
     const program = createVirtualProgram(files, { ...EVAL_COMPILER_OPTIONS, paths: { '@natlang/*': ['/__natlang__/surface.d.ts'],
+      ...Object.fromEntries(STD_SPECIFIERS.map(specifier => [specifier, [STD_MODULE_FILE]])),
       [NEUTRAL_RUNTIME_SPECIFIER]: ['/__natlang__/surface.d.ts'] } });
     const file = program.getSourceFile(path)!;
     const analysis = analyzeInlineLambdas(program, [file], { displayPath: () => record.source,
@@ -252,7 +264,9 @@ export function moduleInstance(platform: Platform, record: ModuleRecord, level: 
     if (specifier === 'natlang:services') return servicesModule;
     if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
     // Every runtime specifier, the neutral one included, is the natlang surface in callable-folder code.
-    if (specifier === NEUTRAL_RUNTIME_SPECIFIER || /^@natlang\/(node|browser|core)$/.test(specifier)) return { __esModule: true, ...surface };
+    // `Context` is the host package's context value (`fn.in(Context.empty().with({ policy }))`), installed by contexts.ts.
+    if (specifier === NEUTRAL_RUNTIME_SPECIFIER || /^@natlang\/(node|browser|core)$/.test(specifier))
+      return { __esModule: true, ...surface, Context: (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.context-class')] };
     if (specifier.startsWith('./')) {
       const parts = specifier.slice(2).replace(/\.(ts|js|nl)$/, '').split('/');
       let scope: Record<string, ItemRecord> = level, parent = level, item: ItemRecord | undefined;

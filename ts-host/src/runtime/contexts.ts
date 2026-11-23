@@ -490,6 +490,9 @@ export function rebind(fn: NatlangCallable, context: Context): NatlangCallable {
   return rebound;
 }
 setRebinder((fn, context) => rebind(fn, context as Context));
+// Callable-folder TypeScript imports the natlang surface as `@natlang/node` (runtime/modules.ts); `Context` reaches it
+// through this global symbol, as the rebinder does, because modules.ts and this module import each other via callable.ts.
+(globalThis as Record<symbol, unknown>)[Symbol.for('natlang.context-class')] = Context;
 
 // --- .nz values ------------------------------------------------------------------------------------------------
 

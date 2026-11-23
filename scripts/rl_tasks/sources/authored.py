@@ -57,7 +57,6 @@ CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'n
 REQUIRES = {'inline': ('required', 'optional', 'avoid'), 'named': ('required',), 'iterate': ('required',),
             'edits': ('required', 'forbidden', 'optional')}
 CONSTRUCT_REQUIRES = {'inline_nl': {'inline': 'required'}, 'nl_with_context': {'inline': 'required'},
-                      'higher_order': {'inline': 'required'}, 'context_lens': {'inline': 'required'},
                       'nl_convergence': {'iterate': 'required'}, 'iterate': {'iterate': 'required'},
                       'iterate_neuralese': {'iterate': 'required'}, 'library_discovery': {'named': 'required'}}
 
@@ -163,8 +162,10 @@ def convert(task):
         fail(task, 'root must be a top-level .nl file present in files')
     stem = root[:-3]
     for path in files:
-        if not FILE.match(path) or (path != root and not path.startswith(stem + '/')):
-            fail(task, f'file {path} must live in the root callable folder {stem}/')
+        # A top-level types.ts gives the root its type aliases (Ticket, Untrusted<T>/Is<T, P> fields); the aliases of
+        # <stem>/types.ts reach only the helpers in that folder.
+        if not FILE.match(path) or (path not in (root, 'types.ts') and not path.startswith(stem + '/')):
+            fail(task, f'file {path} must live in the root callable folder {stem}/ (or be the top-level types.ts)')
         if path.endswith('.nl') and not files[path].startswith('---\n'):
             fail(task, f'{path} needs YAML frontmatter (args, returns)')
     folders, expected_folders = folder_map(task, 'folders'), folder_map(task, 'expected_folders')

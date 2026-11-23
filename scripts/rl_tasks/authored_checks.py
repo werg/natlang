@@ -491,6 +491,30 @@ def cue_rules(task):
     return found
 
 
+# A custody group names one real shared source item: `<dataset>:<item id>` (e.g. `strategyqa:18689be402e9`). A group is
+# a custody identity, so one held world withholds every world that shares it (sfp1: family-wide `invented:<theme>`
+# groups tied 28 of 36 train rows to held worlds).
+REAL_GROUP = re.compile(r'^[a-z0-9][a-z0-9_.-]*:[^\s:/]{4,}$')
+
+
+def group_problems(tasks):
+    """{task id: [errors]}: groups that are not one real source item (invented, family-wide or theme-wide)."""
+    found = collections.defaultdict(list)
+    for task in tasks:
+        groups = task.get('groups') or []
+        if not isinstance(groups, list) or not all(isinstance(group, str) for group in groups):
+            found[task['id']].append('groups must be a list of strings')
+            continue
+        for group in groups:
+            if group.lower().startswith('invented') or not REAL_GROUP.match(group):
+                found[task['id']].append(
+                    f'group {group!r} is not one real source item (`<dataset>:<item id>`): a group is a custody identity '
+                    'and joins every world that carries it, so invented worlds leave groups empty')
+            elif task.get('oracle') == 'verifier' and group.split(':', 1)[0] == task.get('family'):
+                found[task['id']].append(f'group {group!r} names the family, which ties every world of it together')
+    return found
+
+
 def lint_batch(tasks, runtime=None):
     """{task id: {'errors': [...], 'warnings': [...]}} for every task, with the batch-level world checks."""
     report = {}
@@ -501,6 +525,8 @@ def lint_batch(tasks, runtime=None):
         report[task['id']] = {'errors': errors, 'warnings': warnings}
     for ident, found in verifier_controls(tasks, runtime).items():
         report[ident]['errors'].extend(found['errors'])
+    for ident, found in group_problems(tasks).items():
+        report[ident]['errors'].extend(found)
     worlds = collections.defaultdict(list)
     for task in tasks:
         if 'multi_operation_codebase' in (task.get('constructs') or []):

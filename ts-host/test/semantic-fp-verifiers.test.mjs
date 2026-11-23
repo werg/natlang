@@ -89,3 +89,71 @@ test('ledger: executes the operations; any list reaching the goal passes; doing 
   assert.equal(verifyCandidate({ value: [...ops, { op: 'update', id: 'B1', set: { room: 'Oak' } }], oracle }).ok, false);
   assert.equal(verifyCandidate({ value: [...ops, { op: 'add', id: 'B9', record: { day: 'Fri', chairs: 1 } }], oracle }).ok, false);
 });
+
+test('placement: each file at a place its meaning allows, text kept, nothing stray; staying earns nothing', async () => {
+  const { verifyCandidate } = await load('placement.mjs');
+  const fixture = { 'inbox/a.md': 'Kettle unopened\n', 'inbox/b.md': 'Burnt toaster\n', 'inbox/c.md': 'Dented tin\n' };
+  const oracle = { files: { 'inbox/a.md': ['restock/'], 'inbox/b.md': ['scrap/', 'removed'], 'inbox/c.md': ['inbox/', 'restock/'] },
+    written: { 'summary.md': { includes: ['a.md'], lines: 1 } }, value: { moved: 2 } };
+  const good = { 'restock/a.md': 'Kettle unopened', 'scrap/b.md': 'Burnt toaster\n', 'inbox/c.md': 'Dented tin\n', 'summary.md': 'a.md b.md\n' };
+  assert.equal(verifyCandidate({ value: { moved: 2 }, oracle, fixture, files: good }).ok, true);
+  const removed = { ...good }; delete removed['scrap/b.md'];
+  assert.equal(verifyCandidate({ value: { moved: 2 }, oracle, fixture, files: removed }).ok, true);
+  assert.equal(verifyCandidate({ value: { moved: 3 }, oracle, fixture, files: good }).ok, false);
+  assert.equal(verifyCandidate({ value: { moved: 2 }, oracle, fixture, files: { ...good, 'restock/a.md': 'changed' } }).ok, false);
+  assert.equal(verifyCandidate({ value: { moved: 2 }, oracle, fixture, files: { ...good, 'stray.md': 'x' } }).ok, false);
+  const untouched = verifyCandidate({ value: null, oracle, fixture, files: fixture });
+  assert.equal(untouched.ok, false);
+  assert.equal(untouched.score, 0);
+  assert.equal(verifyCandidate({ value: { moved: 2 }, oracle, fixture }).ok, false);
+});
+
+test('records: field by field, several acceptable readings, numbers within tolerance, no record where none is due', async () => {
+  const { verifyCandidate } = await load('records.mjs');
+  const oracle = { items: { r1: { amount: [40], payer: ['Ana'] }, r2: { amount: [12.5, 12], payer: ['Ben', 'Ben Ode'] }, r3: null },
+    shape: 'by_item', tolerance: 0.01 };
+  assert.equal(verifyCandidate({ value: { r1: { amount: '40.00', payer: 'ana' }, r2: { amount: 12, payer: 'Ben Ode' } }, oracle }).ok, true);
+  assert.equal(verifyCandidate({ value: { r1: { amount: 40, payer: 'Ana' }, r2: { amount: 12.5, payer: 'Ben' }, r3: { amount: 1 } }, oracle }).ok, false);
+  const wrong = verifyCandidate({ value: { r1: { amount: 30, payer: 'Ana' }, r2: { amount: 12.5, payer: 'Ben' } }, oracle });
+  assert.equal(wrong.ok, false);
+  assert.ok(Math.abs(wrong.score - 4 / 5) < 1e-9);
+  const rows = { ...oracle, shape: 'rows', id_key: 'id' };
+  assert.equal(verifyCandidate({ value: [{ id: 'r1', amount: 40, payer: 'Ana' }, { id: 'r2', amount: 12.5, payer: 'Ben' }], oracle: rows }).ok, true);
+  assert.equal(verifyCandidate({ value: [{ id: 'r1', amount: 40, payer: 'Ana' }, { id: 'r1', amount: 40, payer: 'Ana' }], oracle: rows }).ok, false);
+});
+
+test('selection: required in, forbidden out, optional either way, bounds hold', async () => {
+  const { verifyCandidate } = await load('selection.mjs');
+  const oracle = { required: ['a', 'b'], forbidden: ['c', 'd'], optional: ['e'], max: 3 };
+  assert.equal(verifyCandidate({ value: ['B', 'a'], oracle }).ok, true);
+  assert.equal(verifyCandidate({ value: ['a', 'b', 'e'], oracle }).ok, true);
+  assert.equal(verifyCandidate({ value: ['a', 'b', 'c'], oracle }).ok, false);
+  assert.equal(verifyCandidate({ value: ['a'], oracle }).ok, false);
+  assert.equal(verifyCandidate({ value: [], oracle }).score, 0.5);
+  assert.equal(verifyCandidate({ value: ['b', 'a'], oracle: { ...oracle, ordered: true } }).ok, false);
+  assert.equal(verifyCandidate({ value: [{ id: 'a' }, { id: 'b' }], oracle: { ...oracle, key: 'id' } }).ok, true);
+});
+
+test('clusters: only who is together counts, names are free, loose pairs either way', async () => {
+  const { verifyCandidate } = await load('clusters.mjs');
+  const oracle = { clusters: [['t1', 't3'], ['t2'], ['t4', 't5']], loose: [['t2', 't4']], shape: 'lists' };
+  assert.equal(verifyCandidate({ value: [['T3', 't1'], ['t5', 't4'], ['t2']], oracle }).ok, true);
+  assert.equal(verifyCandidate({ value: [['t1', 't3'], ['t2', 't4', 't5']], oracle }).ok, false);   // t2-t5 not loose
+  assert.equal(verifyCandidate({ value: { x: 'a', t1: 'a' }, oracle: { ...oracle, shape: 'by_item' } }).ok, false);
+  assert.equal(verifyCandidate({ value: { t1: 'a', t3: 'a', t2: 'b', t4: 'c', t5: 'c' }, oracle: { ...oracle, shape: 'by_item' } }).ok, true);
+  assert.equal(verifyCandidate({ value: [['t1', 't2', 't3', 't4', 't5']], oracle }).ok, false);
+  assert.equal(verifyCandidate({ value: { one: ['t1', 't3'], two: ['t2'], three: ['t4', 't5'] }, oracle: { ...oracle, shape: 'by_cluster' } }).ok, true);
+});
+
+test('numeric: the value or any accepted reading, record name by name, tolerance', async () => {
+  const { verifyCandidate } = await load('numeric.mjs');
+  assert.equal(verifyCandidate({ value: '1,240.00', oracle: { value: 1240 } }).ok, true);
+  assert.equal(verifyCandidate({ value: 1250, oracle: { value: 1240, accept: [1250] } }).ok, true);
+  assert.equal(verifyCandidate({ value: 0, oracle: { value: 1240 } }).ok, false);
+  const oracle = { value: { owed: 30, refunded: 12.5 } };
+  assert.equal(verifyCandidate({ value: { owed: 30, refunded: 12.5 }, oracle }).ok, true);
+  const half = verifyCandidate({ value: { owed: 30, refunded: 10 }, oracle });
+  assert.equal(half.ok, false);
+  assert.equal(half.score, 0.5);
+  assert.equal(verifyCandidate({ value: { owed: 30, refunded: 12.5, extra: 1 }, oracle }).ok, false);
+});

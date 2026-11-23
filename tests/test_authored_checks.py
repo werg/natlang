@@ -150,3 +150,20 @@ def test_semantic_fp_construct_tags_need_the_construct_and_set_their_technique_f
     assert row['curriculum']['iterate'] == 'required'
     with pytest.raises(ValueError, match='requires maps'):
         authored.convert({k: v for k, v in good.items() if v is not None} | {'requires': {'inline': 'always'}})
+
+
+def test_groups_must_name_one_real_source_item(repo):
+    """sfp1: family-wide `invented:<theme>` groups tied 28 of 36 train rows to held worlds; a check, not a convention."""
+    for bad in ('invented:parcel_desk', 'parcel_desk', 'strategyqa', 'parcel_desk:w900-p1a'):
+        assert any('group' in error for error in errors(task(groups=[bad]))), bad
+    assert not [e for e in errors(task(groups=['strategyqa:18689be402e9'])) if 'group' in e]
+    assert any('groups must be a list' in error for error in errors(task(groups='strategyqa:18689be402e9')))
+
+
+def test_a_top_level_types_file_gives_the_root_its_aliases(repo):
+    root = ROOT.replace('"{ id: string; text: string }[]"', '"Note[]"')
+    row = task(files={'sort_parcels.nl': root, 'sort_parcels/read_state.nl': HELPER,
+                      'types.ts': 'export type Note = { id: string; text: Untrusted<string> };\n'})
+    assert authored.convert(row)['semantics']['files']['types.ts'].startswith('export type Note')
+    with pytest.raises(ValueError, match='root callable folder'):
+        authored.convert(task(files={'sort_parcels.nl': ROOT, 'sort_parcels/read_state.nl': HELPER, 'other.ts': ''}))
