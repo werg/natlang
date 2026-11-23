@@ -25,6 +25,68 @@ test('code_test verifier executes candidate code against hidden cases and reject
   assert.ok(fail.issues.some(i => i.includes('forbidden')));
 });
 
+test('code_test verifier: no host object reaches candidate code; loops time out; TypeScript candidates run; empty oracles are refused', async () => {
+  const oracle = { export: 'f', cases: [{ args: [{ a: 1 }], expected: 2 }], timeout_ms: 200 };
+  const escapes = [
+    `export function f(x) { const p = x.constructor.constructor('return process')(); return p.pid ? 2 : 0; }`,
+    `export function f(x) { const p = Object.constructor('return process')(); return p.pid ? 2 : 0; }`,
+    `export function f(x) { return typeof process === 'object' || typeof require === 'function' ? 2 : 0; }`,
+    `export function f(x) { try { null.x; } catch (e) { return typeof e.constructor.constructor('return process')() === 'object' ? 2 : 0; } }`,
+  ];
+  for (const value of escapes) {
+    const result = await verifyCode({ value, oracle });
+    assert.equal(result.ok, false, value);
+  }
+  // Arguments are the context's own objects (parsed inside it), so the candidate sees ordinary JSON values.
+  assert.equal((await verifyCode({ value: 'export function f(x) { return x.a + 1; }', oracle })).ok, true);
+
+  const started = Date.now();
+  const loops = [
+    'export function f(x) { for (;;) {} }',
+    'export async function f(x) { for (;;) { await null; } }',
+    'for (;;) {}\nexport function f(x) { return 2; }',
+    'export function f(x) { return { get a() { for (;;) {} } }; }',
+  ];
+  for (const value of loops) assert.equal((await verifyCode({ value, oracle })).ok, false, value);
+  assert.ok(Date.now() - started < 10_000, 'every loop was cut off by the per-case timeout');
+
+  const never = await verifyCode({ value: 'export function f(x) { return new Promise(() => {}); }', oracle });
+  assert.equal(never.ok, false);
+  assert.match(never.issues[0], /did not settle/);
+  const thrown = await verifyCode({ value: "throw { get message() { for (;;) {} } };\nexport function f(x) { return 2; }", oracle });
+  assert.equal(thrown.ok, false);
+
+  const typed = await verifyCode({ value: 'export function f(x: { a: number }): number { return x.a + 1; }', oracle });
+  assert.deepEqual(typed, { ok: true, issues: [], score: 1 });
+  const wrong = await verifyCode({ value: 'export const f = (x: { a: number }): number => x.a;', oracle });
+  assert.equal(wrong.ok, false);
+  assert.ok(wrong.score < 1);
+  await assert.rejects(verifyCode({ value: 'export function f() { return 2; }', oracle: { export: 'f', cases: [] } }), /cases must be nonempty/);
+});
+
+test('policy_eval verifier rejects missing, extra, wrong-critical and constant answers', () => {
+  const oracle = {
+    cases: { a: { expected: 'allow' }, b: { expected: 'deny' }, c: { expected: 'deny', critical: true }, d: { expected: 'allow' } },
+    min_accuracy: 0.7,
+  };
+  assert.equal(verifyPolicyEval({ value: { a: 'allow', b: 'deny', c: 'deny', d: 'allow' }, oracle }).ok, true);
+  assert.equal(verifyPolicyEval({ value: [{ id: 'a', result: 'Allow ' }, { id: 'b', result: 'deny' }, { id: 'c', result: 'deny' }, { id: 'd', result: 'allow' }], oracle }).ok, true);
+  assert.equal(verifyPolicyEval({ value: { a: 'allow', b: 'allow', c: 'deny', d: 'allow' }, oracle }).ok, true, 'one non-critical miss stays above min_accuracy');
+  const rejected = {
+    missing: { a: 'allow', b: 'deny', c: 'deny' },
+    extra: { a: 'allow', b: 'deny', c: 'deny', d: 'allow', e: 'allow' },
+    critical: { a: 'allow', b: 'deny', c: 'allow', d: 'allow' },
+    constant: { a: 'deny', b: 'deny', c: 'deny', d: 'deny' },
+    notAMap: 'allow',
+  };
+  for (const [name, value] of Object.entries(rejected)) {
+    const result = verifyPolicyEval({ value, oracle });
+    assert.equal(result.ok, false, name);
+    assert.ok(result.score < 1, name);
+  }
+  assert.throws(() => verifyPolicyEval({ value: {}, oracle: { cases: {} } }), /cases must be nonempty/);
+});
+
 test('proper_score verifier grades Brier score, log-loss, and asymmetric risk-floor escalation', () => {
   const oracle = {
     items: {
