@@ -330,7 +330,8 @@ export function moduleInstance(platform: Platform, record: ModuleRecord, level: 
       return { __esModule: true, ...callableTree(item.codebase as never) };
     }
     if (specifier.startsWith('.') || specifier.startsWith('/'))
-      throw new NatlangSourceError(record.source, `cannot import ${JSON.stringify(specifier)}: callable-folder code may import its sibling items and packages only`);
+      throw new NatlangSourceError(record.source, `cannot import ${JSON.stringify(specifier)}: no file of this package matches it; callable-folder code imports its sibling items, ` +
+        'files of its own package by relative path (./ or ../ inside the package root), and packages');
     if (!platform.packageLoader) throw new NatlangSourceError(record.source, `package imports are unavailable here: ${specifier}`);
     return platform.packageLoader(specifier, task);
   };
