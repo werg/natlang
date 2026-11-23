@@ -339,13 +339,20 @@ export const refinementCodeOf = (detail: string): Exclude<RefinementCode, 'refin
 export function checkServiceResults<T extends Record<string, unknown>>(services: T, declared: Record<string, Type>,
   check: (value: unknown, type: Type, label: string) => Promise<void>): T {
   if (!Object.keys(declared).length) return services;
-  const wrap = (target: object, service: string): object => new Proxy(target, {
-    get(object, property, receiver) {
-      const value = Reflect.get(object, property, receiver);
+  const wrap = (target: object, service: string): object => new Proxy({}, {
+    has: (_shell, property) => Reflect.has(target, property),
+    ownKeys: () => Reflect.ownKeys(target),
+    getOwnPropertyDescriptor: (_shell, property) => {
+      const descriptor = Reflect.getOwnPropertyDescriptor(target, property);
+      return descriptor ? { ...descriptor, configurable: true } : undefined;
+    },
+    get(_shell, property) {
+      const value = Reflect.get(target, property, target);
       const type = typeof property === 'string' ? declared[`${service}.${property}`] : undefined;
-      if (typeof value !== 'function' || !type) return value;
+      if (typeof value !== 'function') return value;
+      if (!type) return new Proxy(value, { apply: (fn, _receiver, args) => Reflect.apply(fn, target, args) });
       return async (...args: unknown[]) => {
-        const result = await (value as (...given: unknown[]) => unknown).apply(object, args);
+        const result = await (value as (...given: unknown[]) => unknown).apply(target, args);
         await check(result, type, `${service}.${String(property)}`);
         return result;
       };

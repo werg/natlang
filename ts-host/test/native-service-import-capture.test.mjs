@@ -13,11 +13,12 @@ function root(){return loadVirtualNatlang({'root.nl':header+'Use readNative for 
 function rows(store){return store.calls().map(row=>store.call(row.call_id));}
 test('explicit TS native imports record exact values while the service is hidden from NL tools',async()=>{
  const env=setup();try{
-  const notes={prefix:'actual',async read(id){return {id,value:this.prefix};}};
+  class Notes { #prefix='actual'; get prefix(){return this.#prefix;} async read(id,prefix){assert.equal(prefix,this.#prefix);return {id,value:prefix};} }
+  const notes=new Notes();
   const rt=createNatlangRuntime({calls:env.store,model:scriptedModel(()=> 'return await readNative(id)').driver,services:{notes},serviceScopes:{notes:[]}});
-  assert.deepEqual(await rt.run(()=>root()('owned')),{id:'owned',value:'actual'});
+  assert.deepEqual(await rt.run(()=>loadVirtualNatlang({'root.nl':header+'Use readNative for the exact owned value.','root/readNative.ts':helper.replace('notes.read(id)','notes.read(id, notes.prefix)')},'root.nl')('owned')),{id:'owned',value:'actual'});
   const record=rows(env.store)[0];assert.equal(record.effects.length,1);assert.equal(record.effects[0].method,'read');
-  assert.deepEqual(env.store.value(record.effects[0].args),['owned']);assert.deepEqual(env.store.value(record.effects[0].result),{id:'owned',value:'actual'});
+  assert.deepEqual(env.store.value(record.effects[0].args),['owned','actual']);assert.deepEqual(env.store.value(record.effects[0].result),{id:'owned',value:'actual'});
  }finally{env.close();}
 });
 test('nested and concurrent invocations keep native effects on the correct caller without duplicate wrapping',async()=>{
@@ -45,4 +46,22 @@ test('required imported-effect persistence failures reject the native result at 
   const rt=createNatlangRuntime({calls:env.store,services:{notes:{async read(id){return {id,value:'native'};}}},serviceScopes:{notes:[]},model:async()=>{requests++;return {calls:[['eval',{code:'try { await readNative(id); return { error: "missing rejection" }; } catch (error) { return { error: String(error) }; }',finish:true}]]};}});
   const result=await rt.run(()=>fn('owned'));assert.match(result.error,/required native journal unavailable/);assert.equal(requests,1);
  }finally{env.close();}
+});
+
+// Both wrappers must preserve the original receiver, including frozen services.
+test('refinement wrappers preserve private getters, unchecked methods, metadata and frozen services',async()=>{
+ const {checkServiceResults}=await import('../dist/native/refinement.js');
+ const marker=Symbol('native-call-kind');
+ class Service { #value='owned'; get value(){return this.#value;} read(){return this.#value;} checked(){return this.#value;} }
+ const original=new Service();
+ original.read=Object.assign(original.read,{[marker]:'sync'});
+ original.checked=original.checked;
+ Object.freeze(original);
+ const checked=[];const services=checkServiceResults({notes:original},{'notes.checked':{}},async(value,_type,label)=>checked.push([value,label]));
+ assert.equal(services.notes.value,'owned');
+ assert.equal(services.notes.read(),'owned');
+ assert.equal(services.notes.read[marker],'sync');
+ assert.equal(await services.notes.checked(),'owned');
+ assert.deepEqual(checked,[['owned','notes.checked']]);
+ assert.deepEqual(Object.keys(services.notes),Object.keys(original));
 });

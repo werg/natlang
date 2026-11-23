@@ -71,7 +71,7 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
     },
     set: (_shell, property, value) => Reflect.set(object, property, value),
     get(_shell, property, receiver) {
-      const value = Reflect.get(object, property, receiver);
+      const value = Reflect.get(object, property, object);
       if (typeof property === 'symbol') return value;
       if (typeof value === 'function') {
         const recorded = (...given: unknown[]) => {
