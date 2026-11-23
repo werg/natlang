@@ -312,10 +312,14 @@ examples waiting for natlang tune and when to retune.`,
   natlang improve resume|step DIR
   natlang improve inspect|export DIR [--out FILE]
   natlang improve adopt DIR --into CHECKOUT
-  natlang improve rollback DIR
+  natlang improve adopt-call CALL [--into DIR] [--dry-run] [--untested] [--profile NAME] [--json]
+  natlang improve rollback RECORD
 
 init writes a case for a program; the run proposes source changes, scores them on the
-case's train/validation/test cases and keeps a journal in DIR (docs/IMPROVEMENT.md).`,
+case's train/validation/test cases and keeps a journal in DIR (docs/IMPROVEMENT.md).
+adopt-call takes the code a successful call fixed with edit_code (natlang traces show CALL lists it),
+runs natlang check and natlang test on the fixed program, and installs it only when both pass and no
+protected item (types.ts, protect: lists) changed; it prints the rollback command.`,
   adapt: ADAPTATION,
   eval: ADAPTATION,
   optimize: ADAPTATION,

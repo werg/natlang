@@ -176,6 +176,23 @@ class FunctionalPrograms:
         return True
 
 
+def semantic_fp_shape(semantics):
+    """Program-visible semantic-FP shape (plans/semantic-fp/05): TypeScript helpers, function-typed signatures, outside
+    text and refinement types, a directory-reducer root, and the kind of trusted verifier that judges the outcome.
+    Only keys that are present are returned, so a program without any keeps the structure key it had before."""
+    every = semantics.get('files') or {}
+    text = '\n'.join(every.values())
+    shape = {
+        'ts_helpers': min(sum(path.endswith('.ts') and not path.endswith('types.ts') for path in every), 3),
+        'function_types': bool(re.search(r'=>\s*(?:Promise<)?', '\n'.join(
+            split_file(t)[0] for p, t in every.items() if p.endswith('.nl'))) or re.search(r'\(\w+: [^)]*\) => Promise<', text)),
+        'untrusted': 'Untrusted<' in text, 'refined': bool(re.search(r'\bIs<', text)),
+        'directory_reducer': bool(re.search(r'^kind:\s*directory-reducer', text, re.M)),
+        'verifier': ((semantics.get('trusted_exact_verifier') or {}).get('path') or '').rsplit('/', 1)[-1].removesuffix('.mjs'),
+    }
+    return {key: value for key, value in shape.items() if value}
+
+
 def program_features(row):
     semantics = row['semantics']
     files = {path: text for path, text in semantics['files'].items() if path.endswith('.nl')}
@@ -229,7 +246,7 @@ def program_features(row):
                                  'neuralese_args': min(neuralese_args, 3), 'readouts': min(readouts, 3),
                                  'iterate': 'iterateOn' in code, 'decide': bool(re.search(r'\bdecide\(', code)),
                                  'services': sorted(semantics.get('services') or {}),
-                                 'mode': curriculum.get('mode')}, sort_keys=True),
+                                 'mode': curriculum.get('mode'), **semantic_fp_shape(semantics)}, sort_keys=True),
         'multi_function': len(files) >= 2, 'depth': depth, 'neuralese_result': neuralese_results > 0,
         'typed_neuralese_result': typed_results > 0, 'neuralese_argument': neuralese_args > 0,
         'neuralese_fan_in': neuralese_results >= 2, 'iterate': 'iterateOn' in code, 'readout_decision': readouts > 0,

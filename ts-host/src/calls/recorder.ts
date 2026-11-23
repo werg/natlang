@@ -8,7 +8,7 @@ import { graphCustodyDigest } from './graph-custody.js';
 import { inputFeatures, snapshot } from './snapshot.js';
 import { approachHash } from './normalize.js';
 import { CALLS_VERSION, type CallRecord, type CallStoreSettings, type CaseStats, type CompilationRow, type DefinitionIdentity,
-  type EffectRecord, type ExecutorKind, type FolderRecord, type ValueRef } from './types.js';
+  type CodeRevisionRecord, type EffectRecord, type ExecutorKind, type FolderRecord, type ValueRef } from './types.js';
 import type { ItemRecord } from '../runtime/loader.js';
 
 /** What the runtime needs of a call store. `CallStore` (Node) implements it; tests may pass their own. */
@@ -272,6 +272,7 @@ export class CallCapture {
           sha256: graphCustodyDigest(this.base.taskId, this.base.callId, this.base.parentCallId, result.graphChildren, effects) } } : {}),
         effects,
         folder: this.folder,
+        ...(result.outcome === 'done' ? codeRevisions(events, text => this.ref(text)) : {}),
         approach: { evals, hash: this.executor.kind === 'agent' && result.outcome === 'done' ? approachHash(actions.filter(action => action.ok).map(action => action.code), this.hostInputs) : null },
         cost: { model_requests: requests.length, turns: requests.length, evals: evals.length, wall_ms: Date.now() - this.started,
           tokens_in: requests.reduce((sum, event) => sum + (Number(event.prompt_tokens) || 0), 0),
@@ -281,6 +282,15 @@ export class CallCapture {
       return record;
     } catch (error) { reportStoreFailure(this.store, error); return undefined; }
   }
+}
+
+/** The `code_revision` trace events of a call (native/runtime.ts functionTool), as its record's `code_revisions`. */
+function codeRevisions(events: readonly Record<string, unknown>[], ref: (text: string) => ValueRef): { code_revisions?: CodeRevisionRecord[] } {
+  const revisions = events.filter(event => event.kind === 'code_revision' && typeof event.text === 'string').map(event => ({
+    function: String(event.function), source: String(event.source), revision: Number(event.revision),
+    originalHash: String(event.originalHash), effectiveHash: String(event.effectiveHash), patchedHash: String(event.patchedHash),
+    patch: event.patch as CodeRevisionRecord['patch'], after: ref(event.text as string) }));
+  return revisions.length ? { code_revisions: revisions } : {};
 }
 
 export type { ExecutorKind };

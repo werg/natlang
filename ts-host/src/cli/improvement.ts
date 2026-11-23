@@ -4,6 +4,11 @@ import {Folder} from '../native/scoped-fs.js';
 import {improveProgram} from '../improvement/program.js';
 import {SourceEvaluator} from '../improvement/host.js';
 import {adoptSource,rollbackSource,recoverAdoption,type SourceManifest,type AdoptionRecord} from '../improvement/adoption.js';
+import {adoptCall,type AdoptionVerdict} from '../improvement/adopt-call.js';
+import {readExamples} from '../calls/examples.js';
+import {machineStoreRoot,openMachineStore} from '../machine-store.js';
+import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {fingerprint} from '../adaptation/identity.js';
 import {UsageGateway} from '../evaluation/usage.js';
 import {validateBudget} from '../evaluation/suite.js';
@@ -15,7 +20,7 @@ const read=(path:string)=>JSON.parse(readFileSync(path,'utf8'));
 const write=(path:string,value:unknown)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,JSON.stringify(value,null,2)+'\n');};
 export async function improvementCommand(args:string[]):Promise<number>{
  const [command,...rest]=args;
- if(!command)throw Error('usage: natlang improve CASE.json --out DIR --model MODEL; or init|resume|step|inspect|export|adopt|rollback');
+ if(!command)throw Error('usage: natlang improve CASE.json --out DIR --model MODEL; or init|resume|step|inspect|export|adopt|adopt-call|rollback');
  const flags=rest;
  const option=(name:string,fallback?:string)=>{const index=flags.indexOf(name);if(index<0)return fallback;const value=flags[index+1];if(!value||value.startsWith('--'))throw Error('missing '+name+' value');return value;};
  if(command==='init'){
@@ -32,6 +37,7 @@ export async function improvementCommand(args:string[]):Promise<number>{
  if(command==='export'){const directory=resolve(rest[0]??''),out=resolve(option('--out')??'selected-source.json');write(out,read(join(directory,'source.json')));console.log(out);return 0;}
  if(command==='recover'){recoverAdoption(resolve(rest[0]??''));return 0;}
  if(command==='rollback'){rollbackSource(read(resolve(rest[0]??'')) as AdoptionRecord);return 0;}
+ if(command==='adopt-call')return adoptCallCommand(rest,option,flags);
  if(command==='adopt'){
   const directory=resolve(rest[0]??''),checkout=option('--into');if(!checkout)throw Error('adopt requires --into CHECKOUT');
   const manifest=read(join(directory,'source.json')) as SourceManifest;
@@ -72,4 +78,50 @@ export async function improvementCommand(args:string[]):Promise<number>{
   console.log(JSON.stringify({directory:output,source:result.folder.digest,disposition:result.disposition,quality:result.validation?.quality??null}));
   return result.disposition==='infrastructure-failure'?3:result.disposition==='interrupted'?4:result.disposition==='incomplete-search'||result.disposition==='no-eligible-promotion'?2:0;
  }finally{process.off('SIGINT',stop);process.off('SIGTERM',stop);improverBackend?.close();executorBackend?.close();}
+}
+
+const CLI=fileURLToPath(new URL('./main.js',import.meta.url));
+/** Run this natlang CLI and parse its --json report (natlang check / natlang test print one). */
+function cliJson(argv:string[]):Promise<{code:number;report:Record<string,unknown>|null;stderr:string}>{
+ return new Promise((done,fail)=>{
+  const child=spawn(process.execPath,[CLI,...argv],{stdio:['ignore','pipe','pipe'],env:{...process.env,NO_COLOR:'1',FORCE_COLOR:'0'}});
+  let out='',err='';child.stdout.on('data',chunk=>{out+=chunk;});child.stderr.on('data',chunk=>{err+=chunk;});
+  child.on('error',fail);
+  child.on('close',code=>{let report:Record<string,unknown>|null=null;try{report=JSON.parse(out);}catch{report=null;}done({code:code??1,report,stderr:err.trim()});});
+ });
+}
+/**
+ * natlang improve adopt-call CALL [--into DIR] [--store DIR] [--record FILE] [--dry-run] [--untested] [--profile P]
+ * [--provider ID] [--model ID] [--yes] [--json]: check, test and install the code a successful call fixed (WS1 L3).
+ */
+async function adoptCallCommand(rest:string[],option:(name:string,fallback?:string)=>string|undefined,flags:string[]):Promise<number>{
+ const call=rest[0];
+ if(!call||call.startsWith('--'))throw Error('usage: natlang improve adopt-call CALL [--into DIR] [--store DIR] [--record FILE] [--dry-run] [--untested] [--json]');
+ const json=flags.includes('--json'),untested=flags.includes('--untested');
+ const selection=['--profile','--provider','--model'].flatMap(name=>{const value=option(name);return value?[name,value]:[];});
+ const storeRoot=option('--store')??machineStoreRoot();
+ if(!storeRoot)throw Error('the call store is off on this machine (NATLANG_CALL_STORE=off); pass --store DIR to read one');
+ const store=openMachineStore(storeRoot);
+ try{
+  const {resolveCall}=await import('./calls.js');
+  const id=resolveCall(store,call,'natlang improve adopt-call CALL');
+  const verify=async(directory:string):Promise<AdoptionVerdict>=>{
+   const checked=await cliJson(['check',directory,'--json']);
+   const check={ok:checked.code===0&&checked.report?.ok===true,diagnostics:((checked.report?.diagnostics as {message?:string}[]|undefined)??[]).map(row=>row.message??JSON.stringify(row)).concat(checked.report?[]:[checked.stderr])};
+   if(!check.ok)return{check,test:{ok:false,skipped:'natlang check failed'}};
+   const tested=readExamples(directory).filter(example=>Object.hasOwn(example,'expected'));
+   if(!tested.length)return{check,test:untested?{ok:true,skipped:'no saved examples (--untested)'}:{ok:false,detail:'the program has no saved examples to test the fix against; save one with natlang traces fix CALL --expected JSON, or pass --untested to adopt on natlang check alone'}};
+   const ran=await cliJson(['test',directory,'--json',...selection,...(flags.includes('--yes')?['--yes']:[])]);
+   const report=ran.report??{};
+   return{check,test:{ok:ran.code===0&&report.ok===true,passed:Number(report.passed??0),failed:Number(report.failed??0),
+    ...(ran.code===0&&report.ok===true?{}:{detail:report.failed!==undefined?`${report.failed} of ${tested.length} saved examples fail with the fix`:ran.stderr.split('\n').slice(-3).join(' ')||'natlang test did not report'})}};
+  };
+  const into=option('--into'),recordPath=option('--record');
+  const result=await adoptCall(store,id,{verify,dryRun:flags.includes('--dry-run'),...(into?{into}:{}),...(recordPath?{recordPath}:{})});
+  if(json)console.log(JSON.stringify({status:result.status,call:result.call,directory:result.directory,changed:result.changed,reasons:result.reasons,verdict:result.verdict??null,record:result.recordPath??null},null,2));
+  else console.log(result.status==='accepted'?`adopted ${result.changed.join(', ')} into ${result.directory}\nnatlang improve rollback ${JSON.stringify(result.recordPath)} restores the previous source`:
+   result.status==='checked'?`the fix to ${result.changed.join(', ')} passes natlang check and natlang test; run without --dry-run to install it`:
+   `not adopted: ${result.reasons.join('; ')}`);
+  return result.status==='rejected'?1:0;
+ }finally{store.close();}
 }

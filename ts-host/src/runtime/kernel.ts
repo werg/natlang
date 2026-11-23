@@ -17,6 +17,7 @@ import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNod
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
 import { recordingServices, type LiveEvent, type LiveSink } from './runtime.js';
 import { kernelHooks } from './hooks.js';
+import { protectedSources } from './loader.js';
 import { engageFusion } from './fusion.js';
 import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, producerScopeForTrace, registerTrace, releaseTrace, traceFor } from '../native/graph.js';
 import { CallCapture, definitionKey, interfaceHash, type CallStoreLike } from '../calls/recorder.js';
@@ -55,6 +56,8 @@ export type CallableDefinition = {
   model?: string;
   /** Tools this definition's own calls are not offered (`withhold:` frontmatter; loader WITHHOLDABLE_TOOLS). */
   withhold?: readonly string[];
+  /** Items of the companion folder this definition's calls cannot edit (`protect:` frontmatter). */
+  protect?: readonly string[];
   /** The model work one call may take (`budget:` frontmatter); each bound replaces its model's own. */
   budget?: import('./loader.js').CallBudget;
   revision?: string;
@@ -346,6 +349,7 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   node.hostClasses = options.classes;
   if (definition.readout) node.readout = definition.readout;
   if (definition.withhold?.length) node.withheldTools = [...definition.withhold];
+  if (definition.protect?.length && definition.source) node.protectedSources = protectedSources(definition.source, definition.protect);
   const env = new TypeEnv(node.types);
   env.classes = options.classes;
   env.dialects = options.dialects;
@@ -506,7 +510,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     definition = { ...definition, body: record.instructions, revision: record.revision,
       params: Object.entries(record.args).map(([name, type]) => ({ name: name.replace(/\?$/, ''), type, optional: name.endsWith('?') })),
       returns: definition.representation ? definition.returns : record.returns, types: record.types, codebase: record.codebase,
-      withhold: record.withhold, budget: record.budget };
+      withhold: record.withhold, protect: record.protect, budget: record.budget };
   } else if (replacement?.kind === 'lambda.instructions' && options.instructions === undefined)
     definition = { ...definition, body: replacement.template.segments[0]! };
   // Capture this call's source revision; later edits affect future calls only.

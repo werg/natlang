@@ -478,6 +478,15 @@ export async function startDashboard(options: DashboardOptions): Promise<{ url: 
     } else if (kind === 'tune') {
       const path = inside(string(input.path, 'path'));
       spec = { kind, title: `tune ${relative(root, path) || '.'}`, cwd: root, argv: ['tune', path], meta: { path: relative(root, path) } };
+    } else if (kind === 'adopt-call') {
+      // A call's code fix becomes the program's source only through adopt-call's check, test and install (WS1 L3).
+      const call = string(input.call, 'call'), record = withStore(s => s.call(call));
+      if (!record?.code_revisions?.length) throw new HttpError(400, `call ${call} changed no code`);
+      if (!record.program_root) throw new HttpError(400, `call ${call} did not record its program directory`);
+      const directory = inside(record.program_root);
+      spec = { kind, title: `adopt fix from ${record.definition.name}`, cwd: root,
+        argv: ['improve', 'adopt-call', call, '--into', directory, ...(input.untested === true ? ['--untested'] : []), ...selection(input), ...confirmed(input, directory)],
+        meta: { call, path: relative(root, directory) || '.' } };
     } else if (kind === 'specialize') {
       spec = { kind, title: 'specialize', cwd: root, argv: ['specialize'] };
     } else throw new HttpError(400, `unknown job kind ${kind}`);

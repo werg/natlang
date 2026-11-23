@@ -61,6 +61,11 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
   uses?: string[];
   /** `withhold: [delegate]` in the frontmatter: tools this function's own calls are not offered (WITHHOLDABLE_TOOLS). */
   withhold?: string[];
+  /**
+   * `protect: [checks/citations.ts]` in the frontmatter: items of the companion folder that judge this function's calls
+   * (verifiers, checkers, fixtures), by path from that folder. A call can read them but never edit them (edit_code).
+   */
+  protect?: string[];
   /** `budget: { maxTurns: 8 }` in the frontmatter: the model work one call may take, instead of its model's own budget. */
   budget?: CallBudget;
   /**
@@ -132,7 +137,7 @@ export function isFileRecord(record: ItemRecord): boolean {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses', 'withhold', 'budget']);
+const NL_KEYS = new Set(['description', 'args', 'returns', 'generic', 'types', 'kind', 'readout', 'model', 'uses', 'withhold', 'protect', 'budget']);
 /** What a `budget:` frontmatter map may bound: a call's turns, the reply tokens of one turn, all its tokens, its context window. */
 export const CALL_BUDGET_KEYS = ['maxTurns', 'turnTokens', 'maxTokens', 'contextTokens'] as const;
 export type CallBudget = Partial<Record<typeof CALL_BUDGET_KEYS[number], number>>;
@@ -294,6 +299,10 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
       meta.withhold.some(item => typeof item !== 'string' || !WITHHOLDABLE_TOOLS.includes(item))))
     throw new NatlangSourceError(path, `withhold lists tools this function's calls are not offered, from: ${WITHHOLDABLE_TOOLS.join(', ')}`,
       frontmatterLine(text, 'withhold'));
+  if (meta.protect !== undefined && (!Array.isArray(meta.protect) || meta.protect.some(item => typeof item !== 'string' ||
+      !/^(?:\.\/)?[\w$.-]+(?:\/[\w$.-]+)*\/?$/.test(item) || item.split('/').some(part => part === '..'))))
+    throw new NatlangSourceError(path, 'protect lists items of this function\'s folder by path from that folder, such as [checks/citations.ts]',
+      frontmatterLine(text, 'protect'));
   if (meta.readout === 'decision') {
     const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseTypeCached(text)])));
     if ((finiteValues(parseTypeCached(returns), env)?.length ?? 0) < 2)
@@ -308,7 +317,46 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
     ...(typeof meta.model === 'string' ? { model: meta.model } : {}),
     ...(Array.isArray(meta.uses) && meta.uses.length ? { uses: meta.uses as string[] } : {}),
     ...(Array.isArray(meta.withhold) && meta.withhold.length ? { withhold: [...new Set(meta.withhold as string[])] } : {}),
+    ...(Array.isArray(meta.protect) && meta.protect.length ? { protect: [...new Set(meta.protect as string[])] } : {}),
     ...(budget ? { budget } : {}) };
+}
+
+/**
+ * The sources a `protect:` list names, from the source of the function that declares it: each entry is a path from that
+ * function's companion folder (`review.nl` with `protect: [checks/citations.ts]` names `review/checks/citations.ts`).
+ * The extension is dropped, so an entry names a `.nl`, `.ts` or `.js` item, or a whole subfolder.
+ */
+export function protectedSources(source: string, entries: readonly string[] | undefined): string[] {
+  if (!entries?.length) return [];
+  const companion = source.replace(/\.nl$/, '');
+  return entries.map(entry => `${companion}/${entry.replace(/^\.\//, '').replace(/\/+$/, '')}`.replace(/\.(?:nl|ts|js|mjs|mts)$/, ''));
+}
+/** Whether an item at `source` is one of `protectedList` (protectedSources) or inside a protected folder. */
+export function isProtectedSource(source: string, protectedList: readonly string[]): boolean {
+  const stem = source.replace(/\.(?:nl|ts|js|mjs|mts)$/, '');
+  return protectedList.some(entry => stem === entry || stem.startsWith(`${entry}/`));
+}
+/** Every source a record tree protects: its natural-language functions' `protect:` lists, resolved. */
+export function treeProtectedSources(codebase: Record<string, ItemRecord>): string[] {
+  const found: string[] = [];
+  const visit = (item: ItemRecord) => {
+    if (item.kind === 'natlang') found.push(...protectedSources(item.source, item.protect));
+    for (const child of Object.values(item.codebase)) visit(child);
+  };
+  for (const item of Object.values(codebase)) visit(item);
+  return found;
+}
+/** A `protect:` entry must name an item of the function's companion folder: a misspelt one would protect nothing. */
+function checkProtect(record: NatlangRecord, path: string): void {
+  if (!record.protect?.length) return;
+  const sources: string[] = [];
+  const visit = (item: ItemRecord) => { sources.push(item.source); for (const child of Object.values(item.codebase)) visit(child); };
+  for (const item of Object.values(record.codebase)) visit(item);
+  record.protect.forEach(entry => {
+    if (!sources.some(source => isProtectedSource(source, [protectedSources(record.source, [entry])[0]!])))
+      throw new NatlangSourceError(path, `protect names ${JSON.stringify(entry)}, which is not an item of ${record.name}/; list items by path from that folder, such as [checks/citations.ts]`,
+        frontmatterLine(record.text, 'protect'));
+  });
 }
 
 /** The package root above `dir`: the nearest directory with `natlang.json` or `package.json`. */
@@ -572,6 +620,7 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
   }
   for (const [name, item] of Object.entries(items))
     if (item.kind === 'natlang' && item.uses) attachUses(item, files.join(dir, `${name}.nl`), files);
+  for (const item of Object.values(items)) if (item.kind === 'natlang') checkProtect(item, item.source);
   if (files !== PATH_ONLY) registerFileRecords(items);
   return items;
   } finally { for (const path of mine) { LOADING.delete(path); LOADING_EDGES.delete(path); } }
@@ -636,6 +685,7 @@ export function loadNamedFunction(path: string, files: SourceFiles): NatlangReco
   const record = parseNatlang(path, files.read(path), packageTypes(dir, files), files);
   const companion = files.join(dir, record.name);
   record.codebase = loadCallableFolder(companion, files, record.types);
+  checkProtect(record, path);
   if (files.isDirectory(companion)) {
     const data = folderNzData(companion, files, record.codebase);
     if (Object.keys(data).length) record.contextData = data;

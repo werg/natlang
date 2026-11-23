@@ -120,6 +120,11 @@ export function renderTrace(store: CallStore, call: { record?: CallRecord; runni
       lines.push(`  ${effect.service}.${effect.method}(${cut(json(args), 160, 1, full).replace(/^\[|\]$/g, '')}) ${effect.error ? `failed: ${effect.error}` : `→ ${cut(json(result), 160, 1, full)}`}`);
     }
   }
+  if (record?.code_revisions?.length) {
+    const sources = [...new Set(record.code_revisions.map(revision => revision.source))];
+    lines.push('', `code it changed (${record.code_revisions.length} edit${record.code_revisions.length === 1 ? '' : 's'}): ${sources.join(', ')}`,
+      `  natlang improve adopt-call ${record.call_id} checks, tests and installs the change`);
+  }
   for (const item of store.annotations(callId)) lines.push(`annotation ${item.kind}: ${cut(json(item.value), 200, 1, full)}`);
   for (const item of store.callCases(callId)) lines.push(`case ${item.case_hash}: ${item.role}${item.verdict ? ` ${item.verdict}` : ''}`);
   if (record) {

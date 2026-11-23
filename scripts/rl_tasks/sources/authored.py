@@ -47,7 +47,33 @@ def authored_split(world, author):
 GENERATOR = 'natlang.rl-authored-tasks/1'
 CONSTRUCTS = frozenset({'call_depth_3', 'neuralese_relay', 'typed_neuralese', 'neuralese_fan_in', 'iterate',
                         'iterate_neuralese', 'folder_reducer', 'decision_readout', 'skills', 'multi_operation_codebase',
-                        'effect_state'})
+                        'effect_state',
+                        # semantic-FP constructs (plans/semantic-fp/05 §3; authored_checks.py checks each one statically)
+                        'inline_nl', 'nl_with_context', 'library_discovery', 'nl_convergence', 'higher_order',
+                        'context_lens', 'folder_transaction', 'untrusted_contract', 'refinement_contract'})
+# The curriculum technique flags a correct trajectory must show (ts-host/src/teacher/curriculum.ts `inline`, `named`,
+# `iterate`, `edits`). A construct that the reference solution needs sets its flag to `required` by default; the task's
+# own `requires` object overrides or adds flags.
+REQUIRES = {'inline': ('required', 'optional', 'avoid'), 'named': ('required',), 'iterate': ('required',),
+            'edits': ('required', 'forbidden', 'optional')}
+CONSTRUCT_REQUIRES = {'inline_nl': {'inline': 'required'}, 'nl_with_context': {'inline': 'required'},
+                      'nl_convergence': {'iterate': 'required'}, 'iterate': {'iterate': 'required'},
+                      'iterate_neuralese': {'iterate': 'required'}, 'library_discovery': {'named': 'required'}}
+
+
+def technique_flags(task, constructs, files):
+    """The curriculum flags {inline, named?, iterate?, edits?}: construct defaults, then the task's ``requires``."""
+    flags = {'inline': 'optional'}
+    if len([p for p in files if p.endswith('.nl')]) > 1:
+        flags['named'] = 'required'
+    for construct in sorted(constructs):
+        flags.update(CONSTRUCT_REQUIRES.get(construct, {}))
+    requires = task.get('requires', {})
+    if not isinstance(requires, dict) or any(k not in REQUIRES or v not in REQUIRES[k] for k, v in requires.items()):
+        fail(task, 'requires maps inline (required|optional|avoid), named (required), iterate (required) or '
+                   'edits (required|forbidden|optional)')
+    flags.update(requires)
+    return flags
 ORACLES = frozenset({'exact', 'normalized', 'verifier'})
 VERIFIER_ROOT = 'training/semantic_fp_tasks/'
 REPO = Path(os.environ.get('NATLANG_REPO_ROOT') or Path(__file__).resolve().parents[3])
@@ -136,8 +162,10 @@ def convert(task):
         fail(task, 'root must be a top-level .nl file present in files')
     stem = root[:-3]
     for path in files:
-        if not FILE.match(path) or (path != root and not path.startswith(stem + '/')):
-            fail(task, f'file {path} must live in the root callable folder {stem}/')
+        # A top-level types.ts gives the root its type aliases (Ticket, Untrusted<T>/Is<T, P> fields); the aliases of
+        # <stem>/types.ts reach only the helpers in that folder.
+        if not FILE.match(path) or (path not in (root, 'types.ts') and not path.startswith(stem + '/')):
+            fail(task, f'file {path} must live in the root callable folder {stem}/ (or be the top-level types.ts)')
         if path.endswith('.nl') and not files[path].startswith('---\n'):
             fail(task, f'{path} needs YAML frontmatter (args, returns)')
     folders, expected_folders = folder_map(task, 'folders'), folder_map(task, 'expected_folders')
@@ -177,6 +205,7 @@ def convert(task):
     family = 'auth_' + task['family']
     case_id = f'auth:{slug(task["family"], 40)}:{slug(task["id"], 80)}:{text_digest(json.dumps(task, sort_keys=True))[:8]}'
     root_body = files[root].split('---', 2)[-1]
+    flags = technique_flags(task, constructs, files)
     return {
         'version': 'natlang.program/2', 'id': case_id, 'kind': 'lambda_source', 'family': family,
         'source': 'authored-rl:' + author['model'], 'split': split, 'source_ids': ['authored:' + task['id']],
@@ -192,15 +221,14 @@ def convert(task):
         'curriculum': {
             'version': CURRICULUM_VERSION, 'family': family, 'family_version': 1, 'shape': task.get('shape', family),
             'variant': 'base', 'pair_group': None, 'split_group': world, 'slice': 'nested_scoped',
-            'domain': 'other', 'mode': 'single_call', 'inline': 'optional',
+            'domain': 'other', 'mode': 'single_call', 'inline': flags['inline'],
             'evidence': {'world': [], 'retrieved': [], 'background': []}, 'assumptions': [], 'decisive': [],
             'plausible_actions': [], 'minimum_sequence': [],
             'reference': reference_actions(task),
             'rl': {'level': task['level'], 'family': family,
                    'basis': ('authored-verifier-oracle-reference-verified' if verifier
                              else 'authored-exact-oracle-reference-verified')},
-            **({'iterate': 'required'} if {'iterate', 'iterate_neuralese'} & set(constructs) else {}),
-            **({'named': 'required'} if len([p for p in files if p.endswith('.nl')]) > 1 else {}),
+            **{key: flags[key] for key in ('iterate', 'named', 'edits') if key in flags},
             'external': {'source': 'authored', 'upstream': 'authored:' + author['model'], 'upstream_id': task['id'],
                          'upstream_split': 'train-carve', 'unit': world, 'shape': task.get('shape', family),
                          'instruction_sha256': text_digest(root_body)[:16], 'instruction_id': text_digest(root_body)[:12],

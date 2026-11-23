@@ -322,6 +322,7 @@ export declare function pluggable<A extends unknown[], R>(implementations: Plugg
 /** Module declaration text for packages that export the natlang surface. */
 export const INTRINSICS_MODULE_DTS = `${DECLARATIONS.replace(/\n(interface|type) /g, '\nexport $1 ')}\n` +
   '/** The runtime package\'s context value (\`NatlangContext\` in eval scope). */\nexport type Context = NatlangContext;\n' +
+  'export declare const Context: { empty(): NatlangContext };\n' +
   FUNCTIONS.replace(/\n(function|const) /g, '\nexport declare $1 ') + PLUGGABLE_MODULE_DTS;
 
 export const INTRINSICS_FILE = '/__natlang__/intrinsics.d.ts';

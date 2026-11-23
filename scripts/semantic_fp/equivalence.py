@@ -181,7 +181,7 @@ def parse_map(values, sep='='):
     return out
 
 
-def build_cases(out, *, programs=None, sources=None, roots=None, version='original', repo=REPO, node=None):
+def build_cases(out, *, programs=None, sources=None, roots=None, version='original', kinds=None, repo=REPO, node=None):
     """Write ``out/cases.jsonl`` and a held-eval manifest over it (``held_eval.write_manifest``) for ``programs`` (None:
     all 111), each from its source in the repository or from ``sources[program]``; returns the manifest's sha256."""
     from natlang_neuralese.rl import held_eval
@@ -206,6 +206,8 @@ def build_cases(out, *, programs=None, sources=None, roots=None, version='origin
         root_maps[program][old] = new
     built = sorted((with_version(row, program, version if program in files else 'original', files.get(program),
                                  root_maps.get(program)) for program, row in rows), key=lambda r: r['id'])
+    if kinds:
+        built = [row for row in built if row['equivalence']['kind'] in set(kinds)]
     if len({row['id'] for row in built}) != len(built):
         raise ValueError('duplicate case id')
     tasks = [{'id': row['id'], 'family': row.get('family'), 'program': row['equivalence']['program'],
@@ -378,8 +380,8 @@ def report(run):
             'samples': len(samples), 'ran': sum(s['ran'] for s in samples), 'scored': len(scored),
             'passes': sum(s['reward'] == 1.0 for s in scored), 'judge_pending': sum(s['judge_pending'] for s in samples),
             'seeds': [s['seed'] for s in samples],
-            'outcomes': dict(collections.Counter(s['outcome'] for s in samples if s['ran'])),
-            'statuses': dict(collections.Counter(s.get('status') for s in samples if s['ran'])),
+            'outcomes': dict(collections.Counter(str(s['outcome']) for s in samples if s['ran'])),
+            'statuses': dict(collections.Counter(str(s.get('status')) for s in samples if s['ran'])),
             'calls_mean': _mean([s.get('calls') for s in samples]),
             'prompt_tokens_mean': _mean([s.get('prompt_tokens') for s in samples]),
             'completion_tokens_mean': _mean([s.get('completion_tokens') for s in samples]),
@@ -478,6 +480,8 @@ def main(argv=None):
     c.add_argument('--source', action='append', default=[], help='PROGRAM=DIR: measure the version in DIR')
     c.add_argument('--root', action='append', default=[], help='PROGRAM:OLD=NEW: the version\'s entry for a case root')
     c.add_argument('--version', default='candidate', help='label of the --source versions')
+    c.add_argument('--kind', action='append', choices=('gate', 'workflow', 'world'),
+                   help='only cases of this kind (repeatable; seeds pair across subsets)')
     r = sub.add_parser('run', help='measure the cases on served actors (resumable); writes RUN/report.jsonl')
     r.add_argument('--cases', type=Path, required=True)
     r.add_argument('--out', type=Path, required=True)
@@ -515,7 +519,7 @@ def main(argv=None):
 
     if args.command == 'cases':
         sha = build_cases(args.out, programs=args.program, sources={k: Path(v) for k, v in parse_map(args.source).items()},
-                          roots=parse_map(args.root), version=args.version)
+                          roots=parse_map(args.root), version=args.version, kinds=args.kind)
         manifest = json.loads((args.out / 'manifest.json').read_text())
         print(json.dumps({'manifest': str(args.out / 'manifest.json'), 'sha256': sha, 'cases': len(manifest['tasks']),
                           'programs': len(manifest['programs'])}))

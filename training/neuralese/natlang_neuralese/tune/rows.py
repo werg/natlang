@@ -108,7 +108,8 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None, prefix=None):
         if (not isinstance(options, list) or len(options) < 2 or any(not isinstance(item, str) for item in options)
                 or len(set(options)) != len(options) or type(chosen) is not int or not 0 <= chosen < len(options)):
             raise TuneMathError('a decision turn needs distinct options and its selected option')
-        prompt, continuations = decision_items(engine, messages, turn['tools'], options)
+        prompt, continuations = decision_items(engine, messages, turn['tools'], options,
+                                               decision.get('open_reply') is True)
         names = {mine[key]: import_name(*json.loads(key)[1:]) for key in placed}
         ids, _, imports, external = soft_items_to_node(engine, prompt, [], prompt_weight=0., state_names=names,
                                                        prefix=prefix)

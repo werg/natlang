@@ -217,6 +217,7 @@ def lint_task(task):
                             'the answer from the helpers\' scripted values')
     if {'iterate', 'iterate_neuralese'} & constructs and not any('iterateOn' in b for _, b in functions.values()):
         errors.append('iterate/iterate_neuralese tag but no function uses iterateOn')
+    errors += semantic_fp_problems(task, constructs, functions)
 
     for path in task['files']:
         match = SKILL_PATH.match(path)
@@ -261,6 +262,60 @@ def lint_task(task):
                                 'belong in code, not in a helper')
     new_errors, new_warnings = blind_failure_modes(task, functions)
     return errors + new_errors, warnings + new_warnings
+
+
+def _scripts(task):
+    """Every root script a task carries: the smoke code, the reference evals and the wrong-code variants."""
+    reference = task.get('reference')
+    actions = reference if isinstance(reference, list) else (reference or {}).get('root') or []
+    codes = [str((task.get('smoke') or {}).get('code') or '')]
+    codes += [str(args.get('code') or '') for tool, args in actions if tool == 'eval' and isinstance(args, dict)]
+    return '\n'.join(codes)
+
+
+# A semantic-FP construct is claimed only when the program and the scripts that solve it really use it
+# (plans/semantic-fp/05 §3): (pattern, where, message). `where` is 'scripts' (smoke/reference code), 'program' (the
+# .nl/.ts files) or 'both' (either).
+SEMANTIC_FP_CHECKS = {
+    'inline_nl': (r'\bnl(?:\.with)?(?:<[^`]*>)?(?:\([^)]*\))?`', 'scripts',
+                  'inline_nl: the smoke or reference script never creates an inline nl`...` lambda'),
+    'nl_with_context': (r'\bnl\.with\b', 'scripts', 'nl_with_context: no script uses nl.with({...})`...`'),
+    'nl_convergence': (r'\.until\(\s*nl\b', 'both', 'nl_convergence: no iterateOn(...).until(nl`...`) stop'),
+    'context_lens': (r'\.in\(', 'both', 'context_lens: no script or function uses .in(context)'),
+    'folder_transaction': (r'\.propose\(', 'both', 'folder_transaction: nothing calls folder.propose(...)'),
+    'untrusted_contract': (r'\bUntrusted<', 'program', 'untrusted_contract: no argument or type is Untrusted<T>'),
+    'refinement_contract': (r'\bIs<|^ensures:', 'program', 'refinement_contract: no Is<T, P> type or ensures: contract'),
+}
+
+
+def semantic_fp_problems(task, constructs, functions):
+    errors = []
+    scripts = _scripts(task)
+    program = '\n'.join(task['files'].values())
+    for construct, (pattern, where, message) in SEMANTIC_FP_CHECKS.items():
+        if construct not in constructs:
+            continue
+        text = {'scripts': scripts, 'program': program, 'both': scripts + '\n' + program}[where]
+        if not re.search(pattern, text, re.M):
+            errors.append(message)
+    if 'folder_transaction' in constructs and not re.search(r'\.(accept|select)\(', scripts + '\n' + program):
+        errors.append('folder_transaction: a proposal is never accepted or selected')
+    if 'library_discovery' in constructs:
+        root = task['root']
+        stem = root[:-3] + '/'
+        helpers = sorted(p.rsplit('/', 1)[-1].rsplit('.', 1)[0] for p in task['files']
+                         if p.startswith(stem) and p.endswith(('.nl', '.ts')) and p.count('/') == stem.count('/'))
+        if len(helpers) < 10:
+            errors.append(f'library_discovery: the root library has {len(helpers)} helpers; it needs at least 10')
+        named = [h for h in helpers if re.search(rf'\b{re.escape(h)}\b', functions.get(root, ('', ''))[1])]
+        if named:
+            errors.append('library_discovery: the root instruction names its helpers ' + ', '.join(named) +
+                          '; the task is to find them')
+    if 'higher_order' in constructs:
+        returns_fn = any(re.search(r'returns:\s*"[^"\n]*=>', header) for header, _ in functions.values())
+        if not returns_fn and not re.search(r'=>\s*Promise<', program) and not re.search(r'\bnl(?:\.with)?\b', scripts):
+            errors.append('higher_order: no function returns or takes a callable, and no script builds one')
+    return errors
 
 
 ROUND6_FIRST_WORKER = 136
@@ -436,6 +491,30 @@ def cue_rules(task):
     return found
 
 
+# A custody group names one real shared source item: `<dataset>:<item id>` (e.g. `strategyqa:18689be402e9`). A group is
+# a custody identity, so one held world withholds every world that shares it (sfp1: family-wide `invented:<theme>`
+# groups tied 28 of 36 train rows to held worlds).
+REAL_GROUP = re.compile(r'^[a-z0-9][a-z0-9_.-]*:[^\s:/]{4,}$')
+
+
+def group_problems(tasks):
+    """{task id: [errors]}: groups that are not one real source item (invented, family-wide or theme-wide)."""
+    found = collections.defaultdict(list)
+    for task in tasks:
+        groups = task.get('groups') or []
+        if not isinstance(groups, list) or not all(isinstance(group, str) for group in groups):
+            found[task['id']].append('groups must be a list of strings')
+            continue
+        for group in groups:
+            if group.lower().startswith('invented') or not REAL_GROUP.match(group):
+                found[task['id']].append(
+                    f'group {group!r} is not one real source item (`<dataset>:<item id>`): a group is a custody identity '
+                    'and joins every world that carries it, so invented worlds leave groups empty')
+            elif task.get('oracle') == 'verifier' and group.split(':', 1)[0] == task.get('family'):
+                found[task['id']].append(f'group {group!r} names the family, which ties every world of it together')
+    return found
+
+
 def lint_batch(tasks, runtime=None):
     """{task id: {'errors': [...], 'warnings': [...]}} for every task, with the batch-level world checks."""
     report = {}
@@ -446,6 +525,8 @@ def lint_batch(tasks, runtime=None):
         report[task['id']] = {'errors': errors, 'warnings': warnings}
     for ident, found in verifier_controls(tasks, runtime).items():
         report[ident]['errors'].extend(found['errors'])
+    for ident, found in group_problems(tasks).items():
+        report[ident]['errors'].extend(found)
     worlds = collections.defaultdict(list)
     for task in tasks:
         if 'multi_operation_codebase' in (task.get('constructs') or []):

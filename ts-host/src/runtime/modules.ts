@@ -252,7 +252,9 @@ export function moduleInstance(platform: Platform, record: ModuleRecord, level: 
     if (specifier === 'natlang:services') return servicesModule;
     if (hasBuiltinModule(platform, specifier)) return builtinModule(platform, specifier);
     // Every runtime specifier, the neutral one included, is the natlang surface in callable-folder code.
-    if (specifier === NEUTRAL_RUNTIME_SPECIFIER || /^@natlang\/(node|browser|core)$/.test(specifier)) return { __esModule: true, ...surface };
+    // `Context` is the host package's context value (`fn.in(Context.empty().with({ policy }))`), installed by contexts.ts.
+    if (specifier === NEUTRAL_RUNTIME_SPECIFIER || /^@natlang\/(node|browser|core)$/.test(specifier))
+      return { __esModule: true, ...surface, Context: (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.context-class')] };
     if (specifier.startsWith('./')) {
       const parts = specifier.slice(2).replace(/\.(ts|js|nl)$/, '').split('/');
       let scope: Record<string, ItemRecord> = level, parent = level, item: ItemRecord | undefined;

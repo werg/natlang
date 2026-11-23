@@ -54,7 +54,7 @@ import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { checkCodebase, type CodebaseCheckSpec } from './codebase-check.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import { ANSWER_COMPARISON_VERSION, type FilesOracle } from '../evaluation/oracles.js';
-import type { DecisionRequest, DecisionScores, ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScorer, DecisionScores, ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { activeRecorder } from '../native/model-recording.js';
 import { sampleOption, derivedSeed } from '../runtime/seeded-decision.js';
 import { closeProviderSession, ProviderActionCycleTimeoutError, ProviderRequestTimeoutError,
@@ -64,11 +64,11 @@ import { registerTrace, releaseTrace, traceFor } from '../native/graph.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
 import { hostCaptures, type CaptureSource } from '../exact-capture/host-capture.js';
 import { checkItemResultBinding, type ItemResultBindingSpec } from './item-result-binding.js';
-import { RefinementChecker, type RefinementFailure } from '../native/refinement.js';
+import { RefinementChecker, type RefinementFailure, type RefinementJudge } from '../native/refinement.js';
 import { createTeacherTextNeuralese, TEACHER_TEXT_NEURALESE_PROMPT } from '../model/teacher-text-neuralese.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import { nodePlatform } from '../runtime/node.js';
-import { runInFrame } from '../runtime/context.js';
+import { currentFrame, runInFrame, type Frame } from '../runtime/context.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -1722,6 +1722,23 @@ export async function hermeticEpisode<T>(options: { calls?: unknown }, body: () 
   finally { episode.dispose(); }
 }
 
+/**
+ * The collector agent's refinement gate: the task's checker and judges. A `holds` judge call runs in the frame of the
+ * call being judged when that call belongs to this task, else in the root's.
+ */
+function collectorRefinement(runtime: NodeNativeRuntime): { checker: RefinementChecker; judge?: RefinementJudge; escalation?: RefinementJudge } {
+  const root = runtime.frame!, task = root.task;
+  const at = (): Frame => { const frame = currentFrame(); return frame?.task === task ? frame : root; };
+  const lazy = (pick: 'judge' | 'escalation', base: RefinementJudge | undefined): RefinementJudge | undefined => base && {
+    ...base, probability: (value, predicate, signal, turn) => {
+      const frame = at();
+      return (task.refinementJudges(undefined, frame)[pick] ?? base).probability(value, predicate, signal, turn);
+    } };
+  const judges = task.refinementJudges(undefined, root);
+  const judge = lazy('judge', judges.judge), escalation = lazy('escalation', judges.escalation);
+  return { checker: task.refinementChecker(), ...(judge ? { judge } : {}), ...(escalation ? { escalation } : {}) };
+}
+
 export async function executeProgram(record: ProgramRecord, driver:(request: ModelTurnRequest) => Promise<ModelTurn>,
   options: ExecuteOptions): Promise<ProgramRun> {
   return hermeticEpisode(options, () => executeProgramInEpisode(record, driver, options));
@@ -1747,14 +1764,19 @@ async function executeProgramInEpisode(record: ProgramRecord, driver:(request: M
   const bindingSpec = options.sourceReferenceOnly ? undefined :
     (record.curriculum as { item_result_binding?: ItemResultBindingSpec } | undefined)?.item_result_binding;
   let runtime: NodeNativeRuntime | undefined;
-  const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: options.temperature ?? 0,
+  // Built once the runtime exists: its refinement gate uses the task's checker (one verdict cache with the kernel's
+  // return check) and the task's judges, which run on this driver (runtime.ts refinementJudges with `agentDriver`).
+  // NATLANG_COLLECTOR_REFINEMENT_JUDGE=0 opts out: no judge, and the gate only for an item-result binding.
+  const judged = process.env.NATLANG_COLLECTOR_REFINEMENT_JUDGE !== '0';
+  const makeAgent = (refinement?: { checker: RefinementChecker; judge?: RefinementJudge; escalation?: RefinementJudge }) =>
+    new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: options.temperature ?? 0,
     ...(options.promptRendering ? { promptRendering: options.promptRendering } : {}),
     ...(options.fileTools ? { fileTools: options.fileTools } : {}),
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
     ...(options.trainingGuidance ? { trainingGuidance: trainingGuidance(options.trainingGuidance) } : {}),
     ...(options.programGuidance ? { programGuidance: options.programGuidance } : {}),
     contextTokens: options.contextTokens, maxTurns: options.maxTurns,
-    ...(bindingSpec ? { refinement: { checker: new RefinementChecker(),
+    ...(refinement || bindingSpec ? { refinement: { ...(refinement ?? { checker: new RefinementChecker() }), ...(bindingSpec ? {
       returnGuard: async (runId: string): Promise<RefinementFailure[]> => {
         if (runId !== options.runId || !runtime) return [];
         const verdict = checkItemResultBinding(bindingSpec, itemResultInvocationLedger(runtime, bindingSpec));
@@ -1763,7 +1785,7 @@ async function executeProgramInEpisode(record: ProgramRecord, driver:(request: M
         return verdict.status === 'pass' ? [] : [{ code: 'refinement-unsatisfied', path: 'return',
           predicate: 'declared child result lineage',
           message: 'Complete the declared named child decisions and carry their actual typed results into the return value.' }];
-      } } } : {}) });
+      } } : {}) } } : {}) });
   // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
   const services: Record<string, object> = {};
   for (const [name, fn] of Object.entries(effects.capabilities)) {
@@ -1799,7 +1821,10 @@ async function executeProgramInEpisode(record: ProgramRecord, driver:(request: M
   // The run is recorded in the machine's call store under its run ID, with the driver's model when it names one.
   const driverModel = (driver as { model?: unknown }).model;
   const stepMarkers = iterationStepMarkers(record);
-  runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
+  let agent: NativeToolAgent | undefined;
+  runtime = new NodeNativeRuntime({ environment, agent: session => agent!.run(session), services, declarations,
+    // Refinements (`Is<T, P>` returns, `refine`) are judged on the policy: its decision scorer, else a `holds` call.
+    ...(judged ? { agentDriver: driver as { decide?: DecisionScorer } } : {}),
     modelId: typeof driverModel === 'string' && driverModel ? driverModel : `undeclared:${driver.name || 'teacher-driver'}`,
     ...(options.calls !== undefined ? { calls: options.calls } : {}),
     // The policy answers every call of a collector episode: no compiled case serves one, whatever the store holds.
@@ -1813,6 +1838,7 @@ async function executeProgramInEpisode(record: ProgramRecord, driver:(request: M
       captureAllOutputs: true, maxBytes: 1_048_576 },
     seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId,
     ...(options.runLabel !== undefined ? { runLabel: options.runLabel } : {}), signal: options.signal });
+  agent = makeAgent(judged ? collectorRefinement(runtime) : undefined);
   registerTrace(options.runId, runtime.trace, runtime.episodeBudget);
   try {
     let result: Awaited<ReturnType<typeof runtime.run>>;

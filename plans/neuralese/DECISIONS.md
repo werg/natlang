@@ -7589,3 +7589,129 @@ annotated `FolderHandle` (plain tsc against dist, so the dist declaration, not t
 writes `propose<[], Ledger>`; a target argument whose type contains `Untrusted` is refused ("Request types cannot be
 passed"); a decision readout on an endpoint without scoring (the Colab front) falls back to generation, and LFM3 then
 thinks and fails `decision-generation-invalid`.
+
+## 2026-11-23 04:30 Verifier-judged authored tasks; first batch into grpo-pool (semantic-FP B6, WS5 O1)
+
+Owner direction: break the cue-word trap. Rounds 10-23 qualified by exact match after a literal blind solve, and so
+selected programs whose judgments were keyword lists (`contains the word dog, cat, pet or pets`).
+- **Mechanism (d00814b62).** Authored tasks may declare `oracle: "verifier"`. The task binds a trusted verifier under
+  the new allow-listed root `training/semantic_fp_tasks/`, and the converter records its sha256. The task also carries
+  a `keyword_baseline`: a root script that answers by surface cues.
+  - The verifier returns `{ok, issues, score}`; `ok` implies `score == 1`. The brief said `{pass, score}`; the
+    existing `verifyCandidate` contract was kept.
+  - The collector now passes the files the run left (`files`).
+  - Graded reward uses the verifier `score` as answer credit (`task_rollouts.verifier_score`). Held scoring stays
+    binary on `ok`.
+  - `verifier_controls.mjs`, run from `authored_checks.py`, requires:
+    - the reference and every alias accepted;
+    - every wrong answer, the degenerate values and the keyword baseline rejected;
+    - a deterministic verdict.
+  - The lint rejects cue rules in instructions.
+  - `verify.mjs` replays the keyword baseline through the collector, and the baseline must run to an answer and be
+    rejected. That last condition was added after w405's refused baselines had counted as rejected.
+  - `blind_solve compare` judges a solver's outcome with the task's own verifier.
+  - Verifiers: `labels`, `order`, `assignment`, `ledger`. Every outcome meeting the oracle passes, and a record already
+    right and left alone earns no credit.
+  - Authoring rules: kit section 18.
+- **Batch sfp1:** 5 Opus authors (w402-w406), 5 families, 25 programs x 2 worlds = 50 tasks.
+  - Qualification, collector replay on pin d00814b62:
+    - 50/50 references accepted;
+    - 255/255 wrong controls rejected;
+    - 50/50 keyword baselines ran and were rejected;
+    - 44/44 alias outcomes (other valid orders, assignments and operation lists) accepted;
+    - 50/50 full smoke replays accepted.
+  - An independent Sonnet blind solve agreed with the verifiers on 50/50, after two w403 notes were rewritten to remove
+    an ambiguity it found.
+  - Novelty passed. Family-wide `invented:*` groups were removed and the batches re-admitted, because they tied every
+    world to the held worlds (custody 28/36 related).
+  - The 36 train rows form `natlang-rl-task-supply-20261123sfp1`, promoted to `grpo-pool`.
+  - The 14 held rows are `natlang-rl-authored-{dev,confirmation}-20261123sfp1`, seeds for held-v4.
+  - Final checks: held-v3 verify 0/0 (also with exposure), custody 0 related, group closure passed.
+  - Repetition against the 37,323-row pool: no instruction text, program text or functional program shared; 23
+    programs (21.8 effective); 6 structures.
+- **Not done here:** no model has run these tasks, so their pass rate and frontier tier are unmeasured. There are no
+  Neuralese, folder or iterate constructs, and decide appears in 33%. w401, the exemplar with one program, was not
+  admitted.
+
+## 2026-11-23 05:30 Malleable code through a transaction: protected judges, recorded revisions, adopt-call (semantic-FP B8, WS1 L3)
+
+Decision (WS1 L3, kept): `edit_code` stays on wherever a call owns code; what judges the call is protected, and a good
+edit becomes a proposal the program can adopt instead of dying with the run. The default stays `allow`.
+- **Protected items.** New frontmatter `protect: [path, ...]` (paths from the function's companion folder; extension
+  optional; a subfolder protects everything in it). `edit_code` refuses (code `protected`, one teaching sentence, WS4 §8
+  text) the protected items of the executing function and of every function in its codebase tree, the program's
+  `types.ts`, and an edit that changes any `protect:` list (so a nested function cannot unprotect its verifier). An
+  entry that names no item is a load error. Services were already refused as external (unchanged text).
+  `ensures:` checks (L7, B12) are not on main yet: when they land, their named items join `treeProtectedSources`
+  (`runtime/loader.ts`), the one place protection is computed.
+- **Revisions are recorded.** Each committed edit emits a `code_revision` trace event (item, source, revision, hashes,
+  the find/replace patch, the edited text); a call that ends `done` records them as `code_revisions` in its call record
+  (`after` is a blob ref linked against eviction). `natlang traces show` lists them; the dashboard trace page shows them
+  with **Adopt this fix** (job kind `adopt-call`).
+- **Adoption is a Folder transaction.** `natlang improve adopt-call CALL [--into DIR] [--dry-run] [--untested]` takes the
+  last revision of each source, refuses a stale checkout (file hash must equal the text the call edited), refuses any
+  change to `types.ts`, protected items or `protect:` lists, materializes the proposal in a temp copy, runs `natlang
+  check` and `natlang test` there (the real CLI, as subprocesses), and installs through `improvement/adoption.ts`
+  `adoptSource` (adoption record first, atomic install). `natlang improve rollback RECORD` restores the exact bytes. A
+  program with no saved examples is refused unless `--untested` (adopt on check alone): adopting untested model edits
+  silently would make the gate decorative.
+- **Stale comment fixed** (`native/runtime.ts`: "edit_code is offered to every call"; it is offered only where
+  `codeEditable()` holds, `agent.ts` toolsScope).
+- **Inventory.** Changed: `runtime/loader.ts` (key, validation, resolution helpers), `runtime/callable.ts`,
+  `runtime/kernel.ts` (definition plumbing), `native/values.ts` (`protectedSources`), `native/runtime.ts` (refusals,
+  event), `calls/{types,recorder,store-core,expanded,trace-view}.ts`, `improvement/adopt-call.ts`, `cli/improvement.ts`,
+  `cli/main.ts`, `dashboard/server.ts`, `dashboard/{run-host.js,pages/traces.js}`, spec SPEC/ERRORS, skill SKILL.md and
+  `references/language.md`, MODEL_FACING_CHANGES. Not changed, with reason:
+  - Engines (managed llama-server, wllama, Python native, SGLang): edit_code runs in ts-host (`native/runtime.ts`
+    `functionTool`); engines see only the tool schemas, which are unchanged (`native/agent.ts` toolsScope, edit_code
+    still offered under `session.codeEditable()`), and the refusal text as an observation.
+  - Browser runtime: shares `native/runtime.ts` and `runtime/loader.ts`, so protection applies there too; adopt-call is
+    Node-only (it installs files in a checkout; `improvement/adoption.ts` is `node:fs`).
+  - `ProgramView` (`adaptation/program-view.ts`): unchanged; revisions stay run-scoped there, recording reads the event.
+  - Learner, held eval, collectors, Python renderers of recorded prompts: they replay recorded messages; no message
+    changed except the refusal observation, and the new trace event kind is not a message. Held and EI collection pass
+    `codeEdits: 'deny'` already (WS1 L3 v2 fact).
+  - Authored-task checks (`scripts/rl_tasks/authored_checks.py`, `verify.mjs`, `structure_smoke.mjs`): they load `.nl`
+    through the TS loader, which now accepts `protect:`; the Python checks read only `args` (authored_checks.py
+    `_arg_counts`).
+  - `improvement/program.ts` (`natlang improve CASE.json`): its own proposal search with adoption via `adopt`; adopt-call
+    reuses the same `adoptSource`. WS8 N4 (`natlang improve DIR`) should call `adoptCall`'s gate rather than add a third.
+- **Tests.** `ts-host/test/code-edits.test.mjs` (5 tests: protected/types/protect-list refusals with exact text,
+  revision record, load error, adopt accept/reject/dry-run/stale, byte-identical rollback, refusal of failed and
+  no-edit calls and of a forged protected revision, the CLI end to end with real `natlang check`). Conformance 22/22
+  incl. 17-reopen-refine.
+
+## 2026-11-23 Collector episodes judge refinements on their own driver (refined returns were undecidable)
+
+- **Observation.** Authored probe `w900-refine` (helper `explain` returns `Is<string, "one sentence that says whose
+  order the writer is talking about">`) failed qualification: reference replay and structure smoke both ended with
+  `refinement-undecided: ... (no judge could decide it)`.
+- **Cause.** `ts-host/src/teacher/collector.ts` `executeProgramInEpisode` builds `NodeNativeRuntime` with `agent:` and
+  no `model` (collector.ts, the `new NodeNativeRuntime({ environment, agent: ... })` call), so `task.model()` is
+  undefined, and `NatlangTask.refinementJudges` (`ts-host/src/runtime/runtime.ts`, `judgeOf`: `if (!config) return
+  undefined;`) gave no judge. `RefinementChecker.check` then emits `source: 'none', outcome: 'undecided'`, and the
+  kernel's post-call return check (`runtime/kernel.ts` `invokeDefinition`, `phase: 'return'`) fails the call. Same for
+  refined arguments (kernel `phase: 'argument'`), `refine()` (`runtime/surface.ts`) and refined service results
+  (`checkedServices`). Separately, the collector's one shared `NativeToolAgent` carried a refinement gate only with an
+  item-result binding, and that gate had no judge either: no in-call repair, and refined root returns were never checked.
+  So every refined function in RL collection, held eval and equivalence runs failed, not only the replay.
+- **Fix (default, opt-out `NATLANG_COLLECTOR_REFINEMENT_JUDGE=0`).** New runtime option `agentDriver` (passed through
+  `NodeNativeRuntime`): a task driven by `agent` with no model judges on that driver, by `decisionJudge` when it has
+  `decide` (the policy's scorer: SGLang front / native engine `/v1/neuralese/decide`, sampled verdict in collection),
+  else by `callJudge` (`holds` through the agent, which a reference child or a smoke child named `holds` answers). The
+  collector passes its driver and builds the agent after the runtime, with the task's checker (shared verdict cache
+  with the kernel check, so a sampled verdict is drawn once) and the task's judges (the `holds` call in the judged
+  call's frame). Model-facing; recorded in `plans/MODEL_FACING_CHANGES.md`.
+- **Inventory** (everything that runs programs through `executeProgram`): RL/EI collection and held eval
+  (`run_bonsai_queue.py` -> `dist/teacher/collector.js` `collectBatch` -> `executeProgram`), `scripts/semantic_fp/
+  equivalence.py` (held eval's execution), teacher generation (`teacher_gen.py` -> collector.js), reference replay
+  (`curriculum.ts` `replayReference`/`referenceDriver`, `qualify_authored.py` verify), `structure_smoke.mjs`,
+  `corrections.ts`, `handoff.ts`, `native-forced-replay.ts`, `improvement/teacher.ts`, ts-host scripts calling
+  `executeProgram`: all covered by the one change. Not changed: evaluation fixtures (`teacher/evaluation-fixture.ts`
+  `executeEvaluationFixture` -> `evaluate`, whose worker builds the runtime with `model: { driver }`,
+  `evaluation/worker-entry.ts:58`, already judged); product runtimes with `model` (unchanged path); `interpreter({
+  agent })` test fixtures without `agentDriver` (no judge, as before). Engines: no serving change; the judge uses the
+  existing decide request every engine serves.
+- **Result.** `ts-host/test/collector-refinement-judge.test.mjs` (5 tests: scorer true/false, scripted `holds`
+  true/false, opt-out reproduces undecided). `qualify_authored.py` on `w900-refine` with the fixed runtime: PASS
+  (reference admitted, smoke returns expected); with the opt-out: FAIL with the original `refinement-undecided`.

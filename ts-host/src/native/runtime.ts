@@ -32,7 +32,7 @@ import { SAME_QUESTION_REFUSAL } from '../runtime/kernel.js';
 import { isNatlangCallable } from '../runtime/callable.js';
 import { withSelectedCaptureAccessors } from '../runtime/selected-captures.js';
 import { declareSelectedSurface } from './selected-surface.js';
-import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
+import { PATH_ONLY, isProtectedSource, parseModule, parseNatlang, treeProtectedSources, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { undeclaredServiceType } from './introspection.js';
@@ -629,6 +629,14 @@ export function codebaseTypeAlias(codebase: Record<string, unknown>, name: strin
 }
 
 /** Find a codebase item by dotted path; module exports resolve to their module's source. */
+/** The edit_code refusal for an item that judges the call (`protect:`; WS4 §8 F7): one sentence that names the fix. */
+export const protectedEditError = (source: string): string =>
+  `${source} decides whether this call succeeded, so it cannot be edited here; fix the code that produces the value it rejects.`;
+export const PROTECTED_TYPES_ERROR = 'types.ts declares the types this call\'s result is checked against, so it cannot be edited here; ' +
+  'fix the code that produces the value they reject.';
+const PROTECT_LIST_ERROR = (source: string): string =>
+  `The protect: list of ${source} names what judges its calls, so an edit cannot change it; fix the code that produces the value they reject.`;
+
 export function findCodebaseItem(codebase: Record<string, unknown>, name: string):
   { path: string[]; record: ItemRecord } | undefined {
   const parts = name.trim().replace(/\//g, '.').split('.').filter(Boolean);
@@ -1289,6 +1297,8 @@ export class NativeSession {
   private readonly scopeLocalMutability = new Map<string, boolean>();
   private readonly explainedNaturalFunctions = new Set<string>();
   private readonly originalSources = new Map<string, string>();
+  /** Sources this call cannot edit (protect: lists), fixed at its first edit (functionTool). */
+  private protectedList?: string[];
   private readonly skillReads = new Map<string, { document: string; count: number }>();
   private callableCache?: { codebase: Record<string, unknown>; tree: Record<string, unknown> };
   /** Output cut off in this call's tool results, readable with read_page. */
@@ -1989,8 +1999,11 @@ export class NativeSession {
         `a function of this program; ${requested} belongs to an imported package, which can be read but not changed` }]);
       return { kind: 'ok', text: this.show(packaged), value: packaged };
     }
-    // edit_code is offered to every call (one tool list for all calls, so their openings share one cached prefix); a call
-    // without code of its own has nothing to edit.
+    // The program's types.ts is read (its aliases above) but never a helper to change: the result is checked against it.
+    if (!found && name === 'edit_code' && /^(?:\.\/)?(?:[\w$-]+\/)*types(?:\.ts)?$/.test(requested))
+      throw new Reject([{ path: requested, code: 'protected', text: PROTECTED_TYPES_ERROR }]);
+    // edit_code is offered only where codeEditable() holds (agent.ts toolsScope); a call that reaches this tool without
+    // code of its own (a scripted or replayed action) has nothing to edit.
     if (!found && name === 'edit_code' && !Object.keys(this.lam.codebase).length) throw new Reject([{ path: requested, code: 'no-own-code',
       expected: 'a function in this call\'s callable folder; this function has none, so there is no code of its own to edit' }]);
     if (!found) {
@@ -2090,6 +2103,10 @@ export class NativeSession {
     }
     if (this.codeEditsDenied())
       throw new Reject([{ path: requested, code: 'bad-action', expected: 'code edits are denied by this evaluation policy' }]);
+    // What judges the call is not the call's to change (protect:, WS1 L3): a stuck run edited its verifier to pass.
+    this.protectedList ??= [...(this.lam.protectedSources ?? []), ...treeProtectedSources(this.lam.codebase as Record<string, ItemRecord>)];
+    if (isProtectedSource(record.source, this.protectedList))
+      throw new Reject([{ path: requested, code: 'protected', text: protectedEditError(record.source) }]);
     if (args.expected_revision !== undefined && args.expected_revision !== expectedRevision)
       throw new Reject([{ path: requested, code: 'bad-action', expected: 'current source revision; reread after a concurrent edit' }]);
     const text = editTextContent(record.text, String(args.find ?? ''), String(args.replace_with ?? ''), args.fuzzy === true);
@@ -2097,6 +2114,9 @@ export class NativeSession {
       parseModule(record.source, text, record.types, PATH_ONLY);
     updated.programId = record.programId;
     updated.codebase = record.codebase;
+    if (record.kind === 'natlang' && updated.kind === 'natlang' &&
+        JSON.stringify(record.protect ?? []) !== JSON.stringify(updated.protect ?? []))
+      throw new Reject([{ path: requested, code: 'protected', text: PROTECT_LIST_ERROR(record.source) }]);
     let inlineRevision: { original: InlineLambdaPlan[]; previous: InlineLambdaPlan[]; current: InlineLambdaPlan[] } | undefined;
     if (updated.kind === 'module' && record.kind === 'module') {
       // Validate and compile before committing: existing closures retain their live cells and slots,
@@ -2116,6 +2136,10 @@ export class NativeSession {
     this.lam.codebase = replaceCodebaseItem(this.lam.codebase, found.path, updated);
     const revision = { function: found.path.join('.'), source: record.source, changed: true, revision: view?.revisionId ?? 0,
       originalHash: hexDigest(view?.program?.sources[record.source] ?? record.text), effectiveHash: hexDigest(record.text), patchedHash: hexDigest(updated.text) };
+    // The call record keeps each committed revision with its text (calls/recorder.ts code_revisions): a good fix is a
+    // proposal that `natlang improve adopt-call` can install, not something that dies with the run.
+    this.runtime.trace.emit('code_revision', { ...revision, patch: { find: String(args.find ?? ''), replace_with: String(args.replace_with ?? ''),
+      ...(args.fuzzy === true ? { fuzzy: true } : {}) }, text: updated.text });
     return { kind: 'ok', text: JSON.stringify(revision), value: revision };
   }
 

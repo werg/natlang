@@ -294,7 +294,7 @@ export class CallStore {
       this.db.prepare("DELETE FROM call_blobs WHERE call_id = ? AND kind = 'capture'").run(record.call_id);
       const referenced = [definition.instructions, ...Object.values(record.inputs), ...Object.values(record.captures), record.output,
         ...record.capture_writes.map(write => write.after), ...record.effects.flatMap(effect => [effect.args, effect.result]),
-        ...(record.folder?.changes.map(change => change.after) ?? [])].flatMap(refHashes);
+        ...(record.folder?.changes.map(change => change.after) ?? []), ...(record.code_revisions?.map(revision => revision.after) ?? [])].flatMap(refHashes);
       for (const hash of new Set(referenced)) if (blobs.has(hash) || kinds.has(hash)) link.run(record.call_id, hash, 'value');
     });
     this.keepBound();

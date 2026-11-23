@@ -3,6 +3,24 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-23 — collector episodes judge refinements on the policy (refined returns were undecidable)
+
+- **Defect.** `executeProgram` (`ts-host/src/teacher/collector.ts`) builds `NodeNativeRuntime` with `agent:` and no
+  `model`, and `NatlangTask.refinementJudges` (`runtime/runtime.ts`) returned no judge without a model config. Every
+  `Is<T, P>` return, refined argument, `refine(...)` and refined service result in a collector episode (RL collection,
+  held eval, semantic-FP equivalence, teacher generation, reference replay, structure smoke) failed
+  `refinement-undecided: ... (no judge could decide it)` after the call had finished, and the call itself got no
+  repair feedback: the collector agent had a refinement gate only for an item-result binding, and that one had no judge.
+- **What the model sees now.** The judge runs on the episode's own driver (`agentDriver`): the policy's decision scorer
+  when it has `decide` (the existing judge readout, `JUDGE_SYSTEM_PROMPT`, options `true`/`false`; a collection scorer
+  samples the verdict), else a `holds(value, predicate)` call through the same agent (`JUDGE_CALL_INSTRUCTIONS`). The
+  collector agent always carries the refinement gate with the task's checker and judges, so a refined result the judge
+  rejects comes back inside the call as the same one-sentence refinement error the product runtime gives
+  (`refinement-unsatisfied: Make it unmistakable ...`) within the repair budget, and a refined root return is checked
+  too. The kernel's post-call check reuses the gate's cached verdict (one checker, one judge id), so a sampled verdict
+  is never drawn twice.
+- **Opt-out:** `NATLANG_COLLECTOR_REFINEMENT_JUDGE=0` (no judge, gate only for an item-result binding, as before).
+
 ### 2026-11-23 — `natlang init` writes the inbox planner; `Record<'a' | 'b', T>` is a record (B3)
 
 The front door is also the teacher prompt for idiomatic-program demonstrations (WS4 rule 4). Consumers and coding
@@ -2959,3 +2977,18 @@ binding now carries the sentinel. An evaluation with no scored run now reports n
 the anchor ignores that arm, a group whose support runs all failed is not admitted, and a committed set whose query
 runs all failed leaves the episode unmeasured. Guided programs now see their guidance as the runtime's
 `<natlang_program_guidance>` block, as designed. No opt-out: the old path failed every guided run.
+
+### 2026-11-23 — edit_code refuses what judges the call, with an error that names the fix (semantic-FP B8, WS1 L3)
+
+A stuck model could edit the thing that decides whether it succeeded: in teacher data every run whose board refused a
+move rewrote the board module to accept it. `edit_code` now refuses items a function lists in its new `protect:`
+frontmatter (verifiers, checkers, fixtures), the program's `types.ts`, and an edit that would change a `protect:` list,
+with one sentence: "`review/checks/verdict.ts` decides whether this call succeeded, so it cannot be edited here; fix the
+code that produces the value it rejects." (`types.ts`: "...declares the types this call's result is checked against...";
+a `protect:` list: "The protect: list of `f.nl` names what judges its calls, so an edit cannot change it; ..."). Code
+`protected`, `native/runtime.ts` `functionTool`. The tool block is unchanged (no new tool, no schema change), so the
+stable prefix is untouched; only rejected-edit observations carry new text. `FUNCTION_TOOLS_PROMPT` is unchanged. No
+opt-out for the refusal itself (a program that wants an item editable does not protect it); `codeEdits: 'deny'` and
+`withhold: [edit_code]` stay as before. Successful calls now also record their committed revisions (`code_revisions`
+in the call record, from a new `code_revision` trace event), which renderers of recorded prompts ignore: the event is
+not a message.

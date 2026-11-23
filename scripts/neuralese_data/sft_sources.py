@@ -912,7 +912,31 @@ class ReplayEpisode:
         import difflib
         return max(candidates, key=lambda i: (difflib.SequenceMatcher(None, self.openings[i], opening).ratio(), -i))
 
+    def field_reply_first(self, matches, messages):
+        """Of the unserved recorded calls with the request's exact visible history, the one to serve: for a field-mode
+        readout (``decision_graph.decision_forms``) whose steps were recorded as calls with the same messages (each its
+        open step text), the call whose reply is the whole record (``field_path``), the step calls served with it: the
+        runtime asks a declined readout once, by generation, for the whole value. Otherwise the first."""
+        from natlang_neuralese.data.decision_graph import decision_forms, field_path
+        forms = decision_forms(messages) if len(matches) > 1 else None
+        if forms is None:
+            return matches[0] if matches else None
+        reply = lambda i: ((self.turns[i].get('target') or {}).get('content') or '').strip()
+        whole = [i for i in matches if field_path(forms, reply(i)) is not None]
+        if not whole:
+            return matches[0]
+        for i in matches:
+            if i != whole[0] and field_path(forms, reply(i)) is None:
+                self.served[i] = True
+        return whole[0]
+
     def answer(self, body):
+        if 'items' in body and 'messages' not in body:
+            # a /v1/natlang/score request (ts-host/src/model/decision-scoring.ts): declined as below, item by item
+            with self.lock:
+                self.log.append({'kind': 'scoring-declined', 'turn': None, 'items': len(body.get('items') or [])})
+            return {'results': [{'error': 'decision-unsupported: the replay answers readouts by generation'}
+                                for _ in body.get('items') or []]}
         if 'prompt_logprobs' in body:
             # A decision readout's scoring request (ts-host/src/model/decision-scoring.ts). The recorded teacher could
             # not score replies, so its run declined the readout and ran the call's tool loop: answer as it did, with no
@@ -926,11 +950,9 @@ class ReplayEpisode:
         key, opening = visible_key(messages), opening_key(messages)
         length = sum(m.get('role') != 'system' for m in messages)
         with self.lock:
-            match, kind = None, 'missing'
-            for i, k in enumerate(self.keys):
-                if not self.served[i] and k == key:
-                    match, kind = i, 'exact'
-                    break
+            match = self.field_reply_first([i for i, k in enumerate(self.keys) if not self.served[i] and k == key],
+                                           messages)
+            kind = 'exact' if match is not None else 'missing'
             if match is None:
                 reworded = reworded_key(messages)
                 match = self.closest([i for i, k in enumerate(self.reworded) if not self.served[i] and k == reworded],
@@ -1830,25 +1852,54 @@ def render_decision(renderer, turn, prompt):
     (``serve.native_learning.decision_items``, which the Python engine and the SGLang actor score with): {'options':
     per option its closed continuation ids (int32), 'label': the reply's option, 'values': the option texts,
     'label_source': 'verified-trajectory'}, the learner's option-normalized objective (``exp0_sft.decision_backward``).
-    {'error': ...} when the scorer's prompt differs from the row's or the options do not render."""
+    {'error': ...} when the scorer's prompt differs from the row's or the options do not render.
+
+    A field-mode readout (the request offers record FORMs, ``decision_graph.decision_forms``) whose reply is a whole
+    record is one decision per field step under teacher forcing of the reply's own choices (``field_path``): {'steps':
+    [decision as above, its options the step's open continuations (``decision_items(..., open_reply=True)``) and
+    'open_reply': True]}; steps with a single candidate carry no choice and are left out. A reply that is one step's
+    open text (a recorded step, ``open_reply`` capture) is {'field_step': True}: its record's turn trains the step,
+    and its plain row would teach ending the reply mid-record (``admit`` drops it)."""
     import numpy as np
-    from natlang_neuralese.data.decision_graph import decision_label, decision_replies
+    from natlang_neuralese.data.decision_graph import (decision_forms, decision_label, decision_replies,
+                                                       field_candidates, field_path)
     target = turn.get('target') or {}
-    replies = decision_replies(turn.get('messages') or [])
-    if replies is None or turn.get('tools') or target.get('tool_calls'):
+    messages = turn.get('messages') or []
+    replies = decision_replies(messages)
+    forms = decision_forms(messages) if replies is None else None
+    if (replies is None and forms is None) or turn.get('tools') or target.get('tool_calls'):
         return None
-    label = decision_label(replies, (target.get('content') or '').strip())
-    if label is None:
-        return {'error': 'reply-not-an-option'}
     from natlang_neuralese.serve.native_learning import decision_items
-    try:
-        before, continuations = decision_items(renderer, list(turn['messages']), turn.get('tools'), replies)
-    except Exception as error:
-        return {'error': repr(error)[:200]}
-    if any(kind != 'tok' for kind, _ in before) or [int(i) for _, i in before] != [int(i) for i in prompt]:
-        return {'error': 'prompt-differs-from-scorer'}
-    return {'options': [np.asarray(ids, np.int32) for ids in continuations], 'label': label, 'values': replies,
-            'label_source': 'verified-trajectory'}
+    reply = (target.get('content') or '').strip()
+
+    def rendered(options, label, open_reply=False):
+        try:
+            before, continuations = decision_items(renderer, list(turn['messages']), turn.get('tools'), options,
+                                                   open_reply)
+        except Exception as error:
+            return {'error': repr(error)[:200]}
+        if any(kind != 'tok' for kind, _ in before) or [int(i) for _, i in before] != [int(i) for i in prompt]:
+            return {'error': 'prompt-differs-from-scorer'}
+        return {'options': [np.asarray(ids, np.int32) for ids in continuations], 'label': label, 'values': options,
+                'label_source': 'verified-trajectory', **({'open_reply': True} if open_reply else {})}
+    if replies is not None:
+        label = decision_label(replies, reply)
+        return {'error': 'reply-not-an-option'} if label is None else rendered(replies, label)
+    path = field_path(forms, reply)
+    if path is None:
+        chosen = []
+        while True:   # a recorded step: the reply is the open text of one step on its own path
+            step = [text for text, complete in field_candidates(forms, chosen) if not complete and reply.startswith(text)]
+            if len(step) != 1:
+                return {'error': 'reply-not-a-form'}
+            if step[0] == reply:
+                return {'field_step': True}
+            chosen.append(step[0])
+    steps = [rendered(candidates, label, True) for candidates, label in path if len(candidates) >= 2]
+    failed = next((step for step in steps if 'error' in step), None)
+    if failed is not None:
+        return failed
+    return {'steps': steps} if steps else None
 
 
 def rendered_row(rendered, source, key, index, turn, backend_workarounds='context'):
@@ -1865,9 +1916,14 @@ def rendered_row(rendered, source, key, index, turn, backend_workarounds='contex
     if source not in OWN_SOURCES and detour_call(turn, backend_workarounds):
         row['weight'] = np.zeros(len(target), np.float32)   # the detour after the refusal: context
     decision = decision[0] if decision else None
+    view = lambda d: {**d, 'options': [ids.view(np.int32) for ids in d['options']]}
     if decision and 'options' in decision:
         # the plain row stays (``exp0_sft --no-decision-objective`` trains it as token CE, as before)
-        row['decision'] = {**decision, 'options': [ids.view(np.int32) for ids in decision['options']]}
+        row['decision'] = view(decision)
+    elif decision and 'steps' in decision:
+        row['decisions'] = [view(step) for step in decision['steps']]   # a field-mode readout: one per step
+    elif decision and decision.get('field_step'):
+        row['field_step'] = True   # trained by its record's turn (``render_decision``); ``admit`` drops the row
     elif decision:
         row['decision_error'] = decision['error']
     return row, context
@@ -2396,6 +2452,9 @@ def build(args):
                 if isinstance(call, str):
                     raise RenderError(call)
                 row, context = rendered_row(call, source, c['key'], index, turn, args.backend_workarounds)
+                if row.pop('field_step', False):
+                    stats[source]['decision_field_step_rows_trained_by_record'] += 1
+                    continue
             except Exception as error:
                 stats[source]['render_error_calls'] += 1
                 print(json.dumps({'event': 'render error', 'key': c['key'], 'call': index,
@@ -2425,6 +2484,9 @@ def build(args):
                             **({'decision': {'label': row['decision']['label'], 'values': row['decision']['values'],
                                              'option_tokens': [len(o) for o in row['decision']['options']]}}
                                if 'decision' in row else {}),
+                            **({'decision_steps': [{'label': d['label'], 'values': d['values'],
+                                                    'option_tokens': [len(o) for o in d['options']]}
+                                                   for d in row['decisions']]} if 'decisions' in row else {}),
                             **({'decision_error': row['decision_error']} if 'decision_error' in row else {}),
                             **({'verification_mode': c['verification_mode'], 'live_source': c['live_source'],
                                 'world': c['world'], 'live_exchange': turn['live_exchange']}
@@ -2447,6 +2509,9 @@ def build(args):
         # decision readouts carried with their option sets (exp0_sft trains them with the option-normalized objective)
         s['decision_rows'] += sum('decision' in r for r in rows)
         s['decision_options'] += sum(len(r['decision']['options']) for r in rows if 'decision' in r)
+        s['decision_field_rows'] += sum('decisions' in r for r in rows)
+        s['decision_field_steps'] += sum(len(r['decisions']) for r in rows if 'decisions' in r)
+        s['decision_options'] += sum(len(d['options']) for r in rows for d in r.get('decisions') or ())
         for r in rows:
             if 'decision_error' in r:
                 s[f"decision_surface_not_carried:{r.pop('decision_error')}"] += 1

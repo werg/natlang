@@ -32,3 +32,5 @@ export {admitCounterexamples,CounterexampleSuite} from './counterexamples.js';
 export type {IndependentOracle,CounterexampleAdmission} from './counterexamples.js';
 export {counterexampleGuidedImprove} from './counterexample-program.js';
 export type {CounterexampleState} from './counterexample-program.js';
+export { adoptCall } from './adopt-call.js';
+export type { AdoptCallOptions, AdoptCallResult, AdoptionVerdict } from './adopt-call.js';
