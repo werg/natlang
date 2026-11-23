@@ -436,6 +436,27 @@ def unpack_scored_group(archive_path, store_dir=None):
 
 
 # ---- rollouts --------------------------------------------------------------------------------------------------------
+def memetic_rows_held_free(rows, args):
+    """The memetic rows none of whose support or query worlds (their episode specs) is a held task or shares a held
+    split group (``held_eval.training_exclusion_ids``: every held set training excludes): the set was built
+    against the held set of its day, and a later held set must keep its tasks out of the worlds the policy trains on."""
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
+    if not rows:
+        return rows
+    worlds = {}
+    for row in rows:
+        spec = json.loads(Path(row['semantics']['world']['task']).read_text())
+        worlds[row['id']] = spec['support'] + spec['query']
+    cases = [case for cases in worlds.values() for case in cases]
+    # every held set: --held-manifest, each held-eval* registry role (held-v3, held-v4, reservations), --exclude-manifest
+    held = set(training_exclusion_ids(cases, getattr(args, 'held_manifest', None),
+                                      extra=getattr(args, 'exclude_manifest', None) or ()))
+    kept = [row for row in rows if not any(case['id'] in held for case in worlds[row['id']])]
+    if len(kept) < len(rows):
+        print(json.dumps({'event': 'memetic rows with held worlds left out', 'rows': len(rows) - len(kept)}), flush=True)
+    return kept
+
+
 class Collector:
     """Work-stealing slots over an endless stream of task groups; finished groups are scored and queued for the learner."""
 
@@ -447,28 +468,6 @@ class Collector:
         self.lock = threading.Lock()
         self.pending = collections.deque()          # entries not yet taken by a slot
         self.groups = {}                            # group -> {'dir', 'size', 'done', 'versions', 'task_id'}
-def memetic_rows_held_free(rows, args):
-    """The memetic rows none of whose support or query worlds (their episode specs) is a held task or shares a held
-    split group (``held_eval.exclusion_ids`` of ``--held-manifest`` and every ``--exclude-manifest``): the set was built
-    against the held set of its day, and a later held set must keep its tasks out of the worlds the policy trains on."""
-    from natlang_neuralese.rl.held_eval import exclusion_ids
-    manifests = [m for m in [getattr(args, 'held_manifest', None), *(getattr(args, 'exclude_manifest', None) or [])] if m]
-    if not manifests or not rows:
-        return rows
-    worlds = {}
-    for row in rows:
-        spec = json.loads(Path(row['semantics']['world']['task']).read_text())
-        worlds[row['id']] = spec['support'] + spec['query']
-    cases = [case for cases in worlds.values() for case in cases]
-    held = set()
-    for manifest in manifests:
-        held |= exclusion_ids(manifest, cases)
-    kept = [row for row in rows if not any(case['id'] in held for case in worlds[row['id']])]
-    if len(kept) < len(rows):
-        print(json.dumps({'event': 'memetic rows with held worlds left out', 'rows': len(rows) - len(kept)}), flush=True)
-    return kept
-
-
         self.ready = queue.Queue()                  # finished, scored groups
         self.outstanding = 0                        # groups created and not yet handed to the learner
         self.next_group, self.cursor = first_group, cursor
@@ -555,6 +554,10 @@ def memetic_rows_held_free(rows, args):
         self.outstanding += 1
         self.pending.extend((group, entry) for entry in entries[:wave])
 
+    def _memetic_open(self):
+        """Whether a new group may be a memetic one (always here; expert-iteration collection bounds them)."""
+        return True
+
     def _wave(self, task_id, size):
         """Dynamic sampling: the first-wave size of a new group of ``task_id`` (``wave_plan`` on its ``PassRatePrior``),
         or None to start all its samples at once. The rest wait until the whole first wave has finished, so the decision
@@ -566,10 +569,6 @@ def memetic_rows_held_free(rows, args):
             return None
         if self.prior is None or (self.prior_stale and time.time() - self.prior_built >= 120):
             rates = {k: (v['successes'], v['scored']) for k, v in self.base_rates.items() if v.get('scored')}
-    def _memetic_open(self):
-        """Whether a new group may be a memetic one (always here; expert-iteration collection bounds them)."""
-        return True
-
             rates.update(self.own)
             family = {k: v.get('family') for k, v in self.base_rates.items()}
 
