@@ -13,6 +13,7 @@ import json
 import queue
 import threading
 import time
+from collections import deque
 from concurrent.futures import Future
 from dataclasses import dataclass, field, replace as dataclass_replace
 
@@ -165,6 +166,8 @@ class Sequence:
     native_spec: list = field(default_factory=list)
     cuda_memory_start_allocated_bytes: int | None = None
     cuda_memory_measurement_scope: str | None = None
+    # Set when an out-of-memory prefill sent the request back to the waiting queue as a fresh sequence (Engine._requeue).
+    requeued: bool = False
 
 
 def selected_span(decode, ids, text):
@@ -232,6 +235,15 @@ class Engine:
         self.stop_ids = {i for i in (tokenizer.convert_tokens_to_ids("<|im_end|>"), tokenizer.eos_token_id) if i is not None}
         self._incoming: queue.Queue = queue.Queue()
         self._active: list[Sequence] = []
+        # Continuous batching admits waiting requests while their worst-case memory fits (``_admit``): the process cap
+        # (``--memory-gb``, the ledger's NATLANG_CUDA_MEMORY_GB) when set, and always the device's free memory.
+        self._waiting: deque = deque()
+        self.memory_budget_bytes: int | None = None
+        self.admission_bounded = True       # --unbounded-admission opts out (every queued request joins the batch)
+        self._kv_bytes_per_token: float | None = None
+        self._prefill_workspace_bytes = 0
+        self._admission_deferrals = 0
+        self._oom_requeues = 0
         self._thread: threading.Thread | None = None
         self._stopping = False
         self._ids = itertools.count()
@@ -249,7 +261,12 @@ class Engine:
                 'natlang_active_sequences': sum(seq.phase != 'done' for seq in active),
                 'natlang_native_open_produce_spans': sum(
                     seq.phase != 'done' and seq.native_capture_open for seq in active),
-                'natlang_queued_requests': self._incoming.qsize(),
+                'natlang_queued_requests': self._incoming.qsize() + len(self._waiting),
+                'natlang_waiting_requests': len(self._waiting),
+                'natlang_admission_deferrals_total': self._admission_deferrals,
+                'natlang_oom_requeues_total': self._oom_requeues,
+                **({'natlang_kv_bytes_per_token': self._kv_bytes_per_token} if self._kv_bytes_per_token else {}),
+                'natlang_prefill_workspace_bytes': self._prefill_workspace_bytes,
                 **(self.prefix_cache.metrics() if self.prefix_cache is not None else {})}
         device = torch.device(self.device)
         if device.type == 'cuda':
@@ -307,7 +324,7 @@ class Engine:
     def _loop(self):
         with torch.inference_mode():
             while not self._stopping:
-                block = not self._active
+                block = not self._active and not self._waiting
                 try:
                     while True:
                         item = self._incoming.get(block=block)
@@ -316,14 +333,107 @@ class Engine:
                             if self._stopping:
                                 return
                             continue
-                        self._active.append(item)
+                        self._waiting.append(item)
                 except queue.Empty:
                     pass
-                self._round(list(self._active))
-                self._active = [s for s in self._active if not s.future.done()]
+                self._admit()
+                if self._active:
+                    self._round(list(self._active))
+                self._active = [s for s in self._active if not s.future.done() and not s.requeued]
                 # Do not keep the last completed Sequence (and its GPU KV cache)
                 # alive in this frame while the next blocking queue read waits.
                 item = None
+
+    # ---- Memory-bounded admission (continuous batching) ----
+
+    def _planned_positions(self, seq) -> int:
+        """Prompt positions a waiting request will occupy (its prompt plan; a native-state span counts its bound)."""
+        if seq.phase != 'prefill':
+            return seq.prompt_positions
+        return sum(len(value) if kind in ('tokens', 'privileged') else self.max_block + 2
+                   for kind, value in (seq.prompt_plan or ()) if kind != 'insertion_point')
+
+    def _reserve_bytes(self, seq) -> float:
+        """Worst-case KV bytes ``seq`` may still add: its unprefilled prompt and every token it may still generate."""
+        remaining = max(0, int(seq.request.max_tokens) - seq.generated_positions)
+        if seq.phase == 'prefill':
+            prompt = self._planned_positions(seq)
+            remaining = prompt + min(remaining, max(0, self.context - prompt))   # prefill clamps max_tokens to the context
+        return remaining * (self._kv_bytes_per_token or 0.0)
+
+    def _fits(self, seq) -> bool:
+        device = torch.device(self.device)
+        if not self.admission_bounded or device.type != 'cuda':
+            return True
+        if self._kv_bytes_per_token is None:
+            return False    # admit one at a time until a finished prefill has measured the cache's bytes per token
+        try:
+            allocated = int(torch.cuda.memory_allocated(device))
+            reserved = int(torch.cuda.memory_reserved(device))
+            free_device = int(torch.cuda.mem_get_info(device)[0])
+        except RuntimeError:
+            return True
+        room = free_device + (reserved - allocated)          # the device's free memory and this allocator's own slack
+        if self.memory_budget_bytes:
+            room = min(room, self.memory_budget_bytes - allocated)
+        if self.prefix_cache is not None:                     # the prefix cache may still grow to its budget
+            room -= max(0, self.prefix_cache.budget - self.prefix_cache.bytes)
+        watermark = max(512 * 2**20, (self.memory_budget_bytes or allocated + room) // 10)
+        need = sum(self._reserve_bytes(s) for s in self._active if s.phase != 'done' and not s.requeued)
+        need += self._reserve_bytes(seq) + self._prefill_workspace_bytes
+        return need <= room - watermark
+
+    def _admit(self):
+        """Move waiting requests (oldest first) into the running batch while their worst-case memory fits; the oldest
+        always runs when nothing else does, so every request progresses."""
+        while self._waiting:
+            seq = self._waiting[0]
+            if seq.request.cancelled:
+                self._waiting.popleft()
+                self._fail(seq, RequestError("cancelled", "the client went away"))
+                continue
+            running = any(s.phase != 'done' and not s.requeued for s in self._active)
+            if running and not self._fits(seq):
+                self._admission_deferrals += 1
+                return
+            self._active.append(self._waiting.popleft())
+
+    def _measure_prefill(self, seq, start_allocated):
+        """After a prefill: the cache's bytes per prompt token (buffer headroom included) and, when it ran alone, the
+        transient workspace above its cache. Both only grow: admission stays on the safe side of what was seen."""
+        device = torch.device(self.device)
+        if device.type != 'cuda' or seq.cache is None:
+            return
+        from .prefix_cache import _storages
+        cache_bytes = sum(_storages(seq.cache, {}).values())
+        positions = max(int(seq.cache.lengths[0]) if getattr(seq.cache, 'lengths', None) else 0, 256)
+        per_token = cache_bytes / positions
+        self._kv_bytes_per_token = max(self._kv_bytes_per_token or 0.0, per_token)
+        if seq.cuda_memory_measurement_scope == 'single-request' and start_allocated is not None:
+            try:
+                peak = int(torch.cuda.max_memory_allocated(device))
+            except RuntimeError:
+                return
+            self._prefill_workspace_bytes = max(self._prefill_workspace_bytes, peak - start_allocated - cache_bytes)
+
+    def _requeue(self, seq) -> bool:
+        """An out-of-memory prefill that has produced nothing goes back to the head of the waiting queue as a fresh
+        sequence (same request, seeded identically) while others run; alone, it fails."""
+        if seq.phase != 'prefill' or seq.generated_positions or seq.items or seq.future.done():
+            return False
+        if not any(s is not seq and s.phase != 'done' and not s.requeued for s in self._active):
+            return False
+        seq.requeued = True
+        fresh = Sequence(seq.request, seq.future, prompt_plan=seq.prompt_plan,
+                         native_actor_export=seq.native_actor_export)
+        self._record_and_release_sequence_memory(seq)
+        try:
+            torch.cuda.empty_cache()
+        except RuntimeError:
+            pass
+        self._waiting.appendleft(fresh)
+        self._oom_requeues += 1
+        return True
 
     def _template(self, messages, tools):
         return self.tokenizer.apply_chat_template(messages, tools=tools or None, tokenize=False,
@@ -631,7 +741,9 @@ class Engine:
 
     def _native_prefill(self, seq):
         self._begin_cuda_request_measurement(seq)
-        return self._native_run(lambda: self._native_prefill_impl(seq), seq.request.adapters)
+        result = self._native_run(lambda: self._native_prefill_impl(seq), seq.request.adapters)
+        self._measure_prefill(seq, seq.cuda_memory_start_allocated_bytes)
+        return result
 
     def _begin_cuda_request_measurement(self, seq):
         device = torch.device(self.device)
@@ -1446,7 +1558,8 @@ class Engine:
                 pass
             except Exception as error:
                 step.close()
-                self._native_protocol_fail(seq, error)
+                if not (isinstance(error, torch.OutOfMemoryError) and self.admission_bounded and self._requeue(seq)):
+                    self._native_protocol_fail(seq, error)
         if not pending: return
         # A speculative chain (several tokens of one sequence, _native_feed) runs as its own forward; the
         # single-token steps batch.

@@ -45,11 +45,13 @@ child.once('exit', code => {
 });
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => stop(signal));
 
+/** Whether no slot is processing. A server that does not answer is busy, not idle: its exit is seen by the exit handler,
+ * so an unanswered /slots never counts toward stopping a live server. */
 async function idle(): Promise<boolean> {
   try {
     const slots = await (await fetch(spec.endpoint + '/slots')).json() as { is_processing?: boolean }[];
     return !Array.isArray(slots) || slots.every(slot => !slot.is_processing);
-  } catch { return true; }
+  } catch { return false; }
 }
 
 async function main() {

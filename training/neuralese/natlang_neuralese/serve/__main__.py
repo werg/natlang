@@ -35,6 +35,9 @@ def main(argv=None):
                              "view plans its write sites against it")
     parser.add_argument("--memory-gb", type=float, default=float(os.environ["NATLANG_CUDA_MEMORY_GB"]) if os.environ.get("NATLANG_CUDA_MEMORY_GB") else None,
                         help="cap this process's CUDA allocations (memory is shared with the rest of the machine)")
+    parser.add_argument("--unbounded-admission", action="store_true",
+                        help="admit every queued request into the running batch (default: admit while its worst-case "
+                             "memory fits the --memory-gb cap and the device's free memory)")
     parser.add_argument("--store-dir", nargs="?", const="", default=None, metavar="DIR",
                         help="keep blocks, holds and pins on disk so they outlive restarts (serve/store.py); without DIR, "
                              "<data_nvme>/neuralese-blocks/<dialect> (NVMe)")
@@ -80,6 +83,8 @@ def main(argv=None):
     engine.default_guidance = json.loads(args.guidance) if args.guidance else None
     from . import configure_native_prefix_cache
     configure_native_prefix_cache(engine, args.prefix_cache_gb, args.prefix_block)
+    engine.memory_budget_bytes = int(args.memory_gb * 2**30) if args.memory_gb else None
+    engine.admission_bounded = not args.unbounded_admission
     engine.start()
     server = serve(engine, args.host, args.port)
     from ..data.prompt_rendering import prompt_rendering_identity

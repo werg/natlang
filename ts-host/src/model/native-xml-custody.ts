@@ -1,7 +1,7 @@
 /** Reauthenticate the exact sampled assistant-content call, without relabelling it as a provider raw_call. */
 import { hexDigest } from '../native/hash.js';
 import { parseNativeXmlCalls } from './native-xml-calls.js';
-import { NATIVE_XML_POLICY_SHA256 } from './native-xml-policy.js';
+import { NATIVE_XML_POLICY_READS } from './native-xml-policy.js';
 type Dict = Record<string, unknown>;
 const obj=(v:unknown): Dict => { if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('native XML custody needs an object'); return v as Dict; };
 const canonical=(v:unknown):string => Array.isArray(v) ? `[${v.map(canonical).join(',')}]` : v && typeof v==='object' ? `{${Object.entries(v as Dict).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>`${JSON.stringify(k)}:${canonical(x)}`).join(',')}}` : JSON.stringify(v);
@@ -9,7 +9,7 @@ const same=(a:unknown,b:unknown) => canonical(a) === canonical(b);
 export function authenticateNativeXmlTurn(turn: Dict): [string, Dict][] {
   const response=obj(turn.model_response), proof=obj(response.tool_parse), request=obj(turn.model_request), raw=obj(response.raw_response);
   if (proof.schema !== 'natlang.native-xml-tool-parse/1' || proof.source !== 'assistant-content' ||
-      proof.schema_custody !== 'response_tools' || proof.policy_sha256 !== NATIVE_XML_POLICY_SHA256)
+      proof.schema_custody !== 'response_tools' || !NATIVE_XML_POLICY_READS.has(proof.policy_sha256 as string))
     throw new Error('native XML parser policy differs');
   if (typeof turn.model_request_canonical !== 'string' || typeof response.raw_response_canonical !== 'string' ||
       hexDigest(turn.model_request_canonical) !== turn.request_sha256 || hexDigest(response.raw_response_canonical) !== turn.raw_response_sha256)

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import ts from 'typescript';
+import { spawnSync } from 'node:child_process';
 import { TypeEnv, parseType, formatType, fitsType } from '../dist/index.js';
 import { containsRefinement, fitObligations, TypeSyntaxError } from '../dist/native/types.js';
 import { coerce, problems, MISSING } from '../dist/native/values.js';
@@ -112,18 +113,28 @@ test('schemaOf emits prefixItems, minItems, and maxItems for tuples', () => {
     minItems: 2,
     maxItems: 2,
   });
-  assert.deepEqual(schemaOf(parseType('[string, number?]'), env), {
-    type: 'array',
-    prefixItems: [{ type: 'string' }, { type: 'number' }],
-    minItems: 1,
-    maxItems: 2,
-  });
+  // An optional tail is one exact-length tuple per admitted length: llama.cpp's grammar ignores minItems on prefixItems.
+  assert.deepEqual(schemaOf(parseType('[string, number?]'), env), { anyOf: [
+    { type: 'array', prefixItems: [{ type: 'string' }], minItems: 1, maxItems: 1 },
+    { type: 'array', prefixItems: [{ type: 'string' }, { type: 'number' }], minItems: 2, maxItems: 2 },
+  ] });
+  assert.equal(schemaOf(parseType('[string?, number?]'), env).anyOf.length, 3);
   assert.deepEqual(schemaOf(parseType('[]'), env), {
     type: 'array',
     prefixItems: [],
     minItems: 0,
     maxItems: 0,
   });
+});
+
+test('NATLANG_TUPLE_SCHEMA=prefix-items keeps an optional-tail tuple as one prefixItems schema', () => {
+  const run = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    const { schemaOf } = await import(${JSON.stringify(new URL('../dist/native/agent.js', import.meta.url).href)});
+    const { TypeEnv, parseType } = await import(${JSON.stringify(new URL('../dist/native/types.js', import.meta.url).href)});
+    console.log(JSON.stringify(schemaOf(parseType('[string, number?]'), new TypeEnv())));`],
+    { env: { ...process.env, NATLANG_TUPLE_SCHEMA: 'prefix-items' }, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), { type: 'array', prefixItems: [{ type: 'string' }, { type: 'number' }], minItems: 1, maxItems: 2 });
 });
 
 test('compiler/targets.ts lowers tuples faithfully and preserves Neuralese<[A, B]> for zip', () => {

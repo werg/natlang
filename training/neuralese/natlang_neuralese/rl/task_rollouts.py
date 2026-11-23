@@ -316,7 +316,10 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
     action}``) keeps that metadata plus its paired generation's exact sampled ids (``reasoning_sample_ids``, the
     generation of the same invocation and sample index before it) and the hash of its scored prompt ids
     (``scored_prompt_sha256``, ``data.decision_graph.token_ids_sha256``), what ``sft_sources build`` trains the
-    reasoning from and checks its rendering against (``data.decision_graph.reasoned_decision_plan``)."""
+    reasoning from and checks its rendering against (``data.decision_graph.reasoned_decision_plan``). The action entry
+    (``action: true``, the sample whose choice the program used) also keeps that generation's whole exact capture
+    (``reasoning_sampling``: prompt, sampled ids and behaviour log-probabilities, sampling law, finish reason), the
+    sampled action GRPO trains (``lower_rollout_turns.decision_reasoning_turns``)."""
     turns = []
     invocations = {item.get('invocation_id'): item for item in ((result or {}).get('outcome') or {}).get('invocation_ledger') or []}
     reasoning_steps: dict[tuple[Any, Any], dict[str, Any]] = {}
@@ -398,6 +401,9 @@ def _reasoned_decision(step: dict[str, Any], reasoning_steps: dict[tuple[Any, An
         prompt = capture_prompt_ids(sampling)
         if prompt is not None:
             out["reasoning_prompt_sha256"] = token_ids_sha256(prompt)
+        if out["action"]:
+            # the action sample's reasoning is part of the sampled action: kept whole for GRPO
+            out["reasoning_sampling"] = copy.deepcopy(sampling)
     return out
 
 

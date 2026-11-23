@@ -7,7 +7,8 @@ rollouts (`turns[*].sampling`), never re-rendered. A call whose prompt imports n
 lowered with its sampled reply as the target and the import as ``imports``: a state whose producer document the episode
 recorded (``write_sources``) is computed in the learner's own forward from that document (the pass-through,
 plans/neuralese/NEURALESE_PASSTHROUGH_20261117.md); any other needs a ``NativeStates`` reader of the actor's block store
-(fixed context exactly as the actor fed it) and is skipped and counted without one. Sampled decision calls (no token stream) are lowered separately by ``decision_turns`` (GRPO trains them). Read-only on the rollout files.
+(fixed context exactly as the actor fed it) and is skipped and counted without one. Sampled decision calls (no token stream) are lowered separately by ``decision_turns`` (GRPO trains them), and a reasoned
+decision's action reasoning by ``decision_reasoning_turns`` (GRPO trains it as an ordinary sampled call). Read-only on the rollout files.
 
     lower_rollout_turns.py --out turns.pkl ROUNDDIR [ROUNDDIR ...]
 """
@@ -142,42 +143,98 @@ def episode_turns(row, stats, states=None):
         if 'samples' not in sampling:
             stats['decision_calls' if sampling.get('decision_sample') else 'skip_no_sample_stream'] += 1
             continue
-        segments = sampling['prompt']
-        lowered = prompt_imports(segments, states, stats, sources)
+        lowered = sampled_call(turn['invocation_id'], index, sampling, stats, states, sources)
+        if lowered is not None:
+            rows.append(lowered)
+    return rows
+
+
+def sampled_call(invocation, index, sampling, stats, states=None, sources=None, stop=None):
+    """One captured generation (``sampling``: an RL capture with ``samples``) as a row of ``episode_turns``, or None when
+    it is not lowerable (counted in ``stats``). ``stop``: the number of leading samples the row keeps (None: all)."""
+    segments = sampling['prompt']
+    lowered = prompt_imports(segments, states, stats, sources)
+    if lowered is None:
+        return None
+    if any(any(segment.get('producing') or []) for segment in segments):
+        stats['skip_producing_prompt'] += 1
+        return None
+    samples = sampling['samples'][:stop]
+    if any(item['input_role'] != 'ordinary' for item in samples):
+        stats['skip_non_ordinary_sample'] += 1
+        return None
+    # A forced call (`constrained`, template readout): the tokens fed before the first sample are context, not
+    # samples; they extend the prompt. Forced tokens after a sample (a write's suffix) are not lowered.
+    inputs = sampling.get('generated_inputs') or []
+    lead = 0
+    while lead < len(inputs) and inputs[lead].get('sample_index') is None:
+        lead += 1
+    if any(item.get('sample_index') is None for item in inputs[lead:]):
+        stats['skip_forced_after_sample'] += 1
+        return None
+    if lead:
+        stats['forced_prefix_calls'] += 1
+    prompt, imports, used = lowered
+    if imports:
+        stats['native_state_calls'] += 1
+    if lead:
+        prompt = np.concatenate([prompt, np.array([item['token_id'] for item in inputs[:lead]], dtype=np.int32)])
+    sample = np.array([item['token_id'] for item in samples], dtype=np.int32)
+    logp = np.array([item['logp'] for item in samples], dtype=np.float32)
+    law = sampling.get('sampling_law') or {}
+    return {'invocation': invocation, 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp,
+            'imports': imports, 'sources': used, 'policy': sampling['policy']['checkpoint_sha256'],
+            # the weights actually served: after in-place updates ``policy`` still names the start checkpoint
+            'served': (sampling.get('actor_export') or {}).get('sha256'),
+            'temperature': law.get('temperature'), 'guidance': bool(law.get('guidance')),
+            # the draw's nucleus (1.0: untruncated); `logp` is the untruncated law either way
+            'top_p': float(law.get('top_p', 1.)), 'probabilities': law.get('probabilities')}
+
+
+def decision_reasoning_turns(row, stats, states=None, think_close=None):
+    """(rows of one episode's reasoned-decision action reasonings), shaped as ``episode_turns`` rows. A reasoned readout
+    (DECISIONS 2026-11-23 "reasoned decisions") samples k reasonings and scores its options after each; the sample whose
+    choice the program used (its action entry, ``decision_reasoning.action``) carries its generation's exact capture
+    (``reasoning_sampling``, ``rl.task_rollouts.rollout_turns``). Its reasoning is part of the sampled action: the row is
+    that generation's own prompt ids and sampled ids with their behaviour log-probabilities, kept through the first
+    ``think_close`` (``</think>``) included; the free reply after it was never used and is not kept. A reasoning cut
+    before any close keeps every sample. The other samples only estimated the readout's confidence and give no row.
+    Counted: ``decision_reasoning_rows``/``_tokens``/``_unclosed``, and whether the action's scored prompt continues the
+    reasoning's own prompt with exactly the kept ids (``decision_reasoning_ids_exact``/``_rendered``: the engines
+    re-render the reasoning text when they score)."""
+    from natlang_neuralese.data.decision_graph import capture_prompt_ids
+    rows = []
+    sources = None
+    for index, turn in enumerate(row['turns']):
+        reasoned = turn.get('decision_reasoning')
+        sampling = reasoned.get('reasoning_sampling') if isinstance(reasoned, dict) else None
+        if not isinstance(sampling, dict) or reasoned.get('action') is not True:
+            continue
+        if not isinstance(sampling.get('samples'), list) or not sampling['samples']:
+            stats['skip_decision_reasoning_no_samples'] += 1
+            continue
+        if think_close is None:
+            stats['skip_decision_reasoning_no_close_id'] += 1
+            continue
+        ids = [int(item['token_id']) for item in sampling['samples']]
+        stop = ids.index(think_close) + 1 if think_close in ids else None
+        if sources is None:
+            sources = write_sources(row)
+        lowered = sampled_call(turn['invocation_id'], index, sampling, stats, states, sources, stop)
         if lowered is None:
+            stats['skip_decision_reasoning_lowering'] += 1
             continue
-        if any(any(segment.get('producing') or []) for segment in segments):
-            stats['skip_producing_prompt'] += 1
-            continue
-        if any(item['input_role'] != 'ordinary' for item in sampling['samples']):
-            stats['skip_non_ordinary_sample'] += 1
-            continue
-        # A forced call (`constrained`, template readout): the tokens fed before the first sample are context, not
-        # samples; they extend the prompt. Forced tokens after a sample (a write's suffix) are not lowered.
-        inputs = sampling.get('generated_inputs') or []
-        lead = 0
-        while lead < len(inputs) and inputs[lead].get('sample_index') is None:
-            lead += 1
-        if any(item.get('sample_index') is None for item in inputs[lead:]):
-            stats['skip_forced_after_sample'] += 1
-            continue
-        if lead:
-            stats['forced_prefix_calls'] += 1
-        prompt, imports, used = lowered
-        if imports:
-            stats['native_state_calls'] += 1
-        if lead:
-            prompt = np.concatenate([prompt, np.array([item['token_id'] for item in inputs[:lead]], dtype=np.int32)])
-        sample = np.array([item['token_id'] for item in sampling['samples']], dtype=np.int32)
-        logp = np.array([item['logp'] for item in sampling['samples']], dtype=np.float32)
-        law = sampling.get('sampling_law') or {}
-        rows.append({'invocation': turn['invocation_id'], 'index': index, 'prompt': prompt, 'sample': sample, 'logp': logp,
-                     'imports': imports, 'sources': used, 'policy': sampling['policy']['checkpoint_sha256'],
-                     # the weights actually served: after in-place updates ``policy`` still names the start checkpoint
-                     'served': (sampling.get('actor_export') or {}).get('sha256'),
-                     'temperature': law.get('temperature'), 'guidance': bool(law.get('guidance')),
-                     # the draw's nucleus (1.0: untruncated); `logp` is the untruncated law either way
-                     'top_p': float(law.get('top_p', 1.)), 'probabilities': law.get('probabilities')})
+        lowered['decision_reasoning'] = True
+        rows.append(lowered)
+        stats['decision_reasoning_rows'] += 1
+        stats['decision_reasoning_tokens'] += len(lowered['sample'])
+        if stop is None:
+            stats['decision_reasoning_unclosed'] += 1
+        scored = capture_prompt_ids(turn.get('sampling'))
+        own = capture_prompt_ids(sampling)
+        kept = ids[:stop]
+        exact = scored is not None and own is not None and scored[:len(own) + len(kept)] == own + kept
+        stats['decision_reasoning_ids_exact' if exact else 'decision_reasoning_ids_rendered'] += 1
     return rows
 
 

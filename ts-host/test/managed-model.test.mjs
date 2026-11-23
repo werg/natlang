@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createManagedModelSession, inspectLlamaServer, executorIdentityForChoice } from '../dist/model/index.js';
@@ -264,4 +264,42 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
   const batches = readFileSync(marker, 'utf8').trim().split('\n').map(line => JSON.parse(line).items);
   assert.deepEqual(batches.flat().map(item => item.continuations), [options, ['{"result": "knight"}', '{"result": "knave"}'],
     ['"knight"'], ['"knave"'], ['{"result": "knight"}'], ['{"result": "knave"}']]);
+});
+
+test('the shared-server supervisor keeps a server whose /slots goes unanswered (busy), and stops it once idle', async () => {
+  const { spawn } = await import('node:child_process');
+  const { createServer } = await import('node:net');
+  const root = mkdtempSync(join(tmpdir(), 'natlang-busy-shared-'));
+  const port = await new Promise(resolve => { const probe = createServer().listen(0, '127.0.0.1', () => { const { port } = probe.address(); probe.close(() => resolve(port)); }); });
+  const executable = join(root, 'fake-llama-server'), busy = join(root, 'busy');
+  writeFileSync(busy, '');
+  // /slots hangs while the busy file exists (a server too loaded to answer), then reports idle slots.
+  writeFileSync(executable, `#!${process.execPath}
+const fs = require('node:fs');
+require('node:http').createServer((q, r) => {
+  if (q.url === '/health') return r.end('{"status":"ok"}');
+  if (q.url === '/slots') { if (fs.existsSync(${JSON.stringify(busy)})) return setTimeout(() => r.destroy(), 1500); return r.end('[{"is_processing":false}]'); }
+  r.end('{}');
+}).listen(${port}, '127.0.0.1');
+`);
+  chmodSync(executable, 0o755);
+  const key = 'f'.repeat(16), spec = join(root, 'spec.json');
+  writeFileSync(spec, JSON.stringify({ command: executable, args: [], endpoint: `http://127.0.0.1:${port}`, directory: root, key, startTimeoutMs: 10000,
+    record: { endpoint: `http://127.0.0.1:${port}`, modelSha256: 'a'.repeat(64), runtimeBuild: null, runtime: null, slots: 1, contextPerSlot: 1,
+      model: 'fixture', warm: false, idleSeconds: 1, adapters: [], states: [] } }));
+  const supervisor = spawn(process.execPath, [new URL('../dist/llama/supervisor.js', import.meta.url).pathname, spec], { stdio: 'ignore' });
+  const exited = new Promise(resolve => supervisor.once('exit', resolve));
+  const record = join(root, `${key}.json`);
+  try {
+    for (let waited = 0; !existsSync(record) && waited < 10000; waited += 100) await new Promise(resolve => setTimeout(resolve, 100));
+    assert.ok(existsSync(record), 'the server was published');
+    await new Promise(resolve => setTimeout(resolve, 4000));        // no lease, idle time 1 s, but /slots unanswered
+    assert.equal(supervisor.exitCode, null, 'a busy server is not stopped as idle');
+    assert.ok(existsSync(record));
+    rmSync(busy);                                                    // now it answers: idle slots, no lease
+    await Promise.race([exited, new Promise((_, reject) => setTimeout(() => reject(new Error('idle server not stopped')), 10000))]);
+  } finally {
+    if (supervisor.exitCode === null) supervisor.kill('SIGTERM');
+    rmSync(root, { recursive: true, force: true });
+  }
 });
