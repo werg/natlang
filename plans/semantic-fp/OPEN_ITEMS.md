@@ -160,6 +160,14 @@ admitting the batch.
 
 ## Operations
 
+- **aei1 round 1 -> 2 boundary checklist (coordinator, about 06:00 on 2026-11-24):**
+  1. Move the driver to a pin at or after 78fb05054: read-back fix, decision-budget fix, memetic leak fix, Colab-via-Drive.
+  2. Re-enable Neuralese variants once the L4 actor runs the read-back fix (rollout agent, 2026-11-23 21:45).
+  3. Take the marker-row and produce-span changes once they land (Neuralese learner agent).
+  4. Admit the new task batch from briefs A-D (authoring agent).
+  5. The typed-contract pool replaces prose `Output contract:` tasks (typed-contract agent).
+  6. Rerun bench arm D and the GRPO gradient bench.
+  7. The held reference (sft-v9) is re-measured on the new scoring series.
 - **GRPO decision-reasoning gradient bench:** `gdr-bench-9` (20 GB, low priority) was cancelled at 20:20 on 2026-11-23 because it held the DGX ledger head for 2 h behind round 1's SFT. Rerun `/home/werg/data/lfm3-rl-dgx-20261029/ops/gdr-bench/bench.sh` after the r0001 SFT finishes; its pin `pin-91b26036f` is kept until then. Owner: coordinator.
 - **Neuralese variants are off in aei1's collection** (`--no-neuralese-variants`, driver restarted 19:15 on 2026-11-23). Read-back of Neuralese values is broken: the reader gets the producer's content in about 1% of read-backs (HELD_FAILURES_20261123 finding 1), so variant groups were teaching the policy to skip program functions. Two investigators are on it: a live hunt and an independent static analysis (`NEURALESE_READBACK_STATIC_20261123.md`). Turn variants back on at the round boundary after their fix lands and read-back accuracy is re-measured. Owner: coordinator.
 - **Benchmark arm D (specialize, tune, escalate on sft-v9):** its 24 GB tune job (`bench-tune-b2`) was cancelled at 18:40. It sat at the head of the DGX ledger during round 1's SFT and froze 18 jobs behind it. Rerun arm D (`/home/werg/data/semantic-fp-bench/triage-20261123b/driver.sh`) after the r0001 SFT finishes. Owner: coordinator.
