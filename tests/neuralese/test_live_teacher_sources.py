@@ -668,7 +668,8 @@ def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp
 
 
 
-def test_completed_reassessment_preserves_original_failure_and_binds_all_checker_evidence(tmp_path, monkeypatch):
+@pytest.mark.parametrize("optional_roles", [False, True])
+def test_completed_reassessment_preserves_original_failure_and_binds_all_checker_evidence(tmp_path, monkeypatch, optional_roles):
     import recheck_live_trajectories as recovery
     root = tmp_path / 'original'
     root.mkdir()
@@ -691,6 +692,13 @@ def test_completed_reassessment_preserves_original_failure_and_binds_all_checker
              'actualResult': {'value': 'actual'}, 'passed': True,
              'checks': {'native_state': True, 'old_oracle': True}, 'rationale': 'Recomputed corrected outcome.',
              'checker_sources': [checker], 'evidence': [evidence]}
+    if optional_roles:
+        contract = {'effects': {'checks': ['native_state'], 'rationale': 'Actual native state.'},
+                    'returnedValue': {'checks': ['old_oracle'], 'required': False, 'rationale': 'No final report was requested.'}}
+        proof.update(checks={'native_state': True}, outcomeContract=contract, outcomeDimensions={
+            'effects': {'passed': True, 'checks': {'native_state': True}},
+            'returnedValue': {'required': False, 'passed': False, 'checks': {'old_oracle': False}}})
+        proof['checker_sources'].append({**artifact(root, 'contract.json', contract), 'role': 'outcome-contract'})
     completed = artifact(root, 'completed.json', proof)
     assessment = {'schema': 'natlang.live-reassessment/1', 'task_id': 'live-draft',
                   'original_sha256': original['sha256'], 'rationale': proof['rationale'],
@@ -760,3 +768,26 @@ def test_exact_optional_return_selector_matches_only_actual_function_value():
     forged=copy.deepcopy(proof);forged['outcomeDimensions']['incidentalValues']['incorrectReturns'][0]['sha256']='0'*64
     with pytest.raises(ValueError,match='identity/hash'):
         live.declared_return_exclusions([forged],{'actual':record})
+
+
+def test_reassessment_roles_cannot_drop_checks_or_rewrite_optional_observations(tmp_path):
+    import copy
+    original = {'native_state': True, 'summary': False}
+    contract = {'effects': {'checks': ['native_state'], 'rationale': 'Native state.'},
+                'returnedValue': {'checks': ['summary'], 'required': False, 'rationale': 'No summary requested.'}}
+    proof = {'checks': {'native_state': True}, 'outcomeContract': contract,
+             'checker_sources': [{**artifact(tmp_path, 'contract.json', contract), 'role': 'outcome-contract'}],
+             'outcomeDimensions': {'effects': {'passed': True, 'checks': {'native_state': True}},
+                 'returnedValue': {'required': False, 'passed': False, 'checks': {'summary': False}}}}
+    live.validate_reassessment_check_roles(proof, original, tmp_path)
+    mutations = [lambda p: p.pop('outcomeContract'),
+        lambda p: p['checker_sources'].clear(),
+        lambda p: p['outcomeDimensions']['returnedValue']['checks'].update(summary=True),
+        lambda p: p['outcomeDimensions']['returnedValue'].update(passed=True),
+        lambda p: p['outcomeContract']['returnedValue'].update(required=True),
+        lambda p: p['checks'].update(unknown=True)]
+    for mutate in mutations:
+        candidate = copy.deepcopy(proof)
+        mutate(candidate)
+        with pytest.raises(ValueError):
+            live.validate_reassessment_check_roles(candidate, original, tmp_path)

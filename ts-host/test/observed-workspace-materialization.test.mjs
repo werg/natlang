@@ -65,7 +65,7 @@ else:
  if kind in ('caught-child','incidental-nested'):
   spec['calls'][0]=artifact(root,'call.json',detail);spec['verification']=artifact(root,'verification.json',verification);path.write_text(json.dumps(spec))
  else:rewrite(root,spec,detail,verification)
-if kind=='completed':
+if kind in ('completed','completed-roles'):
  import recheck_live_trajectories as recovery
  proof={'goal':interaction['goal'],'checks':{'native_state':True,'old_oracle':False}}
  packet={'test':{'name':'draft'},'result':{'passed':False},'execution':{'diagnostics':{
@@ -79,6 +79,10 @@ if kind=='completed':
   'checks':{'native_state':True,'old_oracle':True},'rationale':'Independently recomputed native outcome.',
   'checker_sources':[artifact(root,'checker-source.json',{'code':'original checker'})],
   'evidence':[artifact(root,'native-state.json',{'state':'native'})]}
+ if kind=='completed-roles':
+  contract={'effects':{'checks':['native_state'],'rationale':'Native state.'},'returnedValue':{'checks':[],'required':False,'rationale':'No answer requested.'},'incidentalValues':{'checks':['old_oracle'],'rationale':'An old convention, with no incorrect emitted value.'}}
+  outcome.update(checks={'native_state':True},outcomeContract=contract,outcomeDimensions={'effects':{'passed':True,'checks':{'native_state':True}},'returnedValue':{'required':False,'passed':True,'checks':{}},'incidentalValues':{'passed':False,'checks':{'old_oracle':False},'incorrectReturns':[]}})
+  outcome['checker_sources'].append({**artifact(root,'contract.json',contract),'role':'outcome-contract'})
  completed=artifact(root,'completed.json',outcome)
  artifact(root,'assessment.json',{'schema':'natlang.live-reassessment/1','task_id':'live-draft',
   'original_sha256':raw['sha256'],'rationale':outcome['rationale'],'completed_outcome':completed})
@@ -96,7 +100,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['incidental',1],['incidental-nested',1]]) {
+for (const [kind, expected] of [['legacy',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['incidental',1],['incidental-nested',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {
@@ -219,4 +223,21 @@ for(const mutation of ['hash','foreign-source','value'])test(`independent disk v
   const source=await bind('manifest.json',manifest);row.provenance.source_manifest={...source,path:join(root,source.path)};
   await assert.rejects(verifyObservedWorkspaceEvidence(row),/incorrect return/);
  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+import {validateReassessmentCheckRoles} from '../scripts/observed-workspace-evidence.mjs';
+test('source-bound check roles preserve omitted false observations and reject incomplete or forged roles', async()=>{
+ const root=await mkdtemp(join(tmpdir(),'natlang-reassessment-roles-'));
+ try{
+  const contract={effects:{checks:['native'],rationale:'Native state.'},returnedValue:{checks:['summary'],required:false,rationale:'No summary requested.'}};
+  const raw=JSON.stringify(contract);await writeFile(join(root,'contract.json'),raw);
+  const proof={checks:{native:true},outcomeContract:contract,checker_sources:[{path:'contract.json',sha256:createHash('sha256').update(raw).digest('hex'),role:'outcome-contract'}],
+   outcomeDimensions:{effects:{passed:true,checks:{native:true}},returnedValue:{required:false,passed:false,checks:{summary:false}}}};
+  const original={native:true,summary:false};await validateReassessmentCheckRoles(proof,original,root);
+  for(const mutate of [p=>delete p.outcomeContract,p=>p.checker_sources=[],
+   p=>p.outcomeDimensions.returnedValue.checks.summary=true,p=>p.outcomeDimensions.returnedValue.passed=true,
+   p=>p.outcomeContract.returnedValue.required=true,p=>p.checks.unknown=true]){
+   const candidate=structuredClone(proof);mutate(candidate);await assert.rejects(validateReassessmentCheckRoles(candidate,original,root));
+  }
+ }finally{await rm(root,{recursive:true,force:true});}
 });

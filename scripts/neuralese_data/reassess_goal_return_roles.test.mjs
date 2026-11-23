@@ -23,7 +23,7 @@ function draft(){
 test('reassesses the completed private draft without prescribing its final disposition or masking honest returns',()=>{
  const result=reassessGoalReturnRoles(draft());assert.equal(Object.values(result.checks).every(Boolean),true);
  assert.equal(result.checks.correctOutcomeReport,undefined);assert.equal(result.outcomeDimensions.returnedValue.required,false);
- assert.equal(result.outcomeDimensions.incidentalValues,undefined);
+ assert.deepEqual(result.outcomeDimensions.incidentalValues,{passed:false,checks:{correctOutcomeReport:false},incorrectReturns:[]});
 });
 test('preserves every independent failure and requires actual native evidence',()=>{
  const mutations=[p=>p.execution.diagnostics.openGoalVerification.checks.exactArtifactOrReadOnlyHold=false,
