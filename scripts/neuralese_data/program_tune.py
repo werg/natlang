@@ -61,6 +61,14 @@ BINDING = 'program'
 ERROR_RESULT = re.compile(r'^\s*(?:[A-Z][A-Za-z]*Error\b|Error\b|\d+:\d+ [a-z][a-z-]*:|rejected\b|[A-Za-z_][\w.]*: failed:)')
 
 
+def logical(path):
+    """The absolute path as written, symlinks kept: a plan or operation record must not bind to where a symlink
+    pointed when it was written (2026-11-20: plans resolved through the archive symlink to /mnt/external, the
+    directory moved back to the NVMe, and every fit of the chain failed on a missing rows.jsonl)."""
+    import os
+    return os.path.abspath(path)
+
+
 def read_jsonl(path):
     with open(path, encoding='utf-8') as handle:
         return [json.loads(line) for line in handle if line.strip()]
@@ -350,17 +358,17 @@ def plan(args):
               'optimizer': {'name': 'adam', 'learning_rate': args.lr}, 'batch_rows': args.batch_rows,
               'prompt_weight': 0., 'seed': args.seed, **({'target_classes': args.targets} if args.targets else {}),
               **({'epochs': args.epochs} if args.epochs else {'steps': args.steps})}
-    student = {'checkpoint': str(Path(args.checkpoint).resolve())}
+    student = {'checkpoint': logical(args.checkpoint)}
     exports = []
     if args.gguf_base_sha256:
         if not args.hf_config:
             raise SystemExit('--gguf-base-sha256 needs --hf-config (the base model config for the GGUF converter)')
-        student.update(baseGgufSha256=args.gguf_base_sha256, hfConfigDir=str(Path(args.hf_config).resolve()))
+        student.update(baseGgufSha256=args.gguf_base_sha256, hfConfigDir=logical(args.hf_config))
         exports = ['gguf']
     body = {'manifest': manifest(record['family'], {'checkpoint_sha256': sha}),
             'engine': {'checkpoint': student['checkpoint'], 'base': args.base, 'device': args.device, 'dtype': args.dtype,
                        **({'store_scratch': args.store_scratch} if args.store_scratch else {})},
-            'student': student, 'rows': str((directory / 'rows.jsonl').resolve()), 'recipe': recipe,
+            'student': student, 'rows': logical(directory / 'rows.jsonl'), 'recipe': recipe,
             'exports': exports, 'label': f'program:{record["family"]}'}
     (fit / 'plan.json').write_text(json.dumps(body, indent=1) + '\n')
     print(json.dumps({'plan': str(fit / 'plan.json'), 'recipe': recipe, 'exports': exports}))
@@ -462,8 +470,8 @@ def bank(args):
     recipe = MB.MetaRecipe.from_json({'target_pattern': args.target_pattern, 'seed': args.seed,
                                       **json.loads(args.recipe or '{}')})
     operation = {'checkpoint_sha256': sha, 'recipe': recipe.as_json(),
-                 'programs': [str(Path(p).resolve()) for p in args.programs],
-                 'held': [str(Path(p).resolve()) for p in args.held]}
+                 'programs': [logical(p) for p in args.programs],
+                 'held': [logical(p) for p in args.held]}
     if (out / 'operation.json').exists() and json.loads((out / 'operation.json').read_text()) != operation:
         raise SystemExit(f'{out} is bound to another checkpoint, recipe or program set')
     _write(out / 'operation.json', operation)
@@ -520,7 +528,7 @@ def bank(args):
                                                                       'support': [r['graph']['id'] for r in made]})
             write_release(engine, record.id, out / 'adapt' / family,
                           {'bank': manifest['snapshot'], 'family': family, 'support_rows': len(made),
-                           'support_loss': fitted['history'][-1], 'program': str(directory.resolve())})
+                           'support_loss': fitted['history'][-1], 'program': logical(directory)})
             print(json.dumps({'event': 'adapted', 'family': family, 'release': str(out / 'adapt' / family),
                               'support_loss': [round(fitted['history'][0], 4), round(fitted['history'][-1], 4)]}),
                   flush=True)

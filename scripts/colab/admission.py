@@ -11,6 +11,11 @@ Capacity is the probed total less a reserve per pool. A command that finds no li
 memory (a process the shim does not know about holds the rest); with live claims the claims are the accounting,
 because an admitted SGLang engine reserves its pool at launch and the free probe then reads its claim as used.
 
+A ``--preemptible`` claim is a tenant (program tuning between rounds, PROGRAM_TUNING_A100_20261124.md): a normal
+claim that does not fit (a round's SFT learner, an actor served again) evicts tenants, newest first, until it fits
+(SIGTERM to the tenant's process group, SIGKILL after ``EVICT_GRACE_SECONDS``), and while a normal claim waits no tenant
+is admitted. A tenant restarts from its own saved state; the work it yields to never waits on it.
+
     scripts/colab/admission.py check --vram-gib 80 --host-ram-gib 32
     scripts/colab/admission.py run --vram-gib 34 --host-ram-gib 24 --label actor --wait 600 -- python ...
     scripts/colab/admission.py status
@@ -32,6 +37,7 @@ from pathlib import Path
 STATE_DIR = Path(os.environ.get('NATLANG_COLAB_ADMISSION_DIR', '/tmp/natlang-colab-admission'))
 VRAM_RESERVE_GIB, HOST_RESERVE_GIB = 1.0, 4.0
 EXIT_TIMEOUT = 75
+EVICT_GRACE_SECONDS = 60.0
 
 
 def _meminfo() -> dict:
@@ -101,6 +107,66 @@ def write_claims(state_dir: Path, claims: dict) -> None:
     os.replace(tmp, state_dir / 'claims.json')
 
 
+def read_waiters(state_dir: Path) -> dict:
+    """Normal (non-preemptible) requests waiting for admission ({id: request}) whose process lives."""
+    try:
+        waiters = json.loads((state_dir / 'waiting.json').read_text())
+    except (OSError, ValueError):
+        waiters = {}
+    return {k: w for k, w in waiters.items() if alive(w.get('pid'))}
+
+
+def write_waiters(state_dir: Path, waiters: dict) -> None:
+    tmp = state_dir / 'waiting.json.tmp'
+    tmp.write_text(json.dumps(waiters, indent=1, sort_keys=True) + '\n')
+    os.replace(tmp, state_dir / 'waiting.json')
+
+
+def evictions(vram_gib: float, host_ram_gib: float, claims: dict, **probes) -> list[str] | None:
+    """The preemptible claims (newest first) a normal request evicts to fit, ``[]`` when it fits as is, ``None`` when
+    evicting every tenant would not make it fit (pure; ``probes`` are ``decide``'s keyword arguments). With tenants
+    left the claims are the accounting; with none left the probed free memory must also hold the request, and the
+    tenants' memory counts as free once they are gone."""
+    ok, _ = decide(vram_gib, host_ram_gib, claims, **probes)
+    if ok:
+        return []
+    tenants = sorted((k for k, c in claims.items() if c.get('preemptible')),
+                     key=lambda k: -float(claims[k].get('started', 0)))
+    chosen, rest = [], dict(claims)
+    for key in tenants:
+        chosen.append(key)
+        freed = rest.pop(key)
+        probes = {**probes, 'free_vram': (probes.get('free_vram') or 0) + float(freed.get('vram_gib', 0)),
+                  'free_host': (probes.get('free_host') or 0) + float(freed.get('host_ram_gib', 0))}
+        if decide(vram_gib, host_ram_gib, rest, **probes)[0]:
+            return chosen
+    return None
+
+
+def evict(claim: dict, grace_seconds: float = EVICT_GRACE_SECONDS) -> None:
+    """Stop a tenant: SIGTERM to its admission process's group when it leads one (tenants start under setsid), else
+    to the process (which forwards it to its command); SIGKILL after ``grace_seconds`` in a background thread."""
+    pid = int(claim.get('pid') or 0)
+    if not pid:
+        return
+    try:
+        group = os.getpgid(pid) == pid and pid != os.getpgrp()
+    except OSError:
+        return
+    kill = (lambda sig: os.killpg(pid, sig)) if group else (lambda sig: os.kill(pid, sig))
+
+    def finish():
+        deadline = time.monotonic() + grace_seconds
+        while time.monotonic() < deadline and alive(pid):
+            time.sleep(1.0)
+        with contextlib.suppress(OSError):
+            if alive(pid):
+                kill(signal.SIGKILL)
+    with contextlib.suppress(OSError):
+        kill(signal.SIGTERM)
+        threading.Thread(target=finish, daemon=True).start()
+
+
 def decide(vram_gib: float, host_ram_gib: float, claims: dict, *, total_vram, total_host, free_vram, free_host,
            vram_reserve_gib: float = VRAM_RESERVE_GIB, host_reserve_gib: float = HOST_RESERVE_GIB) -> tuple[bool, dict]:
     """Whether a claim of (``vram_gib``, ``host_ram_gib``) fits beside ``claims`` (pure; the probes are arguments)."""
@@ -138,23 +204,53 @@ def check_admission(vram_gib: float, host_ram_gib: float, *, device: int = 0, st
 
 def wait_and_run(command: list[str], *, vram_gib: float, host_ram_gib: float, label: str = '',
                  wait_seconds: float = 600.0, poll_seconds: float = 5.0, device: int = 0, state_dir: Path = STATE_DIR,
-                 workdir: str | None = None, probes: dict | None = None) -> int:
-    """Admit, record the claim, run ``command`` with the lock released, drop the claim when it ends."""
+                 workdir: str | None = None, probes: dict | None = None, preemptible: bool = False) -> int:
+    """Admit, record the claim, run ``command`` with the lock released, drop the claim when it ends. A normal
+    request evicts the tenants it needs gone (``evictions``) and keeps tenants out while it waits; a ``preemptible``
+    one is a tenant."""
     deadline = time.monotonic() + max(0.0, float(wait_seconds))
     claim_id = f'{label or Path(command[0]).name}-{os.getpid()}'
-    while True:
-        with locked(state_dir):
-            claims = read_claims(state_dir)
-            ok, info = check_admission(vram_gib, host_ram_gib, device=device, state_dir=state_dir, **(probes or {}))
-            if ok:
-                claims[claim_id] = {'pid': os.getpid(), 'child': None, 'vram_gib': vram_gib, 'host_ram_gib': host_ram_gib,
-                                    'label': label, 'command': ' '.join(command)[:300], 'started': time.time()}
-                write_claims(state_dir, claims)
-                break
-        if time.monotonic() >= deadline:
-            print(json.dumps({'event': 'colab admission timeout', **info}), file=sys.stderr, flush=True)
-            return EXIT_TIMEOUT
-        time.sleep(min(poll_seconds, max(0.1, deadline - time.monotonic())))
+    evicted = set()
+    try:
+        while True:
+            with locked(state_dir):
+                claims = read_claims(state_dir)
+                ok, info = check_admission(vram_gib, host_ram_gib, device=device, state_dir=state_dir, **(probes or {}))
+                waiters = read_waiters(state_dir)
+                if preemptible and ok and waiters:
+                    ok, info = False, {**info, 'reasons': [f'normal requests wait: {sorted(waiters)}']}
+                if ok:
+                    claims[claim_id] = {'pid': os.getpid(), 'child': None, 'vram_gib': vram_gib,
+                                        'host_ram_gib': host_ram_gib, 'label': label, 'preemptible': preemptible,
+                                        'command': ' '.join(command)[:300], 'started': time.time()}
+                    write_claims(state_dir, claims)
+                    break
+                if not preemptible:
+                    waiters[claim_id] = {'pid': os.getpid(), 'vram_gib': vram_gib, 'host_ram_gib': host_ram_gib,
+                                         'label': label}
+                    write_waiters(state_dir, waiters)
+                    p = probes or {}
+                    victims = evictions(vram_gib, host_ram_gib, claims,
+                                        total_vram=(p.get('total_vram_probe') or (lambda: total_vram_gib(device)))(),
+                                        total_host=(p.get('total_host_probe') or total_host_ram_gib)(),
+                                        free_vram=(p.get('vram_probe') or (lambda: free_vram_gib(device)))(),
+                                        free_host=(p.get('host_probe') or free_host_ram_gib)())
+                    for key in victims or []:
+                        if key not in evicted:
+                            evicted.add(key)
+                            print(json.dumps({'event': 'colab admission evicts a tenant', 'claim': claim_id,
+                                              'tenant': key, 'label': claims[key].get('label')}), flush=True)
+                            evict(claims[key])
+            if time.monotonic() >= deadline:
+                print(json.dumps({'event': 'colab admission timeout', **info}), file=sys.stderr, flush=True)
+                return EXIT_TIMEOUT
+            time.sleep(min(poll_seconds, max(0.1, deadline - time.monotonic())))
+    finally:
+        if not preemptible:
+            with locked(state_dir):
+                waiters = read_waiters(state_dir)
+                if waiters.pop(claim_id, None) is not None:
+                    write_waiters(state_dir, waiters)
     print(json.dumps({'event': 'colab admission granted', 'claim': claim_id, **info}), flush=True)
     proc = None
 
@@ -194,10 +290,13 @@ def main(argv=None) -> int:
     r.add_argument('--wait', type=float, default=600.0)
     r.add_argument('--poll', type=float, default=5.0)
     r.add_argument('--workdir', default=None)
+    r.add_argument('--preemptible', action='store_true',
+                   help='a tenant: normal claims that do not fit evict it, and none is admitted while one waits')
     r.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.action == 'status':
-        print(json.dumps(read_claims(args.state_dir), indent=1, sort_keys=True))
+        print(json.dumps({**read_claims(args.state_dir), **{f'waiting:{k}': w for k, w in read_waiters(args.state_dir).items()}},
+                         indent=1, sort_keys=True))
         return 0
     if args.action == 'check':
         ok, info = check_admission(args.vram_gib, args.host_ram_gib, device=args.device, state_dir=args.state_dir)
@@ -210,7 +309,7 @@ def main(argv=None) -> int:
         raise SystemExit('admission.py run requires a command after --')
     return wait_and_run(cmd, vram_gib=args.vram_gib, host_ram_gib=args.host_ram_gib, label=args.label,
                         wait_seconds=args.wait, poll_seconds=args.poll, device=args.device, state_dir=args.state_dir,
-                        workdir=args.workdir)
+                        workdir=args.workdir, preemptible=args.preemptible)
 
 
 if __name__ == '__main__':

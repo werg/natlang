@@ -249,3 +249,20 @@ def test_fit_engines_do_not_keep_the_checkpoint_training_state(tmp_path):
     dropped = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', training_state=False)
     assert dropped.native_training_state == {}
     assert kept.native_identity == dropped.native_identity
+
+
+def test_plan_keeps_symlinked_paths_as_written(tmp_path):
+    """2026-11-20: plans resolved rows.jsonl through an archive symlink; when the directory moved back, every fit of
+    the chain failed on the vanished archive path. The plan binds to the path as written."""
+    real, link = tmp_path / 'archive' / 'prog', tmp_path / 'data' / 'prog'
+    real.mkdir(parents=True)
+    link.parent.mkdir()
+    link.symlink_to(real, target_is_directory=True)
+    (real / 'split.json').write_text(json.dumps({'family': 'fam'}))
+    (real / 'rows.jsonl').write_text('{}\n')
+    ckpt = tmp_path / 'ckpt-link.pt'
+    ckpt.symlink_to(real / 'rows.jsonl')
+    P.main(['plan', '--dir', str(link), '--checkpoint', str(ckpt), '--checkpoint-sha256', 'a' * 64, '--base', 'b'])
+    body = json.loads((real / 'fit' / 'plan.json').read_text())
+    assert body['rows'] == str(link / 'rows.jsonl')
+    assert body['engine']['checkpoint'] == body['student']['checkpoint'] == str(ckpt)
