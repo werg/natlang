@@ -274,3 +274,78 @@ def test_shared_links_reject_conflicting_paths_without_replacing_them(tmp_path, 
         assert target.is_dir()
     else:
         assert target.read_text() == 'foreign bytes'
+
+
+def test_nested_ignored_venv_container_and_model_store_resume_without_following_links(repository, tmp_path, monkeypatch):
+    module = load(repository)
+    venv = repository / '.venv-decider-systempython'
+    (venv / 'bin').mkdir(parents=True)
+    (venv / 'lib').mkdir()
+    (venv / '.gitignore').write_text('*\n')
+    (venv / 'bin/python').write_text('canonical interpreter')
+    (venv / 'pyvenv.cfg').write_text('canonical config')
+    models = repository / '.natlang/packages/native-models'
+    models.mkdir(parents=True)
+    (models / '.gitignore').write_text('*\n')
+    (models / 'weights.pt').write_text('unique model weights')
+    (repository / '.natlang/model-alias').symlink_to(models)
+    with (repository / '.gitignore').open('a') as stream:
+        stream.write('.venv-decider-systempython/\n')
+    module.git('add', '.gitignore')
+    module.git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'nested ignored environment')
+    dest = tmp_path / 'pin'
+    module.git('worktree', 'add', '--detach', str(dest), 'HEAD')
+    # Reproduce scaffolding left by the old helper: a shared root directory
+    # containing exact aliases to individual canonical children.
+    (dest / venv.name).mkdir()
+    for child in venv.iterdir():
+        (dest / venv.name / child.name).symlink_to(child)
+    calls = []
+    real_git = module.git
+    def git(*args, **kwargs):
+        if args[:2] == ('ls-files', '-o'):
+            return '\n'.join([
+                '.venv-decider-systempython/', '.venv-decider-systempython/bin/',
+                '.venv-decider-systempython/bin/python', '.venv-decider-systempython/.gitignore',
+                '.natlang/', '.natlang/packages/', '.natlang/packages/native-models/',
+                '.natlang/packages/native-models/weights.pt', '.natlang/model-alias',
+            ]) + '\n'
+        return real_git(*args, **kwargs)
+    monkeypatch.setattr(module, 'git', git)
+    real = subprocess.run
+    builds = 0
+    before = (models / 'weights.pt').stat()
+    def run(cmd, **kwargs):
+        nonlocal builds
+        if cmd[0] == 'npm':
+            builds += 1
+            if builds == 1:
+                raise subprocess.CalledProcessError(143, cmd)
+            return None
+        if cmd[0] == 'rsync':
+            calls.append(cmd)
+            assert 'native-models' not in cmd[-2]  # never an exact/descendant source copy
+            assert any(arg.startswith('--exclude=') and 'native-models' in arg for arg in cmd)
+        return real(cmd, **kwargs)
+    monkeypatch.setattr(module.subprocess, 'run', run)
+    with pytest.raises(subprocess.CalledProcessError):
+        module.create('HEAD', dest)
+    module.create('HEAD', dest)
+    assert builds == 2 and calls
+    assert not (dest / venv.name).is_symlink()
+    assert all(child.is_symlink() and child.readlink() == venv / child.name for child in (dest / venv.name).iterdir())
+    assert (dest / '.natlang/packages/native-models').readlink() == models
+    assert (dest / '.natlang/model-alias').is_symlink()
+    after = (models / 'weights.pt').stat()
+    assert (before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) == (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+    assert (models / 'weights.pt').read_text() == 'unique model weights'
+
+
+def test_shared_container_rejects_unique_files_without_deleting_them(tmp_path):
+    module = load(tmp_path)
+    source, target = tmp_path / 'canonical', tmp_path / 'view'
+    source.mkdir(); target.mkdir()
+    (target / 'unique').write_text('must survive')
+    with pytest.raises(SystemExit, match='unique data'):
+        module.ensure_shared_view(source, target)
+    assert (target / 'unique').read_text() == 'must survive'

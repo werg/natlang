@@ -105,6 +105,28 @@ def ensure_link(source, target):
     target.symlink_to(source)
 
 
+def ensure_shared_view(source, target):
+    """Accept helper scaffolding only when every existing leaf is its exact shared link."""
+    if target.is_symlink() or not os.path.lexists(target):
+        ensure_link(source, target)
+        return
+    if not target.is_dir() or not source.is_dir():
+        raise SystemExit(f'{target} conflicts with the intended shared view of {source}')
+    for child in target.iterdir():
+        original = source / child.name
+        if child.is_symlink():
+            ensure_link(original, child)
+        elif child.is_dir() and original.is_dir():
+            ensure_shared_view(original, child)
+        else:
+            raise SystemExit(f'{child} contains unique data, not an exact shared link')
+    # A previous preparation may have stopped halfway through the container.
+    # Fill missing aliases; never replace or remove an existing unique path.
+    for original in source.iterdir():
+        if not os.path.lexists(target / original.name):
+            ensure_link(original, target / original.name)
+
+
 def create(commit, dest):
     dest = destination(dest)
     commit = git('rev-parse', '--verify', f'{commit}^{{commit}}').strip()
@@ -124,34 +146,46 @@ def create_locked(commit, dest, lock_fd):
     else:
         git('worktree', 'add', '--detach', str(dest), commit, pass_fds=(lock_fd,))
         registered_checkout(dest, commit)
-    ignored = git('ls-files', '-o', '-i', '--exclude-standard', '--directory').splitlines()
-    for path in ignored:
-        top = path.split('/', 1)[0].rstrip('/')
-        if path.startswith(SKIPPED):
-            continue
-        source, target = REPO / path, dest / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if top in LINKED:                  # data under a tracked data root (runs/, data/, models/): linked, never copied
-            if '/' in path.rstrip('/'):
-                ensure_link(source, target)
-            continue
-        inner = [s for s in SHARED if s.startswith(path.rstrip('/') + '/')]
-        subprocess.run(['rsync', '-a', *[f'--exclude=/{s[len(path.rstrip("/")) + 1:]}' for s in inner],
-                        str(source).rstrip('/') + ('/' if source.is_dir() else ''), str(target).rstrip('/')], check=True, pass_fds=(lock_fd,))
-        for s in inner:
-            if os.path.lexists(REPO / s):
-                ensure_link(REPO / s, dest / s)
+    # Establish shared ownership before processing ignored listings. Nested
+    # .gitignore rules can list both a directory and its descendants.
+    covered = set(SHARED)
     for name in LINKED:
         source, target = REPO / name, dest / name
         if not os.path.lexists(source):
             continue
-        # Tracked root directories contain tracked files plus the ignored child
-        # links prepared above. They are containers, rather than whole-root links.
-        if target.is_dir() and not target.is_symlink():
-            if not git('ls-files', '--', name, cwd=dest).strip():
-                raise SystemExit(f'{target} conflicts with the intended shared root link')
+        if git('ls-files', '--', name, cwd=dest).strip():
             continue
-        ensure_link(source, target)
+        ensure_shared_view(source, target)
+        covered.add(name)
+    for name in SHARED:
+        if os.path.lexists(REPO / name):
+            ensure_link(REPO / name, dest / name)
+    ignored = git('ls-files', '-o', '-i', '--exclude-standard', '--directory').splitlines()
+    for path in sorted(ignored, key=lambda name: (name.rstrip('/').count('/'), name)):
+        relative = path.rstrip('/')
+        if path.startswith(SKIPPED) or any(relative == root or relative.startswith(root + '/') for root in covered):
+            continue
+        top = relative.split('/', 1)[0]
+        source, target = REPO / relative, dest / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if top in LINKED:
+            if relative != top:  # tracked roots remain real directories
+                ensure_shared_view(source, target)
+                covered.add(relative)
+            continue
+        if source.is_symlink():
+            ensure_link(source, target)
+            covered.add(relative)
+            continue
+        if target.is_symlink():
+            raise SystemExit(f'{target} is a shared link; refusing to copy through it')
+        # Every ancestor copy excludes the shared store, even when its source
+        # is missing. No rsync operation may write through its destination link.
+        inner = [root for root in SHARED if root.startswith(relative + '/')]
+        subprocess.run(['rsync', '-a', *[f'--exclude=/{root[len(relative) + 1:]}' for root in inner],
+                        str(source).rstrip('/') + ('/' if source.is_dir() else ''), str(target)],
+                       check=True, pass_fds=(lock_fd,))
+        covered.add(relative)
     node = sorted(Path.home().glob('.local/share/natlang-dev/node-v24*/bin'))
     env = {**os.environ, 'PATH': f'{node[-1]}:{os.environ["PATH"]}'} if node else None
     subprocess.run(['npm', 'run', '--silent', 'build:node'], cwd=dest / 'ts-host', env=env, check=True,

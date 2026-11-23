@@ -31,3 +31,15 @@ directories fail without replacement. Tracked runs/data root directories remain
 containers for their ignored child links. Actual failed-build/retry tests cover
 both dangling leaves, a dangling venv root, and a dangling native-model store.
 17 targeted tests and the ledgered quick gate passed; no active pin was touched.
+
+Nested ignored environment follow-up: Git can emit both a directory and its
+children when nested .gitignore rules differ. Prepare shared roots first and
+skip every covered descendant; this also removes redundant ignored-state copies.
+A prior helper-created directory is reusable only as an exact canonical symlink
+view; missing aliases are completed, unique files are rejected without deletion.
+Shared model roots are registered before any copying, excluded from every
+ancestor rsync and never copied by exact/descendant entries. Ordinary source
+symlinks are linked without dereferencing; rsync never receives a symlink target
+as its destination. A realistic nested-venv/model-ignore failed-build retry
+regression preserves canonical model inode/content/ctime/mtime.19 tests and
+ledgered quick gate passed.
