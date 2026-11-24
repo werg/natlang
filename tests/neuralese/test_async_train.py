@@ -1825,6 +1825,10 @@ def test_pop_held_processes_are_found_and_the_serve_lock_marks_pop_busy(tmp_path
     assert sorted(pop_rl_actor.pop_held_running(proc)) == [11, 13]
     monkeypatch.setattr(pop_rl_actor, 'SERVE_LOCK', tmp_path / 'pop-serve.lock')
     monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [])
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': [])
+    monkeypatch.setattr(pop_rl_actor, 'pop_host_address', lambda: '100.1.2.3')
+    monkeypatch.setattr(pop_rl_actor, 'held_measure_pids', lambda address: [])
+    monkeypatch.setattr(pop_rl_actor, 'pop_side_held', lambda: [])
     assert pop_rl_actor.pop_busy() is None
     import fcntl
     with open(tmp_path / 'pop-serve.lock', 'a') as other:     # another process serving (flock is per open file)
@@ -2022,3 +2026,66 @@ def test_the_fallow22_fan_in_part_joins_every_round_mix_unless_opted_out(tmp_pat
     _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--no-fallow22-aux')
     _, _, build = off.prepare_plan(off.root / 'r0001', [off.controller.current])
     assert not any(a.startswith('fallow22=') for a in build)
+
+
+def test_a_held_measure_unit_left_by_a_restarted_driver_keeps_pop_busy_and_is_joined_not_duplicated(tmp_path,
+                                                                                                    monkeypatch):
+    """2026-11-24: a driver restart killed pop-held.sh but its DGX measure unit popheld-policy-8e634a0f46ce-* ran on;
+    pop_busy saw no pop-held.sh process, the Pop loop served Pop for collection and the held failed at 279 episodes.
+    The unit, a held_eval measure aimed at Pop and a held process on Pop each keep Pop busy (Pop not answering too),
+    and a restarted held step joins the running unit instead of starting a second measurement of the same episodes."""
+    import expert_iteration as ei
+    import pop_rl_actor
+    units = {'*popheld*': ['popheld-policy-8e634a0f46ce-1795481950']}
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': list(units.get(pattern, [])))
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [])
+    monkeypatch.setattr(pop_rl_actor, 'pop_host_address', lambda: '100.1.2.3')
+    measuring, remote = [], []
+    monkeypatch.setattr(pop_rl_actor, 'held_measure_pids', lambda address: list(measuring))
+    monkeypatch.setattr(pop_rl_actor, 'pop_side_held', lambda: list(remote))
+    monkeypatch.setattr(pop_rl_actor, 'SERVE_LOCK', tmp_path / 'pop-serve.lock')
+    assert 'popheld-policy-8e634a0f46ce' in pop_rl_actor.pop_busy()
+    units.clear()
+    measuring.append(7)
+    assert 'held_eval measure' in pop_rl_actor.pop_busy()
+    measuring.clear()
+    remote.append('unreachable')
+    assert 'unreachable' in pop_rl_actor.pop_busy()
+    remote.clear()
+    assert pop_rl_actor.pop_busy() is None
+    # the DGX scan: only a held_eval measure naming Pop's address counts (a DGX-series measurement does not)
+    proc = tmp_path / 'proc'
+    for pid, argv in ((21, ['python', '-m', 'natlang_neuralese.rl.held_eval', 'measure', '--endpoint',
+                            'http://100.1.2.3:18531=20']),
+                      (22, ['python', '-m', 'natlang_neuralese.rl.held_eval', 'measure', '--endpoint',
+                            'http://127.0.0.1:8470=64'])):
+        (proc / str(pid)).mkdir(parents=True)
+        (proc / str(pid) / 'cmdline').write_bytes(b'\0'.join(a.encode() for a in argv) + b'\0')
+    monkeypatch.undo()
+    assert pop_rl_actor.held_measure_pids('100.1.2.3', proc) == [21]
+    # a restarted held step waits for the running unit, then resumes with one pop-held.sh
+    out = tmp_path / 'held' / 'policy-8e634a0f46ce'
+    out.mkdir(parents=True)
+    polls = {'n': 0}
+
+    def held_units(pattern='*popheld*'):
+        polls['n'] += 1
+        return ['popheld-policy-8e634a0f46ce-1795481950'] if pattern == f'popheld-{out.name}-*' and polls['n'] < 3 \
+            else []
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', held_units)
+    monkeypatch.setattr(pop_rl_actor, 'stop_pop_fills', lambda: None)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    started = []
+
+    class Done:
+        pid = 1
+        def poll(self):
+            return 0
+    monkeypatch.setattr(ei.subprocess, 'Popen', lambda argv, **kw: started.append(polls['n']) or Done())
+    assert ei.pop_held_measure(out, '/c.pt', pin='/pin', samples=4, manifest='/m.json', poll=0) == 'incomplete'
+    assert started == [3]                       # launched only after the old unit ended
+    stopped = []
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': ['popheld-policy-8e634a0f46ce-1'])
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: stopped.append(argv))
+    assert ei.join_pop_held(out, preempt=lambda: True, poll=0) == 'preempted'
+    assert stopped and stopped[0][-1] == 'popheld-policy-8e634a0f46ce-1.service'

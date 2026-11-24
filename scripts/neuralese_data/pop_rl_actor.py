@@ -986,12 +986,67 @@ def pop_serve_lock(blocking=True):
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
+def pop_held_units(pattern='*popheld*'):
+    """DGX units of a Pop held measurement, running or waiting for admission: ``popheld-<OUT>-<t>`` (pop-held.sh's
+    measure unit, with its ledger ``-waiter``) and grpo's ``<prefix>-popheld-<step>-<t>`` (``held-eval`` jobs). They
+    outlive the process that started them: a driver restart kills ``pop-held.sh`` but its measure unit runs on
+    (2026-11-24: the Pop loop then served Pop for collection and failed round 1's held at 279 episodes)."""
+    out = subprocess.run(['systemctl', '--user', 'list-units', pattern, '--state=active,activating', '--plain',
+                          '--no-legend'], capture_output=True, text=True).stdout
+    return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
+
+
+def held_measure_pids(address, proc=Path('/proc')):
+    """PIDs of DGX ``held_eval measure`` processes whose argv names Pop's ``address`` (its endpoint); a DGX-series
+    measurement (another endpoint) is not Pop's."""
+    found = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            argv = [a.decode(errors='replace') for a in (entry / 'cmdline').read_bytes().split(b'\0') if a]
+        except OSError:
+            continue
+        text = ' '.join(argv)
+        if 'held_eval' in text and 'measure' in argv and address and address in text:
+            found.append(int(entry.name))
+    return found
+
+
+def pop_side_held():
+    """``held_eval`` or ``pop-held`` processes on Pop itself, or ``['unreachable']`` when Pop does not answer (fail
+    closed: the collection never takes a Pop it cannot inspect)."""
+    try:
+        result = subprocess.run(['ssh', '-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', POP, 'ps -eo pid=,args='],
+                                capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return ['unreachable']
+    if result.returncode:
+        return ['unreachable']
+    return [line.strip() for line in result.stdout.splitlines()
+            if ('held_eval' in line or 'pop-held.sh' in line) and 'ps -eo' not in line]
+
+
 def pop_busy():
-    """Why Pop belongs to something other than the standing collection now (a held measurement runs, or another
-    process is serving on it), else None."""
+    """Why Pop belongs to something other than the standing collection now, else None: a held measurement's DGX unit
+    (``pop_held_units``), its ``pop-held.sh`` / ``held-eval`` process, a DGX ``held_eval measure`` aimed at Pop, a held
+    process on Pop (or Pop not answering), or another serve holding the Pop serve lock."""
+    units = pop_held_units()
+    if units:
+        return f'held measurement unit {units[0]}'
     held = pop_held_running()
     if held:
         return f'held measurement (pid {held[0]})'
+    try:
+        address = pop_host_address()
+    except (subprocess.CalledProcessError, StopIteration, OSError):
+        return 'Pop address unknown'
+    measuring = held_measure_pids(address)
+    if measuring:
+        return f'held_eval measure against Pop (pid {measuring[0]})'
+    remote = pop_side_held()
+    if remote:
+        return f'on Pop: {remote[0][:120]}'
     with pop_serve_lock(blocking=False) as free:
         return None if free else 'another serve holds the Pop serve lock'
 
