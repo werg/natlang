@@ -69,11 +69,13 @@ window.parity = async ({ prompts, tokens, top, nCtx }) => {
   const runs = [];
   for (const prompt of prompts) for (const scale of [0, 1]) {
     const started = performance.now();
-    const reply = await wllama.createCompletion({ prompt: prompt.ids, max_tokens: tokens, temperature: 0, logprobs: top,
+    // wllama's completion takes a text prompt; the harness checks that it tokenizes to the prompt's ids.
+    const reply = await wllama.createCompletion({ prompt: prompt.text, max_tokens: tokens, temperature: 0, logprobs: top,
       cache_prompt: false, lora: [{ id: 0, scale }] });
     const items = reply.choices?.[0]?.logprobs?.content ?? reply.completion_probabilities ?? [];
     if (!items.length) throw new Error('no logprobs in the reply: ' + JSON.stringify(reply).slice(0, 400));
-    runs.push({ prompt: prompt.index, adapted: scale === 1, tokens: items.map(item => item.id), logprobs: items.map(item => item.logprob),
+    runs.push({ prompt: prompt.index, prompt_kind: 'text', prompt_tokens: reply.usage?.prompt_tokens ?? null,
+      adapted: scale === 1, tokens: items.map(item => item.id), logprobs: items.map(item => item.logprob),
       top: items.map(item => Object.fromEntries((item.top_logprobs ?? []).map(entry => [String(entry.id), entry.logprob]))),
       seconds: (performance.now() - started) / 1000 });
     console.log(JSON.stringify({ prompt: prompt.index, adapted: scale === 1, tokens: items.length, seconds: runs.at(-1).seconds }));

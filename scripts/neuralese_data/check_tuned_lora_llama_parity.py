@@ -165,8 +165,45 @@ if not prompts_path.exists():
         prompts = [{'index': 0, 'root': 'sentence', 'target': [],
                     'ids': engine.tokenizer.encode('Write one sentence about the sea and ships:', add_special_tokens=False)}]
     prompts_path.write_text(json.dumps({'checkpoint': str(cli.checkpoint), 'tokens': cli.tokens, 'prompts': prompts}))
-prompts = json.loads(prompts_path.read_text())['prompts']
+prompts_file = json.loads(prompts_path.read_text())
+if any('text' not in p for p in prompts_file['prompts']):
+    # The page's wllama takes a text prompt only: each prompt's ids as text (special tokens written out). That the
+    # engines' tokenizer reads it back as the same ids is checked against llama-server's /tokenize (`text_tokens`).
+    from tokenizers import Tokenizer
+    tokenizer = Tokenizer.from_file(str(out / 'base' / 'hf-config' / 'tokenizer.json'))
+    for p in prompts_file['prompts']:
+        p['text'] = tokenizer.decode(p['ids'], skip_special_tokens=False)
+    prompts_path.write_text(json.dumps(prompts_file))
+prompts = prompts_file['prompts']
 print('prompts', [(p['index'], len(p['ids'])) for p in prompts], flush=True)
+
+
+def text_tokens():
+    """{prompt index: ids llama.cpp's tokenizer reads from the prompt's text} (completion requests parse special tokens
+    and add BOS only when the GGUF says so; /tokenize with add_special and parse_special is that tokenization)."""
+    path = out / 'text-tokens.json'
+    if path.exists():
+        return {int(k): v for k, v in json.loads(path.read_text()).items()}
+    port = 18978
+    process = subprocess.Popen([cli.server, '-m', str(out / 'base' / f'model-{outtypes[-1]}.gguf'), '--port', str(port),
+                                '-c', '512', '-t', '2', '--no-warmup'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(600):
+            try:
+                urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=1)
+                break
+            except Exception:
+                time.sleep(0.5)
+        found = {}
+        for p in prompts:
+            body = json.dumps({'content': p['text'], 'add_special': True, 'parse_special': True}).encode()
+            found[p['index']] = json.load(urllib.request.urlopen(urllib.request.Request(
+                f'http://127.0.0.1:{port}/tokenize', body, {'content-type': 'application/json'}), timeout=120))['tokens']
+    finally:
+        process.terminate()
+        process.wait(30)
+    path.write_text(json.dumps(found))
+    return found
 
 if not cli.skip_llama:
     if engine is not None:  # free the model while llama-server runs
@@ -201,8 +238,10 @@ def score(candidate):
     plain = {}
     for run in candidate['runs']:
         prompt = by_prompt[run['prompt']]
-        n = len(prompt['ids'])
-        ids = prompt['ids'] + run['tokens']
+        # A text prompt (the page) is scored on the ids the engines' tokenizer reads from it.
+        prompt_ids = text_tokens()[run['prompt']] if run.get('prompt_kind') == 'text' else prompt['ids']
+        n = len(prompt_ids)
+        ids = prompt_ids + run['tokens']
         tuned = native_logprobs(ids, adapters if run['adapted'] else None)[n - 1:n - 1 + len(run['tokens'])]
         diffs, agree = [], 0
         mismatch = None
@@ -225,7 +264,9 @@ def score(candidate):
     for index, pair in plain.items():
         applied.append(pair.get(True) != pair.get(False))
     mean = lambda v: sum(v) / max(len(v), 1)
+    texts = sorted({run['prompt'] for run in candidate['runs'] if run.get('prompt_kind') == 'text'})
     return {'engine': candidate['engine'], 'positions': len(rows), 'max_abs_dlogprob': max(rows, default=0.),
+            'text_prompts_tokenize_to_ids': all(text_tokens()[i] == by_prompt[i]['ids'] for i in texts) if texts else None,
             'mean_abs_dlogprob': mean(rows), 'greedy_agreement': mean(agreement),
             'all_greedy_equal': all(m is None for m in first), 'first_disagreements': [m for m in first if m],
             'adapted_effect_native_mean_abs_dlogprob': mean(effects),
