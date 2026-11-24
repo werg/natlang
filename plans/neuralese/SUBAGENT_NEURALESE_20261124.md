@@ -60,4 +60,54 @@ number. Whether the runtime goes back to splicing is a separate decision.
 
 ## Conversion to natlang programs: scoping only (owner 2026-11-24, part 2)
 
-The counts are in the results section below. No conversion is built.
+No conversion is built. The counts come from `subagent_neuralese.py scope` (read-only;
+`/home/werg/data/sa2nl-20261124/scope/*.json`).
+
+**(a) Checkable answer** is a gold answer or an exact checker. **(b) Complete evidence** means every tool call of the
+lead and of every dispatched subagent has its recorded output, and every dispatched subagent's conversation is in the
+release.
+
+| Dataset | Items | (a) gold | Teacher's final answer contains the gold | (b) complete | (a)+(b)+teacher right | Gold occurs in the recorded tool outputs |
+|---|---|---|---|---|---|---|
+| D02 SearchSwarm | 6,732 | 6,732 | 4,721 | 661 | 429 | 5,830 (all items); 4,437 of the teacher-right ones |
+| D01 WideSeek-R1 | 3,806 | 0 (the release has only the source's `item_f1`) | item_f1 pass 2,943 | 1,979 (1,696 depth, 283 width) | 0 without upstream gold | not measurable |
+| D10 evidence-subagent | 10,379 | not in the row (parent question only) | no lead | 0 (the release keeps `selected_original_tool_events`, a subset) | 0 | — |
+
+D02 by answer type, teacher-right and complete (429): short entity 359 (+1 with the gold absent from the evidence),
+CJK short 41 (+2 without), number 12, CJK number 5, phrase 9. Most of D02 is "subagents missing": 80,147 subagents
+dispatched, 41,300 conversations kept. D01 keeps at most 3 workers of up to 22+ per planner, so width items are rarely
+complete.
+
+**What a natlang conversion of that subset needs** (one real item per task, its own recorded evidence, no templates):
+- **Program shape:** `research(question): string` (the lead) with a callable-folder child `investigate(brief):
+  Neuralese<Report>`, where `Report = { findings: string; sources: { url: string; title: string }[]; open: string }`.
+  The lead fans out with `Promise.all`. These are product functions written once per dataset, with the dataset's
+  instructions as the natural-language policy.
+- **Tool mapping:** a `web` service, crisp, outside world:
+  - `search(query)` -> `web.search(query)`. D02 batches queries; the natlang call takes one query per call, and the
+    model maps over a list;
+  - `visit(url, goal)` -> `web.visit(url, goal)`;
+  - `google_scholar` -> `web.scholar(query)`;
+  - `PythonInterpreter` -> plain `eval` (TypeScript), no service;
+  - `call_sub_agent` / `create_sub_agents` -> `investigate(...)` calls.
+- **Fixture:** our policy issues its own queries, so a frozen replay of the teacher's exact calls is not enough. Per
+  item, freeze a closed corpus: every search-result entry the trajectory saw (title, URL, snippet) and every visited
+  URL's recorded extraction.
+  - `web.search` ranks the item's own corpus (BM25) for any query.
+  - `web.visit(url, goal)` returns the recorded extraction of that URL; an unrecorded URL answers "unavailable".
+  - D02's visit outputs are goal-conditioned summaries ("The useful information in URL for user goal G …"), not
+    pages, so a visit with a different goal gets the teacher's extraction. This is the main fidelity limit.
+  - Assets: one JSON per item (sha-pinned, like the databench table service).
+- **Checker:** the existing `span`/`qa` oracle (qa normalization with containment, polarity and core matching). CJK
+  answers need a check that `qaAnswerText` keeps CJK characters. Numbers use `qaNumbers`.
+- **Qualification per item:**
+  - the gold occurs in the frozen corpus (above);
+  - a reference replay of the teacher's own calls against the fixture reproduces the recorded outputs;
+  - a negative control with an empty corpus fails;
+  - the held closure applies, plus the held content check of `subagent_neuralese.held_texts`.
+- **D01 needs upstream gold first:** WideSeek-R1's width tables and depth answers from its training-set release. Then
+  width items need a table checker (row/column F1 with a threshold, as the source's `item_f1`).
+- **Effort:** about 3 agent-days for D02. That is 1 day for the fixture builder and the BM25 `web` service, half a
+  day for program files and task rows, 1 day for qualification (reference/negative replays and the CJK oracle
+  check), and half a day for registry, exposure and pool promotion. D01 adds the upstream-gold acquisition and a
+  table checker (+1-2 days). D10 has no lead and an incomplete evidence record: not worth converting.
