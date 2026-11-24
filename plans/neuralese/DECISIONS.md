@@ -10277,3 +10277,29 @@ Storage actions: removed about10.1GB of redundant diagnostic/runtime copies on D
 of local npm/pip download caches and obsolete generated projections. Original trajectories, source,
 active dependencies and recovery inputs remain. Lean capture registration/packing is deployed at67b;
 old immutable registered packs were not silently modified.
+
+## 2026-11-24 02:20 Program-tuning tenants on the A100: first live run and yield (program-tuning strand)
+
+- **01:33-01:40.** The keeper's new `serve` decision served the A100 actor again (the first A100 actor since 22:37), at
+  the capped layout: claim 34 GiB, 24 GB KV, 128 running. aei1 rebound it to r0001's publication 8e634a0f.
+- **02:04.** A tenant measurement actor (base 5ff07638, 8 GB KV, 64 running, claim 18 GiB preemptible) was admitted
+  beside it and attested in 136 s at DGX 127.0.0.1:18732.
+- **02:08:46.** r0002's `run-sft` (aei1's pin, older code) stopped the actor, and its learner admission (the session
+  checkout's older `admission.py`, 77 GiB, which writes no waiting record) began waiting. The tenant read it from the
+  process table, terminated its own group (exit 143) and released its claim. The learner started at 02:09:14, 28 s
+  after the actor stop: the normal stop-and-admit path, with no wait on the tenant. held_eval stopped on "actor lost"
+  with 0 episodes scored, so nothing was counted as a failure.
+- **Defects found and fixed.**
+  - `colab-seq.sh` passed no `--host`, so every attempt failed on `host_config` with `None`.
+  - The two tenants' concurrent fetches into the session clone failed on its ref lock. The tenant checkout now runs
+    under `flock` (ed7495022); the arms track is staggered until the next pin.
+- **Disk (coordinator, 01:20).**
+  - Route's finished fit steps (12 GB), T3's SGLang exports and `retired/` moved to `/mnt/external/program-tune-20261117`.
+    Superseded pins removed.
+  - Every program's `fit/build` now points to `/mnt/external`. `tune.build` keeps every step: each step's adapter names
+    the previous one as `source_artifact_id`, which the persisted closure follows, so pruning old steps needs its own
+    change and test before it ships.
+  - The programs root went from 28+ GB to 12 GB on the NVMe.
+- **Next.** After r0002 the actor is restored by the older pin at mem fraction 0.88. The keeper's oversized rule
+  re-serves it at 34 GiB within 10 min, and the tenants resume: the dev64 base arm on 9 programs, then the searchqa
+  fit.
