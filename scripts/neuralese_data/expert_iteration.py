@@ -4259,6 +4259,9 @@ def cycle(args):
 
 
 def main():
+    # one pipe and log per collection slot, plus the actor's: not the unit's soft 1024 (common/open_files.py)
+    from natlang_neuralese.common.open_files import raise_open_files_limit
+    raise_open_files_limit()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
 

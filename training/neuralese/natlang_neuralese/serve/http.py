@@ -762,4 +762,7 @@ class _Server(ThreadingHTTPServer):
 
 
 def serve(engine: Engine, host: str = "127.0.0.1", port: int = 0) -> ThreadingHTTPServer:
+    # two sockets per stream (the client's and, on the SGLang front, its backend request): not the unit's soft 1024
+    from ..common.open_files import raise_open_files_limit
+    raise_open_files_limit()
     return _Server((host, port), make_handler(engine))
