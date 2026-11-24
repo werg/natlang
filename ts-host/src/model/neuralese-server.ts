@@ -20,6 +20,7 @@
 import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTransport, isStream, type ChatCompletionOptions, type ChatTransport,
   type HttpChatOptions } from './chat-completion.js';
 import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
+import { sendReasoningIds, splitTokenization } from './decision-scoring.js';
 import type { DecisionRequest, DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { activeNativeAdapters, activeNativeStates, activeRecorder, activeSoftStates, type NativeAdapterBinding, type TurnRecorder } from '../native/model-recording.js';
 import { serves } from './neuralese-info.js';
@@ -708,7 +709,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   // `hints`: the request's cache hint, open-reply flag and reasoning, carried to the server as they are
   // (SCORE_ITEM_FIELDS); the reasoned readout's sample identity is recorded with the turn, never sent.
   const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined,
-      scope: Scope = here(), record = false, hints?: Pick<Item,'cache_messages'|'open_reply'|'reasoning'|'reasoning_sample'>):Promise<Item> => {
+      scope: Scope = here(), record = false, hints?: Pick<Item,'cache_messages'|'open_reply'|'reasoning'|'reasoning_sample'|'reasoning_ids'>):Promise<Item> => {
     const adapters = await adapterParts(bound ?? [], scope.adapters);
     const info = await serverInfo(scope.nativeStates.length > 0);
     const native=info?.native_state as {enabled?:boolean}|undefined;
@@ -718,7 +719,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       decision:{options:[...replies],...(hints?.open_reply?{open_reply:true}:{}),...reasonedFields(hints)},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
     return {messages:preparedMessages,options:[...replies],...(adapters.length?{adapters:[...adapters]}:{}),
       ...(hints?.cache_messages?{cache_messages:hints.cache_messages}:{}),...(hints?.open_reply?{open_reply:true}:{}),
-      ...(typeof hints?.reasoning==='string'?{reasoning:hints.reasoning}:{}),...(hints?.reasoning_sample?{reasoning_sample:{...hints.reasoning_sample}}:{}),
+      ...(replies.length>=2&&splitTokenization()?{split_tokenization:true}:{}),
+      ...(typeof hints?.reasoning==='string'?{reasoning:hints.reasoning}:{}),
+      ...(typeof hints?.reasoning==='string'&&hints.reasoning&&hints.reasoning_ids?.length&&sendReasoningIds()?{reasoning_ids:[...hints.reasoning_ids]}:{}),...(hints?.reasoning_sample?{reasoning_sample:{...hints.reasoning_sample}}:{}),
       ...(modes?{native_state_modes:modes}:{}),...(native?.enabled&&(record||scope.recorder||scope.nativeStates.length)?{native_recording:true}:{})};
   };
   // JOLT+ teacher attempt: a decision readout gets its invocation's privileged block like a generated turn.

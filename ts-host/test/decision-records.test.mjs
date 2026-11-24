@@ -126,6 +126,18 @@ test('without open-reply scoring a field-by-field decision generates the record;
 test('every engine route carries open_reply and an engine that ignores it is refused, not trusted', async () => {
   assert.equal(batchScoreItem({ messages: [], options: ['{"a":"x","'], open_reply: true }).open_reply, true);
   assert.equal('open_reply' in batchScoreItem({ messages: [], options: ['"x"'] }), false);
+  // both tokenizations of every option are summed by default; one option has nothing to split against
+  assert.equal(batchScoreItem({ messages: [], options: ['"spam"', '"billing"'] }).split_tokenization, true);
+  assert.equal('split_tokenization' in batchScoreItem({ messages: [], options: ['"x"'] }), false);
+  // a reasoned readout carries its reasoning's sampled ids when the generation recorded them, never without the reasoning
+  assert.deepEqual(batchScoreItem({ messages: [], options: ['"a"', '"b"'], reasoning: 'Hello', reasoning_ids: [5, 6, 7] }).reasoning_ids, [5, 6, 7]);
+  assert.equal('reasoning_ids' in batchScoreItem({ messages: [], options: ['"a"', '"b"'], reasoning_ids: [5] }), false);
+  process.env.NATLANG_DECISION_REASONING_IDS = 'rendered';
+  try { assert.equal('reasoning_ids' in batchScoreItem({ messages: [], options: ['"a"', '"b"'], reasoning: 'Hello', reasoning_ids: [5] }), false); }
+  finally { delete process.env.NATLANG_DECISION_REASONING_IDS; }
+  process.env.NATLANG_DECISION_TOKENIZATIONS = 'canonical';
+  try { assert.equal('split_tokenization' in batchScoreItem({ messages: [], options: ['"a"', '"b"'] }), false); }
+  finally { delete process.env.NATLANG_DECISION_TOKENIZATIONS; }
   assert.equal(promptLogprobRequest([], '{"a":', {}, true).continue_final_message, true);
   assert.equal(promptLogprobRequest([], '"a"').continue_final_message, false);
   assert.throws(() => scoresFromBatchResult({ log_probs: [-1, -2] }, { options: ['a', 'b'], open_reply: true }), /^Error: decision-open-unsupported/);
