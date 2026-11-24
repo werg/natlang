@@ -1319,10 +1319,13 @@ def colab_tenant_checkout(host, cfg, commit):
     verified clean; ``python`` stays the session venv's."""
     root, repo = f'{cfg["root"]}/natlang-tenant', cfg['repo']
     q = shlex.quote
-    out = ssh_host(host, f'git -C {q(repo)} fetch -q origin && '
-                         f'{{ test -d {q(root)} || git -C {q(repo)} worktree add -q --detach {q(root)} {q(commit)}; }} && '
-                         f'git -C {q(root)} checkout -q -f --detach {q(commit)} && git -C {q(root)} rev-parse HEAD && '
-                         f'git -C {q(root)} status --porcelain --untracked-files=no | head -5', timeout=600).split()
+    # one tenant at a time: two tenants' concurrent fetches into the session clone failed on its ref lock (11-24)
+    steps = (f'git -C {q(repo)} fetch -q origin && '
+             f'{{ test -d {q(root)} || git -C {q(repo)} worktree add -q --detach {q(root)} {q(commit)}; }} && '
+             f'git -C {q(root)} checkout -q -f --detach {q(commit)} && git -C {q(root)} rev-parse HEAD && '
+             f'git -C {q(root)} status --porcelain --untracked-files=no | head -5')
+    out = ssh_host(host, f'flock -w 300 {q(cfg["root"] + "/.tenant-checkout.lock")} bash -c {q(steps)}',
+                   timeout=600).split()
     if out != [commit] and not (len(out) == 1 and out[0].startswith(commit)):
         raise RuntimeError(f'{host}: the tenant checkout is not clean at {commit}: {" ".join(out)[:300]}')
     return {**cfg, 'repo': root, 'admission': f'{root}/scripts/colab/admission.py', 'commit': out[0]}
