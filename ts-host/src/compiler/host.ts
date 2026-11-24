@@ -30,7 +30,7 @@ const embeddedLibs: LibProvider | undefined = typeof __NATLANG_TS_LIBS__ === 'un
 type ParseOptions = ts.ScriptTarget | ts.CreateSourceFileOptions;
 type SourceCache = Map<string, { text: string; file: ts.SourceFile }>;
 const sharedNumericLibraries: SourceCache = new Map();
-const sharedOptionLibraries = new WeakMap<ts.CreateSourceFileOptions, SourceCache>();
+const sharedOptionLibraries = new WeakMap<ts.CreateSourceFileOptions, { options: ts.CreateSourceFileOptions; files: SourceCache }>();
 const MAX_SHARED_LIBRARY_FILES = 128;
 
 function cachedLibrary(fileName: string, text: string, options: ParseOptions): ts.SourceFile {
@@ -38,8 +38,13 @@ function cachedLibrary(fileName: string, text: string, options: ParseOptions): t
   if (typeof options === 'number') cache = sharedNumericLibraries;
   else {
     const found = sharedOptionLibraries.get(options);
-    cache = found ?? new Map();
-    if (!found) sharedOptionLibraries.set(options, cache);
+    const previous = found?.options;
+    const unchanged = previous && previous.languageVersion === options.languageVersion &&
+      previous.impliedNodeFormat === options.impliedNodeFormat && previous.jsDocParsingMode === options.jsDocParsingMode &&
+      previous.setExternalModuleIndicator === options.setExternalModuleIndicator;
+    cache = unchanged && found ? found.files : new Map();
+    // The public options object is mutable. Replace its old cache rather than retaining each past option variant.
+    if (!unchanged) sharedOptionLibraries.set(options, { options: { ...options }, files: cache });
   }
   const key = `${typeof options === 'number' ? options : options.languageVersion}\0${fileName}`;
   const found = cache.get(key);

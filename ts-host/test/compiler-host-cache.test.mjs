@@ -56,3 +56,25 @@ test('immutable libraries can be shared, explicitly disabled, or requested fresh
   assert.notEqual(host([], { libs, shareLibrarySourceFiles: false }).getSourceFile(library, target), first);
   assert.notEqual(host([], { libs: () => 'declare const revisedLibrary: string;' }).getSourceFile(library, target), first);
 });
+
+
+test('mutating a parse-options owner invalidates its previous library ASTs', () => {
+  const options = { languageVersion: target, setExternalModuleIndicator() {} };
+  const compiler = host();
+  let previous = compiler.getSourceFile(INTRINSICS_FILE, options);
+  options.impliedNodeFormat = ts.ModuleKind.ESNext;
+  let current = compiler.getSourceFile(INTRINSICS_FILE, options);
+  assert.notEqual(current, previous);
+  assert.equal(current.impliedNodeFormat, ts.ModuleKind.ESNext);
+  previous = current;
+  options.setExternalModuleIndicator = file => { file.externalModuleIndicator = file; };
+  current = compiler.getSourceFile(INTRINSICS_FILE, options);
+  assert.notEqual(current, previous);
+  assert.equal(ts.isExternalModule(current), true);
+  previous = current;
+  options.jsDocParsingMode = ts.JSDocParsingMode.ParseNone;
+  current = compiler.getSourceFile(INTRINSICS_FILE, options);
+  assert.notEqual(current, previous);
+  assert.equal(current.jsDocParsingMode, ts.JSDocParsingMode.ParseNone);
+  assert.equal(compiler.getSourceFile(INTRINSICS_FILE, options), current);
+});
