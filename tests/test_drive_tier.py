@@ -66,10 +66,10 @@ def test_archive_then_restore_keeps_links_registered_and_other_projects(tmp_path
     cold = old_file(hdd / 'natlang-grpo-v1' / 'run' / 'state.bin', b'x' * 4096)
     linked = old_file(hdd / 'natlang-grpo-v1' / 'live' / 'pool.bin', b'y' * 4096)
     reg = old_file(hdd / 'natlang-grpo-v1' / 'run' / 'registered.bin', b'z' * 4096)
-    other = old_file(hdd / 'bgkit-data' / 'big.bin', b'w' * 4096)
+    other = old_file(hdd / 'bgkit-checkpoints' / 'big.bin', b'w' * 4096)
     drive = FakeDrive()
     # (age counts ctime too, which a test cannot backdate: -1 admits every age here)
-    args = SimpleNamespace(apply=True, root=['natlang-grpo-v1', 'bgkit-data'], budget_gb=1, max_minutes=5, rate_mb=0,
+    args = SimpleNamespace(apply=True, root=['natlang-grpo-v1', 'bgkit-checkpoints'], budget_gb=1, max_minutes=5, rate_mb=0,
                            min_mb=0, min_age_days=-1, links=[str(hdd / 'natlang-grpo-v1' / 'live')])
     assert m.archive(args, drive) == 0
     assert not cold.exists()
@@ -120,3 +120,49 @@ def test_rearchiving_a_restored_file_reuses_its_drive_copy(tmp_path, monkeypatch
     assert f.exists() and drive.next == 1
     m.archive(args, drive)
     assert not f.exists() and drive.next == 1          # no second upload: the restored copy is still on Drive
+
+
+def test_ei_archive_files_behind_links_are_eligible(tmp_path, monkeypatch):
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    monkeypatch.setattr(m, 'LINK_TOLERANT', {'dgx-moved-ei': -1})
+    linked = old_file(hdd / 'dgx-moved-ei' / 'aei1' / 'collect' / 'v0001-x' / 'actor' / 'blocks' / 'b.bin', b'b' * 64)
+    other = old_file(hdd / 'natlang-grpo-v1' / 'live' / 'a.bin', b'a' * 64)
+    links = {str(linked.parents[2]), str(other.parent)}
+    found = [str(p) for p, _ in m.candidates(['dgx-moved-ei', 'natlang-grpo-v1'], min_mb=0, min_age_days=-1,
+                                              exclude=[], links=links, held=set())]
+    assert found == [str(linked)]
+
+
+def test_round_inflow_drains_first_and_native_pins_stay(tmp_path, monkeypatch):
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    for name in ('natlang-grpo-v1', 'dgx-moved-20261124', 'dgx-moved-ei', 'dgx-moved-20261123', 'bgkit-checkpoints'):
+        (hdd / name).mkdir(parents=True)
+    roots = m.default_roots()
+    assert roots[:3] == ['dgx-moved-ei', 'dgx-moved-20261123', 'dgx-moved-20261124']
+    assert 'bgkit-checkpoints' not in roots and roots.index('natlang-grpo-v1') > 2
+    monkeypatch.setattr(m, 'LINK_TOLERANT', {'dgx-moved-2026112*': -1})
+    pin = old_file(hdd / 'dgx-moved-20261123' / 'native-pins' / 'base.pt', b'p' * 64)
+    blocks = old_file(hdd / 'dgx-moved-20261124' / 'aei1-collect' / 'v0000' / 'b.bin', b'b' * 64)
+    found = [str(p) for p, _ in m.candidates(['dgx-moved-20261123', 'dgx-moved-20261124'], min_mb=0,
+                                              min_age_days=99, exclude=[], links={str(blocks.parent)}, held=set())]
+    assert found == [str(blocks)] and str(pin) not in found
+
+
+def test_bgkit_data_released_except_live_reader_trees(tmp_path, monkeypatch):
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    repo = old_file(hdd / 'bgkit-data' / 'repos' / 'r1.git' / 'objects' / 'pack.pack', b'r' * 64)
+    news = old_file(hdd / 'bgkit-data' / 'multi_news_v1' / 'train.parquet', b'n' * 64)
+    traj = old_file(hdd / 'bgkit-data' / 'trajectories_ext' / 'a' / 't.jsonl.zst', b't' * 64)
+    ckpt = old_file(hdd / 'bgkit-checkpoints' / 'c.pt', b'c' * 64)
+    (hdd / 'dgx-moved-ei').mkdir()
+    roots = m.default_roots()
+    assert roots.index('dgx-moved-ei') < roots.index('bgkit-data') < roots.index('natlang-grpo-v1')
+    found = [str(p) for p, _ in m.candidates(['bgkit-data', 'bgkit-checkpoints'], min_mb=0, min_age_days=-1,
+                                              exclude=[], links=set(), held=set())]
+    assert sorted(found) == sorted([str(repo), str(traj)]) and str(news) not in found and str(ckpt) not in found

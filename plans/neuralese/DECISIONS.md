@@ -10829,6 +10829,13 @@ chunk is the next lever if the front binds again.
 **Not checked.** The new front on DGX cores under production load (read at the next start); the per-token residue
 above was left as is; the exact sequence behind v0001's 1024 descriptors.
 
+
+### 2026-11-24 — Vibe native qualification: actual failures fixed; bounded runtime generations
+
+Full model-free native qualification remains 2,327 unchanged goals (2,314 ordinary + 13 owned-emulator Android), independent of teacher collection. V19 executed 93 cases: 85 passed; eight vault cases failed only a prerequisite-route check because the checker required post-write readbacks before the first write and counted duplicate reads. Spectrolite `8aaa9ea12087bd6846f1f220ee1394483b884e90` fixes the common prerequisite mechanism: use pre-first-successful-write reference evidence as set coverage, preserve authority/current-state/effect/readback checks. All 50 authored vault references pass; removed-authority negative still fails; nine focused tests pass. V20 official 387-binding producer, byte verifier and actual all-eight/default-three native consumer pass; release `a64fbba42f58f94ed4e6efc558333b40c93f3cfddd339492146176c7fc5ddb58` is activated while teacher collection stays held.
+
+The next native batch stopped with an actual workerd V8 heap OOM after 40 Spectrolite cases in one process generation, not a cgroup kill (8.5 GiB peak under 16 GiB). Completed originals remain preserved. The model-free controller now joins canonical instance teardown between batches of at most 16 cases, retaining two concurrent native contexts and the same 16 GiB cap / 7.5 GiB reserve; no heap allowance increase. Investigation of shared runtime/isolate retirement continues separately. New full V20 run `vibe-v20-tick-native-oracles-full-20261124a.service` revalidates 53 unchanged-profile successes from V19 with explicit original source/release identity, exact complete prepared profiles/layers/builds, unchanged Host/compiler/dependency identity and installed package. Spectrolite evidence is rerun on its changed source; no old packet is relabelled. Reference packets have zero model calls and never enter teacher/training data. Remaining unexecuted cases and the 13 Android prerequisites stay visible, not declared qualified.
+
 ## 2026-11-24 08:50 A second Colab session (L4, g4b) for program tuning (owner 08:25; program-tuning strand)
 
 Owner: "I'm fine with adding an L4 session where applicable. I will refill credits." Coordinator: fits, arms and the
@@ -10862,3 +10869,62 @@ bank go to it, so tuning no longer waits for the gaps between aei1's round SFTs.
   - the bank track moves to the L4.
 - **Credits.** 148.85 CU at 05:54, 123.68 at 08:45 (8.88/h for the A100; 8.96 with the CPU stand-in). An L4 adds
   about 1.94/h.
+**2026-11-24 09:00, standing storage rule for expert-iteration rounds (`scripts/ei_round_tier.py`, in the sweep).**
+aei1 runs a round every 1.5-2 h, and each round added about 15 GB to the NVMe: `/` fell from 60 to 25 GB between 04:30
+and 08:18. The rule now runs in `storage_sweep.sh` every 30 min (`SWEEP_EI=0` opts out).
+- **Per driver** (`ops/ei/*/phase-state.json`):
+  - **Collections:** a `collect/vNNNN-<sha12>*` directory whose policy is neither of the last two lineage entries nor
+    the active round's base loses its actor export (`actor/sglang-hf`, rebuilt from the checkpoint when served).
+    The rest moves to `data_hdd/dgx-moved-ei/<driver>/...` with a symlink back. `collections_of` and the frontier read
+    only the current and previous policy's collections, and resolve through the link anyway.
+  - **Rounds older than the previous lineage round** (never the active round or a newer prepared one):
+    - deleted, with a `.removed.json` note: `policy/sglang-hf` and `policy/gguf`, which `publish-round` regenerates
+      from the checkpoint;
+    - moved: `sft/learner-state*` (a finished round's resume state), `mix/*.pkl`, `mix.*` copies and `filled/`;
+    - stay on the NVMe: `mix/rows.jsonl.zst`, `trained-units.json` and `build.json` (the `--prefer-unseen` and
+      `trained_units` readers), plus the logs.
+    - `policy/checkpoint.pt` and `sft/factors` move only when the policy is unprotected. Protected: the last two
+      lineage entries, held's candidate and reference, the last applied verdict, the reference and start policies,
+      and `ops/current-policy.json`. Rollback needs only the last measured checkpoint.
+- **Safety:** every item is checked against the sweep's reference checks (`prune_stale_checkouts.references`:
+  process cwd, exe, fds, maps, cmdline and environ; active or timer-triggered units) and against `.keep-on-nvme`.
+  - A directory is copied while hashing, followed by one `sync`, a re-read from disk with the page cache dropped, and
+    a size and SHA-256 comparison per file. The source must be unchanged and unheld before the symlink swap.
+  - A single file uses the archiver's `verified_copy` and `replace_with_link`.
+  - No move runs the HDD below 100 GB.
+  - Each run is bounded (18 min, `timeout 1200`), and the sweep unit's bound rose to 45 min (a start is skipped
+    while a run is in flight).
+  - Log: `~/.local/state/natlang/ei-round-tier.jsonl`. Tests: `tests/test_ei_round_tier.py`.
+- **Floors:** the sweep logs `ROOT BELOW TARGET` when `/` stays under 60 GB after the tiers (`SWEEP_ROOT_TARGET_GB`).
+  The 40 GB floor alert stays.
+- **What it frees:**
+  - A round older than the previous one: 5.5 GB of exports deleted and about 4-6.5 GB moved (r0001: 2.9 GB of
+    learner states, 1.9 GB of chains, 0.9 GB of filled). Another 3.9 GB of checkpoint and factors moves once its
+    policy leaves the protected set.
+  - A collection: 3.8 GB of export deleted and 11-14 GB moved.
+  - In steady state the NVMe holds two rounds' collections and the last three round directories in full, so a
+    round's net NVMe growth is its logs, mix rows and trained-units: well under 1 GB.
+  - First live pass: see the follow-up line.
+- **HDD inflow and Drive:** what moves is about 20 GB per round, 240-320 GB/day at 12-16 rounds, against 142 GB free
+  on the HDD. `drive_tier.py` now drains `dgx-moved-ei` (`LINK_TOLERANT`): files there may go to Drive even behind
+  the NVMe symlinks, after half a day (their live readers stay on the NVMe), leaving `.ondrive.json` stubs and
+  manifest records. The Drive cap of 3 MiB/s (about 260 GB/day) is close to that inflow. If the HDD floor stops the
+  EI tier (`HDD floor: move refused` in its log), raise `--rate-mb` in `natlang-drive-tier.service`: the uplink allows
+  5.5 MB/s when no Colab transfer runs.
+- **Drive drain raised (coordinator, 2026-11-24 09:20).** `natlang-drive-tier` now runs at 5 MiB/s (about the whole
+  5.5 MB/s uplink) with a 15 GB pass budget, still pausing while an rsync/scp to a Colab host runs.
+  - It drains `dgx-moved-ei` and `dgx-moved-2026112*` first (`PRIORITY_ROOTS`, the round inflow). Files behind NVMe
+    symlinks there are eligible after half a day.
+  - `/native-pins/` is never moved: `dgx-moved-20261123/native-pins` holds the lineage's fresh-init base 5ff07638.
+  - Before the change: 39.8 GB in 195 files had gone to Drive since 11-23 18:42, at 5-8 GB per hourly pass (3 MiB/s
+    nominal).
+- **bgkit-data released to Drive (owner 2026-11-24, "Yes that can go").** The Drive tier drains `bgkit-data` (591 GB)
+  after the round inflow and before the older run archives (`RELEASED_ROOTS`).
+  - The usual safety applies: md5 and size verified before the HDD delete, a stub per file, the manifest, and
+    `drive_tier.py restore PATH` (any prefix: one repo or a subtree).
+  - Live readers were checked. The K3 pool (`natlang-rl-git-history-20261120`) serves its snapshots from NVMe assets.
+    Its authoring (`git_history.stage`) copies only repos with 0.2-25 MB object stores, below the 64 MB file floor, so
+    `repos` (412 GB) moves only packs of repos K3 never draws.
+  - `multi_news_v1`, `arxiv_v1` and `pubmed_v1` stay on the HDD (`KEEP_SUBPATHS`): the registered view-sources-v3
+    corpus reads them on a rebuild.
+  - `bgkit-checkpoints` and the hindsight data stay out (not approved).
