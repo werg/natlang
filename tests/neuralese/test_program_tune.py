@@ -481,3 +481,34 @@ def test_a_merged_release_equals_its_summed_free_lora_stack():
     assert torch.allclose(backbone[key], base + d1 + 0.5 * d2, atol=1e-5)
     with pytest.raises(SystemExit):
         P.merged_factors({'a': one}, [('missing', 1.0)])
+
+
+def test_colab_fit_reruns_segments_and_takes_a_claim_override(tmp_path, monkeypatch):
+    """Two fits share the L4 (11-24): `--vram-gib` sets the fit's admission claim, and with `--segment-steps` each
+    segment's exit 75 reruns tune.build (it resumes from state.json) until the fit ends."""
+    import pop_rl_actor as A
+    prog = tmp_path / 'prog'
+    (prog / 'fit').mkdir(parents=True)
+    (prog / 'split.json').write_text(json.dumps({'family': 'ext_fam'}))
+    (prog / 'rows.jsonl').write_text('{"r": 1}\n')
+    P.main(['plan', '--dir', str(prog), '--checkpoint', str(prog / 'rows.jsonl'), '--checkpoint-sha256', 'c' * 64,
+            '--base', '/hf', '--steps', '3'])
+    runs, rcs = [], [75, 75, 0]
+    monkeypatch.setattr(A, 'colab_tenant_checkout', lambda h, cfg, c: {**cfg, 'repo': '/t', 'admission': '/t/adm.py', 'commit': c})
+    monkeypatch.setattr(A, 'ensure_remote_checkpoint', lambda *a: 'present')
+    monkeypatch.setattr(A, 'ship_file', lambda *a: 'drive')
+    monkeypatch.setattr(A, 'colab_hardware', lambda h: {'gpu_name': 'NVIDIA L4', 'vram_total_gib': 22.5,
+                                                        'host_ram_total_gib': 53.0})
+    monkeypatch.setattr(A, 'log', lambda **e: None)
+    monkeypatch.setattr(A, 'ssh_host', lambda host, command, **k: 'nnt1_abc.nnt\n' if command.startswith('ls ') else '')
+    monkeypatch.setattr(A, 'run_detached', lambda host, cfg, remote, command: runs.append(command) or rcs.pop(0))
+
+    def pull(remote, local, host, attempts=5):
+        Path(local).parent.mkdir(parents=True, exist_ok=True)
+        Path(local).write_text(json.dumps({'artifacts': []}) if remote.endswith('.json') else 'x')
+    monkeypatch.setattr(A, 'pull_verified', pull)
+    assert P.main(['colab-fit', '--dir', str(prog), '--host', 'colab-g4b', '--beside', '', '--commit', 'f' * 40,
+                   '--vram-gib', '10', '--segment-steps', '10']) == 0
+    assert len(runs) == 3 and (prog / 'fit' / 'release' / 'result.json').exists()
+    command = runs[0]
+    assert command[command.index('--vram-gib') + 1] == '10.0' and command[-2:] == ['--segment-steps', '10']

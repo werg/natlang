@@ -54,6 +54,7 @@ from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # n
 SPLITS = ('support', 'dev', 'confirm')
 FRACTIONS = (0.6, 0.25, 0.15)
 ACTION_POLICY = 'natlang.tune-action-outcome/2'
+SEGMENT_EXIT = 75     # tune.build: a segment ended before the last step (rerun to continue)
 TURN_SCHEMA = 'natlang.tune-turn/v1'
 BINDING = 'program'
 # Runtime error results of a tool call: a thrown JS error, a checker diagnostic (`LINE:COL kind: ...`), a refused
@@ -621,13 +622,18 @@ def colab_fit(args):
     A.ssh_host(host, f'mkdir -p {shlex.quote(remote)}/fit {shlex.quote(remote)}/fit-scratch && '
                      f'cat > {shlex.quote(remote)}/fit/plan.json',
                input=json.dumps(body, indent=1) + '\n', timeout=60)
-    claim = A.colab_layout(A.colab_hardware(host))['tenants']['fit']
+    claim = dict(A.colab_layout(A.colab_hardware(host))['tenants']['fit'])
+    if args.vram_gib:     # two fits share the L4 (each ~8 GB, one CPU core bound: 9% GPU at 2.5 min/step, 11-24)
+        claim['vram_gib'] = float(args.vram_gib)
+    segment = ['--segment-steps', str(args.segment_steps)] if args.segment_steps else []
     command = A.colab_tenant_command(cfg, tcfg, claim, f'fit-{family[:40]}',
                                      [cfg['python'], '-m', 'natlang_neuralese.tune.build', '--plan',
-                                      f'{remote}/fit/plan.json', '--out', f'{remote}/fit/build'],
+                                      f'{remote}/fit/plan.json', '--out', f'{remote}/fit/build', *segment],
                                      mps_percent=args.mps_percent, beside=args.beside or None)
     shipped = time.time()
     rc = A.run_detached(host, cfg, remote, command)
+    while args.segment_steps and rc == SEGMENT_EXIT:    # a segment ended (state saved; its memory growth released): the next one resumes
+        rc = A.run_detached(host, cfg, remote, command)
     trained = time.time()
     A.log(event='Colab tenant fit ended', host=host, family=family, returncode=rc, ship_seconds=round(shipped - started, 1),
           fit_seconds=round(trained - shipped, 1))
@@ -968,6 +974,9 @@ def main(argv=None):
     cf.add_argument('--commit', required=True, help='the tenant checkout commit (pushed to origin)')
     cf.add_argument('--mps-percent', type=int, help='join MPS with this SM share (default: outside MPS, its own context)')
     cf.add_argument('--take-over', action='store_true', help='fit on Colab although a local fit state exists')
+    cf.add_argument('--vram-gib', type=float, help='the fit\'s admission claim (default: colab_layout tenants fit)')
+    cf.add_argument('--segment-steps', type=int, default=0,
+                    help='tune.build --segment-steps: end each process after N steps and rerun it (bounds its growth)')
     cm = sub.add_parser('colab-measure', help='one dev arm against a Colab tenant actor (held_eval on the DGX)')
     cm.add_argument('--dir', action='append', required=True)
     cm.add_argument('--arm', choices=('base', 'adapter', 'bank', 'merged'), required=True,
