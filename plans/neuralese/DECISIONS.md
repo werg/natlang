@@ -11133,3 +11133,50 @@ controls (DeepSeek thinking on), Kilo/LLM7 named, reasoning kinds as above.
 
 **Spec changes in `ops/ei/teachers.json`:** added `gemini-3.5-flash-lite` (AI Studio, `GEMINI_API_KEY`, 1 slot, `reasoning: hidden`); no paid
 Vertex teacher. The campaign reads it at its next launch (the running r0005 launched 09:40).
+
+## 2026-11-24 aei1 driver: health report off the loop, SFT launch retries, standing remote collectors, ledger backoff head
+
+Four defects seen between 09:50 and 10:35:
+
+1. **The health report blocked the main loop.** `health_report` read every earlier collection's groups, including
+   v0000's 45k files tiered to the HDD (about 350 ms each), and held r0005's SFT launch for 25 min. The fix:
+   - It now runs in a thread beside the loop (`start_health_report`, one at a time).
+   - Earlier collections come only from `health-cache`: a closed whole summary, or else the scored groups an older
+     cache holds. A collection without a cache is listed under `collections.uncached` and never read.
+   - The previous policy's collections are finished when the report runs and still on the NVMe, so the report closes
+     their caches (`collection_summary(close=True)`).
+
+   The same read pattern was in `select` (`tasks.json`), which globbed every collection's groups. It now takes the
+   newest earlier collection's `tasks.rates.json` (`--rates-json`, every outcome up to that selection) plus the
+   lineage collections and `r*/grpo`. The loop's first selection still reads every collection. The frontier and the
+   teacher queue already read only the lineage (current and previous) collections and `tasks.rates.json`. The build
+   reads the lineage collections, `r*/grpo` and `teacher-*`. Both match the `ei_round_tier` assumption.
+2. **A failed `launch-sft.sh` ended the driver.** The preflight unit (4 GB, low, `--wait 600`) was not admitted, and
+   the resulting `CalledProcessError` ended the driver. The fix:
+   - `launch_sft` now notes each failure (`sft_launch_failed`, `attempt`) and retries after 60 s, doubling to 15 min.
+   - Between attempts it keeps the remote collectors and the teacher running.
+   - It stops retrying once a DGX learner of the round runs.
+   - The round env sets `PREFLIGHT_PRIORITY=high` and `PREFLIGHT_WAIT=3600`, which the coordinator's edit of the ops
+     script reads.
+
+   `launch-sft.sh` stays in ops: its preflight (`ops/grpo-v4/sft_preflight.py`) and the legacy cycle use it there, and
+   the driver now dictates the preflight's priority and wait itself.
+3. **Remote collectors started only at a round's start and in the DGX SFT's polls.** The A100 actor came back at 10:00
+   and got no collector until a 10:20 restart. A standing thread (`remote_collect_loop`, every 5 min, in the SFT phase)
+   now starts a collector for every reachable actor that serves the newest policy. While a round's Colab SFT trains on
+   a session, no actor is rebound, but serving actors still get collectors. The opt-out is
+   `--no-standing-remote-collection`. Collector starts are serialized (`REMOTE_LOCK`).
+4. **The ledger's low queue was stuck.** The head `vibe-student-fill-1795481059079952364` had been preempted three
+   times within 30 min of each relaunch (09:32, 09:44 and 10:00, by medium jobs), so its requeue backoff doubled to
+   1920 s. Its 10:32:39 relaunch is exactly 10:00:35 + 1920 s. For that whole backoff it stayed head of the low queue,
+   and a low job behind it could start only as a "spare" backfill: both needs free, each 4 GB plus the 15 GB DGX
+   reserve, about 38 GB against 28-31 GB free. The fix in `memory_ledger.py`:
+   - Within one priority, a requeued unit still in its backoff queues behind eligible jobs. A higher-priority unit in
+     backoff still precedes every lower one.
+   - A preemption (a stop for a waiting higher job, not for the unit's own memory) caps the backoff at 10 min.
+
+   The 238 stale `waiting` entries (since 2026-10-12, `seen` never refreshed) did not matter: `waiting_order` ignores
+   them after `WAITER_TTL`. The guard now drops non-requeued ones unrefreshed for an hour (`prune_stale_waiting`).
+
+   **The memory guard (`natlang-memory-guard`) runs from `/home/werg/natlang` and picks this up only after a pull and
+   a restart.**

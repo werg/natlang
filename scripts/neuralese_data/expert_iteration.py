@@ -218,6 +218,9 @@ def select(args):
     if args.base_rates:
         rates.update({k: (v['successes'], v['scored']) for k, v in json.loads(Path(args.base_rates).read_text()).items()
                       if v.get('scored')})
+    for path in getattr(args, 'rates_json', None) or []:   # an earlier selection's rates (every outcome up to it)
+        rates.update({k: (v['successes'], v['scored']) for k, v in json.loads(Path(path).read_text()).items()
+                      if v.get('scored')})
     dirs = sorted({d for pattern in args.rates_groups for d in glob.glob(pattern)})
     for task_id, (s, n) in group_outcomes(dirs).items():   # the newest measurements (later runs) replace older ones
         rates[task_id] = (s, n)
@@ -2452,6 +2455,9 @@ def unit_last_run_succeeded(unit):
     return any('Consumed' in line for line in tail) and not any(b in line for line in tail for b in bad)
 
 
+SFT_LAUNCH_RETRY_SECONDS = 60         # a failed launch-sft.sh is retried after this, doubling up to the max
+SFT_LAUNCH_RETRY_MAX = 900
+REMOTE_COLLECT_CHECK_SECONDS = 300    # the standing check that a serving remote actor has its collector
 TEACHER_RELAUNCH_MINUTES = 60   # an idle campaign of the same frontier resumes at most this often
 SFT_HANDBACK_MAX = 2          # moves of one round from the DGX back to a session (no ping-pong between two hosts)
 
@@ -2771,6 +2777,7 @@ ROUND_STAGES = ('prepared', 'trained', 'published')
 class AsyncRoundDriver:
     # the DGX and remote collection builders share Cycle.collect_dir (the main loop and the Pop loop both build)
     COLLECT_LOCK = threading.RLock()
+    REMOTE_LOCK = threading.RLock()     # one remote-collector start at a time (main loop, waits, the standing thread)
     # Pop serves one thing at a time: the Pop loop's collection serve or held-v4's measurement (held_v4_step)
     POP_LOCK = threading.Lock()
     POP_POLL_SECONDS = 120
@@ -2825,6 +2832,7 @@ class AsyncRoundDriver:
         self.held_v4_cadence = parse_held_v4_cadence(getattr(args, 'held_v4_cadence', HELD_V4_CADENCE))
         self.held_v4 = HeldV4Queue(self.root / 'held-v4' / 'queue.json')
         self.teacher_lock = threading.Lock()   # one campaign launch at a time (main loop, waits, the standing thread)
+        self.colab_sft_hosts = set()           # sessions a round's run-sft is training on (no actor rebound there)
         self.teacher_draining = False           # the running campaign drains for a newer frontier: check every minute
         self.handback_next = {}         # round -> when its DGX SFT is next checked for a move to a session
         self.handback_blocked = set()   # rounds whose Colab learner failed: they stay on the DGX
@@ -2866,11 +2874,22 @@ class AsyncRoundDriver:
 
     def select_command(self, out):
         """The collection's task order (``select``: failed first, then unmeasured, then by rate) from every student
-        outcome so far, this loop's collections included."""
-        groups = [str(OPS / 'grpo-v*' / '*' / 'groups' / 'g*'), str(OPS / 'ei' / '*' / 'collect' / 'groups' / 'g*'),
-                  str(self.root / 'collect' / '*' / 'groups' / 'g*'), str(self.root / '*' / 'grpo' / 'groups' / 'g*')]
+        outcome so far, this loop's collections included. The newest earlier collection's ``tasks.rates.json`` (every
+        outcome up to its selection) stands for everything before the lineage, whose collections (on the NVMe) are
+        read; an earlier collection's groups (moved to the HDD by ei_round_tier, 45k files at ~350 ms) are never
+        globbed again. Without such a file every collection is read (the loop's first selection)."""
+        out = Path(out)
+        earlier = [p for p in self.root.glob('collect/*/tasks.rates.json') if p.parent != out.parent]
+        rates = max(earlier, key=lambda p: p.stat().st_mtime) if earlier else None
+        if rates is not None:
+            groups = [str(d / 'groups' / 'g*') for d in self.collections_of(self.lineage_policies())]
+        else:
+            groups = [str(OPS / 'grpo-v*' / '*' / 'groups' / 'g*'), str(OPS / 'ei' / '*' / 'collect' / 'groups' / 'g*'),
+                      str(self.root / 'collect' / '*' / 'groups' / 'g*')]
+        groups.append(str(self.root / '*' / 'grpo' / 'groups' / 'g*'))
         frontiers = sorted(self.root.glob('r*/frontier.json'))[-1:]
         return self.c.py('expert_iteration.py', 'select', '--out', out,
+                         *(['--rates-json', rates] if rates is not None else []),
                          *[x for g in groups for x in ('--rates-groups', g)],
                          *[x for f in frontiers for x in ('--frontier', f)], *self.a.select_args.split())
 
@@ -2948,14 +2967,33 @@ class AsyncRoundDriver:
         return [(t['host'], t['front'], self.target_endpoint(t)) for t in self.remote_targets()
                 if t['host'] and (include_pop or not t['pop'])]
 
-    def ensure_remote_collection(self, policy):
+    def ensure_remote_collection(self, policy, rebind=True):
         """A DGX-side collector per remote actor that serves ``policy`` (``collect --actor``): restarted with the
         policy like the DGX collection (a rebound actor serves the new policy; the old collector drops it). An actor
-        not serving ``policy`` is rebound to it first (``ensure_remote_policy``)."""
-        self.ensure_remote_policy(policy)
-        for target in self.remote_targets():
-            if target['host'] and not target['pop']:     # Pop's collector: pop_step (it yields to held measurements)
-                self.start_remote_collector(policy, target)
+        not serving ``policy`` is rebound to it first (``ensure_remote_policy``) unless ``rebind`` is False."""
+        with self.REMOTE_LOCK:
+            if rebind:
+                self.ensure_remote_policy(policy)
+            for target in self.remote_targets():
+                if target['host'] and not target['pop']:     # Pop's collector: pop_step (it yields to held measurements)
+                    self.start_remote_collector(policy, target)
+
+    def remote_collect_loop(self):
+        """The standing check that every reachable remote actor serving the newest policy has its collector, whatever
+        the main loop waits on (2026-11-24: the A100 actor came back at 10:00 mid-round and got no collector until a
+        10:20 driver restart: collectors started only at a round's start and in the DGX SFT's polls). While a Colab
+        SFT runs (its session's actor yielded the GPU) no actor is rebound, only serving ones get collectors."""
+        while True:
+            time.sleep(REMOTE_COLLECT_CHECK_SECONDS)
+            self.remote_collect_check()
+
+    def remote_collect_check(self):
+        try:
+            if self.controller.phase != 'sft' or getattr(self.a, 'no_standing_remote_collection', False):
+                return
+            self.ensure_remote_collection(self.controller.current, rebind=not self.colab_sft_hosts)
+        except Exception as error:
+            self.note(remote_collection_failed=repr(error)[:300])
 
     def remote_collect_argv(self, policy, target, endpoint):
         """(unit, work dir, argv, ledger GB) of ``target``'s DGX-side collector of ``policy``."""
@@ -3547,14 +3585,48 @@ class AsyncRoundDriver:
             env['VAL'] = str(round_dir / 'mix' / vals[0])
         if preflight_only:
             env['PREFLIGHT_ONLY'] = '1'
+        # the preflight is a 4 GB CPU unit on the round's critical path: at low priority with a 600 s wait it was not
+        # admitted behind a stuck low queue and the launch failed (2026-11-24 10:31)
+        env.setdefault('PREFLIGHT_PRIORITY', 'high')
+        env.setdefault('PREFLIGHT_WAIT', '3600')
         return env
 
     def launch_sft(self, round_dir, policy, *, activation_gb, preflight_only):
+        """launch-sft.sh for the round (the preflight, then unless ``preflight_only`` the DGX learner's ledger unit).
+        A failure (2026-11-24 10:31: the preflight unit was not admitted, CalledProcessError ended the driver) is noted
+        and retried with backoff (SFT_LAUNCH_RETRY_SECONDS doubling to SFT_LAUNCH_RETRY_MAX); the standing services
+        keep running between attempts, and a DGX learner of the round that appeared meanwhile ends the retries."""
         run = round_dir / 'sft'
         run.mkdir(parents=True, exist_ok=True)
-        subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'launch-sft.sh'), str(self.c.pin)],
-                       env=self.sft_env(round_dir, policy, activation_gb=activation_gb, preflight_only=preflight_only),
-                       check=True, stdout=(round_dir / 'sft-launch.log').open('a'), stderr=subprocess.STDOUT)
+        unit = f'{self.a.name}-{round_dir.name}-sft'
+        delay, attempt = SFT_LAUNCH_RETRY_SECONDS, 0
+        while True:
+            attempt += 1
+            try:
+                subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'launch-sft.sh'), str(self.c.pin)],
+                               env=self.sft_env(round_dir, policy, activation_gb=activation_gb,
+                                                preflight_only=preflight_only),
+                               check=True, stdout=(round_dir / 'sft-launch.log').open('a'), stderr=subprocess.STDOUT)
+                if attempt > 1:
+                    self.note(round=round_dir.name, sft_launched_after=attempt, preflight_only=preflight_only)
+                return
+            except (subprocess.CalledProcessError, OSError) as error:
+                self.note(round=round_dir.name, sft_launch_failed=repr(error)[:300], attempt=attempt,
+                          preflight_only=preflight_only, retry_in=delay)
+            self.standing_services(policy)
+            time.sleep(delay)
+            delay = min(SFT_LAUNCH_RETRY_MAX, 2 * delay)
+            if not preflight_only and self.dgx_sft_running(round_dir, unit):
+                return
+
+    def standing_services(self, policy=None):
+        """The standing work a long wait of the main loop keeps going: the remote collectors and the teacher campaign
+        (each failure noted, never raised)."""
+        try:
+            self.ensure_remote_collection(policy or self.controller.current)
+        except Exception as error:
+            self.note(remote_collection_failed=repr(error)[:300])
+        self.standing_teacher()
 
     def colab_command(self, round_dir, host, profile):
         run = round_dir / 'sft'
@@ -3655,11 +3727,13 @@ class AsyncRoundDriver:
                 self.launch_sft(round_dir, policy, activation_gb=profile.activation_gib, preflight_only=True)
                 self.record_colab_placement(round_dir, up[0])
                 self.c.session(up[0], profile, True)
+                self.colab_sft_hosts.add(up[0])
                 try:
                     with (round_dir / 'sft-colab.log').open('a') as handle:
                         subprocess.run(self.colab_command(round_dir, up[0], profile), env=self.c.env, stdout=handle,
                                        stderr=subprocess.STDOUT)
                 finally:
+                    self.colab_sft_hosts.discard(up[0])
                     self.c.session(up[0], profile, False)
                 continue
             away_since = away_since or time.time()
@@ -4141,6 +4215,16 @@ class AsyncRoundDriver:
         earlier += [Path(d) for d in getattr(self.a, 'health_baseline', []) or [] if Path(d) not in earlier]
         return current, previous, earlier
 
+    def start_health_report(self, round_dir, policies):
+        """``health_report`` beside the main loop (2026-11-24: read in the loop, it held r0005's SFT launch for 25 min
+        reading tiered collections); one at a time, a round whose report runs is not started again."""
+        running = getattr(self, 'health_thread', None)
+        if getattr(self.a, 'no_health_report', False) or (running is not None and running.is_alive()):
+            return None
+        self.health_thread = threading.Thread(target=self.health_report, args=(round_dir, list(policies)), daemon=True)
+        self.health_thread.start()
+        return self.health_thread
+
     def health_report(self, round_dir, policies):
         """``rN/health.json`` (``collection_health.report``) once per round, a one-line summary in the drive log, each
         flag in the ops alerts log; a flag on a semantic-FP construct queues held-v4 for the collection's policy."""
@@ -4152,8 +4236,12 @@ class AsyncRoundDriver:
             current, previous, earlier = self.health_collections(policies)
             if not current:
                 return None
+            # the current and previous collections are on the NVMe (ei_round_tier keeps them) and are read; the
+            # previous ones are finished (the newest policy collects now), so their caches close while they are
+            # there; earlier ones come only from those closed caches, never from their (tiered) groups
             health = collection_health.report(current, previous, earlier, cache_dir=self.root / 'health-cache',
-                                              label=f'{self.a.name} {round_dir.name}')
+                                              label=f'{self.a.name} {round_dir.name}', close_previous=True,
+                                              earlier_cached_only=True)
             health['policy'] = policies[-1]['sha256']
             collection_health.write(health, out)
             self.note(round=round_dir.name, health=collection_health.summary_line(health), health_flags=len(health['flags']),
@@ -4208,6 +4296,7 @@ class AsyncRoundDriver:
         if getattr(self.a, 'resume_after_hunt', False):
             self.controller.resume_after_hunt()
         threading.Thread(target=self.teacher_loop, daemon=True).start()
+        threading.Thread(target=self.remote_collect_loop, daemon=True).start()
         completed = 0
         while self.a.max_rounds <= 0 or completed < self.a.max_rounds:
             self.standing_teacher()
@@ -4236,7 +4325,7 @@ class AsyncRoundDriver:
                 if reason:
                     self.rebuild_round(round_dir, self.lineage_policies(), reason)
                 self.standing_teacher()
-                self.health_report(round_dir, self.lineage_policies())
+                self.start_health_report(round_dir, self.lineage_policies())
                 nxt = f'r{int(self.controller.state["round_counter"]) + 1:04d}'
                 self.prepare_ahead(self.round_dir(nxt), self.lineage_policies())
                 update_round_manifest(round_dir, trained_from=cur['sha256'], trained_from_version=cur['version'])
@@ -4405,6 +4494,8 @@ def main():
     s.add_argument('--base-rates', default=str(OPS / 'exp1-rft' / 'base-pass-rates.json'))
     s.add_argument('--rates-groups', action='append', default=[], metavar='GLOB',
                    help='group directories (GRPO runs, earlier collections) whose student outcomes order the tasks')
+    s.add_argument('--rates-json', action='append', default=[], metavar='FILE',
+                   help="an earlier selection's tasks.rates.json (applied after --base-rates, before --rates-groups)")
     s.add_argument('--frontier', action='append', default=[], help='earlier frontier files (newest last)')
     s.add_argument('--include-solved', action='store_true')
     s.add_argument('--limit', type=int, default=0)
@@ -4709,6 +4800,8 @@ def main():
     ad.add_argument('--health-baseline', action='append', default=[], metavar='COLLECT_WORK',
                     help="the lineage's earlier collections (outside this loop) each round's health report compares with")
     ad.add_argument('--no-health-report', action='store_true', help='no per-round collection health report')
+    ad.add_argument('--no-standing-remote-collection', action='store_true',
+                    help='no standing check (every REMOTE_COLLECT_CHECK_SECONDS) that serving remote actors collect')
     ad.add_argument('--alerts-log', default=str(OPS / 'storage-alerts.log'),
                     help='the ops alerts log the heartbeat reads (health flags are appended; empty: none)')
     ad.add_argument('--held-every-max', type=int, default=8)

@@ -242,3 +242,25 @@ def test_a_memetic_group_its_preparation_drops_is_not_admitted_or_a_failure(tmp_
     agg = ch.aggregate([ch.collection_summary(now)])
     assert agg['memetic_not_admitted'] == 1 and agg['pending_groups'] == 0
     assert [(t['task_id'], t['state']) for t in agg['no_episodes']] == [('memetic:b', 'memetic_preparation_failed')]
+
+
+def test_earlier_collections_come_only_from_caches_and_a_finished_collection_closes_its_cache(tmp_path):
+    """2026-11-24: the report read every earlier collection's groups, v0000's 45k files tiered to the HDD at ~350 ms,
+    and held the driver 25 min. Earlier collections now come from their caches only (a closed whole summary, else the
+    scored groups an older cache holds); one without a cache is listed as uncached and never read. The previous
+    collection is finished: its cache closes while it is still on the NVMe, and a closed cache is not read again."""
+    cache = tmp_path / 'cache'
+    now = _collection(tmp_path / 'v3', _healthy(n=2))
+    prev = _collection(tmp_path / 'v2', _healthy(n=2))
+    old = _collection(tmp_path / 'v1', _healthy(n=2))
+    ch.collection_summary(old, cache)                    # an older (open) group cache of v1
+    gone = _collection(tmp_path / 'v0', _healthy(n=2))   # never cached
+    health = ch.report([now], [prev], [old, gone], cache_dir=cache, sfp=SFP, close_previous=True,
+                       earlier_cached_only=True)
+    assert health['collections']['uncached'] == [str(gone)]
+    assert health['earlier']['overall']['scored'] == 8
+    import shutil
+    shutil.rmtree(old / 'groups')                        # the cache answers for v1 without its groups
+    shutil.rmtree(prev / 'groups')                       # v2's cache was closed: a later report reads none of it
+    again = ch.report([now], [], [prev, old], cache_dir=cache, sfp=SFP, earlier_cached_only=True)
+    assert again['earlier']['overall']['scored'] == 16 and again['collections']['uncached'] == []

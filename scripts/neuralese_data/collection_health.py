@@ -210,13 +210,62 @@ def log_events(work):
     return out
 
 
-def collection_summary(work, cache_dir=None):
-    """Every group of one collection (scored groups from ``cache_dir`` when cached) and its log events."""
+def cache_path_of(work, cache_dir):
+    """The cache file of collection ``work`` (by its name and path, as it was when first cached: a collection the
+    storage tier later moved behind a symlink keeps its path, so its cache is found without touching the disk)."""
+    work = Path(work)
+    digest = hashlib.sha256(str(work.absolute()).encode()).hexdigest()[:12]
+    return Path(cache_dir) / f'{work.name}-{digest}.json'
+
+
+def closed_summary(work, cache_dir):
+    """A finished collection's whole summary from its closed cache (``collection_summary(close=True)``), or None:
+    read without touching the collection (its groups may sit on a slow tier)."""
+    if not cache_dir:
+        return None
+    try:
+        stored = json.loads(cache_path_of(work, cache_dir).read_text())
+    except (OSError, ValueError):
+        return None
+    return stored.get('summary') if stored.get('schema') == CACHE_SCHEMA and stored.get('closed') else None
+
+
+def cached_summary(work, cache_dir):
+    """A finished collection's summary from its caches alone, never touching the collection: the closed cache, else
+    (a collection cached before closed caches existed, keyed by its path then) the scored groups any cache of it
+    holds. None without a cache: such a collection is not read (it may sit on a slow tier)."""
+    done = closed_summary(work, cache_dir)
+    if done is not None or not cache_dir:
+        return done
+    work = Path(work)
+    names = {str(work.absolute()), str(work.resolve())}
+    groups = {}
+    for path in sorted(Path(cache_dir).glob(f'{work.name}-*.json')):
+        if not re.fullmatch(re.escape(work.name) + r'-[0-9a-f]{12}\.json', path.name):
+            continue
+        try:
+            stored = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if stored.get('schema') == CACHE_SCHEMA and stored.get('work') in names:
+            groups.update(stored.get('groups') or {})
+    if not groups:
+        return None
+    return {'work': str(work), 'started': None, 'groups': [groups[k] for k in sorted(groups)], 'endpoint_dropped': 0,
+            'from_cache': True}
+
+
+def collection_summary(work, cache_dir=None, close=False):
+    """Every group of one collection (scored groups from ``cache_dir`` when cached) and its log events. A closed
+    cache (written with ``close`` once the collection finished) is the whole summary: returned without reading the
+    collection again."""
     work = Path(work)
     cache, cache_path = {}, None
     if cache_dir:
-        digest = hashlib.sha256(str(work.resolve()).encode()).hexdigest()[:12]
-        cache_path = Path(cache_dir) / f'{work.name}-{digest}.json'
+        done = closed_summary(work, cache_dir)
+        if done is not None:
+            return done
+        cache_path = cache_path_of(work, cache_dir)
         try:
             stored = json.loads(cache_path.read_text())
             if stored.get('schema') == CACHE_SCHEMA:
@@ -253,7 +302,14 @@ def collection_summary(work, cache_dir=None):
         started = json.loads((work / 'runs.jsonl').open().readline()).get('started')
     except (OSError, ValueError):
         pass
-    return {'work': str(work), 'started': started, 'groups': groups, 'endpoint_dropped': events['endpoint_dropped']}
+    summary = {'work': str(work), 'started': started, 'groups': groups, 'endpoint_dropped': events['endpoint_dropped']}
+    if close and cache_path:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cache_path.with_suffix('.tmp')
+        tmp.write_text(json.dumps({'schema': CACHE_SCHEMA, 'work': str(work), 'groups': cache, 'closed': True,
+                                   'closed_at': round(time.time(), 1), 'summary': summary}))
+        tmp.replace(cache_path)
+    return summary
 
 
 def _bucket():
@@ -406,14 +462,25 @@ def _annotate_family_constructs(agg, collections_):
     return agg
 
 
-def report(current, previous=(), earlier=(), *, cache_dir=None, label='', sfp=None, **thresholds):
+def report(current, previous=(), earlier=(), *, cache_dir=None, label='', sfp=None, close_previous=False,
+           earlier_cached_only=False, **thresholds):
     """The health report of the ``current`` collection WORKs against ``previous`` (the previous round's) and
-    ``earlier`` (the lineage's earlier collections)."""
+    ``earlier`` (the lineage's earlier collections). ``close_previous``: the previous collections are finished, their
+    caches are closed (whole summaries). ``earlier_cached_only`` (with ``cache_dir``): earlier collections come from
+    their caches alone (``cached_summary``) and one without a cache is left out (listed under ``uncached``): they may
+    sit on a slow tier (2026-11-24: v0000's 45k files at 350 ms each held a driver 25 min)."""
     sfp = semantic_fp_constructs() if sfp is None else frozenset(sfp)
     started = time.time()
     cur_c = [collection_summary(w, cache_dir) for w in current]
-    prev_c = [collection_summary(w, cache_dir) for w in previous]
-    early_c = [collection_summary(w, cache_dir) for w in earlier]
+    prev_c = [collection_summary(w, cache_dir, close=close_previous) for w in previous]
+    uncached = []
+    if earlier_cached_only and cache_dir:
+        early_c = []
+        for w in earlier:
+            summary = cached_summary(w, cache_dir)
+            (early_c.append(summary) if summary is not None else uncached.append(str(w)))
+    else:
+        early_c = [collection_summary(w, cache_dir) for w in earlier]
     cur = _annotate_family_constructs(aggregate(cur_c), cur_c)
     prev = aggregate(prev_c) if prev_c else None
     early = aggregate(early_c) if early_c else None
@@ -428,7 +495,7 @@ def report(current, previous=(), earlier=(), *, cache_dir=None, label='', sfp=No
         compared[kind] = rows
     return {'schema': SCHEMA, 'label': label, 'time': round(time.time(), 1), 'seconds': round(time.time() - started, 1),
             'collections': {'current': [str(w) for w in current], 'previous': [str(w) for w in previous],
-                            'earlier': [str(w) for w in earlier]},
+                            'earlier': [str(w) for w in earlier], 'uncached': uncached},
             'current': cur, 'previous': {'overall': prev['overall']} if prev else None,
             'earlier': {'overall': early['overall']} if early else None,
             'compared': compared, 'flags': found, 'sfp_flagged': any(f.get('sfp') for f in found)}

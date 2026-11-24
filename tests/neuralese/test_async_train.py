@@ -2402,3 +2402,87 @@ def test_set_aside_held_results_are_never_reused_and_running_measurements_are_jo
     (out2 / 'result.json').write_text(result())
     d.c.set_held_aside(out2, 'pop')
     assert not out2.exists() and len(list(held.glob('policy-ffffffffffff-pop-*/aside.json'))) == 1
+
+
+def test_a_failed_sft_launch_is_noted_and_retried_with_backoff_never_ending_the_driver(tmp_path, monkeypatch):
+    """2026-11-24 10:31: the preflight unit (4 GB, low, --wait 600) was not admitted behind a stuck low queue,
+    launch-sft.sh failed and CalledProcessError ended the driver. A failed launch is noted and retried (backoff
+    doubling), the standing services run between attempts, and the preflight asks for high priority and an hour."""
+    import subprocess
+    ei, d = _driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'chains.sha256').write_text('f' * 64 + '\n')
+    env = d.sft_env(rd, d.controller.current, activation_gb=56, preflight_only=True)
+    assert (env['PREFLIGHT_PRIORITY'], env['PREFLIGHT_WAIT']) == ('high', '3600')
+    calls, sleeps, services = [], [], []
+    def run(argv, **kw):
+        calls.append(argv)
+        if len(calls) < 3:
+            raise subprocess.CalledProcessError(1, argv)
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(ei.subprocess, 'run', run)
+    monkeypatch.setattr(ei.time, 'sleep', sleeps.append)
+    monkeypatch.setattr(d, 'standing_services', lambda policy=None: services.append(policy))
+    monkeypatch.setattr(d, 'dgx_sft_running', lambda *a: False)
+    d.launch_sft(rd, d.controller.current, activation_gb=56, preflight_only=False)
+    assert len(calls) == 3 and sleeps == [ei.SFT_LAUNCH_RETRY_SECONDS, 2 * ei.SFT_LAUNCH_RETRY_SECONDS]
+    assert len(services) == 2
+    log = [json.loads(line) for line in (d.root / 'drive.log').read_text().splitlines()]
+    assert [e['attempt'] for e in log if 'sft_launch_failed' in e] == [1, 2]
+    assert any(e.get('sft_launched_after') == 3 for e in log)
+    # a DGX learner of the round that appeared while it waited ends the retries
+    calls.clear()
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: (_ for _ in ()).throw(subprocess.CalledProcessError(1, argv)))
+    monkeypatch.setattr(d, 'dgx_sft_running', lambda *a: True)
+    d.launch_sft(rd, d.controller.current, activation_gb=56, preflight_only=False)
+
+
+def test_a_remote_actor_serving_the_newest_policy_gets_a_collector_whenever_it_comes_back(tmp_path, monkeypatch):
+    """2026-11-24: the A100 actor came back at 10:00 mid-round and got no collector until a 10:20 driver restart. The
+    standing check starts one whenever the phase is SFT; while a Colab SFT trains on a session (its actor yielded)
+    no actor is rebound, serving ones still get collectors."""
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--rebind-actor', 'colab-g4@http://127.0.0.1:8570=64'])
+    started, rebinds = [], []
+    monkeypatch.setattr(d, 'ensure_remote_policy', lambda policy: rebinds.append(policy['sha256']))
+    monkeypatch.setattr(d, 'start_remote_collector', lambda policy, target: started.append(target['suffix']))
+    d.remote_collect_check()
+    assert started == ['-remote0'] and rebinds == [d.controller.current['sha256']]
+    d.colab_sft_hosts.add('colab-g4')
+    d.remote_collect_check()
+    assert started == ['-remote0'] * 2 and len(rebinds) == 1
+    monkeypatch.setattr(d.controller, 'state', {**d.controller.state, 'phase': 'grpo'})
+    d.remote_collect_check()
+    assert len(started) == 2
+
+
+def test_the_health_report_runs_beside_the_main_loop(tmp_path, monkeypatch):
+    """2026-11-24: read in the loop, the report held r0005's SFT launch for 25 min; it runs in a thread, one at a
+    time."""
+    import threading
+    ei, d = _driver(tmp_path, monkeypatch)
+    release, entered = threading.Event(), []
+    monkeypatch.setattr(d, 'health_report', lambda rd, policies: entered.append(rd) or release.wait(10))
+    thread = d.start_health_report(d.root / 'r0001', d.lineage_policies())
+    assert thread is not None and d.start_health_report(d.root / 'r0002', d.lineage_policies()) is None
+    release.set()
+    thread.join(5)
+    assert entered == [d.root / 'r0001']
+
+
+def test_selection_reads_the_previous_rates_and_the_lineage_collections_never_every_earlier_one(tmp_path, monkeypatch):
+    """Earlier collections move to the HDD (ei_round_tier); a selection globbing every collection's groups read them
+    all again. The newest earlier tasks.rates.json stands for them; only the lineage's collections are read."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    first = d.select_command(d.collect_dir(cur) / 'tasks.json')
+    assert '--rates-json' not in first and str(d.root / 'collect' / '*' / 'groups' / 'g*') in first
+    old = d.root / 'collect' / 'v0000-oldoldoldold'
+    old.mkdir(parents=True)
+    (old / 'tasks.rates.json').write_text(json.dumps({'t:1': {'successes': 1, 'scored': 2}}))
+    (d.collect_dir(cur)).mkdir(parents=True, exist_ok=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text('{}\n')
+    argv = [str(x) for x in d.select_command(d.collect_dir(cur) / 'tasks.json')]
+    assert argv[argv.index('--rates-json') + 1] == str(old / 'tasks.rates.json')
+    globs = [argv[i + 1] for i, x in enumerate(argv) if x == '--rates-groups']
+    assert globs == [str(d.collect_dir(cur) / 'groups' / 'g*'), str(d.root / '*' / 'grpo' / 'groups' / 'g*')]
