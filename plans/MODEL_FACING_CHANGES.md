@@ -3402,3 +3402,5 @@ No opt-out: both change only the text of an error that already occurred, never w
   probabilities and their training targets. Opt-outs: `NATLANG_DECISION_TOKENIZATIONS=canonical`,
   `NATLANG_DECISION_REASONING_IDS=rendered` (SFT rows). Tests: `tests/neuralese/test_decision_split_tokenization.py`,
   `ts-host/test/decision-records.test.mjs`.
+
+- **2026-11-24 — service authority follows authored source ancestry.** Program-owned and context-bound NL calls previously placed qualified recursion identities into the service-scope ancestry, hiding services configured for their actual relative source paths. The scope filter now reads each native invocation's owned frame, so detached host callbacks retain only their own grants and unrelated ambient frames cannot confer services. Exact paths and explicit `/**` descendant scopes remain enforced. Recursion/budget identities retain their program/context qualification. Model-free Node/workerd platform regressions cover both boundaries; engine request formats and model policy are unchanged.

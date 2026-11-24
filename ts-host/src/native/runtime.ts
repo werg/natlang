@@ -2237,7 +2237,9 @@ export class NativeSession {
   }
 
   availableServices(): Record<string, object> {
-    const frame = currentFrame();
+    // This session owns its invocation's authority even when a host callback has
+    // no ambient frame, or happens to run inside an unrelated invocation.
+    const frame = this.runtime.frame;
     const chain = frame?.serviceChain ?? frame?.chain ?? [];
     return Object.fromEntries(Object.entries(this.runtime.services).filter(([name]) => {
       const scope = this.runtime.serviceScopes[name];

@@ -735,7 +735,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   // A file-backed call owns the files from its own companion folder. Inline calls inherit their
   // caller's bound skill set unless one is explicitly supplied for that inline definition.
   const invocationSkillFiles = options.manifest?.inline ? (options.skillFiles ?? frame.skillFiles) : options.skillFiles;
-  const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], serviceChain: [...(frame.serviceChain ?? frame.chain), callIdentity], parentCallId: callId, adHocDepth, adHocQuestions, programOwner: owner,
+  const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], serviceChain: [...(frame.serviceChain ?? frame.chain), definition.id], parentCallId: callId, adHocDepth, adHocQuestions, programOwner: owner,
     ...(nlActive ? { nlActive } : {}),
     typeAliases: definition.types,
     signal: frame.signal, abort: frame.abort,

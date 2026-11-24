@@ -11384,3 +11384,8 @@ out the ~1 min relaunch; resends never spend call budget (ts-host fix); `NATLANG
 (3) held measurement re-runs whatever is still lost (previous entry). Running measurements are untouched: their sealed
 queues keep their entries, and the driver change applies to actors started on the new code. Not checked: whether a
 relaunch keeps Neuralese states that in-flight episodes still reference (the front restarts with the engine).
+
+
+## 2026-11-24: repair program-owned service scope ancestry
+
+The actual Vibe teacher failures exposed scoped services missing from NL calls even though the TS coordinator's service calls worked. The shared kernel mixed program/context-qualified recursion identity into the raw authored source service chain; native service lookup also consulted ambient context instead of its own invocation frame. Repair both exact plumbing boundaries as the default, retaining original service-scope declarations and program/context recursion ownership. No training, model call, full native sweep or live Source mutation gates the repair; the supervising runtime strand owns downstream SDK staging and next-pin activation. Tests use explicit program IDs, bound contexts, mixed TS/NL descendants and negative sibling scopes under Node/workerd platforms with a deterministic agent callback. Original Workerd OOM attribution remains open and independent.
