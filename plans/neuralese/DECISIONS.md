@@ -10692,3 +10692,14 @@ starts over.
   (02:08-04:09 round SFT, 04:47-05:15 the MPS fault). v0000-remote0 logged 47 abandoned groups.
 - **Keeper** back on `/home/werg/natlang` (synced, per coordinator). `pin-ff0f7d75e688` stays: the fits and arms
   tracks run from it.
+
+## 2026-11-24 06:25 aei1's held reference was sft-v7, not sft-v9; corrected
+
+**What happened:**
+- **Round 1 verdict:** round 1's held-v3 measurement on Pop finished. Policy 8e634a0f had 293 of 460 scored episodes passing (63.7%, 512 run). The comparison then failed, because the controller's stored `reference_policy` in `phase-state.json` was **sft-v7** (9ebc8799), although the driver's `--reference` argument names sft-v9 (e15b20a8).
+- **Stale reference measurement:** the held loop had reused an older sft-v7 measurement (`held/policy-9ebc879948e9`, 56.5%, series ba9aa56f, without `head_logits: fp32`). `held_eval compare` correctly refused to pair it with the Pop measurement on fork 17e3458c2e (series f0195216, FP32 head).
+- **Earlier verdicts:** the stored reference is persistent state and overrides `--reference` once the state exists, so earlier verdicts in this lineage were also queued against sft-v7.
+
+**Fix:** with the driver stopped, `reference_policy` and the queued `measuring.reference` in `aei1/phase-state.json` were set to sft-v9 (backup `phase-state.json.pre-reffix-20261124`), and the driver was restarted on the same argv. The held loop now measures sft-v9 on Pop in the current series, then compares.
+
+**Follow-up:** the driver should refuse to start when `--reference` disagrees with the stored `reference_policy` (or adopt the argument and log the change), instead of silently keeping the state's value.
