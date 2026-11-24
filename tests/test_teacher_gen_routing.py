@@ -96,6 +96,15 @@ def test_a_harness_infrastructure_error_is_no_teacher_verdict(tmp_path):
     assert not g._no_verdict(record(0, 'f', 'a', 'budget_exhaustion'))
 
 
+def test_a_usage_limit_hit_mid_episode_is_no_teacher_verdict(tmp_path):
+    # a nested child call refused by the subscription's usage window makes the root fail: the provider's verdict
+    g = campaign(tmp_path, [])
+    limited = {**record(0, 'f', 'a', 'semantic_mismatch'), 'provider_limited': True}
+    assert g._no_verdict(limited)
+    assert not g._no_verdict({**record(0, 'f', 'a', 'task_success'), 'provider_limited': True})
+    assert any(limit in 'Error: You have hit your ChatGPT usage limit.' for limit in teacher_gen.TEMPORARY_PROVIDER_LIMITS)
+
+
 def test_voided_verdicts_are_no_try_and_keep_their_episode_directory(tmp_path):
     failed = {**record(0, 'f', 'a', 'semantic_mismatch'), 'rollouts': '/x/t000000/rollouts.jsonl'}
     earlier = [{**record(5, 'f', 'b', 'semantic_mismatch'), 'task_id': 'x', 'rollouts': '/old/t5/rollouts.jsonl'}]
