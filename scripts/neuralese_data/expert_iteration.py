@@ -351,6 +351,14 @@ def held_budget_gb(slots=HELD_SLOTS):
     return round(HELD_ACTOR_GB + slots * COLLECTOR_SLOT_GB)
 
 
+def ledger_waiting_gb(unit):
+    """The budget (GB) ``unit`` waits in the ledger's queue with, else None (running, or not queued)."""
+    from scripts.memory_ledger import GIB, read_snapshot
+    name = unit if unit.endswith('.service') else unit + '.service'
+    entry = (read_snapshot().get('waiting') or {}).get(name)
+    return entry['budget'] / GIB if entry and entry.get('budget') is not None else None
+
+
 def ledger_queued(unit):
     """Whether the ledger retains ownership, including preemption/requeue transitions."""
     from scripts.memory_ledger import unit_owned
@@ -3178,12 +3186,35 @@ class AsyncRoundDriver:
 
     def collection_pending(self):
         """Whether the standing DGX collection of the newest policy waits in the ledger (launched or requeued, not
-        running): the round's preparation steps let it in first (``Cycle.wait_for_room``)."""
+        running): the round's preparation steps let it in first (``Cycle.wait_for_room``). One queued at more than
+        the budget it would launch with now (``collection_budget``: the prep share while a round prepares) is
+        requeued at that budget first (``requeue_collection_at_share``)."""
         try:
-            unit = self.collection_unit(self.controller.current)
+            cur = self.controller.current
+            unit = self.collection_unit(cur)
+            if not ledger_queued(unit) or self.c.active(unit):
+                return False
+            self.requeue_collection_at_share(cur, unit)
             return ledger_queued(unit) and not self.c.active(unit)
         except Exception:
             return False
+
+    def requeue_collection_at_share(self, policy, unit):
+        """A DGX collection waiting in the ledger at more than ``collection_budget`` asks now is cancelled and queued
+        again at that budget (its collector restores the full claim after the preparation, as at any launch).
+        2026-11-25 00:39: a restarted driver queued v0001 at its full 70 GB before the round's prep share existed;
+        it could not fit (short 4.7 GB behind unpreemptible remote collectors) and the frontier waited out
+        PREP_YIELD_WAIT behind it with the GPU idle. Returns whether it requeued."""
+        queued = ledger_waiting_gb(unit)
+        if queued is None:
+            return False
+        budget, _ = self.c.collection_budget(self.a.slots)
+        if queued <= budget + 0.5:
+            return False
+        self.c.stop_unit(unit)
+        self.note(collection_requeued=unit, from_gb=round(queued, 1), to_gb=budget, why='the prep share')
+        self.ensure_collection(policy)
+        return True
 
     def ensure_collection(self, policy):
         """The standing DGX collection serves exactly ``policy`` (the newest published): an earlier policy's collection
