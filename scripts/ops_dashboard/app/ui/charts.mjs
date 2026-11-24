@@ -211,3 +211,122 @@ export function segBar(parts, { total, marks = [], height = 14, label } = {}) {
   for (const mk of marks) if (num(mk.at) && sum > 0) el.append(h('span', { class: 'segmark', style: `left:${(100 * mk.at / sum).toFixed(2)}%`, title: mk.label }));
   return el;
 }
+
+/** Observed width of an element, redrawn on change. */
+function responsive(root, draw, fallback = 340) {
+  let W = fallback;
+  const ro = new ResizeObserver(es => { const w = Math.round(es[0].contentRect.width); if (w && w !== W) { W = w; draw(W); } });
+  ro.observe(root);
+  queueMicrotask(() => draw(W));
+  return ro;
+}
+
+/**
+ * Stacked bars over time (episodes per hour by machine). bars: [{t, <key>: n}], keys: [{key, label, slot}]. Tap or hover a bar to read
+ * its numbers in the line below the plot; the same numbers are in the aria label.
+ */
+export function barStack(bars, { keys, height = 150, unit = 'episodes', tFmt } = {}) {
+  const root = h('div', { class: 'chart' }), holder = h('div', { class: 'plot', role: 'img' }), detail = h('div', { class: 'panel-note barnote' }, 'Tap a bar for its numbers.');
+  const legend = h('div', { class: 'legend' }, keys.map(k => h('span', { class: 'key' }, h('i', { style: `background:${slotVar(k.slot)}` }), k.label)));
+  root.append(legend, holder, detail);
+  const total = b => keys.reduce((a, k) => a + (b[k.key] || 0), 0);
+  const label = b => `${(tFmt || (t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })))(b.t)}: ${keys.map(k => `${k.label} ${b[k.key] || 0}`).join(', ')}, total ${total(b)} ${unit}`;
+  holder.setAttribute('aria-label', `${unit} per hour. ${bars.map(label).join('; ')}`);
+  const draw = W => {
+    holder.replaceChildren();
+    const max = Math.max(1, ...bars.map(total)), ticks = niceTicks(0, max, 3), top = ticks.at(-1) || max;
+    const m = { l: 34, r: 6, t: 6, b: 20 }, pw = W - m.l - m.r, ph = height - m.t - m.b, bw = pw / bars.length;
+    const el = svg('svg', { viewBox: `0 0 ${W} ${height}`, width: W, height, 'aria-hidden': 'true' });
+    const Y = v => m.t + (1 - v / top) * ph;
+    for (const t of ticks) el.append(svg('line', { class: 'grid', x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t) }), svg('text', { class: 'tick', x: m.l - 5, y: Y(t) + 3.5, 'text-anchor': 'end' }, fmt(t)));
+    bars.forEach((b, i) => {
+      let acc = 0;
+      const x = m.l + i * bw + 1.5, w = Math.max(2, bw - 3);
+      for (const k of keys) {
+        const v = b[k.key] || 0; if (!v) continue;
+        const y0 = Y(acc), y1 = Y(acc + v);
+        el.append(svg('rect', { class: 'bar', x, width: w, y: y1, height: Math.max(1, y0 - y1 - 1), rx: 2, style: `fill:${slotVar(k.slot)}` }));
+        acc += v;
+      }
+      const hit = svg('rect', { class: 'hit', x: m.l + i * bw, width: bw, y: m.t, height: ph + 4, fill: 'transparent' });
+      const show = () => { detail.textContent = label(b); };
+      hit.addEventListener('pointerenter', show); hit.addEventListener('click', show);
+      el.append(hit);
+      if (i % 3 === 0 || i === bars.length - 1) el.append(svg('text', { class: 'tick', x: m.l + i * bw + bw / 2, y: height - 5, 'text-anchor': 'middle' }, new Date(b.t).toLocaleTimeString([], { hour: '2-digit' }).replace(/\s?(AM|PM)/i, '')));
+    });
+    el.append(svg('line', { class: 'axis', x1: m.l, x2: W - m.r, y1: m.t + ph, y2: m.t + ph }));
+    holder.append(el);
+  };
+  responsive(holder, draw);
+  return root;
+}
+
+/**
+ * Round timeline: one row per round, coloured stage segments on a shared time axis, a "now" line, estimated parts hatched with an outline.
+ * rows: [{label, segments:[{key,from,to,est}]}], stages: {key:{label, slot}}.
+ */
+export function gantt(rows, { now, stages, rowH = 26 } = {}) {
+  const root = h('div', { class: 'chart' }), holder = h('div', { class: 'plot', role: 'img' });
+  root.append(h('div', { class: 'legend' }, Object.values(stages).map(s => h('span', { class: 'key' }, h('i', { style: `background:${slotVar(s.slot)};height:10px;width:10px;border-radius:3px` }), s.label))), holder);
+  const all = rows.flatMap(r => r.segments), lo = Math.min(...all.map(s => s.from), now), hi = Math.max(...all.map(s => s.to), now) + 20 * 60e3;
+  holder.setAttribute('aria-label', `Round timeline. ${rows.map(r => `${r.label}: ${r.segments.map(s => `${stages[s.key]?.label}${s.est ? ' (estimate)' : ''} ${new Date(s.from).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} to ${new Date(s.to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`).join(', ')}`).join('; ')}`);
+  const draw = W => {
+    holder.replaceChildren();
+    const m = { l: 44, r: 8, t: 4, b: 20 }, pw = W - m.l - m.r, H = m.t + m.b + rows.length * rowH;
+    const X = t => m.l + ((t - lo) / (hi - lo)) * pw;
+    const el = svg('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, 'aria-hidden': 'true' });
+    for (const t of timeTicks(lo, hi, Math.max(2, Math.floor(pw / 80)))) {
+      el.append(svg('line', { class: 'grid', x1: X(t), x2: X(t), y1: m.t, y2: H - m.b }));
+      const d = new Date(t), day = d.getHours() < 2 ? d.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+      el.append(svg('text', { class: 'tick', x: X(t), y: H - 6, 'text-anchor': 'middle' }, day || d.toLocaleTimeString([], { hour: '2-digit' }).replace(/\s?(AM|PM)/i, 'h')));
+    }
+    rows.forEach((r, i) => {
+      const y = m.t + i * rowH;
+      el.append(svg('text', { class: 'tick rowlabel', x: m.l - 6, y: y + rowH / 2 + 3, 'text-anchor': 'end' }, r.label));
+      for (const s of r.segments) {
+        const x = X(s.from), w = Math.max(2, X(s.to) - x), c = slotVar(stages[s.key]?.slot ?? 0);
+        el.append(svg('rect', { x, y: y + 5, width: w, height: rowH - 10, rx: 4, style: s.est ? `fill:${c};fill-opacity:.25;stroke:${c};stroke-width:1.5;stroke-dasharray:4 3` : `fill:${c}` }));
+      }
+    });
+    el.append(svg('line', { class: 'nowline', x1: X(now), x2: X(now), y1: m.t, y2: H - m.b }), svg('text', { class: 'reflabel', x: X(now) > W - 40 ? X(now) - 3 : X(now) + 3, y: m.t + 8, 'text-anchor': X(now) > W - 40 ? 'end' : 'start' }, 'now'));
+    holder.append(el);
+  };
+  responsive(holder, draw);
+  return root;
+}
+
+/**
+ * Held-out pass rates by policy, in the order they were measured. points: [{label, y, lo, hi, series, scored, ran}] with y, lo, hi in [0,1].
+ * Dots of one measurement series are joined and share a colour: only points of one series are comparable. Whiskers are 95% intervals over tasks.
+ */
+export function ladder(points, { height = 190 } = {}) {
+  const root = h('div', { class: 'chart' }), holder = h('div', { class: 'plot', role: 'img' });
+  const seriesIds = [...new Set(points.map(p => p.series))], slotOf = s => seriesIds.indexOf(s);
+  root.append(h('div', { class: 'legend' }, seriesIds.map(s => h('span', { class: 'key' }, h('i', { style: `background:${slotVar(slotOf(s))}` }), `series ${String(s).slice(0, 4)}`)),
+    seriesIds.length > 1 ? h('span', { class: 'key muted' }, 'only dots of one colour are comparable') : null), holder);
+  holder.setAttribute('aria-label', `Held-out pass rate by policy: ${points.map(p => `${p.label} ${(100 * p.y).toFixed(1)}%, series ${String(p.series).slice(0, 4)}`).join('; ')}`);
+  const draw = W => {
+    holder.replaceChildren();
+    const lo = Math.min(...points.map(p => p.lo ?? p.y)), hi = Math.max(...points.map(p => p.hi ?? p.y));
+    const ticks = niceTicks(Math.floor(lo * 20) / 20, Math.ceil(hi * 20) / 20, 4), y0 = ticks[0], y1 = ticks.at(-1);
+    const m = { l: 38, r: 14, t: 18, b: 38 }, pw = W - m.l - m.r, ph = height - m.t - m.b;
+    const X = i => m.l + (points.length === 1 ? pw / 2 : (i / (points.length - 1)) * pw), Y = v => m.t + (1 - (v - y0) / (y1 - y0)) * ph;
+    const el = svg('svg', { viewBox: `0 0 ${W} ${height}`, width: W, height, 'aria-hidden': 'true' });
+    for (const t of ticks) el.append(svg('line', { class: 'grid', x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t) }), svg('text', { class: 'tick', x: m.l - 5, y: Y(t) + 3.5, 'text-anchor': 'end' }, `${Math.round(100 * t)}%`));
+    for (const s of seriesIds) {
+      const idx = points.map((p, i) => [p, i]).filter(([p]) => p.series === s);
+      el.append(svg('path', { class: 'line', style: `stroke:${slotVar(slotOf(s))}`, d: idx.map(([p, i], k) => `${k ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(p.y).toFixed(1)}`).join('') }));
+    }
+    points.forEach((p, i) => {
+      const c = slotVar(slotOf(p.series));
+      if (num(p.lo) && num(p.hi)) el.append(svg('line', { class: 'whisker', style: `stroke:${c}`, x1: X(i), x2: X(i), y1: Y(p.lo), y2: Y(p.hi) }));
+      el.append(svg('circle', { class: 'dot', style: `fill:${c};stroke:var(--surface)`, cx: X(i), cy: Y(p.y), r: 5 }));
+      el.append(svg('text', { class: 'endlabel', x: X(i), y: Y(p.hi ?? p.y) - 5, 'text-anchor': 'middle' }, `${(100 * p.y).toFixed(1)}`));
+      const words = String(p.label).split(' ');
+      el.append(svg('text', { class: 'tick', x: X(i), y: height - 22, 'text-anchor': 'middle' }, words[0]), svg('text', { class: 'tick', x: X(i), y: height - 10, 'text-anchor': 'middle' }, words.slice(1).join(' ')));
+    });
+    holder.append(el);
+  };
+  responsive(holder, draw);
+  return root;
+}

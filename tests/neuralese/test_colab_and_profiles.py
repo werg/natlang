@@ -307,7 +307,7 @@ def test_run_sft_refuses_a_session_slower_than_the_dgx_before_anything_moves(tmp
     monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
     moved = []
     monkeypatch.setattr(pop_rl_actor, 'ssh_host', lambda *a, **k: moved.append(a))
-    monkeypatch.setattr(pop_rl_actor, 'stop_colab', lambda host: moved.append(('stop', host)))
+    monkeypatch.setattr(pop_rl_actor, 'stop_colab', lambda host, **k: moved.append(('stop', host)))
     args = types.SimpleNamespace(host='g4', run_name='y', work=str(tmp_path), launch_json=str(tmp_path / 'l.json'),
                                  commit=None, state_sync_minutes=15.0, vram_gib=None, host_ram_gib=None)
     with pytest.raises(SystemExit, match='slower than on the DGX'):
@@ -931,7 +931,7 @@ def test_run_sft_yields_an_actor_served_alone_and_serves_it_again(tmp_path, remo
     monkeypatch.setattr(pop_rl_actor, 'run_detached', lambda *a, **k: (
         remote['to_local']('/content/natlang-work/runs/sft-y/checkpoint.pt').write_bytes(b'ok') and 0))
     events = []
-    monkeypatch.setattr(pop_rl_actor, 'stop_colab', lambda host: events.append('stop') or pop_rl_actor.read_json(
+    monkeypatch.setattr(pop_rl_actor, 'stop_colab', lambda host, **k: events.append('stop') or pop_rl_actor.read_json(
         pop_rl_actor.colab_state_path(host)))
     monkeypatch.setattr(pop_rl_actor, 'serve_colab', lambda ns: events.append(('serve', ns.policy_id, ns.port)))
     args = types.SimpleNamespace(host='g4', run_name='y', work=str(work), launch_json=str(work / 'launch.json'),
@@ -945,6 +945,11 @@ def test_run_sft_yields_an_actor_served_alone_and_serves_it_again(tmp_path, remo
     events.clear()
     pop_rl_actor.write_json(pop_rl_actor.colab_state_path('g4'), {**record, 'beside_learner': True})
     assert pop_rl_actor.run_remote_sft(args) == 0 and events == []
+    # a run-sft restarted mid-round: the first one yielded the actor (its record moved aside); this one restores it
+    events.clear()
+    pop_rl_actor.colab_state_path('g4').unlink()
+    pop_rl_actor.write_json(pop_rl_actor.colab_yielded_path('g4'), record)
+    assert pop_rl_actor.run_remote_sft(args) == 0 and events == [('serve', 'p' * 64, 8570)]
 
 
 def test_learner_state_arrives_as_one_save_or_not_at_all(tmp_path, monkeypatch):
@@ -1109,3 +1114,24 @@ def test_a_factor_rebind_with_its_publication_goes_through_ensure_remote_checkpo
     pop_rl_actor._prepare_remote_rebind_export(host='g4', cfg=cfg, policy_id='p' * 64, version=3, factors_dir=factors,
                                                checkpoint='/dgx/policy/checkpoint.pt')
     assert ensured == [('g4', cfg, '/dgx/policy/checkpoint.pt', 'p' * 64)]
+
+
+def test_a_yielded_actor_record_survives_a_run_sft_restart(tmp_path, monkeypatch):
+    """stop_colab(yielded=True) keeps the record for the restore (a run-sft restarted mid-round adopts it); a successful
+    restore removes it, a failed one leaves it for the keeper."""
+    monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path)
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', lambda *a, **k: '')
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    record = {'pid': 7, 'policy_id': 'a' * 64, 'host': 'colab-g4', 'serve_args': {'policy_id': 'a' * 64, 'host': 'colab-g4'}}
+    pop_rl_actor.write_json(pop_rl_actor.colab_state_path('colab-g4'), record)
+    pop_rl_actor.stop_colab('colab-g4', yielded=True)
+    assert not pop_rl_actor.colab_state_path('colab-g4').exists()
+    assert json.loads(pop_rl_actor.colab_yielded_path('colab-g4').read_text())['policy_id'] == 'a' * 64
+    monkeypatch.setattr(pop_rl_actor, 'serve_colab', lambda ns: (_ for _ in ()).throw(RuntimeError('no GPU')))
+    pop_rl_actor.restore_colab_actor(record)
+    assert pop_rl_actor.colab_yielded_path('colab-g4').exists()          # failed: the keeper serves it
+    monkeypatch.setattr(pop_rl_actor, 'serve_colab', lambda ns: {'ok': True})
+    pop_rl_actor.restore_colab_actor(record)
+    assert not pop_rl_actor.colab_yielded_path('colab-g4').exists()
+    pop_rl_actor.stop_colab('colab-g4')                                   # a plain stop keeps nothing
+    assert not pop_rl_actor.colab_yielded_path('colab-g4').exists()

@@ -1854,7 +1854,8 @@ def test_the_standing_teacher_campaign_relaunches_from_the_newest_frontier_whene
     present, launched = {'teacher': True}, []
     monkeypatch.setattr(d.c, 'present', lambda unit: unit == 'aei-teacher' and present['teacher'])
 
-    def launch(runner, work, frontier, groups, unit, covered_extra=()):
+    def launch(runner, work, frontier, groups, unit, covered_extra=(), standing=False, student_rates=()):
+        assert standing
         launched.append((Path(work).name, Path(frontier).parent.name, unit))
         Path(work).mkdir(parents=True, exist_ok=True)
         with (Path(work) / 'launches.jsonl').open('a') as handle:
@@ -1879,7 +1880,17 @@ def test_the_standing_teacher_campaign_relaunches_from_the_newest_frontier_whene
     assert d.newest_frontier() == d.root / 'r0002' / 'frontier.json'
     (d.root / 'r0004').mkdir()
     (d.root / 'r0004' / 'frontier.json').write_text('{}')
+    # a newer frontier while the standing queue runs: it drains (running episodes finish), then the newer one launches
+    present['teacher'] = True
+    assert d.running_teacher_work() == d.root / 'teacher-r0002'
+    assert d.ensure_teacher() is None and len(launched) == 2 and d.teacher_draining
+    assert json.loads((d.root / 'teacher-r0002' / 'DRAIN').read_text())['frontier'].endswith('r0004/frontier.json')
+    assert 'teacher_drain' in (d.root / 'drive.log').read_text()
+    present['teacher'] = False
     assert d.ensure_teacher() == d.root / 'teacher-r0004' and launched[-1][:2] == ('teacher-r0004', 'r0004')
+    assert not d.teacher_draining and d.running_teacher_work() == d.root / 'teacher-r0004'
+    present['teacher'] = True
+    assert d.ensure_teacher() is None and not (d.root / 'teacher-r0004' / 'DRAIN').exists()   # the newest: runs on
     d.a.no_teacher_campaign = True
     (d.root / 'r0005').mkdir()
     (d.root / 'r0005' / 'frontier.json').write_text('{}')
@@ -2292,6 +2303,8 @@ def test_a_held_pair_refused_for_engine_settings_remeasures_the_reference_on_thi
         (out / 'result.json').write_text(json.dumps({'complete': True, 'fresh': not reuse}))
         return out
     monkeypatch.setattr(d.c, 'measure_held', measure)
+    monkeypatch.setattr(d.c, 'held_series_key', lambda: 'k')
+    monkeypatch.setattr(d.c, 'held_measuring', lambda out: False)
     (held / d.held_name(ref)).mkdir(parents=True)
     (held / d.held_name(ref) / 'result.json').write_text(json.dumps({'complete': True, 'reused': True}))
     monkeypatch.setattr(d.c, 'held_result_ok', lambda out: (out / 'result.json').exists())
@@ -2321,3 +2334,155 @@ def test_a_held_pair_refused_for_engine_settings_remeasures_the_reference_on_thi
     monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: subprocess.CompletedProcess(argv, 2, stderr='boom'))
     with pytest.raises(subprocess.CalledProcessError):
         d.c.compare(held / d.held_name(ref), held / d.held_name(cand), tmp_path / 'x.json')
+
+
+def test_set_aside_held_results_are_never_reused_and_running_measurements_are_joined(tmp_path, monkeypatch):
+    """2026-11-24 09:41: a restarted driver reused the reference result the previous driver had set aside as unpaired
+    (held/policy-e15b20a86f1c-unpaired-1795501815), the pair was refused again, and the second set-aside moved the
+    whole directory under the running Pop re-measurement (07:41), which then failed. Now set-aside results (and,
+    into the series that refused them, their reuse source) are never reused; a reused result moves aside alone,
+    leaving a running measurement's files; a restarted driver joins the running Pop unit instead of reusing."""
+    import pop_rl_actor
+    ei, d = _driver(tmp_path, monkeypatch)
+    ops = tmp_path / 'ops'
+    monkeypatch.setattr(ei, 'OPS', ops)
+    pol = 'e' * 64
+    result = lambda **k: json.dumps({'complete': True, 'policy_id': pol, 'samples_per_task': 2, **k})
+    source = ops / 'ei' / 'sft-v9' / 'held' / 'candidate'
+    source.mkdir(parents=True)
+    (source / 'result.json').write_text(result(series={'key': 'other'}))
+    other = ops / 'ei' / 'sft-v8' / 'held' / 'start'
+    other.mkdir(parents=True)
+    (other / 'result.json').write_text(result(series={'key': 'other2'}, v=8))
+    held = d.c.held
+    out = held / 'policy-eeeeeeeeeeee'
+    out.mkdir(parents=True)
+    (out / 'result.json').write_bytes((source / 'result.json').read_bytes())
+    (out / 'reused.json').write_text(json.dumps({'from': str(source / 'result.json')}))
+    for name in ('run.json', 'packet.jsonl'):
+        (out / name).write_text('{}')
+    (out / 'row-000').mkdir()
+    monkeypatch.setattr(d.c, 'held_series_key', lambda: 'mine')
+    measuring = {'on': True}
+    monkeypatch.setattr(d.c, 'held_measuring', lambda o: measuring['on'])
+    d.c.set_held_aside(out, 'unpaired')
+    (aside,) = held.glob('policy-eeeeeeeeeeee-unpaired-*')
+    assert sorted(p.name for p in aside.iterdir()) == ['aside.json', 'result.json', 'reused.json']
+    assert sorted(p.name for p in out.iterdir()) == ['packet.jsonl', 'row-000', 'run.json']     # the measurement's
+    rec = json.loads((aside / 'aside.json').read_text())
+    assert rec['reason'] == 'unpaired' and rec['series_key'] == 'mine' and rec['reused_from'] == str(source / 'result.json')
+    # neither the aside copy nor its source comes back into this series; another cycle's result still may
+    allowed = ei.held_reuse_candidates(sorted(ops.glob('ei/*/held/*/result.json')), held.glob('*/aside.json'),
+                                       'pop', 'mine')
+    assert allowed == [other / 'result.json']
+    legacy = held / 'policy-eeeeeeeeeeee-unpaired-1795501815'     # set aside before aside.json existed
+    legacy.mkdir()
+    (legacy / 'result.json').write_text(result(series={'key': 'x'}))
+    assert legacy / 'result.json' not in ei.held_reuse_candidates([legacy / 'result.json'], [], 'pop', 'mine')
+    assert ei.held_reuse_candidates([source / 'result.json'], held.glob('*/aside.json'), 'pop', 'theirs') \
+        == [source / 'result.json']                                    # another series did not refuse it
+    # a restarted driver: the Pop unit measuring into out runs on; pop_held joins it and never reuses around it
+    polls = []
+
+    def units(pattern):
+        polls.append(pattern)
+        if len(polls) < 3:
+            return ['popheld-policy-eeeeeeeeeeee-1795502476']
+        (out / 'result.json').write_text(result(series={'key': 'mine'}, fresh=True))
+        return []
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', units)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(d.c, 'reuse_held', lambda *a: (_ for _ in ()).throw(AssertionError('reused around a unit')))
+    assert d.c.pop_held('policy-eeeeeeeeeeee', '/p/e.pt') == out
+    assert json.loads((out / 'result.json').read_text())['fresh'] and polls[0] == 'popheld-policy-eeeeeeeeeeee-*'
+    # with nothing measuring, a reused result moves aside with its directory as before
+    measuring['on'] = False
+    out2 = held / 'policy-ffffffffffff'
+    out2.mkdir()
+    (out2 / 'result.json').write_text(result())
+    d.c.set_held_aside(out2, 'pop')
+    assert not out2.exists() and len(list(held.glob('policy-ffffffffffff-pop-*/aside.json'))) == 1
+
+
+def test_a_failed_sft_launch_is_noted_and_retried_with_backoff_never_ending_the_driver(tmp_path, monkeypatch):
+    """2026-11-24 10:31: the preflight unit (4 GB, low, --wait 600) was not admitted behind a stuck low queue,
+    launch-sft.sh failed and CalledProcessError ended the driver. A failed launch is noted and retried (backoff
+    doubling), the standing services run between attempts, and the preflight asks for high priority and an hour."""
+    import subprocess
+    ei, d = _driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'chains.sha256').write_text('f' * 64 + '\n')
+    env = d.sft_env(rd, d.controller.current, activation_gb=56, preflight_only=True)
+    assert (env['PREFLIGHT_PRIORITY'], env['PREFLIGHT_WAIT']) == ('high', '3600')
+    calls, sleeps, services = [], [], []
+    def run(argv, **kw):
+        calls.append(argv)
+        if len(calls) < 3:
+            raise subprocess.CalledProcessError(1, argv)
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(ei.subprocess, 'run', run)
+    monkeypatch.setattr(ei.time, 'sleep', sleeps.append)
+    monkeypatch.setattr(d, 'standing_services', lambda policy=None: services.append(policy))
+    monkeypatch.setattr(d, 'dgx_sft_running', lambda *a: False)
+    d.launch_sft(rd, d.controller.current, activation_gb=56, preflight_only=False)
+    assert len(calls) == 3 and sleeps == [ei.SFT_LAUNCH_RETRY_SECONDS, 2 * ei.SFT_LAUNCH_RETRY_SECONDS]
+    assert len(services) == 2
+    log = [json.loads(line) for line in (d.root / 'drive.log').read_text().splitlines()]
+    assert [e['attempt'] for e in log if 'sft_launch_failed' in e] == [1, 2]
+    assert any(e.get('sft_launched_after') == 3 for e in log)
+    # a DGX learner of the round that appeared while it waited ends the retries
+    calls.clear()
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: (_ for _ in ()).throw(subprocess.CalledProcessError(1, argv)))
+    monkeypatch.setattr(d, 'dgx_sft_running', lambda *a: True)
+    d.launch_sft(rd, d.controller.current, activation_gb=56, preflight_only=False)
+
+
+def test_a_remote_actor_serving_the_newest_policy_gets_a_collector_whenever_it_comes_back(tmp_path, monkeypatch):
+    """2026-11-24: the A100 actor came back at 10:00 mid-round and got no collector until a 10:20 driver restart. The
+    standing check starts one whenever the phase is SFT; while a Colab SFT trains on a session (its actor yielded)
+    no actor is rebound, serving ones still get collectors."""
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--rebind-actor', 'colab-g4@http://127.0.0.1:8570=64'])
+    started, rebinds = [], []
+    monkeypatch.setattr(d, 'ensure_remote_policy', lambda policy: rebinds.append(policy['sha256']))
+    monkeypatch.setattr(d, 'start_remote_collector', lambda policy, target: started.append(target['suffix']))
+    d.remote_collect_check()
+    assert started == ['-remote0'] and rebinds == [d.controller.current['sha256']]
+    d.colab_sft_hosts.add('colab-g4')
+    d.remote_collect_check()
+    assert started == ['-remote0'] * 2 and len(rebinds) == 1
+    monkeypatch.setattr(d.controller, 'state', {**d.controller.state, 'phase': 'grpo'})
+    d.remote_collect_check()
+    assert len(started) == 2
+
+
+def test_the_health_report_runs_beside_the_main_loop(tmp_path, monkeypatch):
+    """2026-11-24: read in the loop, the report held r0005's SFT launch for 25 min; it runs in a thread, one at a
+    time."""
+    import threading
+    ei, d = _driver(tmp_path, monkeypatch)
+    release, entered = threading.Event(), []
+    monkeypatch.setattr(d, 'health_report', lambda rd, policies: entered.append(rd) or release.wait(10))
+    thread = d.start_health_report(d.root / 'r0001', d.lineage_policies())
+    assert thread is not None and d.start_health_report(d.root / 'r0002', d.lineage_policies()) is None
+    release.set()
+    thread.join(5)
+    assert entered == [d.root / 'r0001']
+
+
+def test_selection_reads_the_previous_rates_and_the_lineage_collections_never_every_earlier_one(tmp_path, monkeypatch):
+    """Earlier collections move to the HDD (ei_round_tier); a selection globbing every collection's groups read them
+    all again. The newest earlier tasks.rates.json stands for them; only the lineage's collections are read."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    first = d.select_command(d.collect_dir(cur) / 'tasks.json')
+    assert '--rates-json' not in first and str(d.root / 'collect' / '*' / 'groups' / 'g*') in first
+    old = d.root / 'collect' / 'v0000-oldoldoldold'
+    old.mkdir(parents=True)
+    (old / 'tasks.rates.json').write_text(json.dumps({'t:1': {'successes': 1, 'scored': 2}}))
+    (d.collect_dir(cur)).mkdir(parents=True, exist_ok=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text('{}\n')
+    argv = [str(x) for x in d.select_command(d.collect_dir(cur) / 'tasks.json')]
+    assert argv[argv.index('--rates-json') + 1] == str(old / 'tasks.rates.json')
+    globs = [argv[i + 1] for i, x in enumerate(argv) if x == '--rates-groups']
+    assert globs == [str(d.collect_dir(cur) / 'groups' / 'g*'), str(d.root / '*' / 'grpo' / 'groups' / 'g*')]

@@ -149,3 +149,14 @@ def test_live_grpo_constants_resolve():
     data_catalog._CODE.clear()
     c = data_catalog.code_constants()
     assert len(c['POOLS']['value']) >= 2 and all(p.endswith('cases.jsonl') for p in c['POOLS']['value'])
+
+
+def test_tick_carries_the_agents_inbox_listener_heartbeat(tmp_path, monkeypatch):
+    """`inbox.sh wait` touches <dashboard>/inbox.listener; the tick (pushed to the page every 10 s) carries its mtime, null when never started."""
+    monkeypatch.setattr(data_service, 'DASH', str(tmp_path))
+    monkeypatch.setattr(data_service, 'OUT', str(tmp_path / 'out'))
+    assert data_service.answer('ops.tick', None)['listener'] is None
+    (tmp_path / 'inbox.listener').write_text('')
+    import os
+    os.utime(tmp_path / 'inbox.listener', (1_700_000_000, 1_700_000_000))
+    assert data_service.answer('ops.tick', None)['listener'] == 1_700_000_000_000

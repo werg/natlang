@@ -40,6 +40,23 @@ test('the prompt-logprob decider scores where the options differ, through the en
     /^Error: decision-unsupported/);
 });
 
+test('prompt scoring sends no client-side collection controls, and a hosted server that refuses it is decision-unsupported', async () => {
+  const bodies = [];
+  const refusing = status => async body => {
+    bodies.push(body);
+    throw Object.assign(new Error(`model HTTP ${status}: Unsupported parameter(s): prompt_logprobs`), { status });
+  };
+  const request = { x_natlang_omit_seed: true, x_natlang_host_call_fields: { a: 1 }, x_natlang_history_reasoning: 'none',
+    x_natlang_include_thoughts: true, top_p: 0.95 };
+  await assert.rejects(promptLogprobDecider(refusing(400), { request })({ messages: [], options: ['1', '2'] }),
+    /^Error: decision-unsupported: the server refused prompt scoring/);
+  assert.equal(bodies[0].top_p, 0.95);
+  assert.deepEqual(Object.keys(bodies[0]).filter(key => key.startsWith('x_natlang')), []);
+  for (const status of [429, 503])
+    await assert.rejects(promptLogprobDecider(refusing(status), { request })({ messages: [], options: ['1', '2'] }),
+      error => !/decision-unsupported/.test(error.message));
+});
+
 const VERDICT = '---\nargs: { statement: string }\nreturns: "knight" | "knave"\nreadout: instant\n---\nWho said it?\n';
 
 test('a readout: decision function answers by scoring its values once, without the tool loop', async () => {

@@ -1,0 +1,9 @@
+[Unit]
+Description=natlang daily check of the free LLM APIs for new teacher candidates (ops/teacher-free-models)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/werg/natlang
+Nice=10
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-teacher-free-models-run --budget-gb 0.5 --priority low --class service --wait 1800 -- /usr/bin/timeout 600 /usr/bin/python3 /home/werg/natlang/scripts/teacher_free_models.py check
+TimeoutStartSec=45min

@@ -1625,3 +1625,38 @@ def test_status_corruption_remains_an_error_before_any_probe(status_machine, mon
         ledger.status(SimpleNamespace())
     assert path.read_text() == '{broken'
     assert not Path(str(path) + '.lock').exists()
+
+
+def test_a_preempted_unit_backs_off_at_most_ten_minutes_and_stale_queue_entries_are_dropped():
+    """2026-11-24: a 4 GB low fill preempted three times by medium jobs doubled its backoff to 32 minutes and held the
+    low queue head while 25-43 GB stood free. A preemption (stopped for a waiting higher-priority job) caps the backoff
+    at REQUEUE_PREEMPT_DELAY_MAX; a stop for the unit's own memory keeps the long backoff. Non-requeued queue entries no
+    run refreshed for an hour (238 from 2026-10-12 on) leave the file; requeued ones stay."""
+    state = {'claims': {'fill.service': running('collection', 4, 1, priority='low')}, 'events': []}
+    state['claims']['fill.service'].update(admitted=1000.0, requeue_delay=960)
+    ledger.requeue_spec(state, 'fill.service', now=1100.0, preempted=True)
+    assert state['waiting']['fill.service']['delay'] == ledger.REQUEUE_PREEMPT_DELAY_MAX
+    ledger.requeue_spec(state, 'fill.service', now=1100.0)
+    assert state['waiting']['fill.service']['delay'] == 1920
+    state['waiting'].update({'old.service': {'priority': 'medium', 'since': 1.0, 'seen': 1.0, 'budget': 1},
+                             'live.service': {'priority': 'low', 'since': 1.0, 'seen': 9000.0, 'budget': 1}})
+    ledger.prune_stale_waiting(state, now=9000.0 + 10)
+    assert sorted(state['waiting']) == ['fill.service', 'live.service']
+
+
+def test_a_requeued_unit_in_its_backoff_does_not_hold_its_priority_queue_but_a_higher_one_still_precedes():
+    """2026-11-24: a low fill in a 32-minute requeue backoff stayed the low queue head; a 4 GB preflight behind it could
+    only backfill as spare (both needs free) and waited 23+ min with 28-31 GB free."""
+    now = 10000.0
+    state = {'waiting': {
+        'fill.service': {'priority': 'low', 'since': 1.0, 'requeued': True, 'not_before': now + 900, 'budget': 4 * GIB,
+                         'spec': {'reserve': GIB}},
+        'preflight.service': {'priority': 'low', 'since': 5.0, 'seen': now, 'budget': 4 * GIB, 'reserve': GIB},
+        'learner.service': {'priority': 'high', 'since': 9.0, 'requeued': True, 'not_before': now + 900,
+                            'budget': 60 * GIB, 'spec': {'reserve': GIB}},
+        'smoke.service': {'priority': 'medium', 'since': 2.0, 'seen': now, 'budget': GIB, 'reserve': GIB}}}
+    assert [u for u, _ in ledger.waiting_order(state, now)] == \
+        ['learner.service', 'smoke.service', 'preflight.service', 'fill.service']
+    for entry in state['waiting'].values():
+        entry['seen'] = now + 901                       # the waiting runs keep refreshing
+    assert [u for u, _ in ledger.waiting_order(state, now + 901)][2:] == ['fill.service', 'preflight.service']

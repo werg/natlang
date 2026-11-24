@@ -23,9 +23,9 @@ def campaign(tmp_path, tasks, earlier=(), own=(), teachers=(), **flags):
     work.mkdir(parents=True, exist_ok=True)
     (work / 'tasks.jsonl').write_text(''.join(json.dumps(t) + '\n' for t in tasks))
     (work / 'manifest.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in own))
-    args = SimpleNamespace(work=str(work), covered_by=[str(old)], attempts=2, route_ratio=2.0, route_floor=0.03,
-                           route_min_scored=30, limit=0, shard=(0, 1), pause_below_available_gb=0, provider_cooldown=0,
-                           **flags)
+    args = SimpleNamespace(**{'work': str(work), 'covered_by': [str(old)], 'attempts': 2, 'route_ratio': 2.0,
+                              'route_floor': 0.03, 'route_min_scored': 30, 'limit': 0, 'shard': (0, 1),
+                              'pause_below_available_gb': 0, 'provider_cooldown': 0, **flags})
     return teacher_gen.Generator(args, list(teachers))
 
 
@@ -33,8 +33,8 @@ def teacher(model, **spec):
     return teacher_gen.make_teacher({'model_id': model, 'provider': 'p', **spec})
 
 
-def task(family, failed_by=()):
-    return {'row': {'id': 'x', 'family': family}, 'base_rank': 'teacher_failed',
+def task(family, failed_by=(), tier='teacher_failed'):
+    return {'row': {'id': 'x', 'family': family}, 'base_rank': tier,
             **({'failed_by': list(failed_by)} if failed_by else {})}
 
 
@@ -46,7 +46,6 @@ def test_family_routing_sends_a_family_to_the_teacher_that_solves_it(tmp_path):
     weak, strong = teacher('weak'), teacher('strong')
     g = campaign(tmp_path, [task('read'), task('math'), task('read')], earlier, teachers=[weak, strong])
     assert g._take(weak) == 1                  # the read tasks are left for strong
-    assert g.passed == [0]
     assert g._take(strong) == 0
     assert g._take(strong) == 2
     assert g._take(weak) is None
@@ -108,3 +107,47 @@ def test_voided_verdicts_are_no_try_and_keep_their_episode_directory(tmp_path):
     g = campaign(tmp_path, [task('f', ['b'])], earlier, own=[failed], teachers=[a, b])
     assert g.tasks[0]['failed_by'] == [] and 0 not in g.tried and g.recorded[0] == 1
     assert g._take(a) == 0                     # a may try again; its next episodes go to t000000-a1
+
+
+def fresh(index, model, outcome):
+    return {**record(index, 'old', model, outcome), 'base_rank': 'teacher_untried'}
+
+
+def test_a_weak_teacher_leaves_the_student_rare_tiers_to_the_strong_ones(tmp_path):
+    """2026-11-24: on the aei1 student-rare tasks Nemotron scored 0/99 while Luna and Sol solved 42% of those no teacher
+    had failed; a weak teacher's failure there spends one of the task's attempts and demotes it for later campaigns."""
+    earlier = ([fresh(i, 'nemotron', 'semantic_mismatch') for i in range(40)] + [fresh(50, 'nemotron', 'task_success')] +
+               [fresh(100 + i, 'luna', 'task_success' if i % 2 else 'semantic_mismatch') for i in range(40)])
+    nemotron, luna = teacher('nemotron'), teacher('luna')
+    tasks = [task('f', tier='student_rare'), task('f', tier='student_band'), task('f', tier='teacher_untried'),
+             task('f', tier='student_rare_failed')]
+    g = campaign(tmp_path, tasks, earlier, teachers=[nemotron, luna], weak_yield=0.25, route_ratio=0)
+    assert g.weak(nemotron) and not g.weak(luna)
+    assert g.strength(nemotron) == ((1 + 0.3 * 5) / 46, 41)
+    assert g._take(nemotron) == 1              # the band task: the student-rare one is luna's
+    assert g._take(luna) == 0                  # the strong teacher takes the hard task first
+    assert g._take(nemotron) == 2 and g._take(nemotron) is None   # never the student_rare_failed one
+    assert g._take(luna) == 3
+    off = campaign(tmp_path / 'off', tasks, earlier, teachers=[nemotron, luna], weak_yield=0, route_ratio=0)
+    assert off._take(nemotron) == 0
+
+
+def test_the_standing_queue_has_no_end_but_its_tasks_and_drains_on_request(tmp_path):
+    """No --limit: every ordered task; a deferred task waits for its retry time at its place in the queue; a task a
+    teacher failed here stays at its place for the next teacher; WORK/DRAIN stops the slots."""
+    a, b = teacher('a'), teacher('b')
+    g = campaign(tmp_path, [task('f') for _ in range(5)], teachers=[a, b], weak_yield=0.25)
+    assert [g._take(a) for _ in range(5)] == [0, 1, 2, 3, 4]
+    g.active.clear()
+    g.retry[0] = teacher_gen.time.time() + 600
+    g.tried[1] = {'a'}
+    g.tasks[1]['failed_by'] = ['a']
+    g.done.update({2, 3, 4})
+    for index in range(5):
+        (tmp_path / 'work' / 'claims' / f't{index:06d}').unlink(missing_ok=True)
+    assert g._take(a) is None and g._take(b) == 1
+    g.retry[0] = 0
+    assert g._take(a) == 0 and 0 not in g.retry
+    (tmp_path / 'work' / 'DRAIN').touch()
+    g.slot(a)                                   # returns at once: takes nothing
+    assert g.running == 0

@@ -8,6 +8,8 @@ An item leaves the register when its fix lands on main. A finding reported by an
 
 | Item | Owner |
 |---|---|
+| Paid Vertex teachers paused (owner 2026-11-24 10:00: credits almost empty). When refilled: qualify Gemini 3.8 Flash (thought summaries now captured), Gemini 4 Hydrogen, GLM-5.2 and DeepSeek V4.1 Flash / gpt-oss-120b (Model Garden, raw reasoning) on `ops/ei/teacher-qual-20261124` (plan and estimates: DECISIONS 2026-11-24 "free teacher providers"), then re-add the best to `ops/ei/teachers.json` (`expert_iteration.VERTEX_TEACHERS`) | owner (credits), then the teacher-providers agent |
+| Free teacher candidates: `natlang-teacher-free-models.timer` lists the free models of OpenRouter, Kilo, NIM, AI Studio, Z.ai and Groq daily; each new one appears in the dashboard's open items until qualified (`scripts/teacher_free_models.py mark MODEL qualified|rejected|admitted`) | whoever qualifies teachers (coordinator assigns) |
 | Pin move to the fork release carrying `reasoning_ids` (89026ef24, run 45324416069), with its ENGINE_PARITY row; then split and reasoning_ids parity across four engines on real readouts (DECISIONS 2026-11-24 05:30) | B10 agent |
 | Tool-call grammar on the collection actors: move the DGX and Colab SGLang checkouts to fork 17e3458c2e (`NATLANG_GRAMMAR_PREFIX`; `training/neuralese/sglang-fork.json`) at the next boundary with no live actor; the Python engine and the learner already apply it (DECISIONS 2026-11-23 "constrained decoding with an exact learner law"). Watch `law_masked_fraction` in `train.jsonl` and `natlang_tool_grammar_refused_openings_total` | coordinator, at the next actor boundary |
 | Managed llama-server and page drop the tool grammar under `x_natlang_rl_capture` (ENGINE_PARITY gap row): exact replay needs the fork to compile the same xgrammar structural tag (server and wasm build) and record it | unassigned (needs a fork release; no training source reads fork captures today) |
@@ -188,9 +190,11 @@ Brief E covered only the Neuralese-free capabilities. Open:
 
   Pack each closed run's group directories into one zst per group, which `rl_rollout_files` already reads as
   `g*.rollouts.jsonl.zst`, or move the trees to the HDD/Drive after checking their readers. Owner: coordinator.
-- **The HDD is dominated by data outside natlang's keep rules:** `bgkit-data` holds 591 GB (another project). It is the
-  first Drive candidate (the tier exists since 2026-11-23: `drive_tier.py archive --root bgkit-data` once the owner
-  decides; `NEVER` in drive_tier.py excludes it until then).
+- **`bgkit-data` (591 GB) drains to Drive (owner approved 2026-11-24).** The hourly tier takes it after the round
+  inflow; `multi_news_v1`, `arxiv_v1` and `pubmed_v1` (about 90 GB, view-sources-v3 inputs) stay. At about 5 MB/s
+  shared with the inflow, the bulk takes about 3-4 weeks. Watch: `~/data/drive-tier/manifest.jsonl`. Closes when
+  `bgkit-data` minus the kept inputs is on Drive. `bgkit-checkpoints` and hindsight still await the owner.
+  Owner: coordinator.
 - **`vibe-native-v9-reader-pin*` units failed at 08:15 on 2026-11-23:** `.venv-decider-systempython conflicts with the intended shared root link` in `archive-code-00ab72d28dbc`. The Vibestudio session later reached v9 through other units (`vibe-student-fill-keeper-v9`, `vsingest-semantic-poll-v9`), so this is superseded; the owner is the Vibestudio session.
 - **The Colab keeper's real replacement and upgrade path is untested live.** It is watched by the ops watchdog (`colab` checks).
 

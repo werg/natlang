@@ -77,6 +77,11 @@ WAITER_TTL = 90  # a waiting `run` refreshes its queue entry every 30 s; older e
 REQUEUE_DELAY = 120  # seconds after a preemption/pressure stop before the unit may be relaunched
 REQUEUE_DELAY_MAX = 3600  # a unit stopped again soon after its relaunch waits twice as long each time, up to this
 REQUEUE_SETTLED = 1800  # a relaunched unit that ran this long starts its backoff over
+# a unit preempted for a waiting higher-priority job (not stopped for its own memory) backs off at most this long: on
+# 2026-11-24 a 4 GB low fill preempted three times by medium jobs reached a 32-minute backoff and held the low queue
+# head while 25-43 GB stood free (only 'spare' backfills ran behind it)
+REQUEUE_PREEMPT_DELAY_MAX = 600
+STALE_WAITING_SECONDS = 3600  # a non-requeued queue entry no `run` refreshed for this long is dropped from the file
 # A unit backfilled behind a waiting head is not preempted for that same head for this long (see backfill_hold).
 BACKFILL_HOLD = RAMP_SECONDS
 # Conservative backfill (may_backfill): a job the queue head cannot preempt may borrow at most this share of the
@@ -427,6 +432,17 @@ def ledger():
         os.replace(tmp, STATE)
 
 
+def prune_stale_waiting(state, now=None):
+    """Drop queue entries of ``run`` calls that stopped refreshing them long ago (2026-11-24: 238 such entries from
+    2026-10-12 on, ignored by ``waiting_order`` after WAITER_TTL but never removed). Requeued units stay: the guard
+    relaunches them."""
+    now = now or time.time()
+    waiting = state.get('waiting') or {}
+    for unit in [u for u, w in waiting.items()
+                 if not w.get('requeued') and 'seen' in w and now - w['seen'] > STALE_WAITING_SECONDS]:
+        waiting.pop(unit)
+
+
 def read_snapshot(state_path=None):
     """One committed observational snapshot, without allocator locking or writes.
 
@@ -590,7 +606,8 @@ def blocked_by(live, wanted=None, count=3):
 
 
 def waiting_order(state, now=None):
-    """The queue of jobs waiting for room, head first: higher priority first, then the earlier request. Entries of
+    """The queue of jobs waiting for room, head first: higher priority first, then eligible before a requeued unit in its
+    backoff, then the earlier request. Entries of
     waiting ``run`` calls expire when not refreshed; requeued units (preempted or stopped under pressure) stay."""
     now = now or time.time()
     entries = [(u, w) for u, w in state.get('waiting', {}).items()
@@ -600,7 +617,13 @@ def waiting_order(state, now=None):
             entry['reserve'] = spec_reserve(entry['spec'], entry['budget'])
         elif 'reserve_explicit' in entry and not entry['reserve_explicit']:
             entry['reserve'] = default_reserve(entry['budget'])
-    return sorted(entries, key=lambda item: (-PRIORITIES[item[1]['priority']], item[1]['since'], item[0]))
+    # within one priority, a requeued unit still in its backoff (not_before ahead) queues behind the eligible ones: as
+    # the head it held its whole need (budget + reserve) against every same-priority job for its backoff (2026-11-24:
+    # a 4 GB low fill in a 32-min backoff kept a 4 GB preflight out while 28-31 GB stood free; spare backfill needed
+    # both needs, ~38 GB). A higher-priority unit in backoff still precedes every lower one.
+    return sorted(entries, key=lambda item: (-PRIORITIES[item[1]['priority']],
+                                             bool(item[1].get('requeued') and now < item[1].get('not_before', 0)),
+                                             item[1]['since'], item[0]))
 
 
 def conservative_backfill():
@@ -793,8 +816,10 @@ def non_preemptible(live, wanted, count=4):
     return [{'unit': u, 'held_gb': round(h / GIB, 1), 'reason': why} for h, u, why in sorted(rows, reverse=True)[:count]]
 
 
-def requeue_spec(state, unit, now=None, containers=()):
-    """Put a stopped resumable unit back in the waiting queue with the spec it was launched from."""
+def requeue_spec(state, unit, now=None, containers=(), preempted=False):
+    """Put a stopped resumable unit back in the waiting queue with the spec it was launched from. ``preempted``: it
+    was stopped for a waiting higher-priority job, not for its own memory: its backoff is capped at
+    REQUEUE_PREEMPT_DELAY_MAX."""
     claim = state['claims'].get(unit, {})
     now = now or time.time()
     if not resumable(claim):
@@ -806,7 +831,7 @@ def requeue_spec(state, unit, now=None, containers=()):
     # stopped and relaunched every 2-4 minutes on 2026-11-17: back off while the unit keeps being stopped early.
     delay = REQUEUE_DELAY
     if claim.get('requeue_delay') and now - claim.get('admitted', 0) < REQUEUE_SETTLED:
-        delay = min(REQUEUE_DELAY_MAX, 2 * claim['requeue_delay'])
+        delay = min(REQUEUE_PREEMPT_DELAY_MAX if preempted else REQUEUE_DELAY_MAX, 2 * claim['requeue_delay'])
     state.setdefault('waiting', {})[unit] = {'priority': PRIORITY_NAMES[priority_of(claim)], 'since': now,
                                              'requeued': True, 'not_before': now + delay, 'delay': delay,
                                              'budget': claim['budget'], 'reserve': spec_reserve(claim['spec'], claim['budget']),
@@ -1419,6 +1444,7 @@ def guard(args):
                 # another (cache release above continues).
                 unit, reason = None, None
             to_launch = None
+            prune_stale_waiting(state)
             queue = waiting_order(state)
             if queue and not graceful_stop_pending(pending):
                 head, wanted = queue[0]
@@ -1466,7 +1492,8 @@ def guard(args):
             containers = unit_containers(unit, command, state_claim_containers) if unit else []
             requeued = False
             if unit and (reason.startswith('preempted') or reason.startswith('free memory below floor')):
-                requeued = requeue_spec(state, unit, containers=containers)  # a resumable unit comes back when room returns
+                requeued = requeue_spec(state, unit, containers=containers,  # back when room returns
+                                        preempted=reason.startswith('preempted'))
             grace = graces.get(unit, GRACE_MIN) if unit else 0
             if unit:
                 state['events'].append({'time': time.time(), 'event': 'stopped', 'unit': unit, 'reason': reason,

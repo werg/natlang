@@ -65,6 +65,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 MEMORY['applications'].append({'edit': op, 'status': 'applied', 'detail': 'Preview only: not applied to any data layer.', 'files': '', 'author': 'preview'})
             elif name == 'ask':
                 MEMORY['asks'].append({**inp, 'operationId': op, 'author': 'preview'})
+            elif name == 'answer':           # lets a preview session play the supervising agent (curl)
+                MEMORY['answers'].append({**inp, 'operationId': op, 'author': 'preview-agent'})
             return self._json(200, {'operationId': op, 'status': 'applied', 'outcome': 'accepted'})
         if self.path == '/__preview/state':
             return self._json(200, {'edits': {'edits': MEMORY['edits'], 'applications': MEMORY['applications']},

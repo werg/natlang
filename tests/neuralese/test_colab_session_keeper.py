@@ -226,3 +226,19 @@ def test_a_sibling_session_is_not_a_stray_and_an_unnamed_gpu_is_never_unassigned
     k.unassign_orphans([{'name': '?', 'endpoint': 'a100-ep', 'hardware': 'A100'},
                         {'name': '?', 'endpoint': 'cpu-ep', 'hardware': 'CPU'}])
     assert [c for c in fake.calls if c[0] == 'unassign'] == [('unassign', ('cpu-ep',))]
+
+
+def test_an_actor_yielded_for_a_finished_round_is_served_again(tmp_path, monkeypatch):
+    """2026-11-24: r0003's run-sft yielded the actor; a second run-sft took the round over and found no record, so the
+    actor was never restored. The yielded record stays on disk until it serves; with no live record and no round on
+    the session the keeper serves it."""
+    fake = FakeColab({'g4a': 'A100'})
+    k, _ = keeper(tmp_path, fake, monkeypatch)
+    (tmp_path / 'actors').mkdir()
+    serve = {'checkpoint': '/c.pt', 'policy_id': 'p' * 64, 'commit': 'c' * 40, 'port': 8570}
+    (tmp_path / 'actors' / 'colab-actor-colab-g4.yielded.json').write_text(json.dumps({'serve_args': serve, 'pid': 9}))
+    monkeypatch.setattr(k, 'actor_oversized', lambda: False)
+    assert k.actor_dead()
+    assert k.step().action == 'serve'                     # the fake runner's serve-checkpoint answers 0
+    assert not (tmp_path / 'actors' / 'colab-actor-colab-g4.yielded.json').exists()
+    assert k.step().action == 'ok'

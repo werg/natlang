@@ -113,3 +113,42 @@ def test_hdd_floor_refuses_moves(tmp_path, monkeypatch):
     summary = m.run(SimpleNamespace(apply=True, max_minutes=5, hdd_floor_gb=10**9))
     assert summary['moved_bytes'] == 0 and summary['errors'] > 0
     assert not (root / 'collect' / 'v0000-000000000000').is_symlink()
+
+
+def test_tree_copy_resumes_a_killed_partial_and_bounds_writeback(tmp_path, monkeypatch):
+    m = load()
+    monkeypatch.setattr(m, 'FLUSH_BYTES', 1000)
+    src = tmp_path / 'nvme' / 'v0002'
+    (src / 'blocks').mkdir(parents=True)
+    (src / 'blocks' / 'a.bin').write_bytes(b'a' * 5000)
+    (src / 'blocks' / 'b.bin').write_bytes(b'b' * 3000)
+    (src / 'link').symlink_to('blocks/a.bin')
+    dest = tmp_path / 'hdd' / 'v0002'
+    partial = dest.with_name('v0002.partial')
+    (partial / 'blocks').mkdir(parents=True)
+    done = partial / 'blocks' / 'a.bin'                 # finished by the killed pass: reused
+    done.write_bytes(b'a' * 5000)
+    os.utime(done, ns=(src.joinpath('blocks/a.bin').stat().st_atime_ns, src.joinpath('blocks/a.bin').stat().st_mtime_ns))
+    (partial / 'blocks' / 'b.bin').write_bytes(b'b' * 100)  # cut off mid-write: copied again
+    copied = []
+    real = m._copy_bounded
+    monkeypatch.setattr(m, '_copy_bounded', lambda s, o: copied.append(s.name) or real(s, o))
+    assert m.copy_tree_verified(src, dest) == 8000
+    assert copied == ['b.bin'] and not partial.exists()
+    assert (dest / 'blocks' / 'b.bin').read_bytes() == b'b' * 3000 and os.readlink(dest / 'link') == 'blocks/a.bin'
+
+
+def test_tree_copy_drops_a_file_that_does_not_verify(tmp_path, monkeypatch):
+    m = load()
+    src = tmp_path / 'src'
+    src.mkdir()
+    (src / 'x.bin').write_bytes(b'x' * 100)
+    real = m._sha
+    monkeypatch.setattr(m, '_sha', lambda p: 'bad' if '.partial' in str(p) else real(p))
+    dest = tmp_path / 'dest'
+    try:
+        m.copy_tree_verified(src, dest)
+        raise AssertionError('should not verify')
+    except RuntimeError:
+        pass
+    assert not dest.exists() and not (tmp_path / 'dest.partial' / 'x.bin').exists()

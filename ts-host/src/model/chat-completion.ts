@@ -223,6 +223,21 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
   return { ...head, object: 'chat.completion', choices: [{ index: 0, message, finish_reason: finish }], ...extra };
 }
 
+/** A reply whose text opens with a <think>...</think> block (Gemini's thought summary under `include_thoughts`; Gemma's
+ * own thinking comes as <thought>...</thought>): the block
+ * becomes `reasoning_content` (after any reasoning the server already split off) and the rest is the reply text. */
+export function thoughtsFromContent(message: Json | undefined): Json | undefined {
+  const content = message?.content;
+  if (typeof content !== 'string') return message;
+  const match = /^\s*<(think|thought)>([\s\S]*?)<\/\1>\s*/.exec(content);
+  if (!match) return message;
+  const earlier = message!.reasoning_content ?? message!.reasoning;
+  const thought = (match[2] ?? '').trim();
+  const { reasoning: _drop, ...rest } = message!;
+  return { ...rest, content: content.slice(match[0].length),
+    reasoning_content: typeof earlier === 'string' && earlier.trim() ? `${earlier}\n\n${thought}` : thought };
+}
+
 function contentText(value: unknown): string {
   if (typeof value === 'string') return value;
   if (Array.isArray(value) && value.every(part => part && typeof part === 'object' &&
@@ -365,6 +380,14 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       delete wireRequest.x_natlang_omit_seed;
       delete wireRequest.x_natlang_host_call_fields;
       delete wireRequest.x_natlang_history_reasoning;
+      // Gemini on Vertex/AI Studio returns its thought *summaries* only when asked (`include_thoughts`), and then inside
+      // the reply text as a leading <think>...</think>: `x_natlang_include_thoughts` asks, and the reply's block moves
+      // to `reasoning_content` (thoughtsFromContent) so it is the turn's reasoning, never its answer.
+      const includeThoughts = wireRequest.x_natlang_include_thoughts === true;
+      delete wireRequest.x_natlang_include_thoughts;
+      if (includeThoughts) wireRequest.extra_body = { ...(wireRequest.extra_body as Json | undefined),
+        google: { ...((wireRequest.extra_body as Json | undefined)?.google as Json | undefined),
+          thinking_config: { include_thoughts: true } } };
       if (request.seed !== null && !omitSeed) wireRequest.seed = request.seed;
       // The configured collection cap and the runtime's remaining allowance
       // both apply. A per-turn allowance must not erase a smaller explicit cap.
@@ -383,7 +406,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       const body = isStream(reply) ? await assembleChatCompletion(reply, onDelta) : reply;
       if (options.onExchange) await options.onExchange(structuredClone({ request: recordedRequest!, wireRequest, wireResponse: body }));
       const choice = (body.choices as Json[] | undefined)?.[0];
-      const message = choice?.message as Json | undefined;
+      const message = options.request?.x_natlang_include_thoughts === true
+        ? thoughtsFromContent(choice?.message as Json | undefined) : choice?.message as Json | undefined;
       const rawCalls = message?.tool_calls as Json[] | undefined;
       const usage = body.usage as Json | undefined;
       if (typeof usage?.prompt_tokens === 'number') { promptTokens += usage.prompt_tokens; hasPrompt = true; }
@@ -509,16 +533,40 @@ export function limitedTransport(transport: ChatTransport, limit: RequestLimit):
   };
 }
 
+/** Collection controls the HTTP chat transport applies itself (chatCompletionModelTurn): never wire fields. Every request
+ * built from a collection's `request` controls leaves them out (a hosted server rejects unknown fields: NIM "Unsupported
+ * parameter", Gemini "Unknown name"). */
+export const CLIENT_REQUEST_CONTROLS = ['x_natlang_omit_seed', 'x_natlang_host_call_fields', 'x_natlang_history_reasoning',
+  'x_natlang_include_thoughts'] as const;
+
+export function withoutClientControls<T extends Json>(request: T): T {
+  const out = { ...request };
+  for (const key of CLIENT_REQUEST_CONTROLS) delete out[key];
+  return out;
+}
+
 export function promptLogprobDecider(transport: ChatTransport, options: { request?: Json;
   /** Per-decision request fields (a tuned call's weight selection) carried on the decision item itself. */
   extraFor?: (item: object) => Json | undefined } = {}): DecisionScorer {
-  const { max_tokens: _max, temperature: _temperature, stream: _stream, ...extra } = options.request ?? {};
+  const { max_tokens: _max, temperature: _temperature, stream: _stream, ...extra } = withoutClientControls(options.request ?? {});
   return async (item, signal) => {
     const { messages, options: replies } = item;
     if (!replies.length) throw new Error('a decision needs at least one option');
     const itemExtra = options.extraFor?.(item);
     const responses = await Promise.all(replies.map(async reply => {
-      const raw = await transport({ ...promptLogprobRequest(messages, reply, { ...extra, ...itemExtra }, item.open_reply === true, item.reasoning) }, signal);
+      let raw;
+      try {
+        raw = await transport({ ...promptLogprobRequest(messages, reply, { ...extra, ...itemExtra }, item.open_reply === true, item.reasoning) }, signal);
+      } catch (error) {
+        // A hosted server without prompt scoring refuses the request itself (an unknown `prompt_logprobs` or
+        // `continue_final_message`: 400/404/422) rather than answering without `prompt_logprobs`: the same verdict, so
+        // the runtime reads this function's decisions by generation instead of failing the call. Rate limits, overload
+        // and transport faults stay errors (retried by the caller).
+        const status = (error as { status?: unknown }).status;
+        if (typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429)
+          throw new Error(`decision-unsupported: the server refused prompt scoring (${(error as Error).message.slice(0, 300)})`);
+        throw error;
+      }
       return (isStream(raw) ? await assembleChatCompletion(raw) : raw) as PromptLogprobResponse;
     }));
     return scoresFromPromptLogprobs(responses);

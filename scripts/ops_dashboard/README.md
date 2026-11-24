@@ -7,16 +7,33 @@ answers reads.
 
 | Piece | Where | Role |
 | --- | --- | --- |
-| `export.py` | ledger unit `ops-dashboard-export-N` (0.3 GB) | every 30 s writes `latest.json`, `metrics.jsonl`, `machines.jsonl`, `events.jsonl` under `<data>/ops/dashboard/out/` (unchanged contract, see `CONTRACT.md` there) |
+| `export.py` + `ei_export.py` | ledger unit `ops-dashboard-export-N` (0.3 GB) | every 30 s writes `latest.json`, `metrics.jsonl`, `machines.jsonl`, `events.jsonl` under `<data>/ops/dashboard/out/` (see `CONTRACT.md` there). `ei_export.py` builds `snap.ei`, the expert-iteration section (below) |
 | `app/ops-peer.mjs` | ledger unit `ops-peer-N` (1.5 GB) | the native participant: owns the native device, coordinates writes, serves reads, applies edits, mirrors the inbox; browser pairing runs under `helpers/participant-lifecycle.mjs` (woken by the host's setup notifications) |
 | `data_service.py` (+ `data_catalog.py`, `data_items.py`, `data_edits.py`) | child of ops-peer (JSON lines) | answers every read: ops state and the training-data catalog, items, runs; applies edits to the edit layers |
 | `app/domain.mjs` | bound into the signed descriptor | the retained state: `proposeEdit`, `recordApplication`, `ask`, `answer`; queries `edits`, `inbox` |
-| `app/ui/` | the signed publication | dashboard (`app.mjs`, `charts.mjs`, `model.mjs`), training data (`data.mjs`), session connection (`connect.mjs`, `page.mjs`; the starter's `connection.mjs` and `connect-view.mjs` unchanged) |
+| `app/ui/` | the signed publication | dashboard shell (`app.mjs`: state, intake, alerts, ask dialog, tabs), views (`views.mjs`: Now, Rounds, Data, Held-out, Machines, Units, Teachers, Open items), charts (`charts.mjs`: line, stacked bars, round Gantt, held ladder), pure helpers (`model.mjs`), training data (`data.mjs`), session connection (`connect.mjs`, `page.mjs`; the starter's `connection.mjs` and `connect-view.mjs` unchanged) |
 | data registry | read by `data_catalog.py` | every dataset, its producer, inputs, license and consumers: `natlang_neuralese.common.data_registry` (git layer `training/corpora` + the producer journal; `scripts/data_registry.py`) |
 
 Private state (handle, signer, epoch key, descriptor, device store) lives in `~/.local/share/tendriller/natlang-ops-app/private/`
 (`NATLANG_OPS_PRIVATE`), never in the repository; the verified release packages (SDK, tools, Chronolog session; `package.json` installs them from there) are in `.../natlang-ops-app/kit-rc17/`;
 the built page in `.../natlang-ops-app/page/`. Node 24: `~/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin`.
+
+## What the page shows (phone first)
+
+Six bottom tabs: **Now** (verdict and tiles, what needs attention, the training round and the one being prepared with their steps and ETAs, held progress, fresh data per hour,
+machine cards, Colab credits and runway, what changed), **Rounds** (round timeline Gantt, policy versions, per round: steps, timings, what it trains on, new versus repeated
+episodes, SFT and validation loss, collection health, frontier tiers), **Data** (episodes per hour by machine, per collector, per policy, student fill, teacher campaign per
+teacher, campaigns by round, newest registry entries), **Held-out** (the gate, measurement in progress, pass rate by policy with its series, paired comparisons, every
+measurement), **Machines** (DGX, Pop, Colab A100, Colab L4 with activity, memory, disks and their fall rate, credits and spend, watchdog, program tuning), **More** (Units grouped by role,
+Teacher details, Training data, Open items and fallow, Investigations, Inbox, Events). Wide screens show every tab in the top bar.
+
+`snap.ei` (built by `ei_export.py`, all readers incremental or cached by mtime and size; state in the exporter's `state.json` under `ei`, rebuilt when `STATE_VERSION` changes):
+`driver`, `phase`, `lineage`, `reference`, `rounds` (stamps, size, SFT series, mix, frontier, health), `collection` (per policy, hourly episodes by machine, live collectors, fill),
+`held` (results with series and task-level standard errors, same-series pairs, the gate, measurements in progress from Pop's held log, the held-v4 queue), `colab` (balance and rate
+from `colab usage` every 10 min in a background thread, balance history, spend per session from `cycle-cost.json`), `watchdog` (active alerts and GPU idle from the ops watchdog's state), `hist`
+(10-minute machine samples, 24 h), `disks` (fall rate), `tuning`, `registry`, `open_items`, `decisions`, `events` (curated from `drive.log`). Derived alerts (driver down, SFT log lag, credits runway,
+disk fall, held gate retrying, stalled collector or teacher) join `snap.alerts`. The driver is discovered as the newest `ops/ei/*/drive.log`. Held pass rates are only comparable inside one measurement series;
+the page and the exporter never pair across series.
 
 ## How data reaches the page
 
@@ -26,7 +43,8 @@ the built page in `.../natlang-ops-app/page/`. Node 24: `~/.local/share/natlang-
   every 30 s and GB-scale training data would otherwise grow the signed history without bound.
 - **Retained facts** are small and human-made: edits and questions (declared commands), the participant's application records
   and the agent's answers. The page reads them with the `edits` and `inbox` queries (live views).
-- Query names: `ops.tick|snapshot|metrics|machines|events`; `data.catalog|dataset|items|item|tokens|chain|task_refs|search|registry`.
+- The page reads only the snapshot (and the `ops.metrics` stream while the Investigations tab is open, for its old GRPO charts); machine history, events, rounds and held results travel inside the snapshot.
+- Query names: `ops.tick` (exporter file signatures, plus `listener`: the agent's heartbeat) `|snapshot|metrics|machines|events`; `data.catalog|dataset|items|item|tokens|chain|task_refs|search|registry`.
   `edits.*` and `inbox.*` are native-only.
 
 ## Edits: from the page to the data
@@ -43,10 +61,27 @@ applies each one once (`data_edits.py`), then records `recordApplication {edit, 
   split group. SFT row, demo and episode exclusions are recorded but no builder reads them yet; corrections need
   re-qualification (see the findings doc).
 
+## Mobile layout
+
+Tendriller injects a fixed "Page options" button at the bottom right of every page (about 125 x 54 px, maximum z-index, not configurable; werg/tendriller#92). On a
+phone the tab bar therefore sits under the header at the top, and the page keeps 100 px of bottom padding so nothing ends under the button.
+
 ## The supervising agent's inbox
 
-`inbox.sh` (list), `inbox.sh wait` (block until an unanswered ask exists; run in the background), `inbox.sh answer OP TEXT`
-(declared `answer` command through the running participant), `inbox.sh handled OP`.
+`inbox.sh` (list), `inbox.sh wait` (block until an unanswered ask exists; run in the background, uncapped), `inbox.sh answer OP TEXT`
+(declared `answer` command through the running participant), `inbox.sh handled OP`, `inbox.sh listener` (age of the heartbeat in seconds).
+
+- **What the owner sees.** After Ask > Send the item itself shows "Sent HH:MM; waiting for the agent" at once (this device's pending command, kept in
+  localStorage until the journal has it) and the agent's answer inline when it arrives, with a "New answer" chip and a "Got it" button. Unread answers badge the
+  More tab and the Inbox entry; Now has an Inbox strip one tap from the top. The Inbox tab lists every question with its state and the listener card.
+- **Is anyone listening?** `inbox.sh wait` touches `<data>/ops/dashboard/inbox.listener` every 10 s. The participant puts that mtime in every `ops.tick` (every 10 s)
+  as `listener`; the page shows "agent listening" while it is under 3 minutes old and "nobody listening" otherwise, on the strip, on waiting questions and in the Inbox tab.
+  A tick older than 2 minutes makes the state "unknown" (the participant is not reporting).
+- **A restart of the participant (`ops-peer-N`) kills the agent's listener.** The old `wait_event.sh` (and the contract-3 collector) are gone; the listener is only `inbox.sh wait`.
+  After every restart of ops-peer, and after every ask `wait` returns, re-arm it: `scripts/ops_dashboard/inbox.sh wait` as a background command. The heartbeat on the page tells
+  you whether you did. The ask itself is always kept: it is in the journal and in `inbox.jsonl` whether or not anyone listens.
+- Ask records carry no timestamp (the journal's `authorTimestampMs` is not in the `inbox` query result, and changing a query's read function changes the definition the
+  descriptor binds), so the page keeps the send time of this device's own questions in localStorage; questions from elsewhere show "Sent earlier".
 
 ## Operate
 
@@ -97,5 +132,5 @@ release: download it, check `SHA256SUMS`, unpack `packages/` next to the old kit
 
 ## Preview and tests
 
-Layout preview with real data (no session; edits stay in memory): `python preview_server.py` under the ledger, then
-`http://127.0.0.1:8765/`. Tests: `pytest tests/ops_dashboard` (the Python data service and exporter, plus `app/test/app.test.mjs`: the WebSocket close guard and the module graph against the installed packages).
+Layout preview with real data (no session; edits stay in memory): `preview_server.py` under the ledger (it needs `PYTHONPATH=training/neuralese:.` and the repo venv; `NATLANG_OPS_OUT` points it at a scratch exporter output, `--page` at a scratch build from `NATLANG_OPS_BUILD=DIR node build.mjs`), then
+`http://127.0.0.1:8765/`. Tests: `pytest tests/ops_dashboard` (the Python data service, exporter and `ei_export`, plus `node --test` in `app/`: `test/app.test.mjs` the WebSocket close guard and the module graph against the installed packages, `test/model.test.mjs` the pure helpers).

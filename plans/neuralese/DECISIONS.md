@@ -10925,3 +10925,285 @@ and 08:18. The rule now runs in `storage_sweep.sh` every 30 min (`SWEEP_EI=0` op
 Mechanism inventory: `scripts/neuralese_data/vibestudio_campaign.py` overrides the Host collector runtime lifetime with archival wave size; `Host/scripts/collect-live-workflow-teacher.mjs` already supports independent `--cases-per-instance` (default 12), while `scripts/vibestudio/qualify_open_goals.py:143` also defaults to 12. The current native full-sweep controller bounds generations at 16 and joins teardown. These are execution scheduling limits, not a serving-engine feature; engine parity is unchanged. The campaign was the consumer overriding the existing safe lifetime with 64.
 
 Fix the campaign default to 12 cases per runtime, independent of the full 64-case archival wave, preserving eight ordinary workers. Waves declaring nested installed deployment hubs default to two workers because actual four-context native runs reached 14 GiB; these scenarios start additional servers and do not share only a fixed cost. Both limits have explicit CLI overrides, including 0 for unbounded lifetime. Record effective scheduling in immutable wave execution metadata. No task, goal, expected outcome, model sampling, or original trajectory is changed. Existing ready V21 module closure, outcome composition, observation-frontier and prerequisite-check fixes enter Luna collection without waiting for completion of all 2,327 model-free fixtures.
+- **bgkit-data released to Drive (owner 2026-11-24, "Yes that can go").** The Drive tier drains `bgkit-data` (591 GB)
+  after the round inflow and before the older run archives (`RELEASED_ROOTS`).
+  - The usual safety applies: md5 and size verified before the HDD delete, a stub per file, the manifest, and
+    `drive_tier.py restore PATH` (any prefix: one repo or a subtree).
+  - Live readers were checked. The K3 pool (`natlang-rl-git-history-20261120`) serves its snapshots from NVMe assets.
+    Its authoring (`git_history.stage`) copies only repos with 0.2-25 MB object stores, below the 64 MB file floor, so
+    `repos` (412 GB) moves only packs of repos K3 never draws.
+  - `multi_news_v1`, `arxiv_v1` and `pubmed_v1` stay on the HDD (`KEEP_SUBPATHS`): the registered view-sources-v3
+    corpus reads them on a rebuild.
+  - `bgkit-checkpoints` and the hindsight data stay out (not approved).
+
+## 2026-11-24 10:30 The teacher campaign is a standing queue of every teacher-eligible task, routed by measured yield
+
+**Observed (09:30).** Each campaign took `--limit` = the newest frontier's rare-task count: 234 for r0002, then 46
+(r0004) and 41 (r0005) once `--snapshot-min-hours` went from 2 to 1. A campaign ended in ~30 min, and its 24 slots sat
+idle until the next frontier, ~2 h. The frontier only set the count. teacher_gen took the first N tasks of its own gap
+order, and 38 of r0005's 41 frontier-rare tasks already had a teacher success. Gemini Argon (`min_failed: 1`) had 3
+episodes, because few tasks in a 41-task campaign were teacher-failed. Measured yields (all manifests, Luna and Sol):
+aei1 student-rare tasks with no prior teacher failure 10/24 (42%), with three prior failures 7/242 (3%); fresh
+unmeasured tasks (`teacher_untried`) Luna 178/371 (48%), Sol 109/190 (57%). Nemotron Ultra and Super scored 0/99 on the
+aei1 student-rare tasks and ERNIE 0/23 overall.
+
+**Decision (built; opt-out `async-drive --no-standing-teacher`).**
+- **Standing queue.** `ensure_teacher` launches the newest frontier's campaign with `--limit 0`: the whole ordered
+  queue. Rates come from the newest collection's `tasks.rates.json` (every collection, newest first), then the lineage
+  groups, then the frontier; the newest measurement wins (`teacher_gen --student-rates/--frontier-rates`). When a
+  newer frontier appears, the running campaign gets `WORK/DRAIN`: its running episodes finish, it takes no new task
+  and exits. The driver checks every minute while a drain is pending and launches the re-prioritised queue (earlier
+  campaigns cover their successes). Exclusions are unchanged: held-v3/v2/v4 closure via `grpo.load_tasks`,
+  `ops/pool-errata`, and teacher-covered tasks.
+- **Order by expected value** (`GAP_TIERS`):
+  1. `student_rare`: rate <= 0.25 and no teacher failed it.
+  2. `priority_pool`.
+  3. `student_band`: rate between 0.25 and 0.9, where a teacher success adds a solved variant.
+  4. `teacher_untried`: unmeasured.
+  5. `teacher_failed`.
+  6. `student_rare_failed`: last, at 3% yield.
+
+  Tasks the student solves >= 0.9 are left out. Within a tier, fewer teacher failures come first, family round-robin.
+  A dry run at 10:20 on r0005's inputs gave 7,442 queued tasks: 29 / 0 / 44 / 5,429 / 1,882 / 58. Of the
+  `teacher_failed` tasks, 1,777 have three failures.
+- **Routing by measured yield.** A teacher's strength is its posterior yield on `teacher_untried` verdicts (all
+  covered campaigns, 5 episodes of prior at 0.3). A teacher below `--weak-yield 0.25` never takes the student-rare
+  tiers. A failure there spends one of the task's attempts and demotes it for every later campaign. Today that means
+  Nemotron Ultra (0.19), Nemotron Super (0.16) and ERNIE (0.07); Luna, Sol and the Gemini models are strong.
+  - Each teacher takes the first queue task it may take, so strong teachers take the hard tiers first. Family routing
+    (`--route-ratio`, `--route-floor`) is unchanged.
+  - A task a teacher fails here stays at its queue position for the next teacher. That feeds Luna's fresh failures to
+    Sol and Gemini (`min_failed: 1`, kept as configured) ahead of the three-times-failed backlog.
+  - Each launch logs a `teacher routing` line per teacher: fresh yield, episodes, weak, min_failed, slots.
+- **Rate limits.** Unchanged: per-teacher provider cooldowns, deferral and retirement on a refused account. A task
+  deferred three times is done for the launch, instead of being re-taken.
+
+**Expected.** About 350-500 episodes/h and 100-170 successes/h (estimate):
+- Luna: 6 slots x 60-90 s.
+- Sol and Gemini: on failed tasks.
+- Previously: ~44 successes/h while running, less with the idle gaps.
+
+The Codex subscription limit at a sustained Luna+Sol rate is not measured. Gemini's Vertex spend rises from ~3
+episodes per campaign to its 6 slots busy; the owner is deciding that spend (`ops/ei/teachers.json` slots).
+
+## 2026-11-24 10:00 Held reuse never takes a set-aside result; a running measurement is joined, its directory never moved
+
+**What happened at the 09:41 restart (pin 89ebbf2a3).**
+1. `reuse_held` copied the reference result from `held/policy-e15b20a86f1c-unpaired-1795501815`, which the previous
+   driver had set aside as unpaired.
+2. The pair was refused again, and `set_held_aside` moved the whole directory to
+   `policy-e15b20a86f1c-unpaired-1795509710`. A Pop re-measurement had been writing into that directory since 07:41
+   (`popheld-policy-e15b20a86f1c-1795502476`).
+3. The unit failed at 09:42 (`FileNotFoundError: .../packet.jsonl`). Its episodes (row-000..255, run.json) are in
+   the aside directory.
+
+**Fix (e771e3673's re-measure path).**
+- **Never reused:** `held_reuse_candidates` excludes any result in a set-aside directory (`aside.json`, or named
+  `<name>-<reason>-<epoch>`). Into the series that refused a result, it also excludes that result's bytes and the
+  source it was reused from.
+- **What a set-aside records:** `set_held_aside` writes `aside.json` (reason, series host and key, result sha256,
+  `reused_from`).
+- **Only the result moves:** a reused result, or a result in a directory a measurement unit still writes into, moves
+  alone (`result.json`, `reused.json`). The measurement's files stay where it writes them.
+- **Joined:** `pop_held` joins a running `popheld-<OUT>-*` unit before it considers reuse, and `dgx_held` skips the
+  result check and reuse while its unit runs (`held_measuring`).
+
+Test: `tests/neuralese/test_async_train.py` covers this sequence.
+
+## 2026-11-24 10:20 The A100 actor lost between rounds: a yielded actor's record now survives a restarted run-sft (program-tuning strand)
+
+Observation: the A100 had no actor from about 06:48 to 10:00; aei1's rebinds of r0004 (1823ce9b) at 09:43 and 09:50
+failed on 127.0.0.1:8570. Cause: r0003's first `run-sft` yielded the actor at 05:41, and `stop_colab` deleted
+`colab-actor-colab-g4.json`, keeping the serve arguments only in that process. A second `run-sft` took the round over
+at 06:21, found no record (`yielded_actor: False`) and restored nothing; the first one's restore never ran. With no
+record and no pending serve the keeper decided `ok` every cycle (it logs to `ops/ei/colab/session-keeper.log`, so the
+journal looked silent). Not a tenant fault: the program-tuning fit tenant ran outside MPS beside nothing.
+
+Fix (1b88e5d3f, default, tests in `test_colab_session_keeper.py` and `test_colab_and_profiles.py`): a yield moves the
+record to `colab-actor-<host>.yielded.json`; `restore_colab_actor` removes it only after a successful restore; a
+`run-sft` restarted mid-round adopts it; the keeper treats "yielded record, no live record, no round on the session" as
+actor down and serves it from that record (beside the earlier `pending_serve` retry and dead-actor checks). The actor
+was served at 1823ce9b at 10:00:18 through the keeper's pending-serve path; both keepers run from `/home/werg/natlang`.
+
+Seen alongside, not fixed here (aei1's driver): (1) `ensure_remote_collection` runs only at a round's start and in DGX
+SFT polls, so an actor that comes up after r0005's start (09:50) gets no collector until r0006; (2) r0005 was prepared
+at 09:59 but its SFT had not started at 10:20: the driver's main thread sits in `health_report`, reading
+`v0000-*-remote0` results that the storage sweep moved to `/mnt/external` (HDD, D state); (3) `colab-g4a-tunnel` has
+flapped every 10 s since 07:05 (restart counter 759, HTTP 429) because a client's `ControlPersist yes` master
+(pid 2427383) holds the session; the forwards work through that master.
+
+## 2026-11-24 10:40 Free teacher providers, Gemini thought capture, paid Vertex paused, daily free-model check (teacher-providers strand)
+
+**Paid Vertex paused (owner 10:00: credits almost empty).** `ops/ei/teachers.json` had already lost the Gemini specs,
+but `aei1/teacher-r0005` was launched at 08:40 with Gemini 4 Argon (4) and 3.1 Pro (2) (`min_failed` 1; no Gemini
+episode had started: none in its manifest or queue files). The unit ended at 09:36 and the driver's standing thread
+relaunched r0005 at 09:40 from `teachers.json`: no Vertex teacher. `expert_iteration.TEACHERS` (the fallback when
+`teachers.json` is absent) no longer holds them; `VERTEX_TEACHERS` keeps the specs for a deliberate re-add.
+Vertex spend to date (list price, from the per-call traces): qualification of 3.1 Pro and Argon $4.15 (36 traced
+episodes; Vertex bills hidden thinking as output and the trace's completion tokens may leave it out: a floor), probes
+under $0.10, the capped Model Garden qualification below $0.33 (gpt-oss-120b and DeepSeek V4.1 Flash, 40 episodes, guard at $0.90).
+
+**Owner's question "why Argon": prices (Vertex list, global, <= 200k, per 1M tokens in / cached in / out):** Argon
+$2 / 0.10 / 10 (promotional through 2026-11-30, then $4 / 0.20 / 20); 3.1 Pro $2 / 0.20 / 12; Gemini 4 Hydrogen
+$1.50 / 0.075 / 7.50; Neon $3 / 0.15 / 15; Gemini 3.8 Flash (and 3.7, 3.6) $0.75 / 0.075 / 3.75 (introductory through
+2026-12-31, then $1.50 / 7.50); 3.5 Flash $1.50 / 0.15 / 9; 3.5 Flash-Lite $0.30 / 0.03 / 2.50; 3.1 Flash-Lite $0.25.
+Model Garden (MaaS) callable in this project: DeepSeek V4.1 Flash $0.30 / 0.03 / 1.20, GLM-5.2 $1.40 / 0.14 / 4.40,
+gpt-oss-120b $0.09 / 0.36; listed but "not found or no access" here (Model Garden enablement is the owner's console
+action): DeepSeek V3.2, R1-0528, V3.1, Kimi K2 Thinking, GLM-5, GLM-4.7, Qwen3-Next-80B Thinking, Qwen3-235B, MiniMax M2,
+Llama 4 Maverick. Measured Gemini episodes: ~70k input tokens (16-29k cached), ~1.6k visible output.
+
+**Reasoning kinds (owner: real traces wanted; teacher reasoning stays zero-weight context):**
+- raw: NIM (Nemotron 3.5 Super/Lightning, 3 Ultra, Mistral Large 4, MiniMax M3.1, Step 5, GLM 5.3 Flash), OpenRouter and
+  Kilo free models, Z.ai GLM-4.7/4.5 Flash, Groq gpt-oss, Vertex Model Garden (gpt-oss-120b, GLM-5.2; DeepSeek V4.1 Flash
+  only with `chat_template_kwargs.thinking: true` or `reasoning_effort`), Gemma 4 on AI Studio (its own `<thought>`
+  text in the reply).
+- summary: Codex (Luna, Sol), Claude, Gemini 3.x/4 with `include_thoughts` (Vertex and AI Studio put the summary in the
+  reply text as `<think>...</think>`: now moved to `reasoning_content` by ts-host `x_natlang_include_thoughts`, the
+  Gemini default in teacher_gen).
+- hidden: Gemini Flash-Lite (no thoughts returned even with `include_thoughts`).
+
+**Free-provider sweep (2026-11-24; keys from `~/.config/natlang/*.env`; research agent read the providers' docs):**
+
+| Provider | Key works | Free models worth it | Limits (measured or documented) | Reasoning | Terms facts |
+|---|---|---|---|---|---|
+| NVIDIA NIM | yes | Nemotron 3.5 Super, 3 Ultra, 3.5 Lightning; Mistral Large 4, MiniMax M3.1, Kimi K3.1, Step 5, GLM 5.3 Flash | one account limit (~40 RPM reported); 429 at ~12 slots; Kimi/Step/GLM 74-180 s per one-line call | raw | trial use, logged to improve NVIDIA products |
+| OpenRouter `:free` | yes | ERNIE 5.5 Flash, Ling 3.2 Flash, dots 3, Nemotron (3 Ultra, 3.5 Super/Lightning), Gemma 4 | 1,000 req/day (>= $10 bought), 20 RPM; spent by 09:30 today (ERNIE slot) | raw | free providers may log/train |
+| Kilo gateway | keyless | Beam (free), Nemotron, ERNIE, Ling | keyless allowance used up after ~2 episodes ("PROMOTION_MODEL_LIMIT_REACHED: sign up for free"); a free account is needed (owner's signup) | raw | free router may log prompts |
+| Google AI Studio | free tier only | Gemini 3.5/3.1 Flash-Lite (15 RPM), Gemma 4 26B (16k input TPM: ~2 calls/min); 3.5-3.8 Flash and Gemma 31B 503 (overloaded) today | per-project quotas, not listed by the API | Flash-Lite hidden; Gemma raw `<thought>` | unpaid data used to improve products; "may not use the Services to develop models that compete" |
+| Z.ai | yes (free models only; paid GLM: no balance) | GLM-4.7 Flash, GLM-4.5 Flash | about 1 concurrent request (429s); 1 episode in 25 min | raw (`thinking`) | not found |
+| Groq | yes | gpt-oss-120b, Qwen 3.8 27B | 8k TPM, 200k TPD per model: below one episode | raw | services agreement not read |
+| LLM7 | keyless | gpt-oss 20B, Codestral, Mistral Nemo ("turbo"); the rest is paid "pro" | unpublished | raw (gpt-oss) | provenance unclear |
+| GitHub Models | n/a | retired 2026-07-30 | | | |
+| Cerebras, SambaNova, Together, Fireworks, Chutes, Kimi, Mistral, HF (free acct), Cloudflare (10k neurons/day, ~1-2 episodes) | no key or no free path | | | | Cerebras/DeepSeek terms below |
+| OpenCode Zen | key, no balance | free models only through the official client | | raw | client restriction |
+| DeepSeek API (paid, near-free off-peak $0.15/M in, $0.003 cache hit) | no key | | | raw | ToS allows distillation |
+
+
+**Qualification (same 20 tasks: 10 Luna-solved, 10 Luna-failed; one episode each):** 
+
+| Teacher | Luna-solved | Luna-failed | Total | s/episode | List $/verified success | Reasoning | Limit that binds |
+|---|---|---|---|---|---|---|---|
+| Gemini 4 Argon (Vertex, paid) | 10/10 | 7/10 | 17/20 | 182 | 0.12 (promo; 0.24 after 11-30) | hidden (summary now capturable) | credits |
+| Gemini 3.1 Pro (Vertex, paid) | 10/10 | 3/10 | 13/20 | 142 | 0.16 | hidden (summary now capturable) | credits |
+| DeepSeek V4.1 Flash (Vertex MaaS, paid) | 9/10 | 3/10 | 12/20 | 69 | 0.02 | raw | credits |
+| gpt-oss-120b (Vertex MaaS, paid) | 4/10 | 5/10 | 9/20 | 88 | 0.008 | raw | credits |
+| Nemotron 3.5 Super (NIM, free) | 5/10 | 4/10 | 9/20 | 109 | 0 | raw | NIM account RPM |
+| ERNIE 5.5 Flash (OpenRouter free) | 4/10 | 3/10 | 7/20 | 128 | 0 | raw | 1,000 req/day |
+| Gemini 3.5 Flash-Lite (AI Studio free) | 3/8 | (running) | 3/8 | 137 | 0 | hidden | 15 RPM |
+| Nemotron 3.5 Lightning (NIM, free) | 2/8 | (running) | 2/8 | 257 | 0 | raw | NIM account RPM |
+| Mistral Large 4 / MiniMax M3.1 (NIM) | 2/8, 0/9 | 1/8, 0/10 | 3/16, 0/19 | 1,500-1,800 | 0 | raw | NIM throttling; MiniMax spends its 40 calls on nested calls |
+| GLM-4.7 Flash (Z.ai), Gemma 4 26B (AI Studio), Beam (Kilo) | running / 1/2 (Beam) | | | | 0 | raw | 1 concurrent / 16k TPM / signup |
+| Baseline: Luna (Codex) | 10/10 (by construction) | 0/10 | | | subscription | summary | |
+| Baseline: Sol (Codex), r0001 | | 5/10 | | | subscription | summary | |
+
+The free-tier runs on pin 6263a970f were stopped and rerun on eb31c6f4a after the decide() fix below (their first runs
+lost every decide() call to a 400).
+
+**Harness bug found and fixed (eb31c6f4a): hosted teachers' decide().** The prompt-scoring request a decision readout
+sends (`promptLogprobDecider`) carried every collection control except max_tokens/temperature/stream, so the
+client-side `x_natlang_*` controls reached the server: NIM 400 "Unsupported parameter(s): x_natlang_history_reasoning"
+(188 failed calls in one Lightning run), AI Studio 400 "Unknown name x_natlang_omit_seed" (Vertex accepts unknown top-level fields, so its "Expected a
+valid JSON object" decide() 400 of the 01:00 entry is a refusal of the scoring request itself, not proven to be the
+leak; both now fall back). And a hosted server that refuses `prompt_logprobs` itself (400/404/422)
+failed the call instead of falling back to generated decisions (only a missing `prompt_logprobs` field did). Now
+`CLIENT_REQUEST_CONTROLS` are stripped from every scoring request (and the explicit-batch scorer's `request`), and a
+4xx other than 408/429 is `decision-unsupported`: the runtime reads that function's decisions by generation (verified
+on Flash-Lite: `decision_readout unavailable decision-unsupported`, then generated). Inventory: requests built from the
+collection controls are `chatCompletionModelTurn` (strips them), `promptLogprobDecider` and `explicitBatchScoreMany`
+(fixed); the Pi provider path takes provider controls, not these; engines are receivers. Production impact so far:
+1 Nemotron episode in r0001, none found in r0005; but r0005's pin (23a358778fd3) has the NIM `x_natlang_history_reasoning`
+default and not the fix: its NIM teachers' decide() calls fail until the campaign moves to a pin >= eb31c6f4a.
+
+**Recommendation (verified successes per dollar, raw reasoning preferred at similar yield):**
+- Now (free only): keep Luna 6, Sol 4, Nemotron 3.5 Super 2, Nemotron 3 Ultra 1, ERNIE 1 (OpenRouter's 1,000 req/day);
+  add Gemini 3.5 Flash-Lite 1 (AI Studio free, independent quota, hidden reasoning). Lightning, Mistral, MiniMax, Kimi:
+  no (low yield or NIM throttling, and they would share the Super's NIM limit). GLM-4.7 Flash and Gemma 4 26B: add at
+  1 slot if their running qualifications show yield (they are rate-limited to a few episodes an hour). Kilo: a free
+  account (owner) would add Beam and a second Nemotron pool.
+- When Vertex credits are back: DeepSeek V4.1 Flash first (raw, 12/20, ~$0.02/success: 2 slots ~ 100 episodes/h ~
+  $40/day at list price, without min_failed), gpt-oss-120b second (raw, 9/20 with 5/10 on the hard half, ~$0.008/success:
+  2 slots ~ $10/day), Argon only at `min_failed` 1 for the hard tail (~$0.10/episode; 4 slots on failed tasks
+  ~ $50-100/day, doubling after 11-30). Gemini 3.8 Flash ($0.75/$3.75, summary) and Hydrogen not yet qualified
+  (Flash was overloaded on AI Studio; plan: 20 tasks each, ~$1.30 and ~$2.50).
+
+
+**Daily check.** `scripts/teacher_free_models.py check` (timer `natlang-teacher-free-models`, 07:30 daily, ledger
+unit low 0.5 GB) lists OpenRouter `:free`, Kilo `:free`/`-free`, the NIM catalogue, AI Studio generateContent models,
+Z.ai flash models and Groq; the first listing per provider is the baseline (recorded 2026-11-24 09:45: 15 / 12 / 18 /
+28 / 3 / 3); each later new model goes to `ops/teacher-free-models/candidates.jsonl` (`status: new`) and shows in the
+dashboard's open items until `teacher_free_models.py mark MODEL qualified|rejected|admitted`.
+
+**Code (default on, tests):** ts-host `x_natlang_include_thoughts` (Gemini thought summaries asked for and moved out of
+the reply text; Gemma `<thought>` blocks likewise); teacher_gen: Gemini default asks for thoughts and sends no
+reasoning back (`x_natlang_history_reasoning: none`: the signatures carry the state), Vertex open models get plain
+controls (DeepSeek thinking on), Kilo/LLM7 named, reasoning kinds as above.
+
+**Spec changes in `ops/ei/teachers.json`:** added `gemini-3.5-flash-lite` (AI Studio, `GEMINI_API_KEY`, 1 slot, `reasoning: hidden`); no paid
+Vertex teacher. The campaign reads it at its next launch (the running r0005 launched 09:40).
+
+## 2026-11-24 aei1 driver: health report off the loop, SFT launch retries, standing remote collectors, ledger backoff head
+
+Four defects seen between 09:50 and 10:35:
+
+1. **The health report blocked the main loop.** `health_report` read every earlier collection's groups, including
+   v0000's 45k files tiered to the HDD (about 350 ms each), and held r0005's SFT launch for 25 min. The fix:
+   - It now runs in a thread beside the loop (`start_health_report`, one at a time).
+   - Earlier collections come only from `health-cache`: a closed whole summary, or else the scored groups an older
+     cache holds. A collection without a cache is listed under `collections.uncached` and never read.
+   - The previous policy's collections are finished when the report runs and still on the NVMe, so the report closes
+     their caches (`collection_summary(close=True)`).
+
+   The same read pattern was in `select` (`tasks.json`), which globbed every collection's groups. It now takes the
+   newest earlier collection's `tasks.rates.json` (`--rates-json`, every outcome up to that selection) plus the
+   lineage collections and `r*/grpo`. The loop's first selection still reads every collection. The frontier and the
+   teacher queue already read only the lineage (current and previous) collections and `tasks.rates.json`. The build
+   reads the lineage collections, `r*/grpo` and `teacher-*`. Both match the `ei_round_tier` assumption.
+2. **A failed `launch-sft.sh` ended the driver.** The preflight unit (4 GB, low, `--wait 600`) was not admitted, and
+   the resulting `CalledProcessError` ended the driver. The fix:
+   - `launch_sft` now notes each failure (`sft_launch_failed`, `attempt`) and retries after 60 s, doubling to 15 min.
+   - Between attempts it keeps the remote collectors and the teacher running.
+   - It stops retrying once a DGX learner of the round runs.
+   - The round env sets `PREFLIGHT_PRIORITY=high` and `PREFLIGHT_WAIT=3600`, which the coordinator's edit of the ops
+     script reads.
+
+   `launch-sft.sh` stays in ops: its preflight (`ops/grpo-v4/sft_preflight.py`) and the legacy cycle use it there, and
+   the driver now dictates the preflight's priority and wait itself.
+3. **Remote collectors started only at a round's start and in the DGX SFT's polls.** The A100 actor came back at 10:00
+   and got no collector until a 10:20 restart. A standing thread (`remote_collect_loop`, every 5 min, in the SFT phase)
+   now starts a collector for every reachable actor that serves the newest policy. While a round's Colab SFT trains on
+   a session, no actor is rebound, but serving actors still get collectors. The opt-out is
+   `--no-standing-remote-collection`. Collector starts are serialized (`REMOTE_LOCK`).
+4. **The ledger's low queue was stuck.** The head `vibe-student-fill-1795481059079952364` had been preempted three
+   times within 30 min of each relaunch (09:32, 09:44 and 10:00, by medium jobs), so its requeue backoff doubled to
+   1920 s. Its 10:32:39 relaunch is exactly 10:00:35 + 1920 s. For that whole backoff it stayed head of the low queue,
+   and a low job behind it could start only as a "spare" backfill: both needs free, each 4 GB plus the 15 GB DGX
+   reserve, about 38 GB against 28-31 GB free. The fix in `memory_ledger.py`:
+   - Within one priority, a requeued unit still in its backoff queues behind eligible jobs. A higher-priority unit in
+     backoff still precedes every lower one.
+   - A preemption (a stop for a waiting higher job, not for the unit's own memory) caps the backoff at 10 min.
+
+   The 238 stale `waiting` entries (since 2026-10-12, `seen` never refreshed) did not matter: `waiting_order` ignores
+   them after `WAITER_TTL`. The guard now drops non-requeued ones unrefreshed for an hour (`prune_stale_waiting`).
+
+   **The memory guard (`natlang-memory-guard`) runs from `/home/werg/natlang` and picks this up only after a pull and
+   a restart.**
+- **Drive tier lost most of its uplink to preemption (2026-11-24 11:20).** Over 3 h at the 5 MiB/s setting, Drive gained
+  only 5.8 GB, although uploads in flight ran at 5.3 MiB/s.
+  - The cause: the ledger preempted the low-priority resumable unit 24 times in 17 h, for medium jobs, while it held
+    0.0-0.4 GB. Each preemption discarded a multi-GB upload in flight.
+  - Second cause: the pass deadline gated only the start of a file, so a 4 GB upload begun late was killed by the
+    unit timeout.
+  - Fix: the unit now runs at medium priority and is not preemptible (1 GB budget). A file starts only if it can
+    finish at 3 MiB/s before `--hard-minutes` (54, under the 55-minute timeout); otherwise smaller files fill the
+    pass. Test added.
+- **EI round tier stalled (2026-11-24 11:30): fixed.** After 09:48 the tier moved nothing while root fell from 102 to
+  65 GB.
+  - Cause: its first move, `collect/v0002` (13.25 GB), never finished. One pass was OOM-killed in the sweep's 1 GB
+    cgroup (dirty HDD writeback counts against it), one was preempted, and one hit the 1200 s step timeout. Each
+    retry started by deleting `.partial`.
+  - Fix in `copy_tree_verified`:
+    - it resumes from `.partial`, reusing files whose size and mtime_ns equal the source's (digest from the NVMe
+      source; every file is still re-read from disk and compared);
+    - it syncs and drops each 64 MB written;
+    - a file that fails verification is removed.
+  - The sweep unit is now medium, not preemptible, at 3 GB. Tests added.

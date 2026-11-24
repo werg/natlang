@@ -11,7 +11,8 @@ import teacher_gen  # noqa: E402
 def test_gemini_default_omits_the_seed_field():
     gemini = 'https://generativelanguage.googleapis.com/v1beta/openai/v1/chat/completions'
     assert teacher_gen.default_chat_config(gemini) == {
-        'top_p': 0.95, 'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': teacher_gen.GEMINI_HOST_CALL_FIELDS}
+        'top_p': 0.95, 'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': teacher_gen.GEMINI_HOST_CALL_FIELDS,
+        'x_natlang_include_thoughts': True, 'x_natlang_history_reasoning': 'none'}
     assert teacher_gen.default_chat_config('https://openrouter.ai/api/v1/chat/completions') == {'top_p': 0.95}
 
 
@@ -63,15 +64,34 @@ def test_gap_selection_tiers_and_failed_by(tmp_path):
         {'task_id': 'often', 'reward': 1.0}, {'task_id': 'often', 'reward': 1.0},
         {'task_id': 'often', 'reward': 0.0, 'jolt_role': 'teacher'},
         {'task_id': 'supply-often', 'reward': 1.0}, {'task_id': 'rare', 'reward': 0.0}]))
-    rates = teacher_gen.student_rates({'rare': {'successes': 1, 'scored': 4}}, [str(tmp_path / 'run/groups/g*')])
-    assert rates['often'] == (2, 2) and rates['rare'] == (1, 5)
+    rates = teacher_gen.student_rates({'rare': {'successes': 1, 'scored': 4}, 'band': {'successes': 0, 'scored': 9}},
+                                      [str(tmp_path / 'run/groups/g*')])
+    # the newest measurement wins: the lineage's groups replace the base rate of 'rare'
+    assert rates['often'] == (2, 2) and rates['rare'] == (0, 1) and rates['band'] == (0, 9)
+    select = tmp_path / 'tasks.rates.json'
+    select.write_text(json.dumps({'band': {'successes': 1, 'scored': 2}, 'rare': {'successes': 2, 'scored': 2},
+                                  'untried-measured': {'successes': 3, 'scored': 4}}))
+    frontier = tmp_path / 'frontier.json'
+    frontier.write_text(json.dumps({'tasks': {'often': {'successes': 3, 'scored': 4, 'tier': 'sometimes'}}}))
+    rates = teacher_gen.student_rates({}, [str(tmp_path / 'run/groups/g*')], [select], [frontier])
+    assert rates['band'] == (1, 2) and rates['rare'] == (0, 1) and rates['often'] == (3, 4)
     rank = teacher_gen.gap_rank(coverage, rates, {'supply', 'supply-often'}, 0.25)
-    tiers = {i: rank({'id': i}) for i in ('solved', 'failed', 'rare', 'often', 'supply', 'supply-often', 'untried')}
-    assert tiers == {'solved': None, 'failed': 3, 'rare': 0, 'often': None, 'supply': 1, 'supply-often': 1,
-                     'untried': 2}
+    tiers = {i: rank({'id': i}) for i in ('solved', 'failed', 'rare', 'often', 'supply', 'supply-often', 'untried',
+                                          'band', 'untried-measured')}
+    # rare and luna failed it: last; 'often' at 3/4 is in the band, luna failed it: teacher_failed
+    assert tiers == {'solved': None, 'failed': 4, 'rare': 5, 'often': 4, 'supply': 1, 'supply-often': 1,
+                     'untried': 3, 'band': 2, 'untried-measured': 2}
+    assert teacher_gen.GAP_TIERS[0] == 'student_rare' and teacher_gen.GAP_TIERS[-1] == 'student_rare_failed'
+    solved = teacher_gen.gap_rank(coverage, {'x': (9, 10)}, set(), 0.25)
+    assert solved({'id': 'x'}) is None and teacher_gen.gap_rank({}, {'x': (0, 3)}, set(), 0.25)({'id': 'x'}) == 0
     rows = [{'id': i, 'family': f} for i, f in (('failed', 'a'), ('rare', 'b'), ('supply', 'a'), ('untried', 'c'),
-                                                ('solved', 'a'))]
-    assert [r['id'] for r in teacher_gen.order_tasks(rows, rank, 1)] == ['rare', 'supply', 'untried', 'failed']
+                                                ('solved', 'a'), ('band', 'b'))]
+    assert [r['id'] for r in teacher_gen.order_tasks(rows, rank, 1)] == ['supply', 'band', 'untried', 'failed', 'rare']
+    # within a tier the tasks fewer teachers failed come first
+    many = {'id': 'many', 'family': 'a'}
+    order = teacher_gen.order_tasks([many, {'id': 'one', 'family': 'a'}], lambda row: 4,
+                                    1, sub=lambda row: 3 if row['id'] == 'many' else 1)
+    assert [r['id'] for r in order] == ['one', 'many']
 
 
 def test_task_a_teacher_failed_goes_to_another_teacher_first(tmp_path):
@@ -100,7 +120,7 @@ def test_every_teacher_identity_names_its_provider():
         assert identity['provider'] == provider and identity['model_id'] == 'm' and identity['endpoint'] == endpoint
 
 
-def test_vertex_gemini_teacher_mints_its_token_per_episode_and_records_hidden_reasoning():
+def test_vertex_gemini_teacher_mints_its_token_per_episode_and_records_summary_reasoning():
     import sys
     import pytest
     vertex = 'https://aiplatform.googleapis.com/v1/projects/p/locations/global/endpoints/openapi'
@@ -110,7 +130,10 @@ def test_vertex_gemini_teacher_mints_its_token_per_episode_and_records_hidden_re
     assert teacher.chat_config == teacher_gen.default_chat_config(vertex)
     assert teacher.chat_config['x_natlang_omit_seed'] is True
     identity = teacher_gen.teacher_identity(teacher)
-    assert (identity['provider'], identity['reasoning']) == ('google-vertex', 'hidden')
+    assert (identity['provider'], identity['reasoning']) == ('google-vertex', 'summary')
+    lite = teacher_gen.make_teacher({'model_id': 'google/gemini-3.5-flash-lite', 'endpoint': vertex,
+                                     'chat_config': {'top_p': 0.95, 'x_natlang_omit_seed': True}})
+    assert teacher_gen.teacher_identity(lite)['reasoning'] == 'hidden'
     env = teacher_gen.episode_env(teacher, {'A': '1'})
     assert env == {'A': '1', 'VERTEX_ACCESS_TOKEN': 'tok-1'}
     plain = teacher_gen.make_teacher({'model_id': 'm', 'endpoint': 'https://integrate.api.nvidia.com/v1'})
@@ -146,3 +169,27 @@ def test_completion_urls_keep_the_api_base_path_and_nim_sends_one_reasoning_alia
     assert url(vertex) == vertex + '/chat/completions'
     assert teacher_gen.default_chat_config(url('https://integrate.api.nvidia.com/v1')) == {
         'top_p': 0.95, 'x_natlang_history_reasoning': 'reasoning_content'}
+
+
+def test_vertex_open_models_take_plain_controls_and_record_raw_reasoning():
+    vertex = 'https://aiplatform.googleapis.com/v1/projects/p/locations/global/endpoints/openapi'
+    deepseek = teacher_gen.make_teacher({'model_id': 'deepseek-ai/deepseek-v4.1-flash-maas', 'endpoint': vertex})
+    assert deepseek.chat_config == {'top_p': 0.95, 'chat_template_kwargs': {'thinking': True}}
+    glm = teacher_gen.make_teacher({'model_id': 'zai-org/glm-5.2-maas', 'endpoint': vertex})
+    assert glm.chat_config == {'top_p': 0.95}
+    for teacher in (deepseek, glm):
+        assert teacher_gen.teacher_identity(teacher)['reasoning'] == 'raw'
+
+
+def test_gemma_on_ai_studio_records_raw_reasoning():
+    gemma = teacher_gen.make_teacher({'model_id': 'gemma-4-26b-a4b-it',
+                                      'endpoint': 'https://generativelanguage.googleapis.com/v1beta/openai'})
+    assert gemma.chat_config['x_natlang_include_thoughts'] is True
+    assert teacher_gen.teacher_identity(gemma)['reasoning'] == 'raw'
+
+
+def test_keyless_kilo_gateway_teacher_is_named_and_raw():
+    kilo = teacher_gen.make_teacher({'model_id': 'reflection/beam-free', 'endpoint': 'https://ai-gateway.kilo.ai/api/v1'})
+    assert kilo.chat_completions_url == 'https://ai-gateway.kilo.ai/api/v1/chat/completions' and kilo.api_key_env is None
+    identity = teacher_gen.teacher_identity(kilo)
+    assert (identity['provider'], identity['reasoning']) == ('kilo', 'raw')

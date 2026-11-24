@@ -24,7 +24,7 @@ CONFIG = json.load(open(os.path.join(HERE, 'config.json')))
 DATA = os.path.expanduser(CONFIG['data_dir'])
 REPO = os.path.expanduser(CONFIG['repo'])
 DASH = DATA + '/ops/dashboard'
-OUT = DASH + '/out'
+OUT = os.environ.get('NATLANG_OPS_OUT') or DASH + '/out'     # the preview can read a scratch exporter output
 
 HANDLERS = {}
 
@@ -82,7 +82,8 @@ def _mtime_ms(path):
 def ops_tick(_):
     return {'ts': int(time.time() * 1000), 'snapshot': _mtime_ms(OUT + '/latest.json'),
             'metrics': _mtime_ms(OUT + '/metrics.jsonl'), 'machines': _mtime_ms(OUT + '/machines.jsonl'),
-            'events': _mtime_ms(OUT + '/events.jsonl'), 'edits': _mtime_ms(DATA + '/ops/data-edits/log.jsonl')}
+            'events': _mtime_ms(OUT + '/events.jsonl'), 'edits': _mtime_ms(DATA + '/ops/data-edits/log.jsonl'),
+            'listener': _mtime_ms(DASH + '/inbox.listener')}       # the agent's `inbox.sh wait` touches this every 10 s
 
 
 @handler('ops.paths')

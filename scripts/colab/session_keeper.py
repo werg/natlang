@@ -352,12 +352,22 @@ class Keeper:
             state = self.load()
             state.pop('pending_serve', None)
             self.save(state)
+            (Path(self.a.actor_root) / f'colab-actor-{alias}.yielded.json').unlink(missing_ok=True)
         return rc == 0
+
+    def yielded_record(self) -> dict:
+        """The record of an actor a round's run-sft yielded and has not served again (pop_rl_actor.colab_yielded_path)."""
+        try:
+            return json.loads((Path(self.a.actor_root) / f'colab-actor-{self.a.alias}.yielded.json').read_text())
+        except (OSError, ValueError):
+            return {}
 
     def actor_dead(self) -> bool:
         """The recorded actor's admission process is gone from the VM (2026-11-24 03:47: the actor's engine died with
         a tenant's GPU fault and its record still named it, so the keeper answered 'serves' for 25 min)."""
         record = self.actor_record()
+        if not record and self.yielded_record().get('serve_args'):
+            return True      # yielded for a round that is over (no learner targets the session), never served again
         if not record.get('pid') or not record.get('serve_args'):
             return False
         rc, out = self.run(['ssh', '-o', 'BatchMode=yes', self.a.alias,
@@ -419,7 +429,7 @@ class Keeper:
             self.save(state)
             pending = state.get('pending_serve') or {}
             record = self.actor_record()
-            serve = pending.get('serve') or record.get('serve_args')
+            serve = pending.get('serve') or record.get('serve_args') or self.yielded_record().get('serve_args')
             if serve:
                 self.serve(serve, pending.get('commit') or serve.get('commit'))
             state = {**self.load(), 'last_action': d.action}
