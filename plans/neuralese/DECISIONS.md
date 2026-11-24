@@ -10303,3 +10303,12 @@ old immutable registered packs were not silently modified.
 - **Next.** After r0002 the actor is restored by the older pin at mem fraction 0.88. The keeper's oversized rule
   re-serves it at 34 GiB within 10 min, and the tenants resume: the dev64 base arm on 9 programs, then the searchqa
   fit.
+
+
+### 2026-11-24 — Full Vibe native reference qualification uses Tick's available capacity
+
+- The complete unchanged plan is 2,327 goals across 116 families (catalog SHA `2126ff71bcb1e3a5d459a16b755c6699924adad12fa536b7dc2e46385ab44723`): 2,314 ordinary cases plus 13 requiring an owned disposable Android emulator. Reference packets are separate from teacher/training data; no model flags or API credentials are supplied.
+- Pop built its own complete V18 release (387 bindings, SHA `782f175259a696d1b24e4d7e471c4b54d00081c604f7fc093c876391e7949039`); its actual existing-release consumer matched dependency, Host-build and compiler identities. It preserves the same nine frozen Source commits as Tick's V18 release. No Tick compiled assets were copied to Pop.
+- Pop subsequently became a standing AEI1 collection actor (`async-drive --rebind-actor pop-os@http://100.73.236.5:18531=64`), so waiting for one held run to finish no longer predicts free capacity. Tick had 25.5 GiB ledger headroom after the teacher campaign automatically held wave 0046 for 16 Spectrolite infrastructure failures. Move the full model-free sweep to Tick's already validated V18 release, with an 8 GiB cap, 7.5 GiB reserve and low priority; cancel only our unstarted Pop oracle waiter. Production actors and the teacher hold are untouched.
+- The full Tick command is active as `vibe-v18-tick-native-oracles-full-20261124a`; state and original native packets are under `/home/werg/vibe-native-oracles-v18/runs/tick-full-release/`. At launch, actual native attempts are zero; do not treat the plan inventory, compiled release or relocated consumer proof as goal passes. No slice or workspace filter is imposed. Android cases remain explicitly unchecked until their owned emulator and per-case application-state prerequisites exist.
+- Build recovery now uses a unique private scratch and staged output per attempt, publishes only completed releases, and observes ledger ownership across preemption/requeue. Inactive generated checkpoint clones are removed only when clean (or reduced by interrupted cleanup to `.git/logs` alone); original Source checkouts and every trajectory remain intact.
