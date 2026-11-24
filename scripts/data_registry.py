@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import fnmatch
 import json
 import os
 import subprocess
@@ -205,7 +206,14 @@ def promote(reg, a) -> int:
             order = max([((e.get('roles') or {}).get(a.role) or {}).get('order', 0) for e in reg.git.values()
                          if a.role in (e.get('roles') or {})] + [x['roles'][a.role]['order'] for x in entries
                                                                  if a.role in (x.get('roles') or {})] + [-1]) + 1
-            entry['roles'] = {**(entry.get('roles') or {}), a.role: role_spec(reg, a.role, order, a.role_file)}
+            spec = role_spec(reg, a.role, order, a.role_file)
+            include = entry.get('include') or []
+            if spec.get('file') and include and not any(fnmatch.fnmatch(spec['file'], g) for g in include):
+                # the role's usual file the dataset does not hold: the pool would read a missing file
+                print(f"{i}: role {a.role} would read {spec['file']}, which the dataset does not include ({include}); "
+                      f"pass --role-file", file=sys.stderr)
+                return 1
+            entry['roles'] = {**(entry.get('roles') or {}), a.role: spec}
         entries.append(entry)
     if a.dry_run or not entries:
         _print(entries)
