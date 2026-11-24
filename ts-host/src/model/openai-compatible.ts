@@ -1,5 +1,5 @@
 /** Chat completions over HTTP: the shared adapter (chat-completion.ts) with the HTTP transport. */
-import { chatCompletionModelTurn, fetchModel, httpChatTransport, limitedTransport, openAIEndpointRoot, promptLogprobDecider, requestLimit, type ChatExchange, type HttpChatOptions,
+import { chatCompletionModelTurn, fetchModel, httpChatTransport, limitedTransport, openAIEndpointRoot, promptLogprobDecider, requestLimit, withoutClientControls, type ChatExchange, type HttpChatOptions,
   type RequestLimit } from './chat-completion.js';
 import type { ModelTurnRequest } from '../contracts.js';
 import type { Scheduler } from './scheduler.js';
@@ -82,7 +82,7 @@ export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
   const url = scoreEndpoint === true || scoreEndpoint === 'discover' ? openAIEndpointRoot(http.endpoint) + '/v1/natlang/score' : scoreEndpoint || undefined;
   const concurrent = concurrentScoreMany(single);
   const explicit = url ? explicitBatchScoreMany({ url, headers: { ...(http.apiKey ? { authorization: `Bearer ${http.apiKey}` } : {}), ...http.headers },
-    extra: { model: http.model, ...(request ? { request } : {}) }, scheduler, ...(scoreEndpoint === 'discover' ? { discovered: true } : {}),
+    extra: { model: http.model, ...(request ? { request: withoutClientControls(request) } : {}) }, scheduler, ...(scoreEndpoint === 'discover' ? { discovered: true } : {}),
     ...(scoreAll ? { minItems: 1, itemExtra: (item: object) => (item as Tuned)[TUNED] } : {}) }, concurrent) : concurrent;
   // Without per-item fields on the explicit-batch endpoint, tuned items are scored as individual requests.
   const many: typeof explicit = items => !scoreAll && items.some(item => (item as Tuned)[TUNED]) ? concurrent(items) : explicit(items);

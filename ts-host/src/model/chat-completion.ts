@@ -533,16 +533,40 @@ export function limitedTransport(transport: ChatTransport, limit: RequestLimit):
   };
 }
 
+/** Collection controls the HTTP chat transport applies itself (chatCompletionModelTurn): never wire fields. Every request
+ * built from a collection's `request` controls leaves them out (a hosted server rejects unknown fields: NIM "Unsupported
+ * parameter", Gemini "Unknown name"). */
+export const CLIENT_REQUEST_CONTROLS = ['x_natlang_omit_seed', 'x_natlang_host_call_fields', 'x_natlang_history_reasoning',
+  'x_natlang_include_thoughts'] as const;
+
+export function withoutClientControls<T extends Json>(request: T): T {
+  const out = { ...request };
+  for (const key of CLIENT_REQUEST_CONTROLS) delete out[key];
+  return out;
+}
+
 export function promptLogprobDecider(transport: ChatTransport, options: { request?: Json;
   /** Per-decision request fields (a tuned call's weight selection) carried on the decision item itself. */
   extraFor?: (item: object) => Json | undefined } = {}): DecisionScorer {
-  const { max_tokens: _max, temperature: _temperature, stream: _stream, ...extra } = options.request ?? {};
+  const { max_tokens: _max, temperature: _temperature, stream: _stream, ...extra } = withoutClientControls(options.request ?? {});
   return async (item, signal) => {
     const { messages, options: replies } = item;
     if (!replies.length) throw new Error('a decision needs at least one option');
     const itemExtra = options.extraFor?.(item);
     const responses = await Promise.all(replies.map(async reply => {
-      const raw = await transport({ ...promptLogprobRequest(messages, reply, { ...extra, ...itemExtra }, item.open_reply === true, item.reasoning) }, signal);
+      let raw;
+      try {
+        raw = await transport({ ...promptLogprobRequest(messages, reply, { ...extra, ...itemExtra }, item.open_reply === true, item.reasoning) }, signal);
+      } catch (error) {
+        // A hosted server without prompt scoring refuses the request itself (an unknown `prompt_logprobs` or
+        // `continue_final_message`: 400/404/422) rather than answering without `prompt_logprobs`: the same verdict, so
+        // the runtime reads this function's decisions by generation instead of failing the call. Rate limits, overload
+        // and transport faults stay errors (retried by the caller).
+        const status = (error as { status?: unknown }).status;
+        if (typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429)
+          throw new Error(`decision-unsupported: the server refused prompt scoring (${(error as Error).message.slice(0, 300)})`);
+        throw error;
+      }
       return (isStream(raw) ? await assembleChatCompletion(raw) : raw) as PromptLogprobResponse;
     }));
     return scoresFromPromptLogprobs(responses);
