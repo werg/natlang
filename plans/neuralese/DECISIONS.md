@@ -10664,3 +10664,31 @@ starts over.
     vs base, once the fits are home.
   - The DGX chain is stopped (coordinator: no program-tuning DGX unit above 8 GB); measurement collectors run at 6 GB.
 - **Credits.** 196.21 CU at 00:32, 148.85 at 05:54 (8.88/h, the A100 assignment). Tenants add no Colab cost.
+
+## 2026-11-24 06:10 The A100 actor's 24 GB KV cap does not bind: telemetry (coordinator question; program-tuning strand)
+
+- **Question.** Does the actor-alone cap (24 GB KV, 34 GiB claim, versus mem fraction 0.88 / 70.5 GiB) cost
+  collection throughput? Stated rule: run full size while no tenant is active if it costs more than about 10%.
+- **Evidence.** All three A100 actors tonight were capped (pool 3,605,769 tokens, 128 running): e15b20a8 00:40-01:08
+  UTC, 8e634a0f 03:09-03:47, 7cfc4774 04:15-04:40. Statistics from their SGLang logs:
+
+  | actor | decode lines | tok/s mean (median) | running mean | KV pool peak | mamba-state peak | batches with a queue | prefix cache hit | retractions |
+  |---|---|---|---|---|---|---|---|---|
+  | e15b20a8 | 1,221 | 4,189 (4,266) | 126 | 15% | 38% | 54% | 0.808 | 0 |
+  | 8e634a0f | 1,123 | 3,118 (3,008) | 110 | 16% | 38% | 24% | 0.806 | 0 |
+  | 7cfc4774 | 1,055 | 4,018 (3,923) | 125 | 13% | 38% | 36% | 0.840 | 0 |
+
+- **Mechanism.** The pool never passed 16% and the conv-state slots 38%. Requests queue only on the 128-running
+  limit, which the full-size actor has too. SGLang admits and schedules the same batches whenever the pool has room,
+  and its radix cache evicts only under pool pressure, of which there was none. So a 3x larger pool changes neither
+  the batches nor the prefix hits: the cap costs ~0% of decode throughput at 128 running, far under the 10% bar. A
+  gain from a larger pool would need a higher running limit (a separate change, and not the cap's cost).
+- **Not run:** a full-size A/B window. The collector's progress counter (groups of 4 episodes up to 1 h each)
+  completes 0-2 groups per 25-min window, so episodes per hour cannot separate the arms within one window. The A/B
+  would also cost a window of tenancy, against a first-principles answer the telemetry already gives.
+- **Tripwire.** If an actor's KV pool peak ever passes ~70%, the cap may bind. Re-check then, or raise
+  `ACTOR_ALONE_KV_CAP_GB`.
+- **Also seen (aei1's area).** v0001-remote0 completed 1 group between 01:59 and 04:14 while the A100 actor was down
+  (02:08-04:09 round SFT, 04:47-05:15 the MPS fault). v0000-remote0 logged 47 abandoned groups.
+- **Keeper** back on `/home/werg/natlang` (synced, per coordinator). `pin-ff0f7d75e688` stays: the fits and arms
+  tracks run from it.
