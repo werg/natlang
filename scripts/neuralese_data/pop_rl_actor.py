@@ -197,6 +197,23 @@ def host_address(host):
 # open: its servers are forwarded to DGX 127.0.0.1:(port + COLAB_FORWARD_OFFSET), e.g. 8570 -> 18731 (front) and
 # 9570 -> 19731 (SGLang), the ports the session's tunnel unit forwards.
 COLAB_FORWARD_OFFSET = 10161
+# Two sessions (aei1's A100 'colab-g4', program tuning's L4 'colab-g4b', 2026-11-24) must not share DGX ports:
+# forward_port keeps a port already listening, so a second host's VM port P would be served by the first host's
+# forward. Each alias has its own offset; NATLANG_COLAB_FORWARD_OFFSETS='alias=offset,...' adds or overrides.
+COLAB_FORWARD_OFFSETS = {'colab-g4': COLAB_FORWARD_OFFSET, 'colab-g4b': COLAB_FORWARD_OFFSET + 1000}
+
+
+def colab_forward_offset(host):
+    """The DGX port offset of ``host``'s forwards (VM port P -> DGX 127.0.0.1:P + offset); an alias with none listed
+    gets a stable offset of its own, never the first session's."""
+    import zlib
+    table = dict(COLAB_FORWARD_OFFSETS)
+    for item in filter(None, os.environ.get('NATLANG_COLAB_FORWARD_OFFSETS', '').split(',')):
+        alias, _, value = item.partition('=')
+        table[alias.strip()] = int(value)
+    if host in table:
+        return table[host]
+    return COLAB_FORWARD_OFFSET + 1000 * (2 + zlib.crc32(str(host).encode()) % 20)
 
 
 def _listening(port):
@@ -223,8 +240,9 @@ def remote_endpoint(host, port, bind_host=None):
     options = ssh_options(host)
     if options.get('proxycommand', 'none') == 'none':
         return f'http://{options["hostname"]}:{port}'
-    forward_port(host, int(port) + COLAB_FORWARD_OFFSET, int(port))
-    return f'http://127.0.0.1:{int(port) + COLAB_FORWARD_OFFSET}'
+    offset = colab_forward_offset(host)
+    forward_port(host, int(port) + offset, int(port))
+    return f'http://127.0.0.1:{int(port) + offset}'
 
 
 def sync_to_remote(local_path, remote_path, host, *, attempts=None, stall_seconds=120):
@@ -1438,7 +1456,7 @@ def colab_tenant_checkout(host, cfg, commit):
     return {**cfg, 'repo': root, 'admission': f'{root}/scripts/colab/admission.py', 'commit': out[0]}
 
 
-def colab_tenant_command(cfg, tcfg, claim, label, command, *, mps_percent=None, wait=86400):
+def colab_tenant_command(cfg, tcfg, claim, label, command, *, mps_percent=None, wait=86400, beside='actor-'):
     """``command`` (run with the tenant checkout on PYTHONPATH and an MPS SM share) under a preemptible admission
     claim of ``claim`` beside the session's actor."""
     percent = COLAB_TENANT_MPS_PERCENT if mps_percent is None else mps_percent
@@ -1449,7 +1467,8 @@ def colab_tenant_command(cfg, tcfg, claim, label, command, *, mps_percent=None, 
     else:     # a pipe directory with no daemon: the CUDA client creates its own context
         env = ['/usr/bin/env', '-u', 'CUDA_MPS_ACTIVE_THREAD_PERCENTAGE',
                f'CUDA_MPS_PIPE_DIRECTORY={tcfg["root"]}/mps/tenant-no-mps', *paths]
-    return [cfg['python'], tcfg['admission'], 'run', '--preemptible', '--beside-label', 'actor-',
+    # beside=None: a session of its own (program tuning's L4) has no actor to stand beside; still preemptible
+    return [cfg['python'], tcfg['admission'], 'run', '--preemptible', *(['--beside-label', beside] if beside else []),
             '--vram-gib', str(claim['vram_gib']), '--host-ram-gib', str(claim['host_ram_gib']), '--label', label,
             '--wait', str(int(wait)), '--workdir', tcfg['repo'], '--', *env, *command]
 
@@ -1477,7 +1496,7 @@ def ship_release(host, cfg, release, remote):
     return remote
 
 
-def serve_colab_tenant_actor(*, host, checkpoint, sha, commit, release=None, port=COLAB_MEASURE_PORT,
+def serve_colab_tenant_actor(*, host, checkpoint, sha, commit, release=None, port=COLAB_MEASURE_PORT, beside='actor-',
                              kv_cache_dtype=POP_KV_CACHE_DTYPE, ready_seconds=1800, bind_host=None):
     """A measurement actor as a tenant: ``sha`` (optionally with a program-fit ``release`` served by default on one
     SGLang adapter slot) beside the session's actor, sized by ``colab_layout(...)['tenants']['measure_actor']``. The
@@ -1519,7 +1538,8 @@ def serve_colab_tenant_actor(*, host, checkpoint, sha, commit, release=None, por
     else:
         serve += ['--sglang-adapter-slots', '0']
     # the front's own code is the session checkout's (cfg); only the admission wrapper is the tenant checkout's
-    admitted = colab_tenant_command(cfg, {**tcfg, 'repo': cfg['repo']}, sizing, f'measure-{sha[:12]}', serve)
+    admitted = colab_tenant_command(cfg, {**tcfg, 'repo': cfg['repo']}, sizing, f'measure-{sha[:12]}', serve,
+                                    beside=beside)
     pid = ssh_host(host, f'mkdir -p {shlex.quote(work)} && . {shlex.quote(cfg["env"])} || exit 1; setsid nohup '
                          f'{shlex.join(admitted)} > {shlex.quote(work + "/actor.log")} 2>&1 < /dev/null & echo $!',
                    timeout=60).strip()

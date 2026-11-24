@@ -426,3 +426,30 @@ def test_colab_bank_ships_the_fits_runs_as_a_tenant_and_brings_the_held_releases
     assert [c[1] for c in calls if c[0] == 'release'] == [f'{remote}/programs/ext_a/fit/release',
                                                           f'{remote}/programs/ext_b/fit/release']
     assert (out / 'adapt' / 'ext_held' / 'artifacts' / 'nnt1_x.nnt').exists() and (out / 'bank-manifest.json').exists()
+
+
+def test_two_colab_hosts_get_their_own_forwards_and_a_dedicated_session_needs_no_actor(monkeypatch):
+    import pop_rl_actor as A
+    assert A.colab_forward_offset('colab-g4') == 10161 and A.colab_forward_offset('colab-g4b') == 11161
+    assert A.colab_forward_offset('colab-x') not in (10161, 11161)
+    monkeypatch.setenv('NATLANG_COLAB_FORWARD_OFFSETS', 'colab-x=13161')
+    assert A.colab_forward_offset('colab-x') == 13161
+    cfg = A.host_config('colab', host='colab-g4b')
+    tcfg = {**cfg, 'repo': '/t', 'admission': '/t/adm.py'}
+    alone = A.colab_tenant_command(cfg, tcfg, {'vram_gib': 12, 'host_ram_gib': 16}, 'fit', ['x'], beside=None)
+    beside = A.colab_tenant_command(cfg, tcfg, {'vram_gib': 12, 'host_ram_gib': 16}, 'fit', ['x'])
+    assert '--beside-label' not in alone and '--preemptible' in alone
+    assert beside[beside.index('--beside-label') + 1] == 'actor-'
+
+
+def test_colab_fit_refuses_a_program_another_session_claimed(tmp_path):
+    prog = tmp_path / 'prog'
+    (prog / 'fit').mkdir(parents=True)
+    (prog / 'split.json').write_text(json.dumps({'family': 'ext_fam'}))
+    (prog / 'fit' / 'plan.json').write_text('{}')
+    (prog / 'fit' / 'colab-claim.json').write_text(json.dumps({'host': 'colab-g4'}))
+    try:
+        P.main(['colab-fit', '--dir', str(prog), '--host', 'colab-g4b', '--commit', 'f' * 40])
+        raise AssertionError('a program claimed by another session must not be fitted twice')
+    except SystemExit as stop:
+        assert 'claimed by colab-g4' in str(stop)

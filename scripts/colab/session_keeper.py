@@ -108,11 +108,14 @@ class Decision:
 
 
 def decide(obs: Observation, state: dict, *, session: str, order=DEFAULT_ORDER, tunnel_fail_minutes=15.0,
-           upgrade_minutes=20.0, request_minutes=5.0, serve_minutes=10.0) -> Decision:
+           upgrade_minutes=20.0, request_minutes=5.0, serve_minutes=10.0, siblings=()) -> Decision:
     """What the keeper does now. ``state`` (persisted, updated by the caller): ``ssh_fail_since``,
     ``last_upgrade_try``, ``last_request_try``."""
     mine = [s for s in obs.sessions if s['name'] == session]
-    others = [s for s in obs.sessions if s['name'] != session and tier(s['hardware'], order) is not None]
+    # siblings: sessions another keeper keeps on purpose (program tuning's L4 'g4b' beside aei1's A100 'g4a'), not
+    # strays that would block this session's replacement or upgrade
+    others = [s for s in obs.sessions if s['name'] != session and s['name'] not in siblings
+              and tier(s['hardware'], order) is not None]
     current = mine[0] if mine else None
     rank = tier(current['hardware'], order) if current else None
     lost = (f'session {session} is missing' if current is None else
@@ -206,7 +209,10 @@ class Keeper:
     def unassign_orphans(self, sessions: list[dict]) -> None:
         """Assignments with no local name on a CPU (what is left when a session is recreated under its name): billed,
         unreachable by name. GPU orphans are only reported (never two GPU sessions: `decide` waits on them)."""
-        cpu = [s['endpoint'] for s in sessions if s['name'] == '?' and tier(s['hardware'], self.order) is None]
+        # a GPU of any known tier is never an orphan here, whatever this keeper's own order (the L4 keeper's order is
+        # L4 alone: an unnamed A100 assignment must not look like a CPU VM to it)
+        known = tuple({*DEFAULT_ORDER, *self.order})
+        cpu = [s['endpoint'] for s in sessions if s['name'] == '?' and tier(s['hardware'], known) is None]
         if cpu:
             code = ('import sys\nfrom colab_cli.common import state\nfrom colab_cli.auth import AuthProvider\n'
                     'state.auth_provider = AuthProvider.ADC\nfor e in sys.argv[1:]:\n    state.client.unassign(e)\n')
@@ -387,7 +393,7 @@ class Keeper:
             log('colab sessions failed: no decision this cycle')
             return Decision('wait', 'colab sessions failed')
         self.unassign_orphans(sessions)
-        sessions = [s for s in sessions if not (s['name'] == '?' and tier(s['hardware'], self.order) is None)]
+        sessions = [s for s in sessions if not (s['name'] == '?' and tier(s['hardware'], tuple({*DEFAULT_ORDER, *self.order})) is None)]
         now = time.time()
         ok = self.ssh_ok()
         state = note_ssh(state, ok, now)
@@ -399,7 +405,8 @@ class Keeper:
                           actor_oversized=bool(due and not state.get('pending_serve') and self.actor_oversized()))
         d = decide(obs, state, session=self.a.session, order=self.order,
                    tunnel_fail_minutes=self.a.tunnel_fail_minutes, upgrade_minutes=self.a.upgrade_minutes,
-                   request_minutes=self.a.request_minutes, serve_minutes=self.a.serve_minutes)
+                   request_minutes=self.a.request_minutes, serve_minutes=self.a.serve_minutes,
+                   siblings=tuple(getattr(self.a, 'siblings', None) or ()))
         if d.action != state.get('last_action') or d.action not in ('ok', 'wait'):
             log('decision', action=d.action, reason=d.reason, tiers=[t[0] for t in d.tiers])
         state['last_action'] = d.action
@@ -476,6 +483,8 @@ def main(argv=None) -> int:
     p.add_argument('--request-minutes', type=float, default=5)
     p.add_argument('--tunnel-fail-minutes', type=float, default=15)
     p.add_argument('--bootstrap-minutes', type=float, default=45)
+    p.add_argument('--siblings', nargs='*', default=[],
+                   help='other sessions kept on purpose by their own keeper (not strays that block this one)')
     p.add_argument('--serve-minutes', type=float, default=10,
                    help='retry a failed actor serve / re-serve an oversized actor at most this often')
     p.add_argument('--state', default=str(OPS / 'session-keeper.json'))
