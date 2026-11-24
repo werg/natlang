@@ -11486,3 +11486,43 @@ SharedWorker in the background; a skew beyond 10 s (it fails the same way).
   is what lets the collection in beside it. Opt-out unchanged (`--prep-yield-share 1` launches at full size).
 - **Test.** `test_a_collection_launched_during_round_preparation_starts_shrunk_and_preparation_lets_it_in_first`
   (test_async_train.py), restore-to-full cases in test_memory_ledger.py and test_colab_and_profiles.py.
+
+## 2026-11-24 18:25 Program tuning takeover: the L4 runs one job at a time, adapter arms serve merged weights; route merged vs base: no gain (program-tuning strand)
+
+**Blocking (found 16:45).**
+- The L4 (`colab-g4b`, 22.5 GiB) ran arms and fits as separate preemptible tenants. The measurement actor claimed 18 GiB
+  (8 GB KV + 10; 15.1 GB used) and a fit claims 12 GiB: 30 > 21.5 admissible. Preemptible tenants never evict each
+  other, so the verdict fit waited 8.7 h in admission behind the 9-program base arm. Shrinking the actor would not
+  make room for both: SGLang's static allocation is weights 3.4 + KV + 6 GB slack (`sglang_pool`), so >= 10.6 GiB
+  even at 2 GB KV, and fits peak at 11.5 GB (verdict, step 5) to 18.6 GB (a whole fit; DECISIONS 11-20). The 12 GiB
+  fit claim is below the measured peaks, not above them.
+- The A100 fit (searchqa) is not wasted work: `tune.build` resumes from state.json (steps 1-10, 11-14 and 15-19 over
+  three evictions; 2.5 min/step beside aei1's actor). The "2.3 h attempts" were mostly admission waits through round
+  SFTs; each window between rounds gives ~5 steps, so the remaining 41 steps take ~8 windows (~18 h). It stays on
+  searchqa only (`progtune-colab-fits-2`); the L4 takes every other program.
+- **SGLang adapter slots crash.** The route adapter arm's actor (release on one slot, every request adapted) died at
+  the first batch of 27 running: CUDA illegal memory access (reported in xgrammar's bitmask kernel, sticky error).
+  This is T3's open crash (05:10: above 2 concurrent adapted requests), and slot parity after T3's fixes was never
+  re-measured. An adapter arm on slots is not trustworthy now.
+
+**Changes.**
+- `program_tune.py merge` (becad4efb): the release merged into its start checkpoint with the learner's own merge
+  (`merge_policy_state`, `W = bf16(fp32(W0) + s B A)`), a plain checkpoint any engine serves; `merged.json` records
+  how much of the delta survives BF16. `colab-measure --arm merged` serves it. Test:
+  `test_a_merged_release_equals_its_summed_free_lora_stack`. Route: 153 targets, served/true delta norm 1.001, min
+  cosine 0.989: the BF16 merge keeps the adapter.
+- `program-tune-20261117/l4-seq.sh` (`progtune-l4-seq-2`): per program fit -> merge (DGX ledger, 12 GB) -> base arm
+  if missing -> merged arm -> `compare`, one GPU job at a time; a measurement preempts a running fit (it resumes).
+  Then the PCA bank and its held arms (`colab-seq2.sh bank`). Measurements run 32 slots (was 16; 2.4 GB peak at 16).
+  The episodes run from the base arms' pin (de2b36add32f) so every pair is one series; the driver code from
+  pin-becad4efb. `progtune-l4-arms`, `-l4-fits`, `-l4-bank` and `-colab-fits` stopped (base arm progress kept: all
+  nine resume from their result directories).
+
+**Base arms complete (dev64, 2 samples, L4 series):** route 0.883, verdict 0.727, tally 0.685, tree 0.719, retail
+0.875, pubmed 0.305, searchqa 0.313; multihop and iterate are measured when their fits land.
+
+**First comparison: route (11-18 fit, 60 steps x 8 rows) merged vs base:** 0.883 -> 0.844, -3.9 pts, CI [-11.7,
++3.9], permutation p 0.29, McNemar 11 vs 6 (p 0.33), 5 tasks up / 8 down. Not a success and not a significant
+regression: recorded as no gain. Headroom is small (base 88%) and the fit drove its targets' NLL from 1.49 to 0.32
+nats (T3) on 480 rows, so overfitting the support rows is a candidate; not diagnosed yet. Next: verdict (base 0.727)
+fits on the L4 now, then tally, tree, retail, pubmed, iterate, multihop.
