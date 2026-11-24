@@ -13,6 +13,10 @@ One unit replaces the G4 poller (``ops/ei/colab/g4-poll.sh``) and the tunnel hea
   the assignment GET answers for every entitled GPU, only the POST that assigns says whether there is capacity), so
   two GPU sessions overlap only for the seconds between the assignment and that stop, and renames the new one.
   Never while a round's ``run-sft`` learner runs on the session.
+- **serve**: the actor is down (a serve failed: its arguments stay in the state as ``pending_serve``) or the recorded
+  actor alone claims more than the session's layout gives it now (an actor restored by an older pin's ``run-sft``,
+  whose layout predates the 24 GB KV cap that leaves the A100 to tenants between rounds). Every ``--serve-minutes``
+  while no round's learner targets the session it is served again (``pop_rl_actor serve-checkpoint``).
 - **heal**: the tunnel unit's journal shows HTTP 429 ("another colab ssh is connected") and SSH fails: end the VM's
   stale sshd sessions through ``colab exec`` (the kernel channel; ``end_stale_sshd.py``). A forward missing on a live
   master is re-added over it (``ssh -O forward``).
@@ -92,6 +96,8 @@ class Observation:
     tunnel_429s: int = 0            # HTTP 429 lines in the tunnel unit's journal, last two minutes
     sft_active: bool = False        # a run-sft learner targets the session (no upgrade under a round)
     now: float = 0.0
+    actor_down: bool = False        # a serve failed and is pending (state 'pending_serve')
+    actor_oversized: bool = False   # the recorded actor alone claims more than the session's layout gives it
 
 
 @dataclasses.dataclass
@@ -102,7 +108,7 @@ class Decision:
 
 
 def decide(obs: Observation, state: dict, *, session: str, order=DEFAULT_ORDER, tunnel_fail_minutes=15.0,
-           upgrade_minutes=20.0, request_minutes=5.0) -> Decision:
+           upgrade_minutes=20.0, request_minutes=5.0, serve_minutes=10.0) -> Decision:
     """What the keeper does now. ``state`` (persisted, updated by the caller): ``ssh_fail_since``,
     ``last_upgrade_try``, ``last_request_try``."""
     mine = [s for s in obs.sessions if s['name'] == session]
@@ -123,6 +129,10 @@ def decide(obs: Observation, state: dict, *, session: str, order=DEFAULT_ORDER, 
     if not obs.ssh_ok:
         return Decision('heal' if obs.tunnel_429s >= 3 else 'wait',
                         f'SSH to {session} fails' + (f' ({obs.tunnel_429s} HTTP 429s)' if obs.tunnel_429s else ''))
+    if (obs.actor_down or obs.actor_oversized) and not obs.sft_active \
+            and obs.now - state.get('last_serve_try', 0) >= 60 * serve_minutes:
+        return Decision('serve', 'the actor is down (a serve failed)' if obs.actor_down else
+                        'the actor alone claims more than the session layout gives it')
     if rank and not obs.sft_active and not others \
             and obs.now - state.get('last_upgrade_try', 0) >= 60 * upgrade_minutes:
         return Decision('upgrade', f'{current["hardware"]} is tier {rank}', tuple(order[:rank]))
@@ -312,6 +322,16 @@ class Keeper:
         old = Path(self.a.actor_root) / f'colab-actor-{alias}.json'
         if old.exists():   # its pid named a process on the lost VM: never signal that number on the new one
             os.replace(old, old.with_name(old.stem + f'.lost-{int(time.time())}.json'))
+        return self.serve(serve, commit)
+
+    def serve(self, serve: dict, commit: str) -> bool:
+        """Serve the actor from ``serve`` (a record's ``serve_args``) at ``commit``. Until it serves, the arguments stay
+        in the state as ``pending_serve`` (a failed serve is retried by the ``serve`` decision, not forgotten: the
+        record of the lost VM is already moved aside)."""
+        alias = self.a.alias
+        state = self.load()
+        state['pending_serve'] = {'serve': serve, 'commit': commit}
+        self.save(state)
         argv = [str(REPO / '.venv-neuralese/bin/python'), str(REPO / 'scripts/neuralese_data/pop_rl_actor.py'),
                 'serve-checkpoint', '--host-profile', 'colab', '--host', alias, '--checkpoint', serve['checkpoint'],
                 '--policy-id', serve['policy_id'], '--commit', commit, '--port', str(serve.get('port', 8570)),
@@ -322,7 +342,26 @@ class Keeper:
         env = {**os.environ, 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}:{REPO}/scripts/neuralese_data'}
         rc, out = self.run(argv, timeout=3 * 3600, env=env)
         log('actor served' if rc == 0 else 'actor serve failed', rc=rc, tail=(out or '')[-600:])
+        if rc == 0:
+            state = self.load()
+            state.pop('pending_serve', None)
+            self.save(state)
         return rc == 0
+
+    def actor_oversized(self) -> bool:
+        """The recorded actor (alone, not beside a learner) claims more VRAM than ``colab_layout`` gives an actor alone
+        on this session now."""
+        record = self.actor_record()
+        claim = (record.get('claim') or {}).get('vram_gib')
+        if not claim or record.get('beside_learner') or not record.get('serve_args'):
+            return False
+        rc, out = self.run(['ssh', '-o', 'BatchMode=yes', self.a.alias, f'cat {VM_ROOT}/colab-ready.json'], timeout=60)
+        try:
+            hardware = json.loads(out)['hardware'] if rc == 0 else None
+            from natlang_neuralese.common.execution_profile import colab_layout
+            return bool(hardware) and float(claim) > colab_layout(hardware)['actor_alone']['vram_gib'] + 0.5
+        except (ValueError, KeyError, TypeError, ImportError):
+            return False
 
     def after_new_session(self, hardware: str, before_rate) -> None:
         after = self.usage_rate()
@@ -342,11 +381,14 @@ class Keeper:
         now = time.time()
         ok = self.ssh_ok()
         state = note_ssh(state, ok, now)
+        sft = self.sft_active()
+        due = ok and not sft and now - state.get('last_serve_try', 0) >= 60 * self.a.serve_minutes
         obs = Observation(sessions=sessions, ssh_ok=ok, tunnel_429s=0 if ok else self.tunnel_429s(),
-                          sft_active=self.sft_active(), now=now)
+                          sft_active=sft, now=now, actor_down=bool(state.get('pending_serve')),
+                          actor_oversized=bool(due and not state.get('pending_serve') and self.actor_oversized()))
         d = decide(obs, state, session=self.a.session, order=self.order,
                    tunnel_fail_minutes=self.a.tunnel_fail_minutes, upgrade_minutes=self.a.upgrade_minutes,
-                   request_minutes=self.a.request_minutes)
+                   request_minutes=self.a.request_minutes, serve_minutes=self.a.serve_minutes)
         if d.action != state.get('last_action') or d.action not in ('ok', 'wait'):
             log('decision', action=d.action, reason=d.reason, tiers=[t[0] for t in d.tiers])
         state['last_action'] = d.action
@@ -354,6 +396,15 @@ class Keeper:
             self.heal()
         elif d.action == 'ok':
             self.reforward()
+        elif d.action == 'serve':
+            state['last_serve_try'] = now
+            self.save(state)
+            pending = state.get('pending_serve') or {}
+            record = self.actor_record()
+            serve = pending.get('serve') or record.get('serve_args')
+            if serve:
+                self.serve(serve, pending.get('commit') or serve.get('commit'))
+            state = {**self.load(), 'last_action': d.action}
         elif d.action == 'replace':
             state['last_request_try'] = now
             self.save(state)
@@ -414,6 +465,8 @@ def main(argv=None) -> int:
     p.add_argument('--request-minutes', type=float, default=5)
     p.add_argument('--tunnel-fail-minutes', type=float, default=15)
     p.add_argument('--bootstrap-minutes', type=float, default=45)
+    p.add_argument('--serve-minutes', type=float, default=10,
+                   help='retry a failed actor serve / re-serve an oversized actor at most this often')
     p.add_argument('--state', default=str(OPS / 'session-keeper.json'))
     p.add_argument('--actor-root', default=str(WORKSPACE / 'ops/pop-behavior-eval'),
                    help="pop_rl_actor's ROOT (its colab-actor-<alias>.json records the actor to serve again)")
