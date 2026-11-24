@@ -10829,6 +10829,39 @@ chunk is the next lever if the front binds again.
 **Not checked.** The new front on DGX cores under production load (read at the next start); the per-token residue
 above was left as is; the exact sequence behind v0001's 1024 descriptors.
 
+## 2026-11-24 08:50 A second Colab session (L4, g4b) for program tuning (owner 08:25; program-tuning strand)
+
+Owner: "I'm fine with adding an L4 session where applicable. I will refill credits." Coordinator: fits, arms and the
+bank go to it, so tuning no longer waits for the gaps between aei1's round SFTs. aei1's A100 stays the round host
+(an L4 fails `colab_sft_fit`, so the driver never places a round there).
+
+- **Mechanisms that assumed one session, fixed (de2b36add, tests).**
+  - **DGX ports.** `remote_endpoint` mapped every Colab host's VM port P to DGX P+10161, and `forward_port` keeps a
+    port already listening. A second host's 8571 would have reached the A100's measurement actor at 18732.
+    `colab_forward_offset`: colab-g4 10161, colab-g4b 11161; `NATLANG_COLAB_FORWARD_OFFSETS` overrides; an unlisted
+    alias gets a stable offset of its own.
+  - **Keeper.** Any other GPU session blocked replacement and upgrade ("never two GPU sessions"). `--siblings` names
+    sessions another keeper keeps. An unnamed assignment on any known GPU tier is never unassigned as a CPU orphan:
+    the L4 keeper's order is L4 alone, and it must not take an unnamed A100 for a CPU VM.
+  - **Tenants.** `--beside ''` on a session of its own (no actor to stand beside; still preemptible). `colab-fit`
+    refuses a program another session claimed.
+- **Ops.**
+  - SSH alias `colab-g4b` (ProxyCommand `-s g4b`, its own ControlMaster path).
+  - Tunnel unit `colab-g4b-tunnel` (`ssh -N -M`; forwards are added over the master per endpoint).
+  - `colab-g4b-keeper`: `--session g4b --order L4 --state ops/ei/colab/session-keeper-g4b.json --forward
+    19732:8571 --siblings g4a`, log `session-keeper-g4b.log`.
+  - `colab-g4a-keeper` restarted with `--siblings g4b`.
+  - Watchdog roster (`ops/watchdog.json`): sessions g4a and g4b, GPU `colab-g4b`.
+  - Nothing added to `colab_hosts`, so no aei1 path picks the L4 by default.
+- **First requests.** A `g4b` session already existed on a CPU VM. The keeper stopped it and asked for an L4 at
+  08:43: "Service Unavailable", and Colab assigned a CPU VM instead, which the keeper stops. It asks again every 5
+  min, L4 only.
+- **When the L4 bootstraps** (`progtune-l4-start`, pin de2b36add32f), work moves:
+  - the dev arms to the L4 as series `l4` (base and adapter on one engine host; the A100 arms series is dropped);
+  - an L4 fits track joins the A100's, which now runs `colab-seq2.sh` and skips programs the other session claimed;
+  - the bank track moves to the L4.
+- **Credits.** 148.85 CU at 05:54, 123.68 at 08:45 (8.88/h for the A100; 8.96 with the CPU stand-in). An L4 adds
+  about 1.94/h.
 **2026-11-24 09:00, standing storage rule for expert-iteration rounds (`scripts/ei_round_tier.py`, in the sweep).**
 aei1 runs a round every 1.5-2 h, and each round added about 15 GB to the NVMe: `/` fell from 60 to 25 GB between 04:30
 and 08:18. The rule now runs in `storage_sweep.sh` every 30 min (`SWEEP_EI=0` opts out).
