@@ -44,6 +44,20 @@ def test_attestation_records_the_actual_fork_commit_and_warns_never_refuses(tmp_
     assert dirty['speculative_ngram'] is False   # nor LFM3 n-gram speculative chains: the actor serves without them
     (package / 'srt/sampling/natlang_params.py').write_text('NATLANG_SPECULATIVE_NGRAM = True\n')
     assert serve.attest_sglang_source(str(python), {'commit': commit})['speculative_ngram'] is True
+    assert dirty['shared_graph_wrappers'] is False   # nor shared decode-graph wrappers: no adapter slots on it
+    (package / 'srt/sampling/natlang_params.py').write_text('NATLANG_SHARED_GRAPH_WRAPPERS = True\n')
+    assert serve.attest_sglang_source(str(python), {'commit': commit})['shared_graph_wrappers'] is True
+
+
+def test_adapter_slots_need_the_shared_graph_wrappers_fork(monkeypatch, capsys):
+    from types import SimpleNamespace
+    monkeypatch.delenv('NATLANG_SGLANG_ADAPTER_SLOTS_ANY_FORK', raising=False)
+    args = SimpleNamespace(sglang_adapter_slots=4)
+    assert serve.adapter_slots_on_fork(args, {'shared_graph_wrappers': True}) == 4
+    assert serve.adapter_slots_on_fork(args, {'shared_graph_wrappers': False}) == 0 and args.sglang_adapter_slots == 0
+    assert 'sglang_adapter_slots_disabled' in capsys.readouterr().err
+    monkeypatch.setenv('NATLANG_SGLANG_ADAPTER_SLOTS_ANY_FORK', '1')
+    assert serve.adapter_slots_on_fork(SimpleNamespace(sglang_adapter_slots=1), {}) == 1
 
 
 LFM3_KINDS = ['conv', 'conv', 'full_attention', 'conv', 'sliding_attention'] * 2 + ['full_attention']
