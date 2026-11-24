@@ -764,12 +764,17 @@ def settle_deferred(deferred, admitted_tasks, task_of):
 
 
 def student_selection(unique, rng, funnel, cap_of, family_share, is_wrapper, wrapper_share, trained=frozenset(),
-                      tiers=None):
+                      tiers=None, recent=None):
     """The student's own distribution of a build: unguided own successes (``rl-own``) and leak-checked JOLT+ guided
     successes (``jolt-guided``) under one per-task cap, one family share and one wrapper share, own first under each
     (``capped`` ``rank``). With a frontier (``tiers``): a task's guided successes go where it has unguided ones
     (``frontier_drop``). Returns (pool, own tasks, guided-only tasks); the guided-only tasks' teacher data waits for
-    the own share (``build`` step 5: it trains unless their guided successes enter the mix)."""
+    the own share (``build`` step 5: it trains unless their guided successes enter the mix).
+
+    ``recent`` (frontier policy, previous policy): under each cap the successes of the trained (or adjacent previous)
+    policy go before older policies' (``own_policy_tier``), as the step-4 priority orders them across tasks; without
+    it the cap picked producers at random, and in aei1 round 7 55% of the own target tokens came from grpo-v3/v4/v5
+    and sft-v7..v9 collections (DECISIONS 2026-11-24 aei1 ran-out). ``--own-cap-order any`` restores the random pick."""
     own = [c for c in unique if c['source'] == 'rl-own']
     own_candidate_tasks = {c['task_id'] for c in own}
     candidates = list(own)
@@ -783,7 +788,7 @@ def student_selection(unique, rng, funnel, cap_of, family_share, is_wrapper, wra
             candidates.append(c)
 
     def rank(c):
-        return int(c['source'] == 'jolt-guided')
+        return (int(c['source'] == 'jolt-guided'), own_policy_tier(c, *recent) if recent and recent[0] else 0)
     pool = wrapper_capped(capped(candidates, rng, funnel, cap_of, family_share, lambda c: 0, trained, rank=rank), rng,
                           funnel, is_wrapper, wrapper_share, trained, rank=rank)
     if tiers is None:
@@ -2788,7 +2793,8 @@ def build(args):
     # successes where it has unguided ones (``frontier_drop``: own > jolt-guided > teacher, async-train §8)
     student_pool, own_tasks, guided_tasks = student_selection(
         unique, rng, funnel, core_cap, args.max_family_share, is_wrapper, args.wrapper_share, trained_keys,
-        tiers if frontier else None)
+        tiers if frontier else None,
+        (frontier_policy, previous_policy) if getattr(args, 'own_cap_order', 'recent') == 'recent' else None)
     deferred = {'teacher': [], 'aux': []}
     teacher_candidates = []
     for c in unique:
@@ -3868,6 +3874,10 @@ def main():
                    help='an earlier build the start checkpoint already trained (its OUT dir): its episodes go after '
                         'every untrained one at each cap and budget, and its tasks stay out of validation (for SFT from '
                         'a checkpoint descended from that build; repeatable)')
+    b.add_argument('--own-cap-order', choices=('recent', 'any'), default='recent',
+                   help="recent (default): under the per-task, family and wrapper caps the frontier policy's own "
+                        'successes (and its previous policy\'s) go before older policies\'; any: producers at random '
+                        '(the old rule)')
     b.add_argument('--max-prior-exposures', type=int, default=MAX_PRIOR_EXPOSURES,
                    help='an episode or aux unit that this many --prefer-unseen builds already trained is not trained '
                         'again: the round is smaller instead of padded by repetition (default %(default)s; 0: no '
