@@ -11752,3 +11752,59 @@ judgment calls (owner decision 5 in the plan); the Codex window was spent by the
 
 **Open for the owner** (plan §14): admission of the pilot's 12 tasks; held split for new ideas; one bar or shape-specific
 bars; whole-output tasks vs per-stage; episode budget for long programs; inventor families.
+
+## 2026-11-24 23:30 Subagent -> lead handoffs as Neuralese: WideSeek-R1 and SearchSwarm built (subagent-neuralese strand)
+
+Owner: "take subagent-heavy existing agentic training data and just turn the subagent to parent connections into
+neuralese to train that in". Refined the same day: no conversion to natlang programs. The data is a source of format
+and domain diversity that still trains Neuralese. Design and results: `plans/neuralese/SUBAGENT_NEURALESE_20261124.md`.
+Code: `scripts/neuralese_data/subagent_neuralese.py` (acb78d91e, e35ad7411, c78a1e37b, ea505717b).
+
+- **Mapping.**
+  - Each lead and subagent conversation stays as recorded and is rendered by the engine's chat template for the
+    student. SearchSwarm's in-prompt Qwen tool block becomes structured tools in the student's call format.
+  - Each report the lead receives becomes a Neuralese value written from the report's text. In the default
+    `--read-mode splice` this is the learner's existing pass-through: consume markers, placeholder rows and an import
+    in the lead's prompt, with the producer document `[produce_open] + written ids`. The lead's later replies train the
+    producer computation and the marker rows.
+  - Every recorded reply is a target. Teacher reasoning, lead-in text, prompts, tool outputs and the spans are zero
+    weight.
+- **Recorded tool outputs are zero-weight context, and the October "not replayable" exclusion does not apply.** That
+  rule excluded October rows because they predated the answer protocol and would have taught a retired natlang
+  surface (2026-11-18). These rows claim no natlang surface: they are other harnesses' conversations kept in their
+  own format, and the student never sees them as natlang calls. Their outputs are what the teacher actually saw, so
+  the teacher's next action is conditioned on the true observation. Admission instead rests on the source's own
+  verification: WideSeek `item_f1` (depth 1.0, width >= 0.9), and SearchSwarm's gold answer contained in the lead's
+  final answer.
+- **Splice, not inline, is deliberate.** Since 2026-11-23 the engines read a text write inline, and a spliced
+  context-free write read back 0/12. Only the spliced read trains the Neuralese operators, which is the owner's goal
+  for this data. `--read-mode inline` builds the serving-identical variant, which is plain text and trains no
+  operator.
+- **Built:**
+  - D01 `sft-rows-sa2nl-20261124-wideseek-splice`: 2,806 episodes, 8,955 chains, 25,655 calls, 42,143 Neuralese reads
+    (19,075 per chain) of 18,932 distinct states; 46.7M forward tokens, 4.0M weighted target tokens.
+  - D02 SearchSwarm in 4 disjoint shards by question (a single file would be ~860M forward tokens). Shard 0
+    `sft-rows-sa2nl-20261124-searchswarm-splice-s0`: 958 episodes, 8,122 chains, 65,533 trained calls (27,874 calls
+    over the 32k limit dropped, mostly late lead and long subagent calls), 7,554 chain reads of 10,483 distinct
+    states; 216M forward tokens, 13.3M weighted target tokens in the chains. Shards 1-3 are building under the
+    ledger (`sa2nl-d02-s{1,2,3}`).
+  - D10 is not built: child-only conversations with no lead, so there is no handoff.
+- **Checks:**
+  - Held: 0 hits by id and group, and 0 by content (each question against every held set's inputs: exact match or
+    10-word shingles). `held_eval verify` on held-v3 and held-v4 for D01: no overlap.
+  - Repetition: one bundle per normalized question (183 repeated SearchSwarm questions dropped in shard 0). Exact
+    duplicate trained targets: 0.8% of weighted tokens (D01) and 0 (shard 0). No marker token in any target.
+- **Also fixed: own Neuralese episodes with in-context reads trained nowhere** (66f9472f1). `sft_sources
+  neuralese-graph` dropped any episode without a lowered import, and since the in-context read change none has one
+  (aei1 r0008's own graph: 30 lowered, 0 admitted). `build` skips such episodes for their native_state messages.
+  They are now admitted as plain rows (`in_context_reads`). `--require-import` restores the drop.
+- **Not checked:**
+  - a learner step on these chains: many imports per chain, 22+ states in some D01 leads, untested with the pass-through
+    at this count;
+  - the driver build's memory when loading a 1.2 GB aux pickle;
+  - whether the teacher reports' content repeats across bundles beyond exact duplicates;
+  - the source verification beyond what the sources record (D01 gold is not in the release);
+  - `held_eval verify` for the D02 shards (their ids and groups are new strings like D01's, which verified clean).
+- **Conversion to natlang programs:** scoping only, in the plan's last section. 429 SearchSwarm items have a gold
+  answer, a teacher that got it right, and complete recorded evidence. 4,437 teacher-right items have the gold
+  somewhere in the recorded outputs. D01 needs upstream gold. Estimate: about 3 agent-days for D02.
