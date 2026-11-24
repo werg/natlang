@@ -62,7 +62,7 @@ def rowwise_norm_forward(original_forward, x):
 
 
 def _lfm3_norm_adjoint_parts(x, weight, gradient, eps):
-    """Batch independent 128-row adjoints without reducing their gain parts."""
+    """Batch independent 128-row adjoints without reducing their gain parts (None for a frozen gain)."""
     import torch.nn.functional as F
     rows = x.reshape(-1, x.shape[-1])
     grads = gradient.reshape_as(rows)
@@ -72,13 +72,18 @@ def _lfm3_norm_adjoint_parts(x, weight, gradient, eps):
         rows = F.pad(rows, (0, 0, 0, padding))
         grads = F.pad(grads, (0, 0, 0, padding))
     rows = rows.reshape(-1, 128, rows.shape[-1]).detach().requires_grad_(True)
-    gains = weight.detach().expand(rows.shape[0], -1).clone().requires_grad_(True)
+    trained = weight.requires_grad
+    # A frozen gain (program tuning, adapter-only gradients) needs no per-block parts: the input adjoint is the same
+    # elementwise product with the gain either way.
+    gains = (weight.detach().expand(rows.shape[0], -1).clone().requires_grad_(True) if trained
+             else weight.detach())
     with torch.enable_grad():
         value = rows.float()
         normalized = (value * torch.rsqrt(value.square().mean(-1, keepdim=True) + eps)).to(rows.dtype)
-        output = gains[:, None, :] * normalized
-        dx, gain_parts = torch.autograd.grad(output, (rows, gains), grads.reshape_as(rows))
-    return dx.reshape(-1, x.shape[-1])[:count].reshape_as(x), gain_parts
+        output = (gains[:, None, :] if trained else gains) * normalized
+        derivatives = torch.autograd.grad(output, (rows, gains) if trained else (rows,), grads.reshape_as(rows))
+    return (derivatives[0].reshape(-1, x.shape[-1])[:count].reshape_as(x),
+            derivatives[1] if trained else None)
 
 
 def _sum_norm_gain_parts(gain_parts, dweight=None):
@@ -92,7 +97,7 @@ def _sum_norm_gain_parts(gain_parts, dweight=None):
 def _batched_lfm3_norm_adjoint(x, weight, gradient, eps):
     """Batch independent 128-row adjoints while retaining BF16 gain fan-in order."""
     dx, gain_parts = _lfm3_norm_adjoint_parts(x, weight, gradient, eps)
-    return dx, _sum_norm_gain_parts(gain_parts)
+    return dx, None if gain_parts is None else _sum_norm_gain_parts(gain_parts)
 
 
 def _windowed_lfm3_norm_adjoint(x, weight, gradient, eps):
@@ -106,8 +111,14 @@ def _windowed_lfm3_norm_adjoint(x, weight, gradient, eps):
         end = min(start + 8192, rows.shape[0])
         part, gain_parts = _lfm3_norm_adjoint_parts(rows[start:end], weight, grads[start:end], eps)
         dx[start:end].copy_(part)
-        dweight = _sum_norm_gain_parts(gain_parts, dweight)
+        if gain_parts is not None:
+            dweight = _sum_norm_gain_parts(gain_parts, dweight)
     return dx.reshape_as(x), dweight
+
+
+def _batched_frozen_gain():
+    import os
+    return os.environ.get('NATLANG_NORM_BATCHED_FROZEN', '1') != '0'
 
 
 class _RowwiseNormAdjoint(torch.autograd.Function):
@@ -134,9 +145,13 @@ class _RowwiseNormAdjoint(torch.autograd.Function):
                 return dx, dweight, None
         owner = getattr(original, '__self__', None)
         row_count = x.numel() // x.shape[-1] if x.ndim and x.shape[-1] else 0
+        # The batched adjoint is the per-128-row replay below, exactly, with one dispatch per window instead of
+        # one Python iteration per block. A frozen gain (program-tuning fits: 37% of a fit step was this loop,
+        # 2026-11-24) takes it too; NATLANG_NORM_BATCHED_FROZEN=0 restores the per-block loop for frozen gains.
         if (type(owner).__name__ == 'Lfm3RMSNorm' and x.is_cuda
                 and x.dtype == gradient.dtype == weight.dtype == torch.bfloat16
-                and x.requires_grad and weight.requires_grad and row_count >= 129
+                and x.requires_grad and row_count >= 129
+                and (weight.requires_grad or _batched_frozen_gain())
                 and hasattr(owner, 'variance_epsilon')):
             adjoint = _batched_lfm3_norm_adjoint if row_count <= 1024 else _windowed_lfm3_norm_adjoint
             dx, dweight = adjoint(x, weight, gradient, owner.variance_epsilon)
