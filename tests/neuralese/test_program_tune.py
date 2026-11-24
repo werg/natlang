@@ -388,3 +388,41 @@ def test_a_subset_is_a_stable_pinned_manifest_of_the_split(tmp_path):
     P.main(['subset', '--dir', str(prog), '--tasks', '6', '--name', 'dev6'])
     six = {t['id'] for t in json.loads((prog / 'dev6' / 'manifest.json').read_text())['tasks']}
     assert {t['id'] for t in sub['tasks']} < six                                # stable order: a larger subset extends it
+
+
+def test_colab_bank_ships_the_fits_runs_as_a_tenant_and_brings_the_held_releases_home(tmp_path, monkeypatch):
+    import pop_rl_actor as A
+    dirs = []
+    for name in ('ext_a', 'ext_b', 'ext_held'):
+        prog = tmp_path / name
+        (prog / 'fit' / 'release' / 'artifacts').mkdir(parents=True)
+        (prog / 'split.json').write_text(json.dumps({'family': name}))
+        (prog / 'rows.jsonl').write_text('{"r": 1}\n')
+        (prog / 'fit' / 'plan.json').write_text(json.dumps({'manifest': {'base': {'checkpoint_sha256': 'c' * 64}},
+                                                            'engine': {'checkpoint': '/ck.pt'}}))
+        dirs.append(prog)
+    calls = []
+    monkeypatch.setattr(A, 'colab_tenant_checkout', lambda h, cfg, c: {**cfg, 'repo': '/t', 'admission': '/t/adm.py', 'commit': c})
+    monkeypatch.setattr(A, 'ensure_remote_checkpoint', lambda *a: 'present')
+    monkeypatch.setattr(A, 'ship_file', lambda local, remote, *a: calls.append(('ship', remote)))
+    monkeypatch.setattr(A, 'ship_release', lambda h, cfg, local, remote: calls.append(('release', remote)) or remote)
+    monkeypatch.setattr(A, 'copy_resumable', lambda *a, **k: None)
+    monkeypatch.setattr(A, 'log', lambda **e: None)
+    monkeypatch.setattr(A, 'ssh_host', lambda host, command, **k: 'nnt1_x.nnt\n' if command.startswith('ls ') else '')
+    monkeypatch.setattr(A, 'run_detached', lambda host, cfg, remote, command: calls.append(('run', command)) or 0)
+
+    def pull(remote, local, host, attempts=5):
+        Path(local).parent.mkdir(parents=True, exist_ok=True)
+        Path(local).write_text('{}')
+    monkeypatch.setattr(A, 'pull_verified', pull)
+    out = tmp_path / 'bank-1'
+    assert P.main(['colab-bank', '--programs', str(dirs[0]), str(dirs[1]), '--held', str(dirs[2]), '--out', str(out),
+                   '--host', 'colab-g4', '--commit', 'f' * 40, '--steps', '2']) == 0
+    command = [c for c in calls if c[0] == 'run'][0][1]
+    assert '--preemptible' in command and command[command.index('--vram-gib') + 1] == '14.0'
+    remote = '/content/natlang-work/runs/tenant-bank-bank-1'
+    bank = command[command.index('bank'):]
+    assert bank[bank.index('--held') + 1] == f'{remote}/programs/ext_held' and '--steps' in bank
+    assert [c[1] for c in calls if c[0] == 'release'] == [f'{remote}/programs/ext_a/fit/release',
+                                                          f'{remote}/programs/ext_b/fit/release']
+    assert (out / 'adapt' / 'ext_held' / 'artifacts' / 'nnt1_x.nnt').exists() and (out / 'bank-manifest.json').exists()
