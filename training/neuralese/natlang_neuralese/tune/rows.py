@@ -105,15 +105,22 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None, prefix=None):
     messages, placed = place_states(turn, mine, state_texts) if mine else (turn['messages'], [])
     decision = turn.get('decision')
     if decision is not None:
-        from ..serve.native_learning import decision_items
+        from ..serve.native_learning import decision_sequences
         options, chosen = decision.get('options'), decision.get('chosen')
         if (not isinstance(options, list) or len(options) < 2 or any(not isinstance(item, str) for item in options)
                 or len(set(options)) != len(options) or type(chosen) is not int or not 0 <= chosen < len(options)):
             raise TuneMathError('a decision turn needs distinct options and its selected option')
         # a reasoned readout's action sample: its options were scored after its sampled reasoning (prompt here)
         reasoning = decision_reasoning_text(turn)
-        prompt, continuations = decision_items(engine, messages, turn['tools'], options,
-                                               decision.get('open_reply') is True, reasoning)
+        # every option also as its split form, as the engines score it (the client's default; a record's
+        # split_tokenization, else NATLANG_DECISION_TOKENIZATIONS=canonical, opts out)
+        split = decision.get('split_tokenization')
+        if type(split) is not bool:
+            import os
+            split = os.environ.get('NATLANG_DECISION_TOKENIZATIONS', 'split') != 'canonical'
+        prompt, continuations, alternatives = decision_sequences(
+            engine, messages, turn['tools'], options, decision.get('open_reply') is True, reasoning, split,
+            decision['reasoning_ids'] if reasoning is not None and isinstance(decision.get('reasoning_ids'), list) else None)
         names = {mine[key]: import_name(*json.loads(key)[1:]) for key in placed}
         ids, _, imports, external = soft_items_to_node(engine, prompt, [], prompt_weight=0., state_names=names,
                                                        prefix=prefix)
@@ -123,12 +130,18 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None, prefix=None):
                   'imports':[dataclasses.asdict(edge) for edge in imports],
                   'target_weights':[0.] * (len(ids) + len(continuation))}
                  for index, continuation in enumerate(continuations)]
+        option_names = [node['name'] for node in nodes]
+        alternative_names = [[f'decision:option:{index}:alternative:{k}' for k in range(len(alts))]
+                             for index, alts in enumerate(alternatives)]
+        nodes += [{'name':name, 'token_ids':ids + seq, 'imports':[dataclasses.asdict(edge) for edge in imports],
+                   'target_weights':[0.] * (len(ids) + len(seq))}
+                  for names, alts in zip(alternative_names, alternatives) for name, seq in zip(names, alts)]
         graph = {'schema':GRAPH_SCHEMA,'id':'tune:'+occurrence,'split':'train',
                  'source_groups':['tune-component:'+turn['component']],
                  'tokenizer_fingerprint':engine.model_config['tokenizer_fingerprint'],'nodes':nodes,
-                 'decisions':[{'name':'decision','options':[node['name'] for node in nodes],
+                 'decisions':[{'name':'decision','options':option_names,
                                'prompt_tokens':len(ids),'label':chosen,'label_source':'verified-trajectory',
-                               'values':options}], **({'external_states':external} if external else {}),
+                               'values':options, **({'alternatives':alternative_names} if any(alternative_names) else {})}], **({'external_states':external} if external else {}),
                  'source':{'schema':TURN_SCHEMA,'sha256':canonical_json_sha256_hex(turn),'teacher':turn['teacher'],
                            'source':turn['source'],'evidence':turn['evidence'],**_prefix_record(prefix, external)}}
         row = {'binding':turn['binding'],'graph':graph,'occurrence':occurrence,'evidence_weight':weight}

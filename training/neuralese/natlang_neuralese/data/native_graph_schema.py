@@ -140,7 +140,8 @@ def communication_classification(example):
     names = {node.name for node in example.plan.invocations}
     instruction = set(getattr(example, 'instruction_imports', ()))
     # A decision readout's option continuations are supervised over the option set (data.decision_graph).
-    decided = {option for decision in getattr(example, 'decisions', ()) for option in decision.options}
+    decided = {option for decision in getattr(example, 'decisions', ())
+               for option in (*decision.options, *(a for alts in decision.alternatives for a in alts))}
     offset = 0
     for node in example.plan.invocations:
         weights = example.target_weights[offset:offset + len(node.token_ids)]

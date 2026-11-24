@@ -53,6 +53,7 @@ def _sync(tmp_path):
     sync.export_dir, sync.weights_dir, sync.sglang_url, sync.front_url = tmp_path, tmp_path, None, None
     sync.thread, sync.last, sync.released, sync.pending, sync.publishing = None, {'version': 0, 'ok': True}, None, None, None
     sync.sentinel_ids, sync.slots, sync.staging = [], [], 0
+    sync.extra_actors, sync.on_actor = [], None   # no extra actors (the publish thread reads them)
     sync.start_digests = {'weights_sha256': '1' * 64, 'tensor_identity': '2' * 64}
     sync.last_good = {'version': 0, 'dir': str(tmp_path), 'policy_id': 'a' * 64, 'slot': None, **sync.start_digests}
     sync.pending = {'kind': 'start', 'policy_id': 'a' * 64}

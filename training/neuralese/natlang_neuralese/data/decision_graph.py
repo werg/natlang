@@ -321,7 +321,7 @@ def reasoning_span(tokenizer, at, prompt_ids):
     return at, ids.index(close, at) + 1
 
 
-_FIELDS = {'name', 'options', 'prompt_tokens', 'label', 'probabilities', 'label_source', 'values'}
+_FIELDS = {'name', 'options', 'prompt_tokens', 'label', 'probabilities', 'label_source', 'values', 'alternatives'}
 
 
 @dataclass(frozen=True)
@@ -332,10 +332,15 @@ class GraphDecision:
     prompt_tokens: int
     target: tuple
     label_source: str
+    alternatives: tuple = ()   # per option the node names of its other token sequences (split tokenization)
 
 
 def option_node_name(name, index):
     return f'{name}:option:{index}'
+
+
+def alternative_node_name(name, index, k):
+    return f'{name}:option:{index}:alternative:{k}'
 
 
 def parse_decisions(row, nodes, weights):
@@ -365,13 +370,20 @@ def parse_decisions(row, nodes, weights):
                 or any(option not in by_name or option in used for option in options)):
             raise ValueError('native decision needs at least two distinct, unshared option nodes of its graph')
         used.update(options)
+        alternatives = value.get('alternatives')
+        if alternatives is not None:
+            if (not isinstance(alternatives, list) or len(alternatives) != len(options)
+                    or any(not isinstance(alts, list) or any(a not in by_name or a in used for a in alts)
+                           for alts in alternatives)):
+                raise ValueError('native decision alternatives are, per option, unshared nodes of its graph')
+            used.update(a for alts in alternatives for a in alts)
         if value['label_source'] not in LABEL_SOURCES:
             raise ValueError(f'native decision label_source must be one of {LABEL_SOURCES}')
         first = by_name[options[0]]
         if type(prompt) is not int or prompt < 1:
             raise ValueError('native decision prompt_tokens must be a positive integer')
         continuations = set()
-        for option in options:
+        for option in options + [a for alts in alternatives or () for a in alts]:
             node = by_name[option]
             if (len(node.token_ids) <= prompt or node.token_ids[:prompt] != first.token_ids[:prompt]
                     or node.imports != first.imports or any(edge.at >= prompt for edge in node.imports)):
@@ -383,8 +395,8 @@ def parse_decisions(row, nodes, weights):
             if any(weight != 0 for weight in weights[start:start + len(node.token_ids)]):
                 raise ValueError('native decision option tokens are not token CE targets')
             continuations.add(node.token_ids[prompt:])
-        if len(continuations) != len(options):
-            raise ValueError('native decision options must have distinct continuations')
+        if len(continuations) != len(options) + sum(len(alts) for alts in alternatives or ()):
+            raise ValueError('native decision options (and their alternatives) must have distinct continuations')
         if ('label' in value) == ('probabilities' in value):
             raise ValueError('native decision has exactly one of label or probabilities')
         if 'label' in value:
@@ -404,16 +416,20 @@ def parse_decisions(row, nodes, weights):
         if 'values' in value and (not isinstance(value['values'], list) or len(value['values']) != len(options)
                                   or any(not isinstance(item, str) for item in value['values'])):
             raise ValueError('native decision values are the option reply texts, one per option')
-        result.append(GraphDecision(name, tuple(options), prompt, target, value['label_source']))
+        result.append(GraphDecision(name, tuple(options), prompt, target, value['label_source'],
+                                    tuple(tuple(alts) for alts in alternatives or ())))
     return tuple(result)
 
 
-def option_actions(example, decision):
-    """Per option, the exact next-token queries of its continuation in the example's flat coordinates."""
+def option_actions(example, decision, *, sequences=False):
+    """Per option, the exact next-token queries of its continuation in the example's flat coordinates. ``sequences``:
+    every scored sequence instead, the options' canonical continuations then each option's alternatives in order
+    (``common.decision_objective.sequence_owner`` gives their options)."""
     offsets = {node.name: offset for node, offset in zip(example.plan.invocations, example.plan.offsets)}
     nodes = {node.name: node for node in example.plan.invocations}
     result = []
-    for option in decision.options:
+    names = list(decision.options) + ([a for alts in decision.alternatives for a in alts] if sequences else [])
+    for option in names:
         node, offset = nodes[option], offsets[option]
         result.append([{'query': offset + local - 1, 'token_id': int(node.token_ids[local]), 'temperature': 1.,
                         'allowed_token_ids': None, 'banned_token_ids': None}
@@ -491,10 +507,18 @@ def decision_capture_row(capture, *, id, split, source_groups, label_source, tok
     nodes = [{'name': option_node_name('decision', index), 'token_ids': own + list(ids),
               'target_weights': [0.] * (len(own) + len(ids)), **({'imports': imports} if imports else {})}
              for index, ids in enumerate(continuations)]
+    alternatives = capture.get('continuation_alternatives') or []
+    alternative_names = [[alternative_node_name('decision', index, k) for k in range(len(alts))]
+                         for index, alts in enumerate(alternatives)]
+    option_names = [node['name'] for node in nodes]
+    nodes += [{'name': name, 'token_ids': own + list(ids), 'target_weights': [0.] * (len(own) + len(ids)),
+               **({'imports': imports} if imports else {})}
+              for names, alts in zip(alternative_names, alternatives) for name, ids in zip(names, alts)]
     return {'schema': SCHEMA, 'id': id, 'split': split, 'source_groups': list(source_groups),
             'tokenizer_fingerprint': tokenizer_fingerprint, 'nodes': nodes, 'external_states': external,
-            'decisions': [_decision_field('decision', [node['name'] for node in nodes], len(own), label=label,
-                                          probabilities=probabilities, label_source=label_source, values=values)]}
+            'decisions': [{**_decision_field('decision', option_names, len(own), label=label,
+                                             probabilities=probabilities, label_source=label_source, values=values),
+                           **({'alternatives': alternative_names} if any(alternative_names) else {})}]}
 
 
 def decision_graph_row(renderer, record, *, tokenizer_fingerprint):
@@ -507,9 +531,14 @@ def decision_graph_row(renderer, record, *, tokenizer_fingerprint):
     token targets on decision prompts, so it conditions the choice and is not trained here.
     """
     from ..data.native_graph_schema import SCHEMA
-    from ..serve.native_learning import decision_items
-    prompt, continuations = decision_items(renderer, record['messages'], record.get('tools'), record['options'],
-                                           bool(record.get('open_reply')), record.get('reasoning'))
+    import os
+    from ..serve.native_learning import decision_sequences
+    # split tokenization as the engines score it (the client's default; NATLANG_DECISION_TOKENIZATIONS=canonical)
+    split = record.get('split_tokenization', os.environ.get('NATLANG_DECISION_TOKENIZATIONS', 'split') != 'canonical')
+    prompt, continuations, alternatives = decision_sequences(
+        renderer, record['messages'], record.get('tools'), record['options'], bool(record.get('open_reply')),
+        record.get('reasoning'), bool(split),
+        record.get('reasoning_ids') if record.get('reasoning') is not None else None)
     if any(kind != 'tok' for kind, _ in prompt):
         raise ValueError('a plain-text decision record cannot carry native-state inputs')
     ids = [int(value) for _, value in prompt]
@@ -517,8 +546,14 @@ def decision_graph_row(renderer, record, *, tokenizer_fingerprint):
     nodes = [{'name': option_node_name(name, index), 'token_ids': ids + continuation,
               'target_weights': [0.] * (len(ids) + len(continuation))}
              for index, continuation in enumerate(continuations)]
+    option_names = [node['name'] for node in nodes]
+    alternative_names = [[alternative_node_name(name, index, k) for k in range(len(alts))]
+                         for index, alts in enumerate(alternatives)]
+    nodes += [{'name': n, 'token_ids': ids + list(seq), 'target_weights': [0.] * (len(ids) + len(seq))}
+              for names, alts in zip(alternative_names, alternatives) for n, seq in zip(names, alts)]
     return {'schema': SCHEMA, 'id': record['id'], 'split': record['split'],
             'source_groups': list(record['source_groups']), 'tokenizer_fingerprint': tokenizer_fingerprint,
-            'nodes': nodes, 'decisions': [_decision_field(name, [node['name'] for node in nodes], len(ids),
+            'nodes': nodes, 'decisions': [{**_decision_field(name, option_names, len(ids),
                 label=record.get('label'), probabilities=record.get('probabilities'),
-                label_source=record['label_source'], values=record['options'])]}
+                label_source=record['label_source'], values=record['options']),
+                **({'alternatives': alternative_names} if any(alternative_names) else {})}]}

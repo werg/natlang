@@ -1390,7 +1390,7 @@ class SglangEngine(Engine):
         state['rewind'] = True
         return True
 
-    def sglang_score(self, item, plan, continuations, bindings):
+    def sglang_score(self, item, plan, continuations, bindings, alternatives=None):
         """`decide`/`score` on SGLang (None: the native engine scores it): the native engine's decision capture, each
         continuation's raw log-probability summed from SGLang input logprobs after the shared prompt (the radix cache
         holds the prompt once; `logprob_start_len` keeps each continuation's tokens in its own extend)."""
@@ -1400,11 +1400,12 @@ class SglangEngine(Engine):
         if self._routes_native(request, plan):
             from .native_learning import _score_rendered
             return self._native_gated(lambda: self._native_run(
-                lambda: _score_rendered(self, item, plan, continuations, bindings), bindings))
-        return self._with_adapters(request, lambda adapter: self._sglang_score_bound(item, plan, continuations, request, adapter))
+                lambda: _score_rendered(self, item, plan, continuations, bindings, alternatives), bindings))
+        return self._with_adapters(request, lambda adapter: self._sglang_score_bound(item, plan, continuations, request,
+                                                                                     adapter, alternatives))
 
-    def _sglang_score_bound(self, item, plan, continuations, request, adapter):
-        from .native_learning import decision_response
+    def _sglang_score_bound(self, item, plan, continuations, request, adapter, alternatives=None):
+        from .native_learning import decision_response, decision_sequence_list
         seq = Sequence(request, None, prompt_plan=plan)
         seq.native_actor_export = getattr(self, 'sglang_actor_export', None)  # option scores come from the export
         seq.native_served_policy = self._served_policy()
@@ -1426,10 +1427,11 @@ class SglangEngine(Engine):
                 raise RequestError('sglang-actor-backend', 'SGLang returned the wrong number of continuation logprobs')
             return float(sum(logps)), len(continuation)
         # The first option puts the shared prompt into the radix cache; the others then score from it in parallel.
-        results = [score(continuations[0]), *self._map_threads(score, continuations[1:])] if continuations else []
+        sequences = decision_sequence_list(continuations, alternatives)
+        results = [score(sequences[0]), *self._map_threads(score, sequences[1:])] if sequences else []
         with self._sglang_lock:
             self.sglang_requests += 1
-        return decision_response(item, seq, continuations, results)
+        return decision_response(item, seq, continuations, results, alternatives)
 
     # Opening reuse across inputs (`cache_messages` k: the first k messages are the function's opening, shared by all of
     # its inputs; the llama.cpp fork checkpoints its state at that message boundary, e51ca6d68). The pinned SGLang fork

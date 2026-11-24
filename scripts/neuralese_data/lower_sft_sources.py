@@ -74,9 +74,14 @@ def _decision_sequences(row, stats):
             probabilities = [float(p) for p in decision['probabilities']]
             target, chosen = {'probabilities': probabilities}, max(range(len(options)), key=probabilities.__getitem__)
         ids = np.asarray(options[chosen]['token_ids'], np.int32)
-        out.append((ids, np.zeros(len(ids), np.float32), list(decision['options']),
+        # split-tokenization alternatives: per option its other sequences (exp0_sft scores their logsumexp)
+        alternatives = [[np.asarray(nodes[name]['token_ids'][prompt:], np.int32) for name in names]
+                        for names in decision.get('alternatives') or ()]
+        out.append((ids, np.zeros(len(ids), np.float32),
+                    list(decision['options']) + [n for names in decision.get('alternatives') or () for n in names],
                     {'options': continuations, 'prompt_tokens': prompt, 'label_source': decision['label_source'],
-                     **target, **({'values': decision['values']} if 'values' in decision else {})}))
+                     **target, **({'values': decision['values']} if 'values' in decision else {}),
+                     **({'alternatives': alternatives} if any(alternatives) else {})}))
         stats['decisions'] += 1
     return out
 

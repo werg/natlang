@@ -2095,15 +2095,22 @@ def render_decision(renderer, turn, prompt, own=True):
     forms = decision_forms(messages) if replies is None else None
     if (replies is None and forms is None) or turn.get('tools') or target.get('tool_calls'):
         return None
-    from natlang_neuralese.serve.native_learning import decision_items
+    from natlang_neuralese.serve.native_learning import decision_sequences
+    # every option's split-form tokenization too, as the engines score it (the client's default; the same opt-out)
+    split = os.environ.get('NATLANG_DECISION_TOKENIZATIONS', 'split') != 'canonical'
     reply = (target.get('content') or '').strip()
     reasoned = turn.get('decision_reasoning') if isinstance(turn.get('decision_reasoning'), dict) else None
     reasoning = (target.get('reasoning_content') or '') if reasoned is not None else None
+    # the reasoning generation's sampled ids, as the engines score after them (score item reasoning_ids)
+    sampled_ids = reasoned.get('reasoning_sample_ids') if reasoned is not None else None
+    reasoning_ids = ([int(i) for i in sampled_ids] if isinstance(sampled_ids, list) and sampled_ids
+                     and os.environ.get('NATLANG_DECISION_REASONING_IDS', 'sampled') != 'rendered' else None)
 
     def rendered(options, label, open_reply=False):
         try:
-            before, continuations = decision_items(renderer, list(turn['messages']), turn.get('tools'), options,
-                                                   open_reply, reasoning)
+            before, continuations, alternatives = decision_sequences(
+                renderer, list(turn['messages']), turn.get('tools'), options, open_reply, reasoning, split,
+                reasoning_ids)
         except Exception as error:
             return {'error': repr(error)[:200]}
         scored, row_prompt = [int(i) for _, i in before], [int(i) for i in prompt]
@@ -2113,7 +2120,9 @@ def render_decision(renderer, turn, prompt, own=True):
         shared = scored[len(row_prompt):]
         decision = {'options': [np.asarray(ids, np.int32) for ids in continuations], 'label': label, 'values': options,
                     'label_source': 'verified-trajectory', **({'prefix': np.asarray(shared, np.int32)} if shared else {}),
-                    **({'open_reply': True} if open_reply else {})}
+                    **({'open_reply': True} if open_reply else {}),
+                    **({'alternatives': [[np.asarray(ids, np.int32) for ids in alts] for alts in alternatives]}
+                       if any(alternatives) else {})}
         if reasoned is not None:
             decision['scored'] = scored   # checked against the capture by ``reasoned`` below, then dropped
         return decision
@@ -2193,7 +2202,9 @@ def rendered_row(rendered, source, key, index, turn, backend_workarounds='contex
         row['weight'] = np.zeros(len(target), np.float32)   # the detour after the refusal: context
     decision = decision[0] if decision else None
     view = lambda d: {**d, 'options': [ids.view(np.int32) for ids in d['options']],
-                      **({'prefix': d['prefix'].view(np.int32)} if 'prefix' in d else {})}
+                      **({'prefix': d['prefix'].view(np.int32)} if 'prefix' in d else {}),
+                      **({'alternatives': [[ids.view(np.int32) for ids in alts] for alts in d['alternatives']]}
+                         if 'alternatives' in d else {})}
     if decision and 'options' in decision:
         # the plain row stays (``exp0_sft --no-decision-objective`` trains it as token CE, as before)
         row['decision'] = view(decision)
@@ -2578,7 +2589,9 @@ def decision_report(chains):
             p['chains'] += 1
             p['options'] += len(chain['decision']['options'])
             p['forward_tokens'] += sum(chain['segs'][0][0] + len(chain['decision'].get('prefix', ())) + len(ids)
-                                       for ids in chain['decision']['options'])
+                                       for ids in [*chain['decision']['options'],
+                                                   *(a for alts in chain['decision'].get('alternatives') or () for a in alts)])
+            p['split_sequences'] += sum(len(alts) for alts in chain['decision'].get('alternatives') or ())
             span = chain['decision'].get('reasoning_span')
             if span is not None:   # a reasoned readout's sample: its reasoning trains as token CE (own tokens)
                 p['reasoned'] += 1

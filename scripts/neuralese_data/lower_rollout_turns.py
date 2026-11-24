@@ -273,6 +273,9 @@ def decision_turns(row, stats, states=None):
         rows.append({'invocation': turn['invocation_id'], 'index': index, 'prompt': lowered[0], 'imports': lowered[1],
                      'sources': lowered[2],
                      'options': [np.array(ids, dtype=np.int32) for ids in sample['continuations']],
+                     # split-tokenized readouts: per option its other sequences, scored with it as a logsumexp
+                     **({'alternatives': [[np.array(ids, dtype=np.int32) for ids in alts] for alts in sample['alternatives']]}
+                        if any(sample['alternatives']) else {}),
                      'chosen': sample['chosen'], 'temperature': sample['temperature'],
                      'scores': np.array(sampling['decision_sample']['log_probs'], dtype=np.float32),
                      'behavior_logq': float(sample['behavior_logps'][sample['chosen']]),

@@ -62,16 +62,45 @@ def validate_decision_sample(capture):
         raise ValueError('decision sample chosen option is out of range')
     if type(temperature) not in (int, float) or not math.isfinite(temperature) or temperature <= 0:
         raise ValueError('decision sample temperature must be finite and positive')
+    alternatives = capture.get('continuation_alternatives')
+    if alternatives is not None and (
+            not isinstance(alternatives, list) or len(alternatives) != len(continuations)
+            or any(not isinstance(alts, list) or any(not isinstance(ids, list) or not ids
+                                                     or any(type(t) is not int or t < 0 for t in ids) for ids in alts)
+                   for alts in alternatives)):
+        raise ValueError('continuation_alternatives holds one list of nonempty id sequences per option')
+    # a split-tokenized readout: the served score of an option is the logsumexp over its canonical continuation and
+    # these alternatives (serve.native_learning.decision_sequences); the learner scores the same sequences
     return {'continuations': [list(ids) for ids in continuations], 'chosen': chosen,
+            'alternatives': [[list(ids) for ids in alts] for alts in alternatives or [[] for _ in continuations]],
             'temperature': float(temperature), 'behavior_logps': behavior_log_probs(log_probs, temperature)}
 
 
-def decision_log_policy(model, hidden, action, *, chunk_tokens=128, queries=None):
+def remap_decision(action, rows):
+    """``action`` with its option (and split-tokenization alternative, and twin alternative) queries mapped through
+    ``rows`` (flat -> packed physical rows)."""
+    remap = lambda options: [[{**item, 'query': rows[item['query']]} for item in option] for option in options]
+    return {**action, 'options': remap(action['options']),
+            **({'alternatives': [remap(alts) for alts in action['alternatives']]} if 'alternatives' in action else {}),
+            **({'twin_alternatives': [remap(alts) for alts in action['twin_alternatives']]}
+               if 'twin_alternatives' in action else {})}
+
+
+def decision_log_policy(model, hidden, action, *, chunk_tokens=128, queries=None, alternative_queries=None):
     """log pi_theta over the decision's options (temperature-scaled softmax of the option scores); option queries
-    are rows of ``hidden`` (the caller maps original-token coordinates through its packed physical-row map)."""
+    are rows of ``hidden`` (the caller maps original-token coordinates through its packed physical-row map,
+    ``remap_decision``). A split-tokenized readout's option score is the logsumexp over its canonical continuation and
+    its ``alternatives`` (``alternative_queries`` with ``queries``), as the engines served it."""
+    from ..common.decision_objective import option_sequence_scores, sequence_owner
     from ..train.decision_supervision import option_scores
     options = action['options'] if queries is None else queries
-    scores = option_scores(model, hidden, options, chunk_tokens=chunk_tokens)
+    alternatives = (action.get('alternatives') if queries is None else alternative_queries) or ()
+    if any(alternatives):
+        sequences = option_scores(model, hidden, [*options, *(a for alts in alternatives for a in alts)],
+                                  chunk_tokens=chunk_tokens)
+        scores = option_sequence_scores(sequences, sequence_owner(len(options), alternatives), len(options))
+    else:
+        scores = option_scores(model, hidden, options, chunk_tokens=chunk_tokens)
     return torch.log_softmax(scores.float() / action['temperature'], 0)
 
 
@@ -103,6 +132,7 @@ def decision_policy_terms(model, hidden, actions, *, advantage, mode, policy_los
                 from .jolt import twin_kl
                 with torch.no_grad():
                     twin_log = decision_log_policy(model, hidden.detach(), action, queries=queries,
+                                                   alternative_queries=action.get('twin_alternatives'),
                                                    chunk_tokens=chunk_tokens)
                 # a student's twin term in the declared direction (jolt-plus/1 student_kl); teachers keep reverse
                 direction = policy_loss.get('student_kl', 'reverse') if student else 'reverse'

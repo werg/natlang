@@ -599,6 +599,18 @@ def decision_parts(chain):
     return prompt, options, target
 
 
+def decision_alternatives(chain):
+    """Per option its other token sequences (a split-tokenized readout, ``decision_items`` split_tokenization; the
+    option scores as the logsumexp over all its sequences), empty lists when the row carries none."""
+    decision = chain['decision']
+    alternatives = decision.get('alternatives')
+    if alternatives is None:
+        return [[] for _ in decision['options']]
+    if len(alternatives) != len(decision['options']) or any(not len(ids) for alts in alternatives for ids in alts):
+        raise ValueError('decision alternatives are nonempty sequences, one list per option')
+    return [[np.asarray(ids, np.int64) for ids in alts] for alts in alternatives]
+
+
 def decision_reasoning_span(chain):
     """The (start, stop) of a decision chain's reasoning in its decision prompt that trains as token CE, or None
     (no reasoned readout, or ``mark_decision_objective`` turned it off)."""
@@ -612,7 +624,7 @@ def decision_reasoning_span(chain):
 
 def decision_tokens(chain):
     prompt, options, _ = decision_parts(chain)
-    return sum(len(prompt) + len(ids) for ids in options)
+    return sum(len(prompt) + len(ids) for ids in options + [a for alts in decision_alternatives(chain) for a in alts])
 
 
 def decision_backward(model, forward, chains, denominator, pack_tokens, activation_gb, fast=True, mark=None,
@@ -625,7 +637,7 @@ def decision_backward(model, forward, chains, denominator, pack_tokens, activati
     its reasoning span (in the prompt every option shares; read off the first option's document). Returns (sum of the
     weighted loss, tokens computed, {'decisions', 'ce', 'correct', 'reasoning_tokens', 'reasoning_nll'}); ``backward``
     False: no backward (validation, under ``torch.no_grad``)."""
-    from natlang_neuralese.common.decision_objective import decision_loss
+    from natlang_neuralese.common.decision_objective import decision_loss, option_sequence_scores, sequence_owner
     mark = mark or (lambda name, since: time.time())
     device = model.lm_head.weight.device
     total, computed = 0., 0
@@ -643,11 +655,15 @@ def decision_backward(model, forward, chains, denominator, pack_tokens, activati
     for group in groups:
         t = time.time()
         parts = [decision_parts(chain) for chain in group]
+        # each option's sequences: its canonical continuation, then (after all options) its split-form alternatives
+        alternatives = [decision_alternatives(chain) for chain in group]
+        owners = [sequence_owner(len(options), alts) for (_, options, _), alts in zip(parts, alternatives)]
+        sequences = [options + [a for alt in alts for a in alt] for (_, options, _), alts in zip(parts, alternatives)]
         reasoning = [decision_reasoning_span(chain) for chain in group]
         # per document: its local target positions and tokens (spans in order: a reasoned decision's reasoning span
         # on its first option's document, then each option's continuation)
         documents, local, targets, spans = [], [], [], []
-        for (prompt, options, _), span in zip(parts, reasoning):
+        for (prompt, _, _), options, span in zip(parts, sequences, reasoning):
             if span is not None and span[1] > len(prompt):
                 raise ValueError('a decision reasoning span lies in its prompt')
             for k, ids in enumerate(options):
@@ -677,14 +693,14 @@ def decision_backward(model, forward, chains, denominator, pack_tokens, activati
         sums = -torch.stack([part.sum() for part in nll.split(spans)])
         t = mark('decision_forward', t)
         loss, at = sums.new_zeros((), dtype=torch.float32), 0
-        for (_, options, target), span in zip(parts, reasoning):
+        for (_, options, target), owner, span in zip(parts, owners, reasoning):
             if span is not None:     # the student's own reasoning tokens: token CE, weight 1 each
                 loss = loss - sums[at]
                 report['reasoning_tokens'] += int(span[1] - span[0])
                 report['reasoning_nll'] += float(-sums[at].detach())
                 at += 1
-            scores = sums[at:at + len(options)]
-            at += len(options)
+            scores = option_sequence_scores(sums[at:at + len(owner)], owner, len(options))
+            at += len(owner)
             ce = decision_loss(scores, rule=DECISION_RULE, probabilities=target)
             loss = loss + DECISION_MASS * ce
             report['ce'] += float(ce.detach())

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import torch
 
-from ..common.decision_objective import decision_loss
+from ..common.decision_objective import decision_loss, option_sequence_scores, sequence_owner
 from ..data.decision_graph import option_actions
 
 RULE = 'logLoss'
@@ -37,9 +37,10 @@ def option_scores(model, hidden, options, *, chunk_tokens=128, readout=None):
 
 
 def physical_options(example, decision, physical_rows=None):
-    """Option actions of ``decision`` in packed physical coordinates (``physical_rows``: the graph's flat -> physical
-    row map after prefix sharing; ``None``: the example's own flat coordinates)."""
-    options = option_actions(example, decision)
+    """Sequence actions of ``decision`` (its options' canonical continuations, then their split-tokenization
+    alternatives) in packed physical coordinates (``physical_rows``: the graph's flat -> physical row map after prefix
+    sharing; ``None``: the example's own flat coordinates)."""
+    options = option_actions(example, decision, sequences=True)
     if physical_rows is None:
         return options
     return [[{**action, 'query': physical_rows[action['query']]} for action in option] for option in options]
@@ -52,8 +53,11 @@ def decision_terms(model, hidden, example, *, physical_rows=None, chunk_tokens=1
     total = hidden.new_zeros((), dtype=torch.float32)
     correct = hidden.new_zeros((), dtype=torch.float32)
     for decision in example.decisions:
-        scores = option_scores(model, hidden, physical_options(example, decision, physical_rows),
-                               chunk_tokens=chunk_tokens)
+        sequences = option_scores(model, hidden, physical_options(example, decision, physical_rows),
+                                  chunk_tokens=chunk_tokens)
+        # an option scores as the logsumexp over its sequences, as the engines serve it
+        scores = option_sequence_scores(sequences, sequence_owner(len(decision.options), decision.alternatives),
+                                        len(decision.options))
         total = total + decision_loss(scores, rule=RULE, probabilities=list(decision.target))
         best = max(range(len(decision.target)), key=decision.target.__getitem__)
         correct = correct + (scores.detach().argmax() == best).float()
