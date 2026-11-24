@@ -11716,3 +11716,37 @@ program.
 
 Whether to stop training on A and B rows (a pool-errata or role change, plus a mix filter) is put to the owner. aei1
 keeps running as it is.
+
+## 2026-11-24 23:00 New ideas as complete programs: the program inventor replaces procedural task generation (designed, piloted; nothing admitted)
+
+Owner, verbatim: "I also want us to design a process for generating truly new ideas and building truly complex, new,
+native and idiomatic, functional semantic programming NatLang programs. That hopefully would replace the fixed idea
+procedural generation. The approach will be to provide an overview of the worlds and ideas and tasks that already
+exist, and always have the model come up with a completely new idea. And there should be clear requirements on
+functional, semantic, complexity, and code-based depth."
+
+**Design** `plans/NOVEL_PROGRAMS_20261124.md`; **program** `applications/program-inventor/` (DECOMPOSITION.md,
+`inventIdea`/`isNew`/`meetsBar`/`adjudicate` judgments, `semanticRepair` over crisp qualification, BUILD_BRIEF.md,
+requirements.json: 18 requirements, 13 crisp, 5 judged); crisp mechanism `scripts/rl_tasks/program_atlas.py` (atlas of
+740 existing ideas from grpo-pool families, applications, design briefs, examples, dataset sources and the inventor's
+own accepted ideas; nearest-idea retrieval), `sources/invented.py` (static requirement checks, `natlang.program/2`
+packaging, qualification through `verify.mjs`), `ablate.mjs` (S2: the answer must change when any one judgment takes its
+trap reading, replayed through the program's own code). One idea = one program with 2-3 literal instances; no generator,
+no rotation, no assigned theme.
+
+**Pilot** (`/home/werg/data/natlang-novel-programs/pilot-20261124/`): Sol invented 6 ideas, Opus judged all new and built
+all 6; all 6 passed crisp qualification (references through the real code, 56 wrong answers and 12 keyword baselines
+rejected, 48/48 ablations rejected). Sol's review then failed S4 everywhere (outside free text left untyped) and D3 twice;
+one repair round fixed 5 of 6 fully. Live run: Sol solved 2 programs (3 instances); the adjudicated double failures were
+one ambiguous instance (causal auditor b, to be reworded) and one teacher error. Round 1's ideas shared one template
+("expert audit: prose to formal structure to textbook algorithm"); `inventIdea` now reads accepted ideas as a group and
+leaves their shared pattern, and a 3-idea Opus round with it produced more varied work (knitting errata, liturgical ordo,
+bug-bounty payouts).
+
+**Fixed along the way (main):** `teacher_gen` scored a Codex usage-limit hit on a nested child call as a teacher failure
+(d670ae655: now no verdict, deferred, cooldown; test). Found: the 40-call episode budget cannot fit programs of 16-40
+judgment calls (owner decision 5 in the plan); the Codex window was spent by the pilot's live run on 2026-11-24 evening
+(shared with the teacher campaign).
+
+**Open for the owner** (plan §14): admission of the pilot's 12 tasks; held split for new ideas; one bar or shape-specific
+bars; whole-output tasks vs per-stage; episode budget for long programs; inventor families.
