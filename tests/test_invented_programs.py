@@ -56,7 +56,7 @@ def write(tmp, extra=None):
     files = {'rule_notes.nl': ROOT, 'types.ts': TYPES, 'rule_notes/withdraws.nl': JUDGE,
              'rule_notes/supersedes.nl': JUDGE.replace('withdraws an earlier', 'replaces'),
              'rule_notes/same_item.nl': JUDGE.replace('withdraws an earlier note', 'names the same item'),
-             'rule_notes/rule.ts': HELPER, 'natlang.json': '{}'}
+             'rule_notes/rule.ts': HELPER, 'natlang.json': '{}', 'rule_notes.d.nl.ts': 'export {};'}
     for path, text in files.items():
         (sub / 'program' / path).parent.mkdir(parents=True, exist_ok=True)
         (sub / 'program' / path).write_text(text)

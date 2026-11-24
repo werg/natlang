@@ -63,7 +63,9 @@ def load(submission: Path) -> tuple[dict, dict[str, str]]:
     files = {}
     for path in sorted(program.rglob('*')):
         rel = path.relative_to(program).as_posix()
-        if path.is_file() and rel.split('/')[0] not in PROGRAM_EXTRA and not rel.startswith('.'):
+        # `natlang check` writes generated declarations (`*.d.nl.ts`) beside the sources; they are not program files
+        if (path.is_file() and rel.split('/')[0] not in PROGRAM_EXTRA and not rel.startswith('.')
+                and not rel.endswith('.d.nl.ts')):
             files[rel] = path.read_text()
     return data, files
 
