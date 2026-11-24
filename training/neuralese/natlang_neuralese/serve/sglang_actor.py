@@ -47,6 +47,21 @@ TOP_K_MASS_KEY = 'natlang_top_k_mass'
 CAPTURE_KEY = 'natlang_capture'
 IMPORT_KEY = 'natlang_import'
 ADAPTER_KEY = 'natlang_adapter'
+
+
+def adapter_cache_key(body):
+    """``body`` with SGLang's radix-cache ``extra_key`` naming its adapter stack. SGLang matches a cached prefix (KV and
+    the conv/recurrent states) on the token ids and ``extra_key`` only, and the fork's slot adapters
+    (``custom_params.natlang_adapter``) are not in it: a prompt state computed under one stack (or none) was reused by a
+    request with another, so adapted and base requests on one prompt read each other's prefix (T3, 2026-11-24:
+    base turns of a program prompt 0.70 nats from the native engine, adapted 2.6). Each stack gets its own prefix
+    namespace; base requests keep the empty one. ``NATLANG_SGLANG_ADAPTER_CACHE_KEY=0`` opts out."""
+    adapter = ((body.get('sampling_params') or {}).get('custom_params') or {}).get(ADAPTER_KEY)
+    if not adapter or os.environ.get('NATLANG_SGLANG_ADAPTER_CACHE_KEY', '1') == '0':
+        return body
+    key = f"natlang-adapter:{adapter['id']}"
+    extra = body.get('extra_key')
+    return {**body, 'extra_key': f'{extra}|{key}' if extra else key}
 TRACK_INPUT_END_KEY = 'natlang_track_input_end'
 # The reply tokens a request's input already holds, which its grammar takes first (fork NATLANG_GRAMMAR_PREFIX).
 GRAMMAR_PREFIX_KEY = 'natlang_grammar_prefix'
@@ -419,8 +434,11 @@ class SglangEngine(Engine):
         cached = getattr(self, '_tool_grammar_export_cache', None)
         if cached is None or cached[0] != self.sglang_export_dir:
             from ..common import tool_grammar
-            cached = self._tool_grammar_export_cache = (
-                self.sglang_export_dir, tool_grammar.info_from_export(self.sglang_export_dir))
+            with tool_grammar.INFO_LOCK:   # once, not once per concurrent first request
+                cached = getattr(self, '_tool_grammar_export_cache', None)
+                if cached is None or cached[0] != self.sglang_export_dir:
+                    cached = self._tool_grammar_export_cache = (
+                        self.sglang_export_dir, tool_grammar.info_from_export(self.sglang_export_dir))
         return cached[1]
 
     def rebind_in_place(self, policy_id, weights_sha256=None, version=None, *, export_dir=None, weights_path=None,
@@ -1005,6 +1023,7 @@ class SglangEngine(Engine):
         return result
 
     def _sglang_post(self, body):
+        body = adapter_cache_key(body)
         try:
             with urllib.request.urlopen(urllib.request.Request(self.sglang_url + '/generate',
                     data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'}),
@@ -1374,7 +1393,7 @@ class SglangEngine(Engine):
         state['rewind'] = True
         return True
 
-    def sglang_score(self, item, plan, continuations, bindings):
+    def sglang_score(self, item, plan, continuations, bindings, alternatives=None):
         """`decide`/`score` on SGLang (None: the native engine scores it): the native engine's decision capture, each
         continuation's raw log-probability summed from SGLang input logprobs after the shared prompt (the radix cache
         holds the prompt once; `logprob_start_len` keeps each continuation's tokens in its own extend)."""
@@ -1384,11 +1403,12 @@ class SglangEngine(Engine):
         if self._routes_native(request, plan):
             from .native_learning import _score_rendered
             return self._native_gated(lambda: self._native_run(
-                lambda: _score_rendered(self, item, plan, continuations, bindings), bindings))
-        return self._with_adapters(request, lambda adapter: self._sglang_score_bound(item, plan, continuations, request, adapter))
+                lambda: _score_rendered(self, item, plan, continuations, bindings, alternatives), bindings))
+        return self._with_adapters(request, lambda adapter: self._sglang_score_bound(item, plan, continuations, request,
+                                                                                     adapter, alternatives))
 
-    def _sglang_score_bound(self, item, plan, continuations, request, adapter):
-        from .native_learning import decision_response
+    def _sglang_score_bound(self, item, plan, continuations, request, adapter, alternatives=None):
+        from .native_learning import decision_response, decision_sequence_list
         seq = Sequence(request, None, prompt_plan=plan)
         seq.native_actor_export = getattr(self, 'sglang_actor_export', None)  # option scores come from the export
         seq.native_served_policy = self._served_policy()
@@ -1410,10 +1430,11 @@ class SglangEngine(Engine):
                 raise RequestError('sglang-actor-backend', 'SGLang returned the wrong number of continuation logprobs')
             return float(sum(logps)), len(continuation)
         # The first option puts the shared prompt into the radix cache; the others then score from it in parallel.
-        results = [score(continuations[0]), *self._map_threads(score, continuations[1:])] if continuations else []
+        sequences = decision_sequence_list(continuations, alternatives)
+        results = [score(sequences[0]), *self._map_threads(score, sequences[1:])] if sequences else []
         with self._sglang_lock:
             self.sglang_requests += 1
-        return decision_response(item, seq, continuations, results)
+        return decision_response(item, seq, continuations, results, alternatives)
 
     # Opening reuse across inputs (`cache_messages` k: the first k messages are the function's opening, shared by all of
     # its inputs; the llama.cpp fork checkpoints its state at that message boundary, e51ca6d68). The pinned SGLang fork
@@ -1720,17 +1741,49 @@ class SglangEngine(Engine):
         return path
 
     def _sglang_emit(self, seq, state, final=False):
-        """Send the reply text decoded so far, holding back an incomplete UTF-8 tail until it completes."""
-        text = self.tokenizer.decode(seq.items[state['run']:], skip_special_tokens=False)
+        """Send the reply text decoded so far, holding back an incomplete UTF-8 tail until it completes.
+
+        Between chunks only the newest tokens are decoded, after one earlier chunk of context, as streaming
+        detokenizers do (vLLM's prefix and read offsets): the new text is what the decode of the context plus the new
+        tokens adds to the context's own decode, which also keeps the spacing a tokenizer puts between tokens. Decoding
+        the whole reply at every chunk (every 8 tokens) was quadratic in the reply length and 57-79% of the front's
+        GIL time at 32-128 streams (bench of the a034dbf9c front, 2026-11-24). The run's last emission (``final``)
+        decodes it whole, the exact text the response carries, and sends what is still missing.
+        ``NATLANG_SGLANG_INCREMENTAL_DETOKENIZE=0`` opts out."""
+        items, run, sent = seq.items, state['run'], state['text']
+        incremental = not final and os.environ.get('NATLANG_SGLANG_INCREMENTAL_DETOKENIZE', '1') != '0'
+        mark = state.get('offsets') if incremental else None    # (run, prefix offset, read offset)
+        if mark is not None and mark[0] == run and mark[2] <= len(items):
+            prefix, read = mark[1], mark[2]
+        else:
+            prefix = read = run if incremental and not sent else None
+        if prefix is not None:
+            if read == len(items):
+                return
+            context = self.tokenizer.decode(items[prefix:read], skip_special_tokens=False) if read > prefix else ''
+            text = self.tokenizer.decode(items[prefix:], skip_special_tokens=False)
+            if text.startswith(context):
+                if len(text) <= len(context) or text.endswith('\ufffd'):
+                    return                  # nothing complete yet: the next chunk (or the final decode) sends it
+                state['offsets'] = (run, read, len(items))
+                seq.request.on_delta({'text': text[len(context):]})
+                state['text'] = sent + text[len(context):]
+                return
+        # the whole reply: at the end of a run, without offsets, or when the context's text was not a prefix
+        text = self.tokenizer.decode(items[run:], skip_special_tokens=False)
+        complete = not text.endswith('\ufffd')
         if not final:
             text = text.rstrip('\ufffd')
-        if len(text) > len(state['text']) and text.startswith(state['text']):
-            seq.request.on_delta({'text': text[len(state['text']):]})
+        if len(text) > len(sent) and text.startswith(sent):
+            seq.request.on_delta({'text': text[len(sent):]})
             state['text'] = text
+        state.pop('offsets', None)
+        if incremental and complete and state['text'] == text and items[run:]:
+            state['offsets'] = (run, max(run, len(items) - 8), len(items))   # all of it sent: continue from here
 
     def _sglang_stream(self, body):
         """SGLang /generate as a stream of incremental chunks."""
-        request = urllib.request.Request(self.sglang_url + '/generate', data=json.dumps({**body, 'stream': True}).encode(),
+        request = urllib.request.Request(self.sglang_url + '/generate', data=json.dumps({**adapter_cache_key(body), 'stream': True}).encode(),
                                          headers={'Content-Type': 'application/json'})
         meta = None
         try:

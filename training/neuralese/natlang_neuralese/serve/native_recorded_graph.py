@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from ..model.native_graph_plan import compile_graph, invocation_dict
 from ..rl.native_replay import compile_replay, capture_invocation_actors
@@ -72,6 +72,9 @@ class RecordedGraph:
     # Receipt ID -> per-option actual conditional next-token coordinates.
     decision_actions: dict
     origin_bindings: dict
+    # Receipt ID -> per option the node names of its split-tokenization alternatives (its capture's
+    # continuation_alternatives; the option scores as the logsumexp over its sequences).
+    decision_alternatives: dict = field(default_factory=dict)
 
     def row(self, *, tokenizer_fingerprint, source_id, decision_labels=None):
         """The graph row; ``decision_labels`` ({receipt ID: {label | probabilities, label_source}}) declares the
@@ -83,8 +86,11 @@ class RecordedGraph:
             names, actions = self.invocations[receipt], self.decision_actions.get(receipt)
             if actions is None:
                 raise ValueError('decision label names no recorded decision receipt')
+            alternatives = self.decision_alternatives.get(receipt) or []
+            options = names[:len(names) - sum(len(alts) for alts in alternatives)]
             prompt = actions[0][0]['query'] - offsets[names[0]] + 1
-            decisions.append({'name': receipt, 'options': list(names), 'prompt_tokens': prompt,
+            decisions.append({'name': receipt, 'options': list(options), 'prompt_tokens': prompt,
+                              **({'alternatives': [list(alts) for alts in alternatives]} if any(alternatives) else {}),
                               **{key: label[key] for key in ('label', 'probabilities', 'label_source') if key in label}})
         return json.loads(json.dumps({'schema':'natlang.neuralese-native-graph/1','id':source_id,'split':'train',
             'source_groups':[source_id], 'tokenizer_fingerprint':tokenizer_fingerprint,
@@ -102,7 +108,7 @@ def compile_recorded_graph(turns, events, *, identity, roles, fetch_block):
     replay = compile_replay(prepared, identity=identity, roles=roles, fetch_block=fetch_block,
                             invocation_actors=actors, structural=True)
     by_name = {turn['graph_turn']:turn for turn in prepared}
-    nodes, actor_map, invocations, local_actions = [], {}, {}, {}
+    nodes, actor_map, invocations, local_actions, alternative_names = [], {}, {}, {}, {}
     reserved = set(by_name) | set(replay.external_blocks)
     text_writers={write['node'] for turn in prepared for write in turn.get('text_result_writes',[])}
     reserved.update(text_writers)
@@ -121,10 +127,18 @@ def compile_recorded_graph(turns, events, *, identity, roles, fetch_block):
             options = turn['sampling'].get('continuations')
             if not isinstance(options,list) or not options:
                 raise ValueError('native recorded decision requires actual option continuations')
-            for index, ids in enumerate(options):
+            alternatives = turn['sampling'].get('continuation_alternatives') or []
+            if alternatives and (not isinstance(alternatives, list) or len(alternatives) != len(options)):
+                raise ValueError('native decision continuation_alternatives hold one list per option')
+            alternative_names[turn['receipt_id']] = [[f'{node.name}:option:{index}:alternative:{k}' for k in range(len(alts))]
+                                                     for index, alts in enumerate(alternatives)]
+            # the options' canonical continuations, then every split-tokenization alternative
+            sequences = [(f'{node.name}:option:{index}', ids) for index, ids in enumerate(options)]
+            sequences += [(name, ids) for names, alts in zip(alternative_names[turn['receipt_id']], alternatives)
+                          for name, ids in zip(names, alts)]
+            for name, ids in sequences:
                 if not isinstance(ids,list) or not ids or any(type(token) is not int or token < 0 for token in ids):
                     raise ValueError('native decision continuation needs nonempty exact token IDs')
-                name = f'{node.name}:option:{index}'
                 if name in reserved:
                     raise ValueError('native option identity collides with an actual source occurrence')
                 reserved.add(name)
@@ -152,4 +166,5 @@ def compile_recorded_graph(turns, events, *, identity, roles, fetch_block):
     origins={turn['receipt_id']:{key:copy.deepcopy(turn[key]) for key in
         ('graph_turn','written_nodes','read_bindings','external_read_bindings','written_occurrences','read_occurrences','text_result_writes') if key in turn} for turn in prepared}
     return RecordedGraph(replace(replay,plan=plan,invocation_actors=receipts,
-        external_invocations=external_invocations,external_receipts=external_receipts),invocations,decisions,origins)
+        external_invocations=external_invocations,external_receipts=external_receipts),invocations,decisions,origins,
+        {receipt: names for receipt, names in alternative_names.items() if any(names)})

@@ -105,6 +105,7 @@ bandwidth; `--sglang-kv-cache-dtype auto` is the opt-in.
 | 0bee37915 | `/v1/natlang/score` items take `reasoning`: each continuation is the content of an assistant message with that reasoning (`reasoning_content`), so the reasoning is prompt; results echo `reasoning: true`, the decision capture records it | Python native and SGLang the same day (`native_learning.decision_items`); the page from the same release; gap row above until the pin moves |
 | b704a8b2f | native-state files: `--native-state` and the page's `native_states` load natlang's store files (a release's `states/<id>.nzs`) through the PUT path (verified once, stored as read); PUT `{"path"}`; non-finite values refused; GGUF state-span format removed | every engine: section "Native state: one format, handed over as files" |
 | 1a7f5015f | a text write or produce span is read in the reader's context (`in-context-text`): `producer_kind` ("text"/"span") is validated native-state metadata (refused with another value or with a `derivation`); a state of the server's identity carrying it, with no `adapter_binding` or `derivation`, is consumed as its own token ids inline with no consume markers, receipt `in-context-text`, recorded by the RL capture as tokens; every produced span carries `producer_kind: "span"` (its content id is the Python engines' for the same span); opt-outs `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0`, `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0`; `/v1/neuralese/info` lists the mode; an in-page reply carries its import receipts (`native_state.imports`) as an HTTP reply does | every engine: Python native and SGLang (`engine.py` `reads_in_context`, `_native_consume_text_in_context`; `sglang_actor.py` `_sglang_import`); the page compiles the same fork sources (werg/wllama builds `server-native-state.cpp`, `server-common.cpp`, `server-context.cpp`) |
+| 89026ef24 | `/v1/natlang/score` `reasoning_ids`: a reasoned item's sampled reasoning ids replace the reasoning text's re-encoding, kept up to the first token the template writes after the reasoning (LFM3 `</think>`); ids need `reasoning` and must lie in the vocabulary (per-item error otherwise); results echo `reasoning_ids: true`, the capture records `reasoning_ids_kept`; split forms use the same ids | every engine: the Python engines splice the same ids (`serve/native_learning.decision_items`, SGLang through `_score_item`); the client sends them from the reasoning generation's RL capture (`native/agent.ts`), opt-out `NATLANG_DECISION_REASONING_IDS=rendered` |
 
 ## Record decisions: joint and field by field
 
@@ -211,6 +212,51 @@ Live check, 2026-11-17: natlang-b12081 CPU with the natlang-lfm3-5ff07638 Q8_0 G
 - The two states hold the same token ids and the same 38 tensors.
 - Relative L2 difference: median 0.025-0.026 and largest 0.045-0.048 (layer-12 V), the Q8 floor. For comparison, SGLang vs Python forced producing differs by 0.050 (fork-checks).
 
+## Tuned adapters (LoRA) on LFM3
+
+A program fit (`tune.build`: native free-LoRA or subspace factors) serves on every engine. The Python native engine
+applies the stack exactly (`native_adapters.run_native`) and is the reference. The SGLang front sums the stack into
+resident slot factors per fused fork module (`sglang_actor._sglang_adapter_file`). The managed llama-server and the
+page load the GGUF LoRA export (`tune/export.py` `export_peft` -> `export_gguf`, the vendored fork converter) at scale 0
+and send per-request scales (`model/lora-scales.ts`); the fork's LFM3 graph applies it through `build_lora_mm` on
+q/k/v, `attn_gate`, `attn_output`, conv `in_proj`/`out_proj` and `ffn_gate`/`ffn_up`/`ffn_down` (`src/models/lfm3.cpp`,
+`lfm-base.cpp`). The export carries every target the tuner trains: on this release 55 attention, 26 conv and 72 MLP
+tensors, the attention gate and `o_proj` included.
+
+Measured 2026-11-24 (T3) on the first real LFM3 program fit, `ext_decisions_route` (free LoRA rank 16 over every LFM3
+family, base 5ff07638). The prompts are 6 of the program's rows rendered with the serving template, 4.9-6.9k tokens
+each, run greedily for 24 tokens with the adapter off and on. Each engine's tokens are scored by the native model on
+that engine's own path (float32 for llama.cpp, BF16 for SGLang). Harnesses:
+`scripts/neuralese_data/check_tuned_lora_llama_parity.py RELEASE`, `ts-host/scripts/wllama-lora-smoke.mjs --parity`,
+`scripts/neuralese_data/check_sglang_adapter_parity.py --release`.
+
+| Engine | How served | Greedy agreement (positions where the engine's token is the native argmax) | mean / max \|Δ logprob\| of the engine's tokens | Adapter applied |
+|---|---|---|---|---|
+| Python native engine (reference) | `run_native` on the release's `.nnt` stack, BF16 (the identity the release binds: a float32 engine refuses it as another live checkpoint) | reference | reference | fit targets' mean NLL 1.49 -> 0.32 nats with the adapter |
+| Managed llama-server, natlang-b12088 linux-arm64 CPU (`src/` and `ggml/` identical to the pinned b12092) | f32 GGUF of 5ff07638 + the release's GGUF LoRA, `--lora-init-without-apply --lora-per-sequence`, per-request `lora` scale 0 / 1 | 288/288 (6 prompts x 24 tokens, adapter off and on): every continuation equals the native greedy one | 0.004 / 0.21 (the BF16 reference's rounding) | 6/6 continuations change; the adapter moves the native logprob of these tokens by 1.90 nats on average |
+| In-page wllama (vendored natlang-b12092, headless Chromium, CPU) | Q8_0 GGUF + the same LoRA blob at scale 0, per-request `lora` | 144/144 (3 prompts x 24 tokens, off and on) | 0.006 / 0.11 | 3/3 change (1.69 nats); text prompts tokenize to the prompt's ids (llama.cpp `/tokenize`); tokens equal the managed server's f32 run |
+| SGLang actor slots (fork 17e3458c2e) | the front sums the stack into resident slot factors (`custom_params.natlang_adapter`), BF16 | before the fixes below (GB10, 2 running): top-1 agreement 0.34 adapted / 0.78 base | 2.6 / 0.70 nats adapted / base | control (native base vs native adapted on the same tokens) 1.79 nats. Blocked: the keyed re-measurement crashed in the fork (CUDA illegal memory access in decode after a mixed adapted/base prefill at 4 running requests, on the GB10 and the A100); a run at 2 running is queued on the A100 (`runs/t3-score/sglang-keyed`, with a CUDA_LAUNCH_BLOCKING trace in `sglang-debug/collect.log`) |
+
+The export is exact: the PEFT's dense deltas equal the native stack's low-rank deltas on all 153 targets (max relative
+gap 0.0).
+
+Two defects found on the SGLang path, both fixed:
+
+- **Slot rank.** The front packs q|k|v into one fork module (`qkv_proj`) and w1|w3 into another, so a rank-r fit over
+  every LFM3 family needs 3r in a slot. Slots of the default rank 32, and of the fit's own rank (passed by
+  `pop_actor_driver` and the Colab measurement actor), were too small, and every adapted turn ran on the native engine
+  (the first run had 12 of 24 requests on SGLang, none of them adapted). `serve_native_checkpoint.py` now sizes the slot
+  from `--adapter-release` (`release_slot_rank`, `native_hf.packed_slot_rank`: 48 here). Pop's job and the Colab
+  measurement actor pass the packed rank, computed on the DGX.
+- **Prefix cache across adapters.** SGLang matched cached prefixes (KV and conv/recurrent state) on token ids and
+  `extra_key` only, and the slot adapter (`custom_params.natlang_adapter`) was not part of the key. So a prompt state
+  computed under one stack, or under none, served requests with another. With an adapted and a base request on each
+  program prompt, base turns were 0.70 nats from the native engine (top-1 agreement 0.78) and adapted turns 2.6 nats
+  (0.34). `sglang_actor.adapter_cache_key` now names the stack in `extra_key`, as SGLang's own LoRA does with
+  `lora_id`; `NATLANG_SGLANG_ADAPTER_CACHE_KEY=0` opts out. The managed server and the page never reuse a prompt
+  computed under other adapters (fork `--lora-per-sequence`, the vendored wllama patch). The Python engine's prefix
+  cache keys on the execution binding (`engine.py` `prefix.digests({'adapters': execution_binding(self), ...})`).
+
 ## Result schemas: tuples
 
 A function's result type reaches every engine as the `value` schema of its `return_result` tool (`native/agent.ts`
@@ -268,6 +314,7 @@ Python engine captures: calls 9, 4,406 sampled tokens, 270 constrained (the gram
 | Gradients (`natlang:learning`: `POST /v1/neuralese/grad` recorded objectives and derivative programs, native-state and adapter optimizer steps) | no: blocked, llama.cpp has no backward pass through the model or the spliced native state | no: blocked, wllama has no backward pass; the page refuses the module (`ModuleUnavailableError`, `browser/index.ts`) and takes trained states and adapters as `.nz` files | yes (`serve/http.py` `/v1/neuralese/grad`, `serve/native_grad.py`, `serve/native_derivative.py`); conformance: `conformance/neuralese/cases/termination-learning-graph.yaml` `grad-*` and `graph-replay-fixed-choices`, run by `ts-host/scripts/native-conformance.mjs` against `tests/neuralese/learning_conformance_server.py` (2026-11-23) | no: blocked, the SGLang actor serves generation only (no gradient replay endpoint; its weights update by `rebind` from the learner) | train on the Python native engine and hand the results to every engine as native states or adapter files; an engine gains the row with a backward pass |
 | Tool arguments decoded under their schema, and a captured reply recording the grammar it was drawn under (result types, tuples included; section "Result schemas: tuples") | decoded: yes (autoparser tool grammar); captured: no, `x_natlang_rl_capture` drops the tool grammar (`server-rl-capture.cpp` `rl_sampling_law`), so a captured reply is unconstrained and its recorded law is the unmasked one the learner scores | the same as the fork | yes, captured as `sampling_law.tool_grammar` | yes, the same | blocked on the grammar engine: the learner replays xgrammar's masks exactly (`tool_grammar.replay_masks`), and llama.cpp's grammar is another implementation of the schema (its token masks are not xgrammar's, e.g. whitespace and string rules), so a fork capture constrained by it could not be replayed exactly. Next: the fork compiles the same structural tag with xgrammar's C++ core in the server and the page build (a fork change and release through `update_llama_runtime.mjs --fork`); no training source reads fork or page captures today (RL, SFT and held collection run on the Python engine and SGLang) |
 | Hybrid SWA KV, FP8 KV, mixed adapters in one batch | partly | partly | n/a | yes | none needed for CPU hosts |
+| Tuned adapter (program-fit LoRA) parity on LFM3 | yes (2026-11-24: greedy 288/288 vs native) | yes (144/144) | reference | blocked: fork crash (CUDA illegal memory access in decode after a mixed adapted/base prefill at 4 running requests; GB10 and A100) and the re-measurement after the slot-rank and prefix-cache fixes (9cf56138e) not yet run | read `runs/t3-score/sglang-keyed` (queued A100 tenant) and its CUDA_LAUNCH_BLOCKING trace; localize the fork's slot path (`models/lfm3.py` `NatlangAdapters.token_mask` / decode graph variant) and fix it in werg/sglang-natlang |
 
 Finite decision generation (2026-11-17): when no scored readout is available, the shared TypeScript agent sends the
 same encoded decision messages through ordinary ModelTurn generation with `tools: []`. Managed llama-server, wllama,

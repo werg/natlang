@@ -1733,6 +1733,7 @@ export class NativeToolAgent {
       // model-call-kind: decision-readout -- training/model-call-kinds.json
       const scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options, cache_messages: cacheMessages,
         ...(open ? { open_reply: true } : {}),
+        ...(reasoning?.ids?.length ? { reasoning_ids: reasoning.ids } : {}),
         ...(reasoning ? { reasoning: reasoning.text, reasoning_sample: { index: reasoning.index, samples: reasonings.length, action: reasoning.index === action } } : {}),
         ...(callId ? { invocation_id: callId, invocation_role: session.runtime.options.parentCallId ? 'child' as const : 'root' as const } : {}),
         ...(capturedGuidance ? { x_natlang_privileged_context: capturedGuidance } : {}),
@@ -1927,8 +1928,9 @@ export class NativeToolAgent {
       // No model_turn graph node: the reasoning is not one of the call's actions (rollout turns count the scored
       // decision turns, whose captured prompts hold this reasoning's tokens); the recorder keeps it, marked.
       this.recordGeneratedTurn(messages, [], response, turn, undefined, this.driver, actor, { index, samples });
+      const ids = sampledIds(response);
       return { index, text: replyReasoning(response), truncated: response.truncated === true,
-        completionTokens: response.completion_tokens ?? null };
+        completionTokens: response.completion_tokens ?? null, ...(ids ? { ids } : {}) };
     };
     const sampled = await Promise.all(Array.from({ length: samples }, (_, index) => one(index)));
     session.runtime.checkInterruption();
@@ -2860,7 +2862,17 @@ export class NativeToolAgent {
 }
 
 /** One sampled reasoning of a reasoned decision readout. */
-type DecisionReasoning = { index: number; text: string; truncated: boolean; completionTokens: number | null };
+type DecisionReasoning = { index: number; text: string; truncated: boolean; completionTokens: number | null;
+  /** The generation's sampled ids, when its RL capture recorded them (the scorer scores them, not the text re-encoded). */
+  ids?: number[] };
+/** A generation's sampled token ids from its RL capture (`x_natlang_rl_capture.samples[].token_id`), or undefined. */
+function sampledIds(response: ModelTurn): number[] | undefined {
+  const samples = (response.raw_response?.x_natlang_rl_capture as { samples?: unknown } | undefined)?.samples;
+  if (!Array.isArray(samples) || !samples.length) return undefined;
+  const ids = samples.map(sample => (sample as { token_id?: unknown })?.token_id);
+  return ids.every(id => Number.isSafeInteger(id)) ? ids as number[] : undefined;
+}
+
 /** Scorers that refused to condition on reasoning (`decision-reasoning-unsupported`): their readouts read out instantly. */
 const reasoningRefused = new WeakSet<object>();
 

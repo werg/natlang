@@ -85,7 +85,13 @@ COLAB_ROUND_HOURS = 2.0
 ROUND_SPEED_FILE = 'round-speed.json'
 DEFAULT_CHAIN_TOKENS_PER_S = (('A100', 30_800), ('GB10', 5_900))
 DGX_GPU = 'GB10'
-FORWARD_PER_TARGET = 10.7     # forward tokens per weighted target token of a round mix (r0001 10.87, r0002 10.57)
+FORWARD_PER_TARGET = 10.7
+# FALLOW-22 (DECISIONS 2026-11-24 "fallow-22 in the round mix"): 11,259 reference-program fan-in episodes (fetaqa,
+# 2wiki, bird) re-rendered on today's runtime (broad_graph_october.py, registry sft-fallow22-broad-graphs-20261124-v1,
+# held-v3/v4 verified). ~95 forward tokens per target token and templated root code: a small share (1% of the loss,
+# ~10% of a round's forward); --no-fallow22-aux opts out.
+FALLOW22_AUX = (f'fallow22={DATA.parent / "sft-fallow22-broad-graphs-20261124-v1" / "chains.pkl"},'
+                'share=0.01,task_tokens=2000')     # forward tokens per weighted target token of a round mix (r0001 10.87, r0002 10.57)
 FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB); 6 kept the Pop fill out beside the SFT
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
@@ -945,6 +951,11 @@ def promote_policy(runner, checkpoint, sha, *, label, why, unit):
                   runner.dir / f'{unit}.log', workdir=str(REPO), repo=REPO)
 
 
+class HeldPairRefused(RuntimeError):
+    """``held_eval compare`` refused the pair: the two results come from different engine settings, sampling laws,
+    budgets or hosts, so they are no paired measurement."""
+
+
 class Cycle:
     def __init__(self, args):
         self.a = args
@@ -1121,9 +1132,11 @@ class Cycle:
             raise SystemExit(f'pin failed: {self.dir}/pin.log')
         self.mark('pin', pin=str(self.pin))
 
-    def measure_held(self, name, checkpoint):
-        """One held-v3 measurement of ``checkpoint`` into DIR/held/NAME on this cycle's held series."""
-        return self.dgx_held(name, checkpoint) if self.held_host == 'dgx' else self.pop_held(name, checkpoint)
+    def measure_held(self, name, checkpoint, reuse=True):
+        """One held-v3 measurement of ``checkpoint`` into DIR/held/NAME on this cycle's held series (``reuse`` False:
+        measured here, never copied from another cycle's result)."""
+        kw = {} if reuse else {'reuse': False}
+        return self.dgx_held(name, checkpoint, **kw) if self.held_host == 'dgx' else self.pop_held(name, checkpoint, **kw)
 
     def held_result_ok(self, out):
         """Whether ``out`` holds a complete result of this cycle's held host; a result of another host (a Pop start
@@ -1141,16 +1154,20 @@ class Cycle:
 
     def set_held_aside(self, out, host='other'):
         aside = out.with_name(f'{out.name}-{host}-{int(time.time())}')
+        n = 0
+        while aside.exists():        # set aside twice within a second
+            n += 1
+            aside = out.with_name(f'{out.name}-{host}-{int(time.time())}-{n}')
         os.replace(out, aside)
         self.note(stage='held', moved_aside=str(aside), reason=f'measured on {host}, the series is {self.held_host}')
 
-    def dgx_held(self, name, checkpoint):
+    def dgx_held(self, name, checkpoint, reuse=True):
         """One held-v3 measurement on the DGX held series (async-train §1): ``dgx-held`` as a ledger unit (the pinned
         held engine as its child: SGLang, vendor projection, FP8 KV, BF16 weights, attested against the held manifest's
         engine.json; ``held_eval measure`` with ``--held-samples`` per task), resumable. Preempted (the SFT outranks
         it), it is relaunched and resumes its episodes."""
         out = self.held / name
-        if self.held_result_ok(out) or self.reuse_held(out, checkpoint):
+        if self.held_result_ok(out) or (reuse and self.reuse_held(out, checkpoint)):
             return out
         from natlang_neuralese.common.hashing import sha256_file_hex_cached
         sha = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
@@ -1173,15 +1190,18 @@ class Cycle:
         self.record_cost(f'held:{name}', 'dgx', time.time() - started)
         return out
 
-    def pop_held(self, name, checkpoint):
+    def pop_held(self, name, checkpoint, reuse=True):
         """One held-v3 measurement on Pop (ops/grpo-v4/pop-held.sh: the pinned harness, 2 samples)."""
         out = self.held / name
         result = out / 'result.json'
         if result.exists() and json.loads(result.read_text()).get('complete'):
             return out
-        if self.reuse_held(out, checkpoint):
+        if reuse and self.reuse_held(out, checkpoint):
             return out
         import pop_rl_actor
+        join_pop_held(out)                  # a measure unit a restarted driver left running: never a second one
+        if _result_complete(out):
+            return out
         pop_rl_actor.stop_pop_fills()       # the held pin's pop_rl_actor may predate the stop in its serves
         mode = ['base', str(out), str(self.a.held_samples)] if checkpoint == BASE_CKPT else \
             ['ckpt', str(out), str(self.a.held_samples), str(checkpoint)]
@@ -1888,9 +1908,14 @@ class Cycle:
         return path.exists() and bool(json.loads(path.read_text()).get('deferred'))
 
     def compare(self, a, b, out):
-        subprocess.run([PY, '-m', 'natlang_neuralese.rl.held_eval', 'compare', str(a / 'result.json'),
-                        str(b / 'result.json'), '--out', str(out)], env=self.held_env, check=True,
-                       stdout=subprocess.DEVNULL)
+        done = subprocess.run([PY, '-m', 'natlang_neuralese.rl.held_eval', 'compare', str(a / 'result.json'),
+                               str(b / 'result.json'), '--out', str(out)], env=self.held_env,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        if done.returncode:
+            err = (done.stderr or '').strip()
+            if 'are not paired' in err or 'are different held' in err:
+                raise HeldPairRefused(err.splitlines()[-1][:600])
+            raise subprocess.CalledProcessError(done.returncode, done.args, stderr=err)
         return json.loads(out.read_text())
 
     def verdict_stage(self):
@@ -2226,6 +2251,10 @@ def pop_held_measure(out, checkpoint, *, pin, samples, manifest, preempt=None, p
     if _result_complete(out):
         return 'complete'
     out.mkdir(parents=True, exist_ok=True)
+    if join_pop_held(out, preempt=preempt, poll=poll) == 'preempted':
+        return 'preempted'
+    if _result_complete(out):
+        return 'complete'
     pop_rl_actor.stop_pop_fills()
     mode = ['base', str(out), str(samples)] if str(checkpoint) == BASE_CKPT else \
         ['ckpt', str(out), str(samples), str(checkpoint)]
@@ -2237,13 +2266,29 @@ def pop_held_measure(out, checkpoint, *, pin, samples, manifest, preempt=None, p
         if preempt is not None and preempt():
             os.killpg(process.pid, signal.SIGTERM)
             process.wait()
-            units = subprocess.run(['systemctl', '--user', 'list-units', '--plain', '--no-legend',
-                                    f'popheld-{out.name}-*'], capture_output=True, text=True).stdout.split()
-            for unit in [u for u in units if u.startswith(f'popheld-{out.name}-') and u.endswith('.service')]:
-                subprocess.run(['systemctl', '--user', 'stop', unit], check=False)
+            stop_pop_held_units(out)
             return 'preempted'
         time.sleep(poll)
     return 'complete' if _result_complete(out) else 'incomplete'
+
+
+def stop_pop_held_units(out):
+    import pop_rl_actor
+    for unit in pop_rl_actor.pop_held_units(f'popheld-{Path(out).name}-*'):
+        subprocess.run(['systemctl', '--user', 'stop', f'{unit}.service'], check=False)
+
+
+def join_pop_held(out, *, preempt=None, poll=30):
+    """Wait for a measure unit of ``out`` that is still running (``popheld-<OUT name>-*``: a driver restart killed the
+    ``pop-held.sh`` that started it, not the unit) instead of starting a second measurement on the same episodes.
+    Returns 'preempted' when ``preempt`` stopped it, else None."""
+    import pop_rl_actor
+    while pop_rl_actor.pop_held_units(f'popheld-{Path(out).name}-*'):
+        if preempt is not None and preempt():
+            stop_pop_held_units(out)
+            return 'preempted'
+        time.sleep(poll)
+    return None
 
 
 # ---- async round driver & phase switching (async-train §2, §4, §5, §7.4) ---------------------------------------------
@@ -2288,6 +2333,43 @@ def write_round_manifest(round_dir, *, round_id, base_policy_sha, previous_polic
     return manifest
 
 
+PREPARE_STEPS = ('frontier', 'data', 'build')
+
+
+def argv_digest(argv):
+    """sha256 of a step's argv (its exit record names the command it ran)."""
+    import hashlib
+    return hashlib.sha256(json.dumps([str(a) for a in argv]).encode()).hexdigest()
+
+
+def step_command(argv, exit_path):
+    """``argv`` run by /bin/sh, which then records its exit status, the argv digest and the time in ``exit_path``
+    (atomically) and exits with that status: a driver that died before writing the step's ``.done`` marker still
+    learns that the step finished."""
+    q = _quote
+    record = (f'printf \'{{"rc": %s, "argv_sha256": "{argv_digest(argv)}", "at": %s}}\\n\' "$rc" "$(date +%s)" '
+              f'> {q(str(exit_path))}.tmp && mv -f {q(str(exit_path))}.tmp {q(str(exit_path))}')
+    return ['/bin/sh', '-c', f'"$@"; rc=$?; {record}; exit $rc', 'step', *map(str, argv)]
+
+
+def unit_last_run_succeeded(unit):
+    """Whether ``unit``'s last run (from its last "Started" in the user journal) ended without a failure: systemd
+    logged its resource use ("Consumed") and no failure, kill or stop. False when the journal has no run."""
+    try:
+        out = subprocess.run(['journalctl', '--user', '-u', f'{unit}.service', '-o', 'cat', '--no-pager', '-n', '400'],
+                             capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    lines = out.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith('Started ')]
+    if not starts:
+        return False
+    tail = lines[starts[-1] + 1:]
+    bad = ('Failed with result', 'Main process exited', 'Stopping ', 'Stopped ', 'code=killed', 'code=dumped')
+    return any('Consumed' in line for line in tail) and not any(b in line for line in tail for b in bad)
+
+
+TEACHER_RELAUNCH_MINUTES = 60   # an idle campaign of the same frontier resumes at most this often
 SFT_HANDBACK_MAX = 2          # moves of one round from the DGX back to a session (no ping-pong between two hosts)
 
 
@@ -2398,6 +2480,7 @@ class PhaseController:
             # an unmeasured start (speculative cycles) is judged against the last held-adopted policy, not itself
             'reference_policy': ({'checkpoint': str(reference_checkpoint), 'sha256': str(reference_sha)}
                                  if reference_checkpoint else {'checkpoint': str(start_checkpoint), 'sha256': str(start_sha)}),
+            'start_policy': {'checkpoint': str(start_checkpoint), 'sha256': str(start_sha)},
             'lineage': [start], 'version_counter': 0, 'trained_rounds': [],
             'prefer_unseen': [str(p) for p in prefer_unseen], 'measuring': None, 'applied_verdicts': [],
             'history': [],
@@ -2409,6 +2492,63 @@ class PhaseController:
     def save(self):
         from natlang_neuralese.common.jsonio import write_json_durable
         write_json_durable(self.path, self.state)
+
+    def reconcile_arguments(self, *, start_checkpoint, start_sha, reference_checkpoint=None, reference_sha=None,
+                            held_every=None, held_every_max=None, prefer_unseen=()):
+        """A restarted driver's arguments against the state they seeded (2026-11-24: the stored reference sft-v7
+        silently outranked --reference sft-v9, and every held verdict was queued against the wrong policy).
+        - ``--start`` names the experiment's start: one that differs from the state's start refuses (SystemExit:
+          another start is another experiment, a fresh ``--root``).
+        - ``--reference``: the state's reference wins only when a held verdict adopted it (the loop moved it on from
+          the argument's policy); otherwise the argument is adopted (an open measurement is re-pointed at it).
+        - ``--held-every`` / ``--held-every-max`` set the base interval and its cap (the current interval is clamped);
+          ``--prefer-unseen`` entries missing from the state are added.
+        Every change is appended to ``history`` (``action`` 'arguments'); returns the changes."""
+        state, changes = self.state, {}
+        recorded = state.get('start_policy')
+        if recorded is None and state['lineage'] and int(state['lineage'][0].get('version', -1)) == 0:
+            recorded = {k: state['lineage'][0][k] for k in ('checkpoint', 'sha256')}
+        if recorded and recorded['sha256'] != str(start_sha):
+            raise SystemExit(f'{self.path}: this loop started at {recorded["sha256"][:12]} ({recorded["checkpoint"]}); '
+                             f'--start names {str(start_sha)[:12]} ({start_checkpoint}): another start is another '
+                             'experiment (use a fresh --root, or pass the recorded --start)')
+        if recorded and 'start_policy' not in state:
+            state['start_policy'] = dict(recorded)
+            changes['start_policy'] = {'recorded': recorded}
+        if reference_checkpoint and reference_sha:
+            stored = state['reference_policy']
+            if stored['sha256'] != str(reference_sha):
+                adopted = any(e.get('action') == 'adopt' and e.get('sha256') == stored['sha256']
+                              for e in state.get('history') or ())
+                if adopted:
+                    changes['reference_kept'] = {'stored': stored, 'argument': str(reference_sha),
+                                                 'why': 'a held verdict adopted the stored reference'}
+                else:
+                    new = {'checkpoint': str(reference_checkpoint), 'sha256': str(reference_sha)}
+                    state['reference_policy'] = new
+                    changes['reference'] = {'from': stored, 'to': new}
+                    job = state.get('measuring')
+                    if job and job.get('reference', {}).get('sha256') != new['sha256']:
+                        job['reference'] = dict(new)
+                        changes['measuring_reference'] = new['sha256']
+        if held_every is not None and int(held_every) != int(state['base_held_every']):
+            changes['base_held_every'] = {'from': state['base_held_every'], 'to': max(1, int(held_every))}
+            if int(state['held_every']) == int(state['base_held_every']):
+                state['held_every'] = max(1, int(held_every))
+            state['base_held_every'] = max(1, int(held_every))
+        if held_every_max is not None and int(held_every_max) != int(state['held_every_max']):
+            changes['held_every_max'] = {'from': state['held_every_max'], 'to': max(1, int(held_every_max))}
+            state['held_every_max'] = max(1, int(held_every_max))
+        if int(state['held_every']) > int(state['held_every_max']):
+            state['held_every'] = int(state['held_every_max'])
+        missing = [str(p) for p in prefer_unseen if str(p) not in state['prefer_unseen']]
+        if missing:
+            state['prefer_unseen'].extend(missing)
+            changes['prefer_unseen_added'] = missing
+        if changes:
+            state['history'].append({'at': round(time.time(), 1), 'action': 'arguments', 'changes': changes})
+            self.save()
+        return changes
 
     @property
     def phase(self):
@@ -2585,7 +2725,14 @@ class AsyncRoundDriver:
             held_every=args.held_every, held_every_max=args.held_every_max, initial_phase=args.initial_phase,
             prefer_unseen=args.prefer_unseen, reference_checkpoint=args.reference,
             reference_sha=args.reference and (args.reference_sha or sha256_file_hex_cached(Path(args.reference))))
+        # the arguments a restart passes against the state they once seeded (adopted or refused, never shadowed)
+        self.argument_changes = self.controller.reconcile_arguments(
+            start_checkpoint=args.start, start_sha=start_sha, reference_checkpoint=args.reference,
+            reference_sha=args.reference and (args.reference_sha or sha256_file_hex_cached(Path(args.reference))),
+            held_every=args.held_every, held_every_max=args.held_every_max, prefer_unseen=args.prefer_unseen)
         self.c = Cycle(self.cycle_args())
+        if self.argument_changes:
+            self.note(arguments_reconciled=self.argument_changes)
         self.lock = threading.RLock()
         self.verdicts = []              # verdict records the held thread produced, applied by the main loop
         self.held_wake = threading.Event()
@@ -2594,6 +2741,7 @@ class AsyncRoundDriver:
         self.held_done = set()          # held-v3 candidates the held thread finished
         self.held_v4_cadence = parse_held_v4_cadence(getattr(args, 'held_v4_cadence', HELD_V4_CADENCE))
         self.held_v4 = HeldV4Queue(self.root / 'held-v4' / 'queue.json')
+        self.teacher_lock = threading.Lock()   # one campaign launch at a time (main loop, waits, the standing thread)
         self.handback_next = {}         # round -> when its DGX SFT is next checked for a move to a session
         self.handback_blocked = set()   # rounds whose Colab learner failed: they stay on the DGX
         self.handed_back = None         # the round a hand-back just moved (ends the DGX wait)
@@ -2823,16 +2971,158 @@ class AsyncRoundDriver:
                 if self.c.present(u):          # a requeued one too, or the ledger relaunches it beside the learner
                     self.c.stop_unit(u)
 
-    def ensure_teacher(self, round_dir):
-        """The teacher campaign stands: when its unit is idle, the newest frontier's rare tasks start the next one."""
+    def standing_teacher(self):
+        """``ensure_teacher`` from a wait or the loop: a failure is logged, never the caller's end."""
+        try:
+            self.ensure_teacher()
+        except Exception as error:
+            self.note(teacher_check_failed=repr(error)[:300])
+
+    def build_code(self):
+        """The commit of the build code (``--data-repo``, else the pin): its pin record, else git; what a rebuild is
+        recorded under."""
+        repo = self.c.data_repo()
+        marker = repo / '.natlang-pin.json'
+        if marker.exists():
+            return json.loads(marker.read_text()).get('commit')
+        try:
+            return subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True,
+                                           stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+    def rebuild_requested(self, round_dir):
+        """Why the prepared round's mix is rebuilt before it trains, or None: ``stages/rebuild.request`` (written by
+        hand: picked up at the round's start by a running driver), or ``--rebuild-round RNNNN`` while round.json
+        records no rebuild under the current build code (so a restart with the same argv does not rebuild again)."""
+        if (round_dir / 'stages' / 'rebuild.request').exists():
+            return 'stages/rebuild.request'
+        if round_dir.name in (getattr(self.a, 'rebuild_round', None) or ()):
+            manifest = json.loads((round_dir / 'round.json').read_text())
+            code = self.build_code()
+            if not any(r.get('build_code') == code for r in manifest.get('rebuilds') or ()):
+                return f'--rebuild-round under build code {code}'
+        return None
+
+    def rebuild_round(self, round_dir, policies, reason):
+        """Rerun only a prepared round's mix build, under the current build code, from its recorded inputs: the round's
+        frontier, data outputs (filled, own Neuralese graph, extractions in --sft-work), size, previous policy and
+        prefer-unseen list (round.json), with the lineage it was prepared from (refused when that is no longer the
+        lineage, or once its SFT started). The old mix stays as ``mix.pre-rebuild-<time>``; a failed build puts it
+        back. ``chains.sha256`` and round.json (blob first, every other recorded field kept, a DGX recap dropped:
+        the recap reruns from the new mix when the round starts on the DGX) follow the new mix; round.json
+        ``rebuilds`` records each one. Returns True when it rebuilt."""
+        from natlang_neuralese.common.jsonio import write_json_durable
+        manifest = json.loads((round_dir / 'round.json').read_text())
+        marker = round_dir / 'stages' / 'rebuild.request'
+        run = round_dir / 'sft'
+        started = ((run / 'learner-state' / 'learner_manifest.json').exists() or (run / 'factors').exists()
+                   or dgx_sft_progress(run / 'train.jsonl') is not None
+                   or self.dgx_sft_running(round_dir, f'{self.a.name}-{round_dir.name}-sft'))
+        cur, prev = policies[-1], (policies[-2] if len(policies) > 1 else None)
+        lineage_ok = (manifest.get('base_policy_sha') == cur['sha256']
+                      and manifest.get('previous_policy_sha') == (prev['sha256'] if prev else None))
+        if started or not lineage_ok:
+            why = 'its SFT started' if started else 'it was prepared from another lineage'
+            self.note(round=round_dir.name, rebuild_refused=why, reason=reason)
+            marker.unlink(missing_ok=True)
+            return False
+        size = manifest.get('size') or json.loads((round_dir / 'size.json').read_text())
+        _, _, build = self.prepare_plan(round_dir, policies, size, prefer_unseen=manifest.get('prefer_unseen') or [])
+        mix = round_dir / 'mix'
+        stamp = time.strftime('%Y%m%dT%H%M%S')
+        n = 0
+        while (round_dir / f'mix.pre-rebuild-{stamp}{f"-{n}" if n else ""}').exists():
+            n += 1
+        stamp = f'{stamp}-{n}' if n else stamp
+        old = round_dir / f'mix.pre-rebuild-{stamp}'
+        code = self.build_code()
+        self.note(round=round_dir.name, rebuild=reason, build_code=code, old_mix=str(old))
+        if mix.exists():
+            os.replace(mix, old)
+        t = time.time()
+        try:
+            self.c.ledger(f'{self.a.name}-{round_dir.name}-rebuild-{stamp}', 32, STAGE_PRIORITY, build,
+                          round_dir / 'rebuild.log', repo=self.c.data_repo())
+            report = json.loads((mix / 'build.json').read_text())
+            if not (mix / 'chains.pkl').is_file():
+                raise SystemExit(f'round {round_dir.name}: the rebuild wrote no chains.pkl ({round_dir}/rebuild.log)')
+        except BaseException:
+            if old.exists():
+                shutil.rmtree(mix, ignore_errors=True)
+                os.replace(old, mix)
+            self.note(round=round_dir.name, rebuild_failed=f'{round_dir}/rebuild.log', restored=str(mix))
+            raise
+        core = {'schema', 'round_id', 'base_policy_sha', 'previous_policy_sha', 'chains_path', 'chains_sha256',
+                'chains_bytes', 'episode_ids', 'prefer_unseen', 'profile', 'profile_changes', 'committed_at'}
+        entry = {'at': round(time.time(), 1), 'reason': reason, 'build_code': code, 'seconds': round(time.time() - t, 1),
+                 'old_mix': str(old) if old.exists() else None, 'old_chains_sha256': manifest.get('chains_sha256')}
+        extra = {**{k: v for k, v in manifest.items() if k not in core and k != 'recap'},
+                 'mix_dir': str(mix), 'expected_hours': self.expected_hours(report),
+                 'rebuilds': [*(manifest.get('rebuilds') or []), entry]}
+        new = write_round_manifest(
+            round_dir, round_id=manifest.get('round_id', round_dir.name), base_policy_sha=manifest['base_policy_sha'],
+            previous_policy_sha=manifest.get('previous_policy_sha'), chains_path=mix / 'chains.pkl',
+            episode_ids=report.get('admitted_episode_keys') or [], prefer_unseen=manifest.get('prefer_unseen') or [],
+            profile=manifest.get('profile', self.a.sft_profile), profile_changes=manifest.get('profile_changes') or [],
+            extra=extra)
+        write_json_durable(round_dir / 'stages' / 'build.done', {'time': time.time(), 'rebuild': entry})
+        marker.unlink(missing_ok=True)
+        self.note(round=round_dir.name, rebuilt=new['chains_sha256'], old_chains=entry['old_chains_sha256'],
+                  episodes=len(new['episode_ids']))
+        return True
+
+    def newest_frontier(self):
+        """The newest round's measured frontier (``rNNNN/frontier.json`` of the highest round not discarded), or None."""
+        found = [f for f in sorted(self.root.glob('r[0-9]*/frontier.json'))
+                 if not (f.parent / 'discarded.json').exists()]
+        return found[-1] if found else None
+
+    def ensure_teacher(self, round_dir=None):
+        """The teacher campaign stands: whenever its unit is idle, the newest frontier's campaign runs
+        (``teacher-rNNNN``). Called from the main loop, the end of a round's preparation, the SFT and preparation
+        waits and a standing thread every ``--teacher-check-minutes`` (2026-11-24: called only when a round was
+        prepared, the campaign stayed idle from 01:00 until a hand launch at 02:10 under a restarted driver joining an
+        already-prepared round). A campaign of that frontier which already ran resumes (teacher_gen skips finished
+        tasks) at most once per ``TEACHER_RELAUNCH_MINUTES``, and not after a relaunch that scored nothing new (its
+        tasks are done: the next frontier starts the next one). ``round_dir`` is ignored (the newest frontier
+        decides)."""
         unit = f'{self.a.name}-teacher'
-        if self.a.no_teacher_campaign or self.c.active(unit) or not (round_dir / 'frontier.json').exists():
-            return
-        work = self.root / f'teacher-{round_dir.name}'
-        n = launch_teacher(self.c, work, round_dir / 'frontier.json',
-                           [self.collect_dir(p) / 'groups' / 'g*' for p in self.lineage_policies()], unit,
-                           covered_extra=sorted(self.root.glob('teacher-*')))
-        self.note(teacher=unit, frontier_tasks=n, work=str(work))
+        if self.a.no_teacher_campaign:
+            return None
+        with self.teacher_lock:
+            frontier = self.newest_frontier()
+            if frontier is None or self.c.present(unit):
+                return None
+            work = self.root / f'teacher-{frontier.parent.name}'
+            record_path = work / 'driver-launch.json'
+            scored = sum(1 for line in (work / 'manifest.jsonl').open() if line.strip()) \
+                if (work / 'manifest.jsonl').exists() else 0
+            last = json.loads(record_path.read_text()) if record_path.exists() else None
+            launched = (work / 'launches.jsonl').exists()
+            if launched and last is not None:
+                if scored <= int(last.get('scored_at_launch', -1)):
+                    return None                 # the last relaunch scored nothing: this frontier's campaign is done
+                if time.time() - float(last.get('at', 0)) < 60 * TEACHER_RELAUNCH_MINUTES:
+                    return None
+            n = launch_teacher(self.c, work, frontier,
+                               [self.collect_dir(p) / 'groups' / 'g*' for p in self.lineage_policies()], unit,
+                               covered_extra=sorted(self.root.glob('teacher-*')))
+            if n:
+                from natlang_neuralese.common.jsonio import write_json_durable
+                write_json_durable(record_path, {'at': round(time.time(), 1), 'frontier': str(frontier),
+                                                 'scored_at_launch': scored, 'resume': launched, 'tasks': n})
+            self.note(teacher=unit, frontier=str(frontier), frontier_tasks=n, work=str(work), resume=launched)
+            return work
+
+    def teacher_loop(self):
+        """The standing campaign's check, beside every wait the main loop makes (run-sft, ledger units, held)."""
+        while True:
+            time.sleep(60 * self.a.teacher_check_minutes)
+            try:
+                self.ensure_teacher()
+            except Exception as error:
+                self.note(teacher_check_failed=repr(error)[:300])
 
     def lineage_policies(self):
         """The policies whose collections a round reads: the current and the previous published policy."""
@@ -2910,7 +3200,7 @@ class AsyncRoundDriver:
                 builds.append(str(mix))
         return builds
 
-    def prepare_plan(self, round_dir, policies, size=None):
+    def prepare_plan(self, round_dir, policies, size=None, prefer_unseen=None):
         """(frontier argv, data script lines, build argv) of a round's preparation from ``policies``' collections,
         sized by ``size`` (``round_size``; the DGX round without one)."""
         size = size or self.dgx_round_size()
@@ -2936,11 +3226,14 @@ class AsyncRoundDriver:
                                '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
                                '--current-surface-run', f'^rl:({surfaces})$'))
         aux = list(self.a.aux)
+        if not getattr(self.a, 'no_fallow22_aux', False) and not any(a.startswith('fallow22=') for a in aux):
+            aux.append(FALLOW22_AUX)
         aux.append(f'filled={round_dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
         aux.append(f'own-neuralese-graph={round_dir / "neuralese-graph-own" / "chains.pkl"},'
                    f'share={self.a.own_neuralese_graph_share},task_tokens=40000')
         build = mix_build_command(self.c.data_repo(), work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
-                                  aux=aux, prefer_unseen=self.prefer_unseen_for(round_dir),
+                                  aux=aux, prefer_unseen=(self.prefer_unseen_for(round_dir) if prefer_unseen is None
+                                                          else prefer_unseen),
                                   teacher_budget=size['teacher_budget'], own_share=self.a.own_share,
                                   previous_policy=prev['sha256'] if prev else None,
                                   live_registry=live_holdout_registry(self.a.live_work),
@@ -2960,18 +3253,83 @@ class AsyncRoundDriver:
                 out.append(v['sha256'])
         return out
 
+    def prepare_policies(self, round_dir, policies):
+        """The policies a round's preparation is for: the ones it recorded when it started (``stages/prepare.json``,
+        else an existing ``frontier.json``'s policy and previous policy), so a driver restarted after the previous
+        round published continues a round prepared ahead with the policy of that time instead of re-snapshotting on
+        the new one (2026-11-24: r0003's frontier and data were done, and the restart waited ~3 h for the v2
+        collection). A record whose policies left the lineage (a rollback) is dropped with its stage markers (its
+        running stage units stopped), and the round prepares from ``policies``."""
+        stages = round_dir / 'stages'
+        record = stages / 'prepare.json'
+        shas = None
+        if record.exists():
+            shas = [p['sha256'] for p in json.loads(record.read_text())['policies']]
+        elif (round_dir / 'frontier.json').exists():
+            f = json.loads((round_dir / 'frontier.json').read_text())
+            shas = [s for s in (f.get('previous_policy'), f.get('policy')) if s]
+        if not shas:
+            return list(policies)
+        by_sha = {p['sha256']: p for p in self.controller.state['lineage']}
+        if all(s in by_sha for s in shas):
+            return [by_sha[s] for s in shas]
+        self.note(round=round_dir.name, prepare_restarted='its recorded policies left the lineage', policies=shas)
+        for name in PREPARE_STEPS:
+            unit = f'{self.a.name}-{round_dir.name}-{name}'
+            if self.c.present(unit):
+                self.c.stop_unit(unit)
+            for suffix in ('.done', '.exit'):
+                (stages / f'{name}{suffix}').unlink(missing_ok=True)
+        record.unlink(missing_ok=True)
+        (round_dir / 'frontier.json').unlink(missing_ok=True)
+        return list(policies)
+
+    def step_finished(self, round_dir, name, unit, argv):
+        """How a preparation step with no ``.done`` marker is known to have finished (the driver died between its end
+        and the marker): its own exit record (``stages/<step>.exit``, written by the unit: status 0 for this argv), or
+        for a unit launched before those records its journal (the last start ended without a failure) together with
+        its output. None when it did not (it runs again)."""
+        exit_path = round_dir / 'stages' / f'{name}.exit'
+        if exit_path.exists():
+            try:
+                rec = json.loads(exit_path.read_text())
+            except ValueError:
+                return None
+            return 'exit-status' if rec.get('rc') == 0 and rec.get('argv_sha256') == argv_digest(argv) else None
+        output = {'frontier': [round_dir / 'frontier.json'],
+                  'data': [round_dir / 'neuralese-graph-own' / 'chains.pkl'],
+                  'build': [round_dir / 'mix' / 'build.json', round_dir / 'mix' / 'chains.pkl']}.get(name, [])
+        if output and all(p.exists() for p in output) and unit_last_run_succeeded(unit):
+            return 'journal'
+        return None
+
     def prepare(self, round_dir, policies):
         """Stage 1 (resumable; ``stages/prepared.done``): wait until the newest policy's collection has run
         ``--snapshot-min-hours`` (the frontier needs its outcomes), register the snapshot, frontier, data, build,
-        ``round.json``."""
+        ``round.json``. The policies and the snapshot are recorded (``stages/prepare.json``): a restarted driver
+        continues with them (``prepare_policies``) and does not wait or snapshot again; a step that finished before
+        the driver died is not rerun (``step_finished``)."""
         if (round_dir / 'stages' / 'prepared.done').exists():
             return json.loads((round_dir / 'round.json').read_text())
         (round_dir / 'stages').mkdir(parents=True, exist_ok=True)
+        from natlang_neuralese.common.jsonio import write_json_durable
+        given = [p['sha256'] for p in policies]
+        policies = self.prepare_policies(round_dir, policies)
+        if [p['sha256'] for p in policies] != given:
+            self.note(round=round_dir.name, prepare_continues_with=[p['sha256'] for p in policies], lineage=given)
         cur = policies[-1]
+        record_path = round_dir / 'stages' / 'prepare.json'
+        record = json.loads(record_path.read_text()) if record_path.exists() else {}
+        if not record:
+            record = {'policies': [{k: p.get(k) for k in ('version', 'sha256', 'checkpoint')} for p in policies],
+                      'started_at': round(time.time(), 1)}
+            write_json_durable(record_path, record)
+        snapshot_taken = bool(record.get('snapshot_at')) or (round_dir / 'stages' / 'frontier.done').exists() \
+            or (round_dir / 'frontier.json').exists()
         # the newest policy's collections: the DGX one and the remote actors' (which keep collecting while a DGX SFT
         # holds the DGX collection stopped: the snapshot waits for them)
         units = [self.collection_unit(cur), *self.remote_units(self.collection_unit(cur))]
-        while True:
+        while not snapshot_taken:
             runs = [d / 'runs.jsonl' for d in self.collections_of([cur])]
             if runs:
                 started = min(json.loads(r.read_text().splitlines()[0])['started'] for r in runs)
@@ -2981,9 +3339,13 @@ class AsyncRoundDriver:
                 if runs:
                     break                   # stopped early (a rollback, a phase switch): what it scored is the snapshot
                 raise SystemExit(f'round {round_dir.name}: no collection of {cur["sha256"][:12]} ({self.collect_dir(cur)})')
+            self.standing_teacher()
             time.sleep(60)
-        for d in self.collections_of(policies):
-            record_collection(d, closed=False)       # the snapshot the extraction reads (the collection grows on)
+        if not snapshot_taken:
+            for d in self.collections_of(policies):
+                record_collection(d, closed=False)       # the snapshot the extraction reads (the collection grows on)
+            record = {**record, 'snapshot_at': round(time.time(), 1)}
+            write_json_durable(record_path, record)
         # the live WORKs' extractions so far (the ingester keeps adding waves; each round takes what is there)
         if self.a.live_work:
             self.note(live_links=link_live_works(self.c.work, self.a.live_work))
@@ -2993,7 +3355,6 @@ class AsyncRoundDriver:
             size = json.loads(size_path.read_text())
         else:
             size = {**self.round_size(), 'decided_at': round(time.time(), 1)}
-            from natlang_neuralese.common.jsonio import write_json_durable
             write_json_durable(size_path, size)
         self.note(round=round_dir.name, round_size=size)
         frontier, lines, build = self.prepare_plan(round_dir, policies, size)
@@ -3002,10 +3363,19 @@ class AsyncRoundDriver:
         # rerunning frontier and data (hours) beneath a build that may still be reading their outputs.
         def step(name, budget, argv, repo=None):
             done = round_dir / 'stages' / f'{name}.done'
-            if not done.exists():
-                self.c.ledger(f'{self.a.name}-{round_dir.name}-{name}', budget, STAGE_PRIORITY, argv,
-                              round_dir / f'{name}.log', repo=repo)
-                done.write_text(json.dumps({'time': time.time()}) + '\n')
+            if done.exists():
+                return
+            unit = f'{self.a.name}-{round_dir.name}-{name}'
+            if not self.c.present(unit):
+                how = self.step_finished(round_dir, name, unit, argv)
+                if how:
+                    self.note(round=round_dir.name, step_finished_before_restart=name, how=how)
+                    done.write_text(json.dumps({'time': time.time(), 'recovered': how}) + '\n')
+                    return
+                (round_dir / 'stages' / f'{name}.exit').unlink(missing_ok=True)
+            self.c.ledger(unit, budget, STAGE_PRIORITY, step_command(argv, round_dir / 'stages' / f'{name}.exit'),
+                          round_dir / f'{name}.log', repo=repo)
+            done.write_text(json.dumps({'time': time.time()}) + '\n')
         step('frontier', 4, frontier)
         self.c.work_tokenizer()
         script = round_dir / 'data.sh'
@@ -3142,6 +3512,7 @@ class AsyncRoundDriver:
         profile = resolve_profile('colab', hosts=self.colab_hosts)
         away_since, failures = None, 0
         while not (factors / 'policy_manifest.json').exists():
+            self.standing_teacher()
             up = pop_rl_actor.reachable_hosts('colab', self.colab_hosts) if self.colab_hosts else []
             fit = {h: pop_rl_actor.colab_sft_fit(h) for h in up}
             if up and not any(ok for ok, _ in fit.values()):
@@ -3191,6 +3562,7 @@ class AsyncRoundDriver:
             self.ensure_remote_collection(policy)
         except Exception as error:
             self.note(stage='wait', unit=unit, between_failed=repr(error)[:300])
+        self.standing_teacher()
         self.sft_handback(round_dir, policy, unit)
 
     def expected_hours(self, report):
@@ -3507,11 +3879,34 @@ class AsyncRoundDriver:
         ref_out = self.c.held / self.held_name(ref)
         if not self.c.held_result_ok(ref_out):
             ref_out = self.c.measure_held(self.held_name(ref), ref['checkpoint'])
-        for o in (out, ref_out):
-            if not json.loads((o / 'result.json').read_text()).get('complete'):
-                raise RuntimeError(f'held measurement incomplete: {o}')
+
+        def complete(*outs):
+            for o in outs:
+                if not json.loads((o / 'result.json').read_text()).get('complete'):
+                    raise RuntimeError(f'held measurement incomplete: {o}')
+        complete(out, ref_out)
         (self.root / 'verdicts').mkdir(exist_ok=True)
-        vs = self.c.compare(ref_out, out, self.root / 'verdicts' / f'{cand["sha256"][:12]}-compare.json')
+        compare_path = self.root / 'verdicts' / f'{cand["sha256"][:12]}-compare.json'
+        # a pair compare refuses (different engine settings: 2026-11-24, a reused sft-v7 result of another series) is
+        # no reason to fail every retry: the reference is measured again here, on this series (never reused), then if
+        # need be the candidate too; a third refusal is a real fault and raises
+        for again in ('reference', 'candidate', None):
+            try:
+                vs = self.c.compare(ref_out, out, compare_path)
+                break
+            except HeldPairRefused as error:
+                self.note(held_pair_refused=str(error)[:300], candidate=cand['sha256'], reference=ref['sha256'],
+                          remeasure=again)
+                if again is None:
+                    raise
+                policy, target = (ref, ref_out) if again == 'reference' else (cand, out)
+                self.c.set_held_aside(target, 'unpaired')
+                fresh = self.c.measure_held(self.held_name(policy), policy['checkpoint'], reuse=False)
+                complete(fresh)
+                if again == 'reference':
+                    ref_out = fresh
+                else:
+                    out = fresh
         verdict, adopt = judge(vs, self.a.success_pts, self.a.fail_pts)
         record = {'verdict': verdict, 'adopt': adopt, 'sha256': cand['sha256'], 'checkpoint': cand['checkpoint'],
                   'reference': ref, 'vs_start': {'delta': vs['primary']['delta'], 'p': vs['primary']['permutation_p'],
@@ -3698,8 +4093,10 @@ class AsyncRoundDriver:
             threading.Thread(target=self.pop_loop, daemon=True).start()
         if getattr(self.a, 'resume_after_hunt', False):
             self.controller.resume_after_hunt()
+        threading.Thread(target=self.teacher_loop, daemon=True).start()
         completed = 0
         while self.a.max_rounds <= 0 or completed < self.a.max_rounds:
+            self.standing_teacher()
             with self.lock:
                 self.apply_verdicts()
             if self.controller.state.get('halted'):
@@ -3721,6 +4118,10 @@ class AsyncRoundDriver:
                     shutil.rmtree(round_dir)                # prepared ahead from a lineage a rollback discarded
                     (round_dir / 'stages').mkdir(parents=True)
                 self.prepare(round_dir, self.lineage_policies())
+                reason = self.rebuild_requested(round_dir)
+                if reason:
+                    self.rebuild_round(round_dir, self.lineage_policies(), reason)
+                self.standing_teacher()
                 self.health_report(round_dir, self.lineage_policies())
                 nxt = f'r{int(self.controller.state["round_counter"]) + 1:04d}'
                 self.prepare_ahead(self.round_dir(nxt), self.lineage_policies())
@@ -3837,8 +4238,10 @@ def publish_round(args):
                                       label=args.label, why=f'async round {args.label}')
     (out / 'sha256.txt').write_text(merged['checkpoint_sha256'] + '\n')
     # factors_dir: a Colab learner merges the next round's start from it on the VM instead of receiving 3.4 GB
-    # (pop_rl_actor.ensure_remote_checkpoint)
-    write_json_durable(out / 'published.json', {**published, 'merge': merged,
+    # (pop_rl_actor.ensure_remote_checkpoint); code: the commit whose merge wrote these bytes, which the VM merges
+    # with (pop_rl_actor.remote_merge_code: a VM checkout at another commit wrote other bytes, r0002 2026-11-24)
+    from natlang_neuralese.common.code_provenance import code_provenance
+    write_json_durable(out / 'published.json', {**published, 'merge': merged, 'code': code_provenance(),
                                                 'factors_dir': str(Path(args.factors).resolve())})
     log({'event': 'round published', 'checkpoint_sha256': merged['checkpoint_sha256'], 'out': str(out)})
 
@@ -3856,6 +4259,9 @@ def cycle(args):
 
 
 def main():
+    # one pipe and log per collection slot, plus the actor's: not the unit's soft 1024 (common/open_files.py)
+    from natlang_neuralese.common.open_files import raise_open_files_limit
+    raise_open_files_limit()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
 
@@ -4112,6 +4518,8 @@ def main():
                     help='a round prepared while a Colab session fit for SFT answers is sized to this many hours of '
                          'its learner (forward tokens at its measured throughput, round-speed.json; the target cap and '
                          'teacher budget scaled alike, never below the DGX round); 0: every round is the DGX size')
+    ad.add_argument('--no-fallow22-aux', action='store_true',
+                    help='leave the fallow-22 reference-program fan-in part (FALLOW22_AUX, share 0.01) out of the mix')
     ad.add_argument('--no-dgx-recap', action='store_true',
                     help='a round sized for a session that starts on the DGX trains its whole mix there (default: '
                          'recapped to --round-target-tokens first, sft_sources recap)')
@@ -4161,6 +4569,13 @@ def main():
     ad.add_argument('--fill-repo', help='immutable fill-reader checkout (default: --data-repo or controller source); use --pin path to opt out')
     ad.add_argument('--fill-inflight', type=int, default=32)
     ad.add_argument('--no-teacher-campaign', action='store_true')
+    ad.add_argument('--teacher-check-minutes', type=float, default=10.0,
+                    help='how often the standing teacher campaign is checked (relaunched from the newest frontier when '
+                         'its unit is idle) beside the waits')
+    ad.add_argument('--rebuild-round', action='append', default=[], metavar='RNNNN',
+                    help='rebuild this prepared round\'s mix (only the build step, its recorded inputs) under the '
+                         'current build code when it starts, once per build commit; stages/rebuild.request in the '
+                         'round does the same for a running driver',)
     ad.add_argument('--grpo-steps', type=int, default=20, help='GRPO steps per round in the polish phase')
     ad.add_argument('--grpo-budget', type=int, default=100, help='GRPO ledger GB (learner + its actor)')
     ad.add_argument('--grpo-extra', default='')

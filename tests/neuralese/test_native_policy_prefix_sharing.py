@@ -212,7 +212,9 @@ def test_jolt_twins_and_guidance_imports_share_only_raw_prefixes(tmp_path, role)
     assert details['jolt']['privileged_episodes'] == 2
 
 
-def test_jolt_decision_twin_options_map_through_shared_rows(tmp_path):
+@pytest.mark.parametrize('split', [False, True])
+def test_jolt_decision_twin_options_map_through_shared_rows(tmp_path, split):
+    """``split``: a split-tokenized decision (continuation_alternatives) maps its alternative branches too."""
     from test_rl_jolt import episode_with_top_k, load, objective_for, prepare, rollouts
     model, roles, identity = load('lfm')
     episode = episode_with_top_k(model, roles, identity, 'write-only')
@@ -221,9 +223,12 @@ def test_jolt_decision_twin_options_map_through_shared_rows(tmp_path):
     root['sampling'] = {'schema': 'natlang.native-decision-capture/1', 'policy': old['policy'],
         'prompt': old['prompt'], 'privileged': old['privileged'], 'continuations': [[11, 2], [13, 2]],
         'decision_sample': {'schema': 'natlang.decision-sample/1', 'log_probs': [-1., -2.],
-                            'chosen': 0, 'temperature': 1., 'seed': 3}}
+                            'chosen': 0, 'temperature': 1., 'seed': 3},
+        **({'split_tokenization': True, 'continuation_alternatives': [[[11, 14, 2]], []]} if split else {})}
     graphs, spec = prepare(rollouts(episode.turns), episode, roles, identity)
     assert all(len(spec['rows'][graph['id']]['decision_actions'][0]['twin_options']) == 2 for graph in graphs)
+    if split:
+        assert all(len(spec['rows'][graph['id']]['decision_actions'][0]['twin_alternatives'][0]) == 1 for graph in graphs)
     examples = [parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint']) for graph in graphs]
     details = _assert_shared_equals_unshared(model, examples, objective_for(tmp_path, spec))
     assert details['sampled_decisions'] == 2

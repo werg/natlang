@@ -1284,6 +1284,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
 
 
 if __name__ == '__main__':
+    # the collector's node workers inherit the limit (common/open_files.py)
+    from natlang_neuralese.common.open_files import raise_open_files_limit
+    raise_open_files_limit()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('queue')
     parser.add_argument('journal')

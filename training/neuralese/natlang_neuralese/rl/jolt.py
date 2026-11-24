@@ -287,7 +287,7 @@ def actor_sources(row):
     for decision in row.get('decision_actions') or ():
         turn = decision['turn']
         sources.pop(turn)
-        for option in decision['option_nodes']:
+        for option in (*decision['option_nodes'], *(n for alts in decision.get('alternative_nodes') or () for n in alts)):
             sources[option] = turn
     for twin, source in twin_sources(row).items():
         sources[twin] = sources[source]
@@ -431,17 +431,22 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns, beta=None):
     originals = {node.name: node for node in replay.plan.invocations}
     edited = {node.name: node for node in twin.plan.invocations}
     decision_twins = []
+    def twin_queries(name, option, prompt):
+        before, after = originals[name], edited[name]
+        delta = len(after.token_ids) - len(before.token_ids)
+        continuation = before.token_ids[prompt:]
+        if prompt + delta < 1 or tuple(after.token_ids[prompt + delta:]) != tuple(continuation):
+            raise ValueError('JOLT+ twin edit crosses a decision option continuation')
+        return [{**item, 'query': offsets[name + suffix] + item['local_query'] + delta} for item in option]
+
     for action in replay.decision_actions:
-        per_option = []
-        for name, option in zip(action['option_nodes'], action['options']):
-            before, after = originals[name], edited[name]
-            delta = len(after.token_ids) - len(before.token_ids)
-            continuation = before.token_ids[action['prompt_tokens']:]
-            if (action['prompt_tokens'] + delta < 1
-                    or tuple(after.token_ids[action['prompt_tokens'] + delta:]) != tuple(continuation)):
-                raise ValueError('JOLT+ twin edit crosses a decision option continuation')
-            per_option.append([{**item, 'query': offsets[name + suffix] + item['local_query'] + delta}
-                               for item in option])
+        per_option = [twin_queries(name, option, action['prompt_tokens'])
+                      for name, option in zip(action['option_nodes'], action['options'])]
+        # split-tokenization alternatives (rl.decision_policy sums them per option): their twin queries, per option
+        if action.get('alternatives'):
+            per_option = {'options': per_option, 'alternatives': [
+                [twin_queries(name, alt, action['prompt_tokens']) for name, alt in zip(names, alts)]
+                for names, alts in zip(action['alternative_nodes'], action['alternatives'])]}
         decision_twins.append(per_option)
 
     for node in renamed:

@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/neuralese_data'))
 
@@ -194,8 +196,11 @@ def test_a_differentiated_adapter_row_leaves_no_cyclic_garbage(tmp_path):
     engine = engine_fixture(tmp_path, 'lfm', service_template=True)
     rows, _ = P.episode_turns('task-1', 'k', episode())
     recipe = Recipe.from_json({'parameterization': 'free-lora', 'ranks': {'tree': 2, 'folder': 0, 'lambda': 0},
-                               'level_lr_scale': {'tree': 1., 'folder': 1., 'lambda': 1.}, 'steps': 1, 'batch_rows': 2})
+                               'level_lr_scale': {'tree': 1., 'folder': 1., 'lambda': 1.}, 'steps': 2, 'batch_rows': 2})
     trainer = JointTrainer(engine, P.manifest('fam', {}), lower_rows(engine, rows, prompt_weight=0.), recipe)
+    # The first step also leaves one-time garbage of lazy imports and caches (667 objects when this test ran first,
+    # 2026-11-24): measure a row's operation on the second step.
+    trainer.step()
     gc.collect()
     gc.disable()
     try:
@@ -211,7 +216,47 @@ def test_pop_actor_serves_an_adapter_release_on_sglang_slots():
     assert pop_actor_driver.adapter_args({}) == ['--sglang-adapter-slots', '0']
     job = {'adapter_release': {'path': '/eval/adapter-ab', 'rank': 16, 'scale': 1.0, 'result_sha256': 'ab'}}
     assert pop_actor_driver.adapter_args(job) == ['--adapter-release', '/eval/adapter-ab', '--adapter-scale', '1.0',
-                                                  '--sglang-adapter-slots', '1', '--sglang-adapter-rank', '16']
+                                                  '--sglang-adapter-slots', '1']   # the server derives the slot
+    job['adapter_release']['slot_rank'] = 48   # pop_rl_actor.send_adapter_release: the packed rank, not the fit's 16
+    assert pop_actor_driver.adapter_args(job)[-2:] == ['--sglang-adapter-rank', '48']
+
+
+def test_sglang_slot_rank_fits_a_release_over_every_lfm3_family(monkeypatch, tmp_path):
+    """A rank-16 fit over every LFM3 family packs q|k|v into one fork module (48) and w1|w3 into another (32): the
+    server sizes its slots from the release, so the default 32 no longer sends every adapted turn to the native engine."""
+    import serve_native_checkpoint as S
+    from natlang_neuralese.export.native_hf import packed_slot_rank
+    layer = lambda i, family: f'port.hf.model.layers.{i}.{family}.weight'
+    attention = ['self_attn.q_proj', 'self_attn.k_proj', 'self_attn.v_proj', 'self_attn.o_proj', 'self_attn.gate_proj']
+    conv = ['conv.in_proj', 'conv.out_proj']
+    mlp = ['feed_forward.w1', 'feed_forward.w2', 'feed_forward.w3']
+    names = [layer(2, f) for f in attention + mlp] + [layer(0, f) for f in conv + mlp]
+    fit = {'kind': 'free-lora', 'rank': 16, 'parameter_names': names}
+    assert packed_slot_rank([fit]) == 48
+    assert packed_slot_rank([fit, {'kind': 'xs', 'rank': 4, 'parameter_names': [layer(2, 'self_attn.k_proj')]}]) == 52
+    assert packed_slot_rank([{'kind': 'free-lora', 'rank': 16, 'parameter_names': [layer(0, f) for f in mlp]}]) == 32
+    with pytest.raises(ValueError):
+        packed_slot_rank([{'kind': 'free-lora', 'rank': 4, 'parameter_names': ['port.hf.model.embed_tokens.weight']}])
+    args = S.build_parser().parse_args(['--checkpoint', 'c', '--checkpoint-sha256', 'x'])
+    assert args.sglang_adapter_rank is None and S.adapter_slot_rank(args) == S.DEFAULT_ADAPTER_RANK
+    monkeypatch.setattr(S, 'release_slot_rank', lambda release: 48)
+    args = S.build_parser().parse_args(['--checkpoint', 'c', '--checkpoint-sha256', 'x', '--adapter-release', str(tmp_path)])
+    assert S.adapter_slot_rank(args) == 48
+    args = S.build_parser().parse_args(['--checkpoint', 'c', '--checkpoint-sha256', 'x', '--adapter-release', str(tmp_path),
+                                        '--sglang-adapter-rank', '16'])
+    assert S.adapter_slot_rank(args) == 16   # explicit wins (adapted turns over it run on the native engine)
+
+
+def test_pop_adapter_job_carries_the_packed_slot_rank(monkeypatch, tmp_path):
+    """The DGX records the slot the release needs on SGLang (packed q|k|v), not the fit's rank, in the Pop job."""
+    import pop_rl_actor
+    import serve_native_checkpoint as S
+    monkeypatch.setattr(pop_rl_actor, 'ssh', lambda *a, **k: '')
+    monkeypatch.setattr(pop_rl_actor.subprocess, 'run', lambda *a, **k: None)
+    monkeypatch.setattr(S, 'release_slot_rank', lambda release: 48)
+    job = {}
+    pop_rl_actor.send_adapter_release(job, '/eval', tmp_path, 'ab' * 8, 16)
+    assert job['adapter_release']['rank'] == 16 and job['adapter_release']['slot_rank'] == 48
 
 
 def test_pop_attestation_distinguishes_base_and_adapted_actors(monkeypatch):
@@ -291,6 +336,7 @@ def test_colab_fit_runs_as_a_preemptible_tenant_and_brings_the_release_home(tmp_
     def ssh_host(host, command, *, input=None, timeout=600, check=True):
         if input is not None and 'plan.json' in command:
             plans['plan'] = json.loads(input)
+            assert f'{json.loads(input)["engine"]["store_scratch"]}' in command   # created before the fit runs
         if command.startswith('ls '):
             return 'nnt1_abc.nnt\n'
         return ''
@@ -312,7 +358,10 @@ def test_colab_fit_runs_as_a_preemptible_tenant_and_brings_the_release_home(tmp_
     assert body['engine']['base'].endswith('/base-lfm3') and body['recipe']['steps'] == 3
     command = [c for c in calls if c[0] == 'run'][-1][1]
     assert command[1] == '/t/adm.py' and '--preemptible' in command and command[command.index('--beside-label') + 1] == 'actor-'
-    assert 'CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=50' in command and command[-4:] == ['--plan', f'{remote}/fit/plan.json',
+    # outside MPS (a tenant's GPU fault must not end the actor's context): no SM share, a pipe with no daemon
+    assert not any(c.startswith('CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=') for c in command)
+    assert any(c.startswith('CUDA_MPS_PIPE_DIRECTORY=') and c.endswith('/mps/tenant-no-mps') for c in command)
+    assert command[-4:] == ['--plan', f'{remote}/fit/plan.json',
                                                                                   '--out', f'{remote}/fit/build']
     assert json.loads((prog / 'fit' / 'colab.json').read_text())['tenant_commit'] == 'f' * 40
     assert P.main(args) == 0                                                    # present: nothing runs again
@@ -339,3 +388,41 @@ def test_a_subset_is_a_stable_pinned_manifest_of_the_split(tmp_path):
     P.main(['subset', '--dir', str(prog), '--tasks', '6', '--name', 'dev6'])
     six = {t['id'] for t in json.loads((prog / 'dev6' / 'manifest.json').read_text())['tasks']}
     assert {t['id'] for t in sub['tasks']} < six                                # stable order: a larger subset extends it
+
+
+def test_colab_bank_ships_the_fits_runs_as_a_tenant_and_brings_the_held_releases_home(tmp_path, monkeypatch):
+    import pop_rl_actor as A
+    dirs = []
+    for name in ('ext_a', 'ext_b', 'ext_held'):
+        prog = tmp_path / name
+        (prog / 'fit' / 'release' / 'artifacts').mkdir(parents=True)
+        (prog / 'split.json').write_text(json.dumps({'family': name}))
+        (prog / 'rows.jsonl').write_text('{"r": 1}\n')
+        (prog / 'fit' / 'plan.json').write_text(json.dumps({'manifest': {'base': {'checkpoint_sha256': 'c' * 64}},
+                                                            'engine': {'checkpoint': '/ck.pt'}}))
+        dirs.append(prog)
+    calls = []
+    monkeypatch.setattr(A, 'colab_tenant_checkout', lambda h, cfg, c: {**cfg, 'repo': '/t', 'admission': '/t/adm.py', 'commit': c})
+    monkeypatch.setattr(A, 'ensure_remote_checkpoint', lambda *a: 'present')
+    monkeypatch.setattr(A, 'ship_file', lambda local, remote, *a: calls.append(('ship', remote)))
+    monkeypatch.setattr(A, 'ship_release', lambda h, cfg, local, remote: calls.append(('release', remote)) or remote)
+    monkeypatch.setattr(A, 'copy_resumable', lambda *a, **k: None)
+    monkeypatch.setattr(A, 'log', lambda **e: None)
+    monkeypatch.setattr(A, 'ssh_host', lambda host, command, **k: 'nnt1_x.nnt\n' if command.startswith('ls ') else '')
+    monkeypatch.setattr(A, 'run_detached', lambda host, cfg, remote, command: calls.append(('run', command)) or 0)
+
+    def pull(remote, local, host, attempts=5):
+        Path(local).parent.mkdir(parents=True, exist_ok=True)
+        Path(local).write_text('{}')
+    monkeypatch.setattr(A, 'pull_verified', pull)
+    out = tmp_path / 'bank-1'
+    assert P.main(['colab-bank', '--programs', str(dirs[0]), str(dirs[1]), '--held', str(dirs[2]), '--out', str(out),
+                   '--host', 'colab-g4', '--commit', 'f' * 40, '--steps', '2']) == 0
+    command = [c for c in calls if c[0] == 'run'][0][1]
+    assert '--preemptible' in command and command[command.index('--vram-gib') + 1] == '14.0'
+    remote = '/content/natlang-work/runs/tenant-bank-bank-1'
+    bank = command[command.index('bank'):]
+    assert bank[bank.index('--held') + 1] == f'{remote}/programs/ext_held' and '--steps' in bank
+    assert [c[1] for c in calls if c[0] == 'release'] == [f'{remote}/programs/ext_a/fit/release',
+                                                          f'{remote}/programs/ext_b/fit/release']
+    assert (out / 'adapt' / 'ext_held' / 'artifacts' / 'nnt1_x.nnt').exists() and (out / 'bank-manifest.json').exists()

@@ -133,9 +133,21 @@ def test_a_reasoned_row_scores_after_its_reasoning_and_spans_it(renderer):
     assert decision['reasoning_exact'] is True
     # the plain row is the reasoning and the reply: R </think> option <|im_end|>
     assert tok.decode(target) == REASONING[0] + '</think>"decline"<|im_end|>'
-    # sampled ids that tokenize the reasoning otherwise: the rendered ids train, the mismatch is reported
-    turn['decision_reasoning']['reasoning_sample_ids'] = [sampled[0] + 1] + sampled[1:]
-    assert sft_sources.render_decision(renderer, turn, np.asarray(prompt, np.int32))['reasoning_exact'] is False
+    # sampled ids that tokenize the reasoning otherwise: the engines score after the sampled ids (score item
+    # reasoning_ids), so the row's decision prompt holds them too and they train exactly
+    other_ids = [sampled[0] + 1] + sampled[1:]
+    turn['decision_reasoning']['reasoning_sample_ids'] = other_ids
+    from natlang_neuralese.serve.native_learning import decision_items
+    before, _ = decision_items(renderer, turn['messages'], None, replies, reasoning=REASONING[0], reasoning_ids=other_ids)
+    spliced = [int(v) for _, v in before]
+    assert spliced[len(prompt):len(prompt) + other_ids.index(close) + 1] == other_ids[:other_ids.index(close) + 1]
+    assert sft_sources.render_decision(renderer, turn, np.asarray(prompt, np.int32)) == {
+        'error': 'prompt-differs-from-capture'}   # a capture scored after the re-encoded text disagrees
+    turn['decision_reasoning']['scored_prompt_sha256'] = token_ids_sha256(spliced)
+    redone = sft_sources.render_decision(renderer, turn, np.asarray(prompt, np.int32))
+    assert redone['reasoning_exact'] is True and prompt + redone['prefix'].tolist() == spliced
+    turn['decision_reasoning']['reasoning_sample_ids'] = sampled
+    turn['decision_reasoning']['scored_prompt_sha256'] = token_ids_sha256(scored)
     # a teacher's reply: conditioned the same way, its reasoning never a target
     other = sft_sources.render_decision(renderer, turn, np.asarray(prompt, np.int32), own=False)
     assert 'reasoning_span' not in other and other['prefix'].tolist() == decision['prefix'].tolist()

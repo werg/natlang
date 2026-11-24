@@ -212,8 +212,10 @@ def test_converted_rows_and_served_decisions_share_rendering_scores_and_imported
         row = decision_graph_row(renderer, {'id': 'converted', 'split': 'train', 'source_groups': ['g'],
             'messages': messages, 'options': options, 'label': 1, 'label_source': 'exact-oracle'},
             tokenizer_fingerprint=fingerprint)
-        plan, continuations = _decision_render(engine, messages, None, options)
-        assert [node['token_ids'][row['decisions'][0]['prompt_tokens']:] for node in row['nodes']] == continuations
+        # converted rows render as the engines serve them: split tokenization on (the client's default)
+        plan, continuations, alternatives = _decision_render(engine, messages, None, options, split_tokenization=True)
+        assert [node['token_ids'][row['decisions'][0]['prompt_tokens']:] for node in row['nodes']] == [
+            *continuations, *(ids for alts in alternatives for ids in alts)]
         assert row['nodes'][0]['token_ids'][:row['decisions'][0]['prompt_tokens']] == plan[0][1]
         state = engine.native_write_text('t5 t6')['id']
         native_messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 't4 '},

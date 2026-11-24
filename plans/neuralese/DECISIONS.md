@@ -10312,3 +10312,519 @@ old immutable registered packs were not silently modified.
 - Pop subsequently became a standing AEI1 collection actor (`async-drive --rebind-actor pop-os@http://100.73.236.5:18531=64`), so waiting for one held run to finish no longer predicts free capacity. Tick had 25.5 GiB ledger headroom after the teacher campaign automatically held wave 0046 for 16 Spectrolite infrastructure failures. Move the full model-free sweep to Tick's already validated V18 release, with an 8 GiB cap, 7.5 GiB reserve and low priority; cancel only our unstarted Pop oracle waiter. Production actors and the teacher hold are untouched.
 - The full Tick command is active as `vibe-v18-tick-native-oracles-full-20261124a`; state and original native packets are under `/home/werg/vibe-native-oracles-v18/runs/tick-full-release/`. At launch, actual native attempts are zero; do not treat the plan inventory, compiled release or relocated consumer proof as goal passes. No slice or workspace filter is imposed. Android cases remain explicitly unchecked until their owned emulator and per-case application-state prerequisites exist.
 - Build recovery now uses a unique private scratch and staged output per attempt, publishes only completed releases, and observes ledger ownership across preemption/requeue. Inactive generated checkpoint clones are removed only when clean (or reduced by interrupted cleanup to `.git/logs` alone); original Source checkouts and every trajectory remain intact.
+## 2026-11-24 02:30 async-drive: the standing teacher campaign relaunches whenever idle; a supported mix rebuild
+
+**Teacher campaign.** `ensure_teacher` ran only at the end of `prepare`. The campaign ended about 01:00, and a
+restarted driver joining the already-prepared r0002 never relaunched it; the coordinator launched it by hand at 02:10
+(`aei1-teacher`, `r0002/frontier.json`, `teacher-r0002`). Now, whenever the `<name>-teacher` unit is idle, the
+campaign of the newest frontier (the highest `rNNNN/frontier.json` not discarded) runs in `teacher-rNNNN`.
+- Checked: at the top of each loop iteration, after a round's preparation, in every DGX SFT poll
+  (`dgx_sft_between`), in each Colab SFT iteration and the snapshot wait, and by a standing thread every
+  `--teacher-check-minutes` (10). The thread covers the long blocking waits: `run-sft`, ledger stages, publication.
+- A campaign of that frontier that already ran resumes (teacher_gen skips finished tasks) at most once an hour, and
+  not after a driver relaunch that scored nothing new (`teacher-rNNNN/driver-launch.json`); the next frontier starts
+  the next campaign. `--no-teacher-campaign` still opts out.
+- With the hand-launched r0002 campaign running, the driver leaves it alone (unit present). When it ends, the driver
+  resumes it once, an hour later at the earliest. After that, r0002's campaign is done until r0003's frontier.
+
+**Rebuild.** Removing `build.done` and `prepared.done` reran all of `prepare`, including the
+`--snapshot-min-hours` wait (about 2 h for r0002).
+- `--rebuild-round rNNNN` (repeatable) or a `stages/rebuild.request` file reruns only the build step when the round
+  starts. A running driver picks the file up at the round start; the option applies once per build-code commit (the
+  data repo's pin record), so a restart with the same argv does not rebuild again.
+- Inputs are the recorded ones: frontier, data outputs, `size`, previous policy and the `prefer_unseen` list from
+  `round.json`, with the lineage the round was prepared from.
+- The old mix is kept as `mix.pre-rebuild-<time>`, and a failed build puts it back. The new mix is committed blob
+  first (`chains.sha256`, then `round.json`); every other recorded field is kept, including `manual_rebuild` and
+  `profile_changes`. A DGX recap is dropped (it reruns from the new mix if the round starts on the DGX). Each rebuild
+  is appended to `round.json` `rebuilds` (time, reason, build code, old mix and chains sha) and to
+  `stages/build.done`.
+- Refused (noted, request consumed) once the round's SFT started, or when it was prepared from another lineage.
+
+Tests: `tests/neuralese/test_async_train.py` (relaunch from the newest frontier when idle, resume rate limit and
+done rule, discarded frontiers, hooks and standing thread; rebuild from recorded inputs, once per build commit, the
+request file, failure restore, refusal after SFT start, the round loop rebuilding before it trains).
+
+## 2026-11-24 02:55 Round budgets measured on real data; fallow-22 enters the round mix
+
+**The A100-sized build on real data** (scratch rebuild of r0002 inputs with the 00:45 code; r0002 now trains this
+mix: `max_target_tokens` 20.98M, `max_forward_tokens` 221.8M, teacher budget 314.6M).
+- Run: 22 min wall, 22.9 GB peak. This is why the round build's ledger budget went to 32 GB.
+- The forward cap bound (fraction 0.359). It kept 15.48M weighted and 238.2M forward tokens (7% over the forward cap:
+  each part's budget is counted in weighted tokens), 471 steps.
+- On the A100: 35.1k chain tokens/s, 12.4 s/step, so ~1.6 h.
+- Units kept (of them trained before):
+  - teacher: 4,253 (309), against r0002's original 1,645 (489);
+  - filled: 3,913 (3,064). Only 849 unseen filled units exist, and all were kept first;
+  - own: 534 (1);
+  - operators: 1,431 (593).
+- Teacher admission:
+  - 7,948 skipped because their filled unit trains (`filled_instead`), so they spent no budget;
+  - 4,376 over the forward budget (was 17,089);
+  - 45 unfilled observed-live episodes kept, with teacher reasoning as context.
+- Composition: forward per weighted target rose from 10.6 to 15.4, because raw teacher episodes are forward-heavy.
+  The forward cap holds the round's time.
+
+**Fallow-22** (FALLOW_REGISTER row 22; strand commits 9f1be1922..62ea0a6de, `scripts/neuralese_data/broad_graph_october.py`).
+- 11,259 reference-program fan-in episodes (fetaqa, 2wiki, bird) re-rendered on today's runtime: 69.7k calls, 3.26M
+  weighted and 311M forward tokens. Registry: `sft-fallow22-broad-graphs-20261124-v1` on the NVMe.
+- Held separation:
+  - 203 trajectories dropped for two held-v3 BIRD databases (`car_retails`, `soccer_2016`);
+  - `held_eval verify` then shows no overlap with held-v3 or held-v4.
+- They hold no Neuralese state. The native-write spans had been added after the fact, so the re-render keeps each
+  child's answer as plain text in the root's context. This is consistent with how the runtime now reads text states
+  (read-back fix). It trains fan-in over child calls, not Neuralese use.
+- Target mass: 66% child extraction answers, 15% final answers, 19% templated root code (8 templates).
+  About 95 forward tokens per target token.
+- So they enter every round mix at **share 0.01, task_tokens 2000** (`FALLOW22_AUX`; `--no-fallow22-aux` opts out).
+  That is ~1% of the loss and ~10% of a round's forward work. Unit-level prefer-unseen rotates them across rounds.
+- Not checked: no held measurement of their effect, and no Neuralese-declaring variants of these programs.
+
+## 2026-11-24 04:35 Pop yield: a held measurement is found by its unit, not only by the shell that started it
+
+Round 1's held-v3 on Pop (`popheld-policy-8e634a0f46ce-1795481950`, started by the driver about 01:58 through
+`pop-held.sh`) failed at 04:15:24, incomplete at 279 episodes (242 scored). The driver restarts at 01:56 and 04:17
+killed the driver's process tree, and with it `pop-held.sh`, but not its DGX measure unit. `pop_busy` looked only for
+`pop-held.sh` / `held-eval` processes, so at 04:14:59 the Pop loop saw Pop free and served it for collection
+(`aei1-collect-v0001-pop`) under the running measurement.
+
+Fix (`pop_rl_actor.pop_busy`): Pop is busy while any of these holds; each check fails closed:
+- a DGX `*popheld*` unit is active or activating (pop-held.sh's measure unit and its ledger waiter, grpo's
+  `<prefix>-popheld-*` held-eval jobs);
+- a `pop-held.sh base|ckpt` or `pop_rl_actor held-eval` process runs;
+- a DGX `held_eval measure` process names Pop's address;
+- a `held_eval` / `pop-held.sh` process runs on Pop, or Pop does not answer;
+- another serve holds the Pop serve lock.
+
+Pop-side `popheld-*` units are not a signal: they are the actors themselves, collection included.
+
+The same restart also let a retried held start a second measure unit on the same episodes beside the surviving one
+(`pop-held.sh` reuses a Pop engine that serves the policy). `pop_held_measure` and `Cycle.pop_held` now join a live
+`popheld-<OUT>-*` unit first (`join_pop_held`; a preemption stops it) and resume afterwards. Test:
+`test_async_train.py::test_a_held_measure_unit_left_by_a_restarted_driver_keeps_pop_busy_and_is_joined_not_duplicated`.
+Effective at the next driver restart; until then the running held keeps its `pop-held.sh` alive, so the running
+driver leaves it alone unless it is restarted on old code.
+
+## 2026-11-24 04:45 aei1 r0002: the Colab VM merged with its own checkout's code, not the publisher's; fixed
+
+**Observation.** At 04:17:11 aei1 published r0002 as 7cfc4774 (pin 0076be613; factors `aei1/r0002/sft/factors`, base
+r0001 8e634a0f). The Colab rebind failed: `the merge of .../r0002/sft/factors does not hash to the published 7cfc4774`.
+It failed again at 04:20 (the driver's retry).
+
+**Cause.** The VM-side merge (`pop_rl_actor._REMOTE_MERGE`) imported `merge_factors_to_checkpoint` from the VM
+checkout. That checkout was at bdf4c8721, not 0076be613: `run-sft` had moved it to 0076be613, but the actor restored
+after the round's SFT went back to its launch commit (`colab_checkout(serve_args.commit)`, bdf4c8721). bdf4c8721 is
+older than 0462075ea, which added the FP32 master rows (`trainable_rows_fp32`) to every merged checkpoint. So the VM
+wrote the old layout. The publication is 3,457,841,117 bytes; the r0001-format files are ~49.8 KB smaller, which is
+the FP32 rows.
+- Localized on the VM: the same merge, run there from 0076be613's `training/neuralese` (git archive) over the VM's
+  8e634a0f and the VM's copy of the factors (4a0f1b31), hashes to **7cfc4774** byte for byte (59 s).
+- So the base identity, the factor files, the merge order and the numerics all agree across x86 MKL (A100 VM,
+  torch 2.14.1+cu130) and the GB10. The only difference was the code.
+- Round 1 is consistent with this. Its publisher (pin bdf4c8721) and the VM checkout were on the same commit, and its
+  rebind at 01:42 merged on the VM (`ok`, 47.8 s) and attested.
+
+**Fix** (default, opt-out `NATLANG_COLAB_REMOTE_MERGE=0` as before).
+- `publish-round` records `code` (`code_provenance()`) in `published.json`.
+- `pop_rl_actor.remote_merge_code` extracts the publisher's `training/neuralese` at that commit to
+  `ROOT/merge-code/<commit>` with `git archive` (fetching if needed; the 4 newest are kept). The serving checkout is not
+  moved. `remote_merge` runs the merge from that tree.
+- A dirty or unknown publisher tree raises (`ensure_remote_checkpoint` then ships the checkpoint). A publication
+  without `code` (r0001, r0002) merges with the checkout as before, and the hash check still decides.
+- A factor rebind given the DGX checkpoint (the driver always passes it) now goes through `ensure_remote_checkpoint`:
+  it keeps a file that hashes to its name, else merges with the publisher's code, else ships the publication. Before,
+  a mismatch raised and the actor kept the old policy.
+- Inventory: VM merge consumers are `ensure_remote_checkpoint` (serve-colab, the measure tenant, run-sft's start
+  checkpoint) and `_prepare_remote_rebind_export` (rebind); all four now go through the commit-pinned merge.
+  - Pop does not merge; it serves the published checkpoint by copy (`pop_step`).
+  - The DGX merges in `publish-round` and in `export_merged_checkpoint` run the process's own code.
+- Tests: `test_the_vm_merges_with_the_publishers_code_not_its_checkouts` (real git and bash extraction; the checkout is
+  not moved), `test_ensure_remote_checkpoint_merges_with_the_published_code_and_ships_a_dirty_one`,
+  `test_a_factor_rebind_with_its_publication_goes_through_ensure_remote_checkpoint`,
+  `test_publish_round_records_the_code_whose_merge_wrote_the_bytes`.
+
+**Restored.**
+- The verified merge was moved into the VM's `checkpoints/7cfc4774….pt`.
+- The rebind was run through the supported path (`pop_rl_actor.py rebind` from pin a034dbf9c5e4, `--checkpoint`):
+  4 routes attested at 04:30.
+- The VM export's `weights_sha256` 5a99d617 equals the DGX publication's SGLang export.
+- r0003's Colab SFT finds its start checkpoint present.
+
+**Not checked / left.**
+- The FP32 matmul in `merge_policy_state` is not made deterministic across BLAS libraries. It matched on two rounds
+  (MKL x86 against the GB10), and a future mismatch now ships the checkpoint instead of failing.
+- The restored actor's VM checkout stays at its launch commit (bdf4c8721), so the export and the front run that code.
+  The export matched byte for byte here.
+- The running driver (pin a034dbf9c5e4) keeps the old rebind path until its next pin. r0003 publishes from that pin
+  without `code`, and after r0003's SFT the actor is restored at bdf4c8721 again, so r0003's first rebind is expected
+  to fail the same way. A driver on a pin with this fix then retries through `ensure_remote_checkpoint`: the merge with
+  the checkout mismatches, so it ships the checkpoint (Drive) and rebinds. Rounds after that carry `code` and merge
+  on the VM.
+
+## 2026-11-24 05:10 T3: LFM3 adapter serving parity (program-tuning strand)
+
+Question: does the first real LFM3-1.7B program fit (`ext_decisions_route`, free LoRA rank 16 over q/k/v/o_proj, the
+attention gate, conv in/out_proj and w1/w2/w3; base 5ff07638) serve as the native engine computes it on every engine?
+Prompts: 6 of the program's rows, rendered with the serving template (`target_items`), 4.9-6.9k tokens each, greedy
+24 tokens, adapter off and on. Each engine's tokens are scored by the native engine on that engine's own path, at BF16:
+the release binds the identity it was fit at, and a float32 engine refuses it as another live checkpoint.
+
+**Inventory (mechanism: a tuned adapter stack applied to the base weights at serving; every component that
+implements or consumes it).**
+
+| Component | Role | Where | In scope |
+| --- | --- | --- | --- |
+| Python native engine | reference: exact native application (torch.func weight substitution) | `model/native_adapters.run_native` (`:771`), `serve/engine.py` `_native_run` (`:589-600`), `serve/http.py:579` (`x_natlang_adapters`), `serve_native_checkpoint.py` `bind_adapter_release` (default stack) | measured (reference) |
+| SGLang actor slots | the front sums a stack into rank-padded per-module factors; the fork adds `((x A^T) * mask) B^T` | `serve/sglang_actor.py` `_sglang_reason` / `_sglang_adapter_file` (`:813-865`), `export/native_hf.py` `ADAPTER_MODULES` / `adapter_targets` (`:63-87`), fork `python/sglang/srt/models/lfm3.py` `NatlangAdapters` (`:1175-1270`), `serve_native_checkpoint.py` slot flags, `pop_actor_driver.adapter_args` | measured; defect fixed |
+| Managed llama-server (fork) | GGUF LoRA via `build_lora_mm` per matrix, per-request scales | fork `src/models/lfm3.cpp` (q/k/v via `build_qkv`, `attn_gate`, `wo`), `src/models/lfm-base.cpp` (conv in/out_proj, `build_ffn`), `src/llama-graph.cpp:1784`; ts-host `llama/server.ts:238-268` (`--lora-init-without-apply --lora-per-sequence --lora`), `model/lora-scales.ts`, `model/local-server.ts:148-153` | measured |
+| In-page wllama | the same fork sources compiled to wasm; adapters as blobs at scale 0, per-request scales | `ts-host/vendor/wllama` (natlang-b12092), `browser/tuned-release.ts` `loadBrowserRelease`, `browser/local-model.ts:124,237,262` | measured |
+| PEFT export | native factors -> PEFT safetensors (r/alpha folded into B) | `tune/export.py` `export_peft` / `load_peft_dense` | measured (dense check) |
+| GGUF LoRA export | PEFT -> GGUF via the vendored converter | `tune/export.py` `export_gguf`; `vendor/llama.cpp` = fork a6401bbd converter (`convert_lora_to_gguf.py`, `conversion/lfm3.py`; identical to the pinned 1a7f5015f for these files) | measured |
+| Native->HF module map | which HF module a native target is | `tune/targets.py` `TABLES['lfm3']` | exercised (all 153 targets exported) |
+| Release export drivers | per-node / family GGUF exports of a fit | `tune/build.py` `_export_gguf`, `export_nodes`, `export_families`, `export_release_nodes` (`tune/learned/apply.py`); `program_tune.py plan --gguf-base-sha256`; ts-host `tune/pipeline.ts:360-370` | same functions as measured (not re-run through `tune.build`) |
+| Stack reader | release artifacts -> stack members without an engine | `tune/stack_export.py` | measured (the harness uses it) |
+| Base GGUF | the base the LoRA binds to | `export/native_gguf.py` `export` | measured (f32 export, q8_0 by llama-quantize) |
+| ts-host native-server client | `x_natlang_adapters` to the native/SGLang server | `model/neuralese-server.ts:592-627`, `model/chat-completion.ts:339` | wire only: carries ids and scales; numerics are the engine's |
+| Held eval | adapted policy id | `rl/held_eval.py` `policy_id_of` (`:1221`) | identity only, no numerics |
+
+Results (`docs/ENGINE_PARITY.md` "Tuned adapters (LoRA) on LFM3"):
+
+- Export: all 153 targets reach the GGUF LoRA (attn_q/k/v, attn_output, attn_gate, shortconv in/out_proj,
+  ffn_gate/up/down). The PEFT dense deltas equal the native low-rank deltas exactly (max relative gap 0.0). llama.cpp's
+  LoRA loader applies o_proj and the attention gate: the fork's LFM3 graph routes both through `build_lora_mm`, and
+  the measured continuations match. That closes the question in TUNING_RESTORE §5.
+- Managed llama-server, natlang-b12088 CPU, f32 GGUF (the pinned b12092 has identical `src/` and `ggml/` trees):
+  greedy agreement 288/288, mean / max |Δlogprob| 0.004 / 0.21. The adapter changes 6/6 continuations, and the native
+  logprob of these tokens moves by 1.90 nats on average.
+- In-page wllama, vendored natlang-b12092, Q8_0: 144/144, 0.006 / 0.11; adapter changes 3/3 (1.69 nats). The text
+  prompts tokenize to the prompt ids. The tokens equal the managed server's f32 tokens.
+- Native reference: the fit targets' mean NLL goes from 1.49 to 0.32 nats with the adapter.
+- SGLang slots, first run on the GB10 before the fixes: base turns 0.70 nats from native (top-1 0.78), adapted turns
+  2.6 nats (top-1 0.34), against a control (native base vs native adapted on the same tokens) of 1.79. With slot rank
+  32, 12 of 24 requests reached SGLang and none of them were adapted.
+
+Defects fixed (default on, with opt-outs and tests):
+
+1. SGLang slot rank. q|k|v pack into one module, so a rank-r all-family fit needs 3r (48 here). The default 32, and
+   the fit's rank passed by `pop_actor_driver` / `pop_rl_actor.serve_colab_tenant_actor`, sent every adapted turn to
+   the native engine (on Pop, the CPU front). Now `serve_native_checkpoint.adapter_slot_rank` sizes the slot from
+   `--adapter-release` (`native_hf.packed_slot_rank`), and the Pop job and the Colab measurement actor pass the packed
+   rank, computed on the DGX (18e158961).
+2. SGLang prefix cache across adapters. The radix cache keyed on token ids and `extra_key` only, and the fork's slot
+   adapter was not in the key, so a prompt state computed under one stack (or none) served another. This mechanism
+   predicts both observations: base and adapted turns on the same prompt read each other's prefix, so both sides
+   diverge. Now `sglang_actor.adapter_cache_key` puts the stack id into `extra_key`, as SGLang does with `lora_id`
+   (`NATLANG_SGLANG_ADAPTER_CACHE_KEY=0` opts out; 9cf56138e). The other engines already key their caches by adapters:
+   the llama fork's `--lora-per-sequence` never reuses a prompt computed with other adapters, wllama is the same code,
+   and the Python prefix cache digests `execution_binding`.
+3. Harness and test fixes: `check_sglang_adapter_parity.py` was stale against `serve_native_checkpoint`'s flags (it
+   now uses `build_parser`) and had a greedy indexing bug. The `test_program_tune` cyclic-garbage check depended on
+   test order (667 objects when it ran first) and now measures the second step.
+
+Open, not closed:
+
+- After fix 2 the SGLang re-measurement crashed in the fork: CUDA illegal memory access in the decode step after a
+  prefill batch that mixed adapted and base requests, at --sglang-max-running 4. The same crash happened earlier on
+  the GB10 before fix 2. A GB10 run at 2 running completed. Cause not localized. A tenant job is queued on the A100
+  (`runs/t3-score/sglang-keyed`): first a CUDA_LAUNCH_BLOCKING collect at 4 running (`sglang-debug/collect.log`), then
+  the keyed measurement at 2 running and its native reference. It waits for the session's actor; at 05:00 none was
+  served. Until that is read and the crash is fixed, adapted SGLang serving at more than 2 concurrent requests is
+  suspect.
+- Not checked: llama-server Q8_0 candidates (the f32 run plus the page's Q8 run stand in); the page on WebGPU; mixed
+  stacks in one llama batch; soft states; `tune.build` with `exports: ['gguf']` end to end (the same export functions
+  were exercised); held-task outcomes of the adapter.
+
+Resources: DGX ledger units of 3-20 GB, then of at most 8 GB after the coordinator's rule; native scoring ran on the
+A100 as a preemptible tenant. NVMe: up to 16 GB under `parity-t3`. I deleted 3.9 GB (sglang-r32) and moved 12 GB
+(sglang export, base GGUFs) to `/mnt/external/program-tune-20261117/ext_decisions_route/parity-t3`.
+
+## 2026-11-24 05:30 Split tokenization and sampled reasoning ids (B10 agent)
+
+Context: B10 (structured `readout: decision`, records and unions on four engines; 1160a4a36, natlang-b12088) left two
+scoring defects open, both in what every engine and the learner score:
+- Options scored only under the canonical BPE (`"sp`,`am"`), though generation also writes `"`,`spam`,`"` (8b34839ab).
+- Reasoned readouts scored after the reasoning text re-encoded, which left the sampled ids mid-reasoning in 4 of 16
+  aei1 r0000 readouts (DECISIONS 2026-11-23 16:40).
+
+Decision (default on, one protocol change, one fork release):
+- Score item `split_tokenization` (the client sends it for >= 2 options): an option's log-probability is the logsumexp
+  of its canonical tokens and its split form. The split form tokenizes the options' longest common character prefix
+  and suffix apart, both cut back to word boundaries (a word byte is ASCII `[A-Za-z0-9_]` or >= 0x80, so spam/ham keep
+  `am"` inside the word). A split equal to the canonical form counts once.
+  - Results echo `tokenizations` per option; captures record `continuation_alternatives`.
+  - Opt-out: `NATLANG_DECISION_TOKENIZATIONS=canonical`.
+- Score item `reasoning_ids` (from the reasoning generation's RL capture, `x_natlang_rl_capture.samples[].token_id`):
+  the sampled ids replace the re-encoded reasoning, kept up to the first token the template writes after it (LFM3
+  `</think>`).
+  - Results echo `reasoning_ids: true`; captures record `reasoning_ids_kept`.
+  - Opt-out: `NATLANG_DECISION_REASONING_IDS=rendered`.
+- Engines:
+  - llama-server and wllama: fork b4a202717, e528eb5a3 and 89026ef24 (reasoning_ids), release dispatched as run
+    45324416069.
+  - Python native and SGLang: `serve/native_learning.decision_items`, `_score_item` and `SCORE_ITEM_FIELDS`.
+- Learner: scores the same sequences, with option score = logsumexp over the option's sequences.
+  - grpo per-call `decision_tensors`.
+  - exp0_sft decision objective (`common/decision_objective.option_sequence_scores`).
+  - Graph decision supervision.
+  - Whole-graph replay: tune RL, JOLT twins (`rl/native_replay` alternative branch nodes, `rl/decision_policy`
+    `remap_decision`). A split-tokenized readout used to be dropped to context there.
+
+Measured:
+- Fork split test ("spam" vs "billing"): spam rises from -3.98 (canonical alone) to -1.03 summed; billing and ham are
+  not double counted.
+- Fork reasoning_ids test (5ff07638 Q8_0, local build of 89026ef24):
+  - Canonical ids reproduce the text scores to the last digit (-14.978, -23.123).
+  - A different split of the same text (`Hel`+`lo`) moves them to -15.21, -23.93.
+  - Ids past `</think>` are cut.
+  - Ids without reasoning are a per-item error.
+- Record-decision parity at b12088 (66422fcf, 20 decisions / 44 scored steps, Python native as the reference):
+
+  | Engine | Steps agreeing | Decisions agreeing | Max gap (nats) |
+  |---|---|---|---|
+  | SGLang (Colab A100, FP8 KV) | 41/44 | 17/20 | 3.9 field, 0.75 joint |
+  | llama-server | 42/44 | 18/20 | 1.06 |
+  | page (wllama) | 41/44 | 17/20 | 1.40 |
+
+  - Token counts are identical on all 44 steps (llama-server, page).
+  - Every disagreement is a near-tie (native margin <= 0.34), except SGLang's classifyPullRequest (margin 0.91, gap
+    0.67, FP8 KV).
+  - The helper's Python-vs-SGLang run: 19/20 decisions, max gap 3.74.
+- The tuple agent's b12081 "item 3" mismatch is explained:
+  - b12081 scored 14 tokens per option where Python scores 9. The shared reply opening and the closed render's
+    trailing `\n` were scored per option before 550cb0313 and af0f93100, about -30 nats each.
+  - That changed the option gaps (Python 1.04/1.92/3.05, b12081 1.34/1.34/2.59) and left options 1 and 2 tied to
+    0.01 nats, so the order was decided by a tie.
+  - At b12088 the server, the page and Python rank item 3 identically (9 tokens each, gap 0.30, margin 1.05), and item
+    4 is scored open with its echo.
+
+Not checked:
+- Split and reasoning_ids parity across engines on real readouts; only unit tests and the fork's local tests have run.
+- vLLM prompt_logprobs endpoints (no open, split or reasoning_ids).
+- reasoning_ids on a template with nothing between the reasoning and the reply: the fork cuts the ids at the first
+  token of that text tokenized alone (none: keeps all ids), Python at the first rendered id after the reasoning (the
+  reply's first token). They agree on LFM3, where `</think>` follows the reasoning.
+- Python split alternatives are derived only when the canonical content tokens equal the content tokenized alone and a
+  closed reply ends in `<|im_end|>`; otherwise the option gets no alternative (e.g. the tiny test templates).
+- A live Colab natlang run end to end. The Colab actor still runs code from before open_reply; it serves the 18.5-nat
+  shared-`</think>` scores until it moves to current main.
+
+## 2026-11-24 06:00 async-drive: a round prepared ahead keeps its policy across a driver restart; finished steps are not rerun
+
+**What happened (twice tonight).** Round N+1 is prepared ahead while round N trains, on the policy of that time.
+A driver restarted after round N published found N+1 without `prepared.done`. It began `prepare` again with the new
+policy as `cur` and waited `--snapshot-min-hours` for the new policy's collection. It also ignored, or redid, a data
+step that had finished without a marker because the driver died first. r0003: frontier 03:50 and data done 04:56
+under the old driver; the 04:17 restart would have delayed the build to about 07:30. Workaround at 05:20: a hand
+`data.done` and `--snapshot-min-hours 1`.
+
+**Fix.**
+- **Policy record.** `prepare` records its policies in `stages/prepare.json` at its start, and `snapshot_at` once the
+  snapshot is registered. A restarted driver continues with the recorded policies (`prepare_policies`). Without that
+  record (rounds started by older code) it takes them from an existing `frontier.json` (`policy`,
+  `previous_policy`). Once the snapshot was taken (recorded, `frontier.done` or `frontier.json`) it neither waits
+  nor snapshots again.
+- **Stale record.** A record whose policies left the lineage (a rollback) is dropped with the stage markers, its
+  running stage units are stopped, and the round prepares from the current lineage.
+- **Finished steps.** Every step's unit now records its own exit status in `stages/<step>.exit` (status, argv digest,
+  time; `step_command`). A step with no `.done` whose exit record says status 0 for the same argv is marked done
+  (`recovered: exit-status`) and not rerun; a failed one or one for another argv runs again. For units launched
+  before exit records, the user journal decides: the last start ended with its resource line and no
+  failure/kill/stop, and the step's output exists (frontier.json; the data's last output
+  `neuralese-graph-own/chains.pkl`; `mix/build.json` and `chains.pkl`), giving `recovered: journal`. A running unit
+  is joined as before.
+- **Forcing a rerun.** Deleting a `.done` no longer reruns a step that recorded success; use `--rebuild-round` for a
+  build, or delete the step's `.exit` and outputs too.
+
+Tests: `tests/neuralese/test_async_train.py`. The r0003 sequence: prepared ahead on v1, restart with v2, no wait or
+snapshot, data recovered from its journal, only the build runs, round.json on v1/v0. Also: a restart in the
+snapshot wait waits on the recorded policy; exit records (success not rerun, failure rerun); a rolled-back record
+starts over.
+
+## 2026-11-24 05:55 Program tuning on the A100: a tenant's GPU fault killed aei1's actor under MPS; tenants leave MPS; state (program-tuning strand)
+
+- **Incident.** At 03:47:31 UTC T3's tenant (`runs/t3-score/sglang-keyed`: an SGLang measurement with adapted and
+  base requests in one prefill, the fork's open crash) hit a CUDA illegal memory access (kernel Xid 31). Under MPS
+  that ends every client of the server: aei1's actor engine got SIGKILL 5 s later. The actor record still named it,
+  so the keeper said "serves", and the A100 stood idle from 03:47 to 05:15 UTC+1. That cost aei1 about 1.5 h of A100
+  collection. The tenancy design coupled the failure domains, and the T3 job was the riskiest workload to run there.
+- **Fixes (defaults, tests; ff0f7d75e).**
+  - Tenants run outside MPS: their own CUDA context, compute mode Default, MPS pipe directory pointed at a path with
+    no daemon. They time-slice with the actor and fail alone. `NATLANG_COLAB_TENANT_MPS=1` (or `--mps-percent`) opts
+    back in.
+  - The keeper treats a recorded actor whose admission pid is gone on the VM as down and serves it again (10-min
+    spacing, never under a round).
+  - The actor was served again at 05:15 (policy 7cfc4774, r0002's publication).
+- **Throughput beside a tenant.** With the tenant measurement actor loading beside it (outside MPS), the actor
+  decoded 2.7-5.0k tok/s at 122-128 running, the same range as alone (2.7-6.0k). Fit steps beside it are not measured
+  yet.
+- **Other defects fixed (tests).**
+  - The fit store's scratch directory did not exist on the VM (2f73a2a2d).
+  - The SGLang slot rank: T3 found that a fit's rank was passed where the packed rank (48) was needed, so every
+    adapted turn went to the native engine (18e158961, every caller).
+  - The radix cache keyed without the adapter (9cf56138e).
+- **Cadence found.** Round SFTs now run about 40 min with about 25 min of actor time between them (r0002 ended 05:15,
+  r0003 started 05:41). Tenants get those windows only; fits and held_eval resume across evictions.
+- **Running (pin ff0f7d75e688; bank track at 0c53c23f9d96).**
+  - `progtune-colab-fits`: searchqa, multihop, iterate, pubmed, retail, tree, tally, verdict.
+  - `progtune-colab-arms`: the dev64 base arm on 9 programs (route partial: 37/40 scored pass), then each program's
+    adapter arm and `compare`.
+  - `progtune-colab-bank`: the PCA bank (`--steps 0`) over 7 meta-train fits, held tree and retail, their bank arms
+    vs base, once the fits are home.
+  - The DGX chain is stopped (coordinator: no program-tuning DGX unit above 8 GB); measurement collectors run at 6 GB.
+- **Credits.** 196.21 CU at 00:32, 148.85 at 05:54 (8.88/h, the A100 assignment). Tenants add no Colab cost.
+
+## 2026-11-24 06:10 The A100 actor's 24 GB KV cap does not bind: telemetry (coordinator question; program-tuning strand)
+
+- **Question.** Does the actor-alone cap (24 GB KV, 34 GiB claim, versus mem fraction 0.88 / 70.5 GiB) cost
+  collection throughput? Stated rule: run full size while no tenant is active if it costs more than about 10%.
+- **Evidence.** All three A100 actors tonight were capped (pool 3,605,769 tokens, 128 running): e15b20a8 00:40-01:08
+  UTC, 8e634a0f 03:09-03:47, 7cfc4774 04:15-04:40. Statistics from their SGLang logs:
+
+  | actor | decode lines | tok/s mean (median) | running mean | KV pool peak | mamba-state peak | batches with a queue | prefix cache hit | retractions |
+  |---|---|---|---|---|---|---|---|---|
+  | e15b20a8 | 1,221 | 4,189 (4,266) | 126 | 15% | 38% | 54% | 0.808 | 0 |
+  | 8e634a0f | 1,123 | 3,118 (3,008) | 110 | 16% | 38% | 24% | 0.806 | 0 |
+  | 7cfc4774 | 1,055 | 4,018 (3,923) | 125 | 13% | 38% | 36% | 0.840 | 0 |
+
+- **Mechanism.** The pool never passed 16% and the conv-state slots 38%. Requests queue only on the 128-running
+  limit, which the full-size actor has too. SGLang admits and schedules the same batches whenever the pool has room,
+  and its radix cache evicts only under pool pressure, of which there was none. So a 3x larger pool changes neither
+  the batches nor the prefix hits: the cap costs ~0% of decode throughput at 128 running, far under the 10% bar. A
+  gain from a larger pool would need a higher running limit (a separate change, and not the cap's cost).
+- **Not run:** a full-size A/B window. The collector's progress counter (groups of 4 episodes up to 1 h each)
+  completes 0-2 groups per 25-min window, so episodes per hour cannot separate the arms within one window. The A/B
+  would also cost a window of tenancy, against a first-principles answer the telemetry already gives.
+- **Tripwire.** If an actor's KV pool peak ever passes ~70%, the cap may bind. Re-check then, or raise
+  `ACTOR_ALONE_KV_CAP_GB`.
+- **Also seen (aei1's area).** v0001-remote0 completed 1 group between 01:59 and 04:14 while the A100 actor was down
+  (02:08-04:09 round SFT, 04:47-05:15 the MPS fault). v0000-remote0 logged 47 abandoned groups.
+- **Keeper** back on `/home/werg/natlang` (synced, per coordinator). `pin-ff0f7d75e688` stays: the fits and arms
+  tracks run from it.
+
+## 2026-11-24 06:25 aei1's held reference was sft-v7, not sft-v9; corrected
+
+**What happened:**
+- **Round 1 verdict:** round 1's held-v3 measurement on Pop finished. Policy 8e634a0f had 293 of 460 scored episodes passing (63.7%, 512 run). The comparison then failed, because the controller's stored `reference_policy` in `phase-state.json` was **sft-v7** (9ebc8799), although the driver's `--reference` argument names sft-v9 (e15b20a8).
+- **Stale reference measurement:** the held loop had reused an older sft-v7 measurement (`held/policy-9ebc879948e9`, 56.5%, series ba9aa56f, without `head_logits: fp32`). `held_eval compare` correctly refused to pair it with the Pop measurement on fork 17e3458c2e (series f0195216, FP32 head).
+- **Earlier verdicts:** the stored reference is persistent state and overrides `--reference` once the state exists, so earlier verdicts in this lineage were also queued against sft-v7.
+
+**Fix:** with the driver stopped, `reference_policy` and the queued `measuring.reference` in `aei1/phase-state.json` were set to sft-v9 (backup `phase-state.json.pre-reffix-20261124`), and the driver was restarted on the same argv. The held loop now measures sft-v9 on Pop in the current series, then compares.
+
+**Follow-up:** the driver should refuse to start when `--reference` disagrees with the stored `reference_policy` (or adopt the argument and log the change), instead of silently keeping the state's value.
+
+## 2026-11-24 07:00 async-drive: restart arguments are adopted or refused, never shadowed by phase-state; a refused held pair re-measures the reference
+
+**What happened (06:20, corrected by hand 06:25).** `phase-state.json`'s `reference_policy` was sft-v7 (9ebc8799)
+while the driver's `--reference`/`--reference-sha` named sft-v9 (e15b20a8). `PhaseController.initialize` returns
+the stored state as it is, so the stored value won silently. Held verdicts were queued against sft-v7. The held loop
+reused an old sft-v7 result of another engine series, `held_eval compare` refused the pair, and the verdict failed
+every 5 minutes.
+
+**Rule (`PhaseController.reconcile_arguments`, at every driver start).** The state moves some values on by itself;
+the arguments seed them. So an argument is adopted unless the loop's own record shows it moved the value on, and
+an argument that would change the experiment's identity is refused:
+- `--start`: one that differs from the loop's start (`start_policy`, recorded now; for older states the lineage's
+  version-0 entry) refuses with a message. Another start is another experiment: use a fresh `--root`.
+- `--reference`/`--reference-sha`: the stored reference is kept only when a held verdict adopted it (a history
+  `adopt` of that sha). Otherwise the argument is adopted, and an open measurement's reference is re-pointed at it.
+- `--held-every`/`--held-every-max` set the base interval and its cap (the current interval follows a base change
+  and is clamped to the cap). `--prefer-unseen` entries missing from the state are added. `--initial-phase` applies
+  only to a new state (the phase is the loop's).
+- Each change goes to `history` (`action: arguments`) and to the driver log (`arguments_reconciled`).
+
+**Held pairs.**
+- `Cycle.compare` raises `HeldPairRefused` when `held_eval compare` refuses a pairing (engine settings, sampling
+  law, budget, host).
+- `judge_measurement` then sets the reference's result aside (`<name>-unpaired-<time>`) and measures it again on
+  this series without reuse (`measure_held(..., reuse=False)`). If the pair is refused again it does the same for
+  the candidate. A third refusal raises, a real fault.
+
+Tests (`tests/neuralese/test_async_train.py`): the sft-v7/sft-v9 case, a kept verdict-adopted reference, the start
+refusal (recorded and inferred), interval and prefer-unseen adoption, a restarted driver adopting its argument; the
+refused pair re-measuring the reference without reuse, the raise after both were re-measured, other compare failures
+not taken for refusals.
+
+## 2026-11-24 07:40 The SGLang front's single-process ceiling: whole-reply detokenization per chunk, a cold-start tokenizer herd, a 1024-fd limit; fixed in one process (no worker split)
+
+**Brief.** Raise aei1's collection throughput by removing the native front's single-process (one GIL) ceiling: measure
+where its time goes at production concurrency, fix the `Errno 24 Too many open files` seen before the 03:04 OOM kill of
+`aei1-collect-v0001`, remove the ceiling by the mechanism the profile points to.
+
+**Live production (before), aei1-collect-v0002 on pin a034dbf9c, 128 slots, 04:44-04:46.** Front 0.97 cores,
+1,556 tok/s through it (60 s of `/metrics` counters), 0.62 ms of front CPU per generated token; SGLang at 158-160
+running (its `--sglang-max-running 160`, shared with the fill) with 2-30 queued, 1,250-2,330 tok/s in all;
+`/metrics` answered in 1-47 ms. 257 sockets open at 128 streams (one client and one SGLang connection per stream) under
+the unit's soft `RLIMIT_NOFILE` of 1024 (hard 500000). Production rate of that run: 45 groups, 174 episodes from 04:22
+to its 05:21 preemption by `aei1-r0003-build` (~175 episodes/h). py-spy cannot attach to the live front (ptrace scope 1,
+the front is not our child, no sudo), so the front was measured on a bench instead of being signalled.
+
+**Bench** (`benchmarks/sglang-front/`, run on the Colab A100 VM's CPUs as a preemptible admission beside r0003's SFT,
+because the DGX ledger had no room): the front built as `serve_native_checkpoint.py` builds it (checkpoint 7cfc4774,
+its SGLang export, tool grammar on), bound to a mock SGLang that replays 687 recorded aei1 v0002 turns (122 episodes,
+738k tokens) with their per-token records in 8-token chunks at a set rate per stream; 128 streaming chat clients
+replay the episodes; py-spy as the front's parent (`--gil`). 0 mock misses: every request's prompt matched its recording.
+
+**Where the time went (py-spy, GIL-holding samples).**
+1. Cold start: 87-90% in `tool_grammar.info_from_export` -> `AutoTokenizer.from_pretrained` (~3 s of GIL-held Python
+   each). lru_cache and f29b9cd43's per-export cache do not stop concurrent first callers from each building it, so every
+   stream's first request after a start loaded the tokenizer: 4 requests reached SGLang in the first 150 s at 32
+   streams.
+2. Steady state: `_sglang_emit` decoded the whole reply so far at every 8-token chunk (quadratic in the reply
+   length): 57% of the GIL samples at 32 streams, 79% at 128 (`TokenizersBackend._decode` and transformers' `to_py_obj`
+   over the id list). Next: `_sglang_consume` record decoding 6-9%, the HTTP stream's event JSON 4-7%, append-only
+   hashing ~5%. The tool grammar itself is cheap: 0.9 us per accepted token, 0.17 s per new tool set (24 sets in 687
+   turns), cached after.
+
+**Fixes** (each default on with an opt-out and tests; main commits below).
+- Streamed text: `_sglang_emit` decodes the previous chunk plus the new tokens and sends what that adds to the previous
+  chunk's decode (vLLM's prefix/read offsets, which keeps a tokenizer's inter-token spacing); an incomplete UTF-8 tail
+  waits, a context that is not a prefix falls back to the whole decode, and the run's final emission still decodes the
+  reply whole. The 687 recorded replies stream to exactly their whole decode both ways (2.6 s against 75 s of CPU).
+  `NATLANG_SGLANG_INCREMENTAL_DETOKENIZE=0` opts out.
+- Tokenizer info: `tool_grammar.INFO_LOCK` makes `info_from_export`/`info_from_base` and both engines'
+  `_tool_grammar_info` single-flight, and `serve_native_checkpoint` builds it before the server starts.
+- Open files: `common/open_files.raise_open_files_limit` (soft to hard; `NATLANG_RAISE_NOFILE=0` opts out) in
+  `serve/http.serve` (every Python engine), `expert_iteration` and `run_bonsai_queue` (their node workers inherit it).
+  Connection pooling was not added: an open stream holds its sockets either way, and front -> SGLang requests run at
+  ~1.3/s, so connection setup is no cost. The pile-up that reached 1024 in v0001 (likely retried streams whose first
+  attempt kept running during the stalled-front period) was not reconstructed.
+
+**Throughput, bench (steady state 60 s .. end-30 s, mock served tokens; 128 streams).**
+
+| front | demand (tok/s) | tok/s | front cores | CPU ms/token | /metrics |
+|---|---|---|---|---|---|
+| a034dbf9c (before) | 5,120 | 4,054 (front-bound) | 1.42 | 0.352 | 0.9-1.7 s |
+| this change | 5,120 | 5,074 (demand-bound) | 0.82 | 0.162 | 9-15 ms |
+| this change | 12,800 | 8,284 (front-bound) | 1.62 | 0.195 | 0.2-0.7 s |
+
+The single front's ceiling rose from ~4.0k to ~8.3k tok/s on the VM's cores (2.0x, and the before front could not meet
+5.1k). DGX cores ran the production front at 0.62 ms/token against the VM's 0.35 for the same code (slower cores,
+load 70-85), which puts the DGX front's new ceiling near 4.5k tok/s, about twice what SGLang decodes on the GB10 at 160
+running. Episodes per hour on the bench are not comparable to production (recorded tool output, no node workers); the
+production before/after in episodes/h and tok/s is read at the next collection start on the new pin.
+
+**No worker split.** One front per ~64 streams would need SGLang adapter-slot partitioning between processes, rebind
+and attestation fan-out, owner/episode affinity for the exclusive native-state store and append-only histories, and a
+lazily loaded native model per worker (~14 GB each on a fallback). With the front no longer the bound that buys nothing
+now; revisit if SGLang decode passes ~4k tok/s on the DGX or the front's CPU per token rises again.
+
+**For aei1 (coordinator).** Take the pin at the next round boundary. Slots can rise now, together with SGLang's
+running cap, which binds first (160 running with requests queued, KV pool 56% used): e.g. `--slots 192` with
+`--actor-arg=--sglang-max-running --actor-arg=224`; keep it if SGLang's gen throughput rises by >= 10% in the first
+progress lines, else return to 128/160.
+
+**Inventory.** Streaming detokenization: the SGLang front (fixed); the native engine's `Engine._emit` decodes only the
+pending token(s) (`serve/engine.py` `_emit`); guided replies publish through `native_guidance.flush` and never call
+`_sglang_emit` (`_sglang_consume`, `_sglang_feed_forced`: `seq.guide is None`); llama-server and the page detokenize
+per token in llama.cpp. Tokenizer info: `tool_grammar` (both builders), `Engine` and `SglangEngine._tool_grammar_info`
+(fixed); llama-server/wllama compile grammars in C++. Open files: Python servers and collectors (fixed); node raises its
+soft limit to the hard one itself (a live collector: 500000); the SGLang server sets 65535 itself (live process).
+
+**After the change, at its ceiling** (py-spy `--gil --nonblocking`, 128 streams, 8.0k tok/s): the GIL time spreads
+over the grammar matcher's per-token `accept_token` (20%; 0.9 us per token uncontended, so mostly the FFI call's GIL
+release and retake among ~130 busy threads), reading SGLang's chunked stream (12%), the client stream's event JSON and
+writes (13%), append-only prompt hashing (8%) and record decoding (~4%). None dominates; batching the matcher calls per
+chunk is the next lever if the front binds again.
+
+**Not checked.** The new front on DGX cores under production load (read at the next start); the per-token residue
+above was left as is; the exact sequence behind v0001's 1024 descriptors.

@@ -131,6 +131,40 @@ def test_streamed_reply_matches_whole_reply(tmp_path):
     assert front.sglang_requests == 2 and front.native_fallbacks == 0
 
 
+@pytest.mark.parametrize('incremental', ['1', '0'])
+def test_streamed_text_decodes_only_the_newest_tokens_and_matches_the_whole_reply(tmp_path, monkeypatch, incremental):
+    """A streamed reply's deltas concatenate to the whole decode while the front decodes each token a bounded number of
+    times: decoding the whole reply at every 8-token chunk was 57-79% of the front's GIL time at 32-128 collection
+    streams (2026-11-24). NATLANG_SGLANG_INCREMENTAL_DETOKENIZE=0 restores the whole-reply decode."""
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.serve import load_native_engine
+    monkeypatch.setenv('NATLANG_SGLANG_INCREMENTAL_DETOKENIZE', incremental)
+    native = engine_fixture(tmp_path, 'lfm')
+    front = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', dtype=native.backbone.embedding_weight.dtype,
+                               engine_class=SglangEngine)
+    words = front.tokenizer(' '.join(f't{4 + i % 5}' for i in range(400)), add_special_tokens=False)['input_ids']
+    decoded = []
+    real = front.tokenizer.decode
+    monkeypatch.setattr(front.tokenizer, 'decode', lambda ids, **kw: decoded.append(len(ids)) or real(ids, **kw))
+
+    class Request:
+        deltas = []
+        on_delta = deltas.append
+
+    class Seq:
+        items, request = [], Request()
+    seq, state = Seq(), {'run': 0, 'text': ''}
+    for at in range(0, len(words), 8):
+        seq.items.extend(words[at:at + 8])
+        front._sglang_emit(seq, state)
+    front._sglang_emit(seq, state, final=True)
+    assert ''.join(d['text'] for d in Request.deltas) == real(words, skip_special_tokens=False)
+    if incremental == '1':
+        assert sum(decoded) <= 5 * len(words) and len(Request.deltas) > len(words) // 16
+    else:
+        assert sum(decoded) > 20 * len(words)
+
+
 def _span_fixture(tmp_path):
     import threading
     from test_native_serving_adapters import engine_fixture
@@ -1228,3 +1262,25 @@ def test_capture_after_an_imported_state_matches_the_native_engine(tmp_path):
         for key in a:
             if key != 'kind':
                 torch.testing.assert_close(a[key], b[key], rtol=1e-5, atol=1e-6, msg=f'layer {index} {key}')
+
+
+def test_adapted_requests_get_their_own_sglang_prefix_namespace(monkeypatch):
+    """SGLang reuses a cached prefix on token ids + extra_key only: each adapter stack names its own extra_key, so a
+    prompt state computed under one stack (or none) never serves a request with another; base requests keep none."""
+    import io
+    from natlang_neuralese.serve import sglang_actor as S
+    base = {'input_ids': [1, 2], 'sampling_params': {'custom_params': {'natlang_top_k': 1}}}
+    assert S.adapter_cache_key(base) is base
+    adapted = {'input_ids': [1, 2], 'sampling_params': {'custom_params': {S.ADAPTER_KEY: {'slot': 1, 'id': 'abc', 'path': 'p'}}}}
+    assert S.adapter_cache_key(adapted)['extra_key'] == 'natlang-adapter:abc'
+    assert S.adapter_cache_key({**adapted, 'extra_key': 'x'})['extra_key'] == 'x|natlang-adapter:abc'
+    monkeypatch.setenv('NATLANG_SGLANG_ADAPTER_CACHE_KEY', '0')
+    assert 'extra_key' not in S.adapter_cache_key(adapted)
+    monkeypatch.delenv('NATLANG_SGLANG_ADAPTER_CACHE_KEY')
+    sent = []
+    monkeypatch.setattr(S.urllib.request, 'urlopen', lambda request, timeout=None: (
+        sent.append(json.loads(request.data)), io.BytesIO(b'{"meta_info": {}}'))[1])
+    front = S.SglangEngine.__new__(S.SglangEngine)
+    front.sglang_url = 'http://x'
+    front._sglang_post(adapted)
+    assert sent[0]['extra_key'] == 'natlang-adapter:abc'

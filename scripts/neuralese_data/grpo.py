@@ -110,6 +110,7 @@ from natlang_neuralese.common import data_registry  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 from natlang_neuralese.common.sampling import RL_TOP_P, check_top_p, sampling_law_of  # noqa: E402
 from natlang_neuralese.rl.held_eval import EPISODE_MODEL_CALLS, LEGACY_SAMPLING  # noqa: E402
+from natlang_neuralese.common.decision_objective import option_sequence_scores  # noqa: E402
 
 BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
 
@@ -2068,9 +2069,27 @@ def write_pruned_checkpoint(state, native_rows, special, path, source_sha256, tr
     return None
 
 
+def decision_sequences(row):
+    """Every scored token sequence of a decision row: its options' canonical continuations, then each option's
+    split-tokenization alternatives (``lower_rollout_turns``; the actor's option score is their logsumexp)."""
+    return list(row['options']) + [a for alts in row.get('alternatives') or () for a in alts]
+
+
 def decision_tokens(row):
-    """Packed tokens of one decision: its prompt once per option plus the option's continuation."""
-    return sum(len(row['prompt']) + len(o) for o in row['options'])
+    """Packed tokens of one decision: its prompt once per scored sequence plus the sequence."""
+    return sum(len(row['prompt']) + len(o) for o in decision_sequences(row))
+
+
+def decision_sequence_options(batch):
+    """The option index (over the batch's forwards, ``decision_tensors`` order) of each scored sequence: the canonical
+    continuations first (index = option), then every alternative after all canonical ones."""
+    canonical, extra, option = [], [], 0
+    for same in batch:
+        row = same[0]['row']
+        canonical += list(range(option, option + len(row['options'])))
+        extra += [option + index for index, alts in enumerate(row.get('alternatives') or ()) for _ in alts]
+        option += len(row['options'])
+    return canonical + extra
 
 
 def decision_record(item, learner, actor, reference, log_rho):
@@ -2142,6 +2161,7 @@ def decision_forward_key(row):
     episodes of a group often sample the same decision (the 2026-11-22 bench: 16 decisions, 2 distinct)."""
     return (np.asarray(row['prompt'], np.int64).tobytes(),
             tuple(np.asarray(o, np.int64).tobytes() for o in row['options']),
+            tuple(tuple(np.asarray(a, np.int64).tobytes() for a in alts) for alts in row.get('alternatives') or ()),
             repr(sorted((int(start), str(block)) for start, block in row.get('imports') or ())))
 
 
@@ -2165,15 +2185,19 @@ def decision_batches(items, max_tokens):
 
 
 def decision_tensors(batch, device):
-    """(ids, lengths, positions, targets, option index per target, options per forward, imported state spans
-    [(packed row start, key)], their producer documents {key: document}) of a decision batch (``decision_batches``)."""
+    """(ids, lengths, positions, targets, sequence index per target, options per forward, imported state spans
+    [(packed row start, key)], their producer documents {key: document}) of a decision batch (``decision_batches``).
+    Sequence k < sum(counts) is option k's canonical continuation; split-tokenization alternatives follow, their
+    options in ``decision_sequence_options``."""
     import torch
     ids, lengths, positions, targets, owner, counts, offset, option, imports = [], [], [], [], [], [], 0, 0, []
     sources = {}
+    laid = [(same[0]['row'], list(same[0]['row']['options'])) for same in batch]
+    laid += [(same[0]['row'], [a for alts in same[0]['row'].get('alternatives') or () for a in alts]) for same in batch]
     for same in batch:
-        row = same[0]['row']
-        counts.append(len(row['options']))
-        for continuation in row['options']:
+        counts.append(len(same[0]['row']['options']))
+    for row, sequences in laid:
+        for continuation in sequences:
             prompt = len(row['prompt'])
             imports += [(offset + start, block_id) for start, block_id in row.get('imports') or ()]
             sources.update(row.get('sources') or {})
@@ -5204,12 +5228,15 @@ def train(args):
             stored = lfm3_fast_train.import_tensors(model, chain_states(plan['fixed'])) if plan['fixed'] else None
             imports = lfm3_fast_train.passthrough_tensors(plan, 'cuda', stored)
             options = sum(counts)
+            sequence_options = decision_sequence_options(batch)
 
             def scores_of(net, tokens=False, *, adapters=None, trainable_rows=None):
                 h = forward(net, ids, lengths, imports, adapters=adapters, trainable_rows=trainable_rows,
                             fp8_base=learner.fp8_base)
                 token = -exp0_sft.token_nll(net, h, positions, targets, trainable_rows=trainable_rows)
-                scores = torch.zeros(options, device='cuda', dtype=token.dtype).index_add(0, owner, token)
+                sequences = torch.zeros(len(sequence_options), device='cuda', dtype=token.dtype).index_add(0, owner, token)
+                # an option's score is the logsumexp over its sequences, as the actor served it
+                scores = option_sequence_scores(sequences, sequence_options, options)
                 return (scores, token, owner) if tokens else scores
             return ids, counts, scores_of
 

@@ -1825,6 +1825,10 @@ def test_pop_held_processes_are_found_and_the_serve_lock_marks_pop_busy(tmp_path
     assert sorted(pop_rl_actor.pop_held_running(proc)) == [11, 13]
     monkeypatch.setattr(pop_rl_actor, 'SERVE_LOCK', tmp_path / 'pop-serve.lock')
     monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [])
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': [])
+    monkeypatch.setattr(pop_rl_actor, 'pop_host_address', lambda: '100.1.2.3')
+    monkeypatch.setattr(pop_rl_actor, 'held_measure_pids', lambda address: [])
+    monkeypatch.setattr(pop_rl_actor, 'pop_side_held', lambda: [])
     assert pop_rl_actor.pop_busy() is None
     import fcntl
     with open(tmp_path / 'pop-serve.lock', 'a') as other:     # another process serving (flock is per open file)
@@ -1832,3 +1836,488 @@ def test_pop_held_processes_are_found_and_the_serve_lock_marks_pop_busy(tmp_path
         assert 'serve lock' in pop_rl_actor.pop_busy()
     monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [11])
     assert 'held measurement' in pop_rl_actor.pop_busy()
+
+
+def test_the_standing_teacher_campaign_relaunches_from_the_newest_frontier_whenever_idle(tmp_path, monkeypatch):
+    """2026-11-24: the campaign was relaunched only when a round was prepared; it ended about 01:00 and a restarted
+    driver joining the already-prepared r0002 left it idle until a hand launch at 02:10. Now whenever the unit is
+    idle the newest frontier's campaign runs (teacher-r0002), from the main loop, the waits and a standing thread;
+    a campaign of that frontier that ran resumes at most hourly and not after a relaunch that scored nothing."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    for rid in ('r0001', 'r0002'):
+        (d.root / rid).mkdir(parents=True)
+        (d.root / rid / 'frontier.json').write_text('{}')
+    old = d.root / 'teacher-r0001'
+    old.mkdir()
+    (old / 'launches.jsonl').write_text('{}\n')
+    (old / 'manifest.jsonl').write_text('{}\n' * 40)
+    present, launched = {'teacher': True}, []
+    monkeypatch.setattr(d.c, 'present', lambda unit: unit == 'aei-teacher' and present['teacher'])
+
+    def launch(runner, work, frontier, groups, unit, covered_extra=()):
+        launched.append((Path(work).name, Path(frontier).parent.name, unit))
+        Path(work).mkdir(parents=True, exist_ok=True)
+        with (Path(work) / 'launches.jsonl').open('a') as handle:
+            handle.write('{}\n')
+        return 7
+    monkeypatch.setattr(ei, 'launch_teacher', launch)
+    assert d.ensure_teacher() is None and launched == []            # running: nothing
+    present['teacher'] = False
+    assert d.ensure_teacher() == d.root / 'teacher-r0002'
+    assert launched == [('teacher-r0002', 'r0002', 'aei-teacher')]
+    assert d.ensure_teacher() is None and len(launched) == 1        # just launched (and it scored nothing since)
+    (d.root / 'teacher-r0002' / 'manifest.jsonl').write_text('{}\n' * 3)
+    assert d.ensure_teacher() is None and len(launched) == 1        # scored, but within the hour
+    now = time.time()
+    monkeypatch.setattr(ei.time, 'time', lambda: now + 3700)
+    assert d.ensure_teacher() == d.root / 'teacher-r0002' and len(launched) == 2    # resumes
+    monkeypatch.setattr(ei.time, 'time', lambda: now + 9000)
+    assert d.ensure_teacher() is None and len(launched) == 2        # that resume scored nothing new: done
+    (d.root / 'r0003').mkdir()
+    (d.root / 'r0003' / 'frontier.json').write_text('{}')
+    (d.root / 'r0003' / 'discarded.json').write_text('{}')          # a discarded round's frontier is not the newest
+    assert d.newest_frontier() == d.root / 'r0002' / 'frontier.json'
+    (d.root / 'r0004').mkdir()
+    (d.root / 'r0004' / 'frontier.json').write_text('{}')
+    assert d.ensure_teacher() == d.root / 'teacher-r0004' and launched[-1][:2] == ('teacher-r0004', 'r0004')
+    d.a.no_teacher_campaign = True
+    (d.root / 'r0005').mkdir()
+    (d.root / 'r0005' / 'frontier.json').write_text('{}')
+    assert d.ensure_teacher() is None and len(launched) == 3
+    # the hooks: every DGX SFT poll and the standing thread check it (a failure is a note, never the caller's end)
+    calls = []
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: calls.append('teacher'))
+    monkeypatch.setattr(d, 'ensure_remote_collection', lambda policy: None)
+    monkeypatch.setattr(d, 'sft_handback', lambda *a: calls.append('handback'))
+    d.dgx_sft_between(d.root / 'r0002', d.controller.current, 'aei-r0002-sft')
+    assert calls == ['teacher', 'handback']
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) > 2:
+            raise StopIteration
+    monkeypatch.setattr(ei.time, 'sleep', sleep)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: (_ for _ in ()).throw(RuntimeError('ssh')))
+    with pytest.raises(StopIteration):
+        d.teacher_loop()
+    assert sleeps == [600.0] * 3 and 'teacher_check_failed' in (d.root / 'drive.log').read_text()
+
+
+def _prepared_round(tmp_path, monkeypatch, argv=()):
+    ei, d = _driver(tmp_path, monkeypatch, argv=list(argv))
+    (tmp_path / 'pin' / '.natlang-pin.json').write_text(json.dumps({'commit': 'b' * 40}))
+    monkeypatch.setattr(d.c, 'data_repo', lambda: tmp_path / 'pin')     # the build code's pin
+    rd = d.root / 'r0002'
+    (rd / 'stages').mkdir(parents=True)
+    (rd / 'mix').mkdir()
+    (rd / 'mix' / 'chains.pkl').write_bytes(b'old chains')
+    (rd / 'mix' / 'build.json').write_text('{}')
+    cur = d.controller.current
+    size = {'placement': 'colab', 'teacher_budget': 1000, 'max_target_tokens': 5, 'max_forward_tokens': 9}
+    ei.write_round_manifest(rd, round_id='r0002', base_policy_sha=cur['sha256'], previous_policy_sha=None,
+                            chains_path=rd / 'mix' / 'chains.pkl', episode_ids=['e-old'], prefer_unseen=['/x/mix'],
+                            profile_changes=[{'from_profile': 'colab', 'to_profile': 'dgx', 'reason': 'r'}],
+                            extra={'frontier_policy': cur['sha256'], 'size': size, 'manual_rebuild': {'by': 'hand'},
+                                   'recap': {'at': 1}, 'mix_dir': str(rd / 'mix-dgx'), 'collections': ['/c']})
+    for stage in ('frontier', 'data', 'build', 'prepared'):
+        (rd / 'stages' / f'{stage}.done').write_text('{}')
+    plans, units = [], []
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd_, pols, size_=None, prefer_unseen=None: plans.append(
+        (rd_, [p['sha256'] for p in pols], size_, prefer_unseen)) or (['frontier'], [['data']], ['build', 'argv']))
+    monkeypatch.setattr(d, 'expected_hours', lambda report: {'dgx': 1.0})
+
+    def ledger(unit, budget, priority, command, log, **kw):
+        units.append((unit, command))
+        (rd / 'mix').mkdir()
+        (rd / 'mix' / 'chains.pkl').write_bytes(b'new chains')
+        (rd / 'mix' / 'build.json').write_text(json.dumps({'admitted_episode_keys': ['e-new', 'e2']}))
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    return ei, d, rd, cur, plans, units, size
+
+
+def test_a_prepared_rounds_mix_rebuilds_alone_from_its_recorded_inputs(tmp_path, monkeypatch):
+    """2026-11-24: removing build.done and prepared.done to take new build code reran all of prepare, which first
+    waits --snapshot-min-hours (r0002 would have stalled ~2 h). --rebuild-round (or stages/rebuild.request) reruns
+    only the build, with the round's recorded size, previous policy and prefer-unseen list, keeps the old mix aside,
+    and refreshes chains.sha256 and round.json (every recorded field kept, the DGX recap dropped), once per build
+    commit; a failed build restores the old mix; a round whose SFT started is not rebuilt."""
+    import hashlib as _h
+    ei, d, rd, cur, plans, units, size = _prepared_round(tmp_path, monkeypatch, argv=['--rebuild-round', 'r0002'])
+    monkeypatch.setattr(d, 'prepare', lambda *a: (_ for _ in ()).throw(AssertionError('prepare reran')))
+    assert d.rebuild_requested(rd) == f'--rebuild-round under build code {"b" * 40}'
+    assert d.rebuild_round(rd, d.lineage_policies(), d.rebuild_requested(rd))
+    assert plans == [(rd, [cur['sha256']], size, ['/x/mix'])]
+    (unit, command), = units
+    assert unit.startswith('aei-r0002-rebuild-') and command == ['build', 'argv']
+    m = json.loads((rd / 'round.json').read_text())
+    new_sha = _h.sha256(b'new chains').hexdigest()
+    assert m['chains_sha256'] == new_sha and (rd / 'chains.sha256').read_text().split()[0] == new_sha
+    assert m['episode_ids'] == ['e-new', 'e2'] and m['mix_dir'] == str(rd / 'mix') and 'recap' not in m
+    assert m['manual_rebuild'] == {'by': 'hand'} and m['profile_changes'][0]['to_profile'] == 'dgx'
+    assert m['prefer_unseen'] == ['/x/mix'] and m['size'] == size and m['collections'] == ['/c']
+    (old,) = rd.glob('mix.pre-rebuild-*')
+    assert (old / 'chains.pkl').read_bytes() == b'old chains'
+    assert m['rebuilds'][-1]['build_code'] == 'b' * 40 and m['rebuilds'][-1]['old_mix'] == str(old)
+    assert m['rebuilds'][-1]['old_chains_sha256'] == _h.sha256(b'old chains').hexdigest()
+    assert d.rebuild_requested(rd) is None                    # a restart with the same argv does not rebuild again
+    (rd / 'stages' / 'rebuild.request').write_text('')          # a running driver's request
+    assert d.rebuild_requested(rd) == 'stages/rebuild.request'
+
+    def failing(unit, budget, priority, command, log, **kw):
+        (rd / 'mix').mkdir()
+        (rd / 'mix' / 'chains.pkl').write_bytes(b'partial')
+        raise SystemExit('aei-r0002-rebuild failed')
+    monkeypatch.setattr(d.c, 'ledger', failing)
+    before = (rd / 'round.json').read_text()
+    with pytest.raises(SystemExit, match='rebuild failed'):
+        d.rebuild_round(rd, d.lineage_policies(), 'stages/rebuild.request')
+    assert (rd / 'mix' / 'chains.pkl').read_bytes() == b'new chains' and (rd / 'round.json').read_text() == before
+    assert (rd / 'chains.sha256').read_text().split()[0] == new_sha
+    # its SFT started: refused, the request consumed, nothing moved
+    (rd / 'sft' / 'learner-state').mkdir(parents=True)
+    (rd / 'sft' / 'learner-state' / 'learner_manifest.json').write_text('{}')
+    monkeypatch.setattr(d.c, 'ledger', lambda *a, **k: (_ for _ in ()).throw(AssertionError('rebuilt')))
+    assert not d.rebuild_round(rd, d.lineage_policies(), 'stages/rebuild.request')
+    assert not (rd / 'stages' / 'rebuild.request').exists() and (rd / 'round.json').read_text() == before
+    assert 'rebuild_refused' in (d.root / 'drive.log').read_text()
+
+
+def test_the_round_loop_rebuilds_a_requested_round_before_it_trains(tmp_path, monkeypatch):
+    ei, d, rd, cur, plans, units, size = _prepared_round(tmp_path, monkeypatch,
+                                                         argv=['--rebuild-round', 'r0001', '--max-rounds', '1'])
+    rd = d.root / 'r0001'
+    calls = []
+    monkeypatch.setattr(d.c, 'pin_stage', lambda: None)
+    monkeypatch.setattr(d.c, 'require_data_readers', lambda: None)
+    monkeypatch.setattr(d, 'record_reader_sources', lambda: None)
+    monkeypatch.setattr(d, 'held_loop', lambda: None)
+    monkeypatch.setattr(d, 'teacher_loop', lambda: None)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: calls.append('teacher'))
+    monkeypatch.setattr(d, 'ensure_collection', lambda p: None)
+    monkeypatch.setattr(d, 'ensure_remote_collection', lambda p: None)
+    monkeypatch.setattr(d, 'prepare_ahead', lambda rd_, pols: None)
+    monkeypatch.setattr(d, 'health_report', lambda rd_, pols: None)
+
+    def prepare(rd_, pols):
+        if not (rd_ / 'round.json').exists():
+            (rd_ / 'mix').mkdir(parents=True, exist_ok=True)
+            (rd_ / 'mix' / 'chains.pkl').write_bytes(b'old')
+            ei.write_round_manifest(rd_, round_id=rd_.name, base_policy_sha=pols[-1]['sha256'], previous_policy_sha=None,
+                                    chains_path=rd_ / 'mix' / 'chains.pkl', episode_ids=[], extra={'size': size})
+        calls.append('prepare')
+    monkeypatch.setattr(d, 'prepare', prepare)
+    monkeypatch.setattr(d, 'rebuild_round', lambda rd_, pols, reason: calls.append(('rebuild', rd_.name, reason)))
+    monkeypatch.setattr(d, 'train_sft', lambda rd_, p: calls.append('sft') or rd_ / 'sft' / 'factors')
+    monkeypatch.setattr(d, 'publish', lambda rd_, p, f: {'checkpoint': str(rd_ / 'policy' / 'checkpoint.pt'),
+                                                          'checkpoint_sha256': 'e' * 64})
+    monkeypatch.setattr(d, 'rebind_remote', lambda *a: None)
+    assert d.run() == 0
+    assert calls.index('prepare') < calls.index(('rebuild', 'r0001', f'--rebuild-round under build code {"b" * 40}')) \
+        < calls.index('sft') and 'teacher' in calls
+
+
+def test_the_fallow22_fan_in_part_joins_every_round_mix_unless_opted_out(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    _, _, build = d.prepare_plan(d.root / 'r0001', [d.controller.current])
+    aux = [build[i + 1] for i, a in enumerate(build) if a == '--aux']
+    assert ei.FALLOW22_AUX in aux and ei.FALLOW22_AUX.endswith('share=0.01,task_tokens=2000')
+    _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--no-fallow22-aux')
+    _, _, build = off.prepare_plan(off.root / 'r0001', [off.controller.current])
+    assert not any(a.startswith('fallow22=') for a in build)
+
+
+def test_a_held_measure_unit_left_by_a_restarted_driver_keeps_pop_busy_and_is_joined_not_duplicated(tmp_path,
+                                                                                                    monkeypatch):
+    """2026-11-24: a driver restart killed pop-held.sh but its DGX measure unit popheld-policy-8e634a0f46ce-* ran on;
+    pop_busy saw no pop-held.sh process, the Pop loop served Pop for collection and the held failed at 279 episodes.
+    The unit, a held_eval measure aimed at Pop and a held process on Pop each keep Pop busy (Pop not answering too),
+    and a restarted held step joins the running unit instead of starting a second measurement of the same episodes."""
+    import expert_iteration as ei
+    import pop_rl_actor
+    units = {'*popheld*': ['popheld-policy-8e634a0f46ce-1795481950']}
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': list(units.get(pattern, [])))
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [])
+    monkeypatch.setattr(pop_rl_actor, 'pop_host_address', lambda: '100.1.2.3')
+    measuring, remote = [], []
+    monkeypatch.setattr(pop_rl_actor, 'held_measure_pids', lambda address: list(measuring))
+    monkeypatch.setattr(pop_rl_actor, 'pop_side_held', lambda: list(remote))
+    monkeypatch.setattr(pop_rl_actor, 'SERVE_LOCK', tmp_path / 'pop-serve.lock')
+    assert 'popheld-policy-8e634a0f46ce' in pop_rl_actor.pop_busy()
+    units.clear()
+    measuring.append(7)
+    assert 'held_eval measure' in pop_rl_actor.pop_busy()
+    measuring.clear()
+    remote.append('unreachable')
+    assert 'unreachable' in pop_rl_actor.pop_busy()
+    remote.clear()
+    assert pop_rl_actor.pop_busy() is None
+    # the DGX scan: only a held_eval measure naming Pop's address counts (a DGX-series measurement does not)
+    proc = tmp_path / 'proc'
+    for pid, argv in ((21, ['python', '-m', 'natlang_neuralese.rl.held_eval', 'measure', '--endpoint',
+                            'http://100.1.2.3:18531=20']),
+                      (22, ['python', '-m', 'natlang_neuralese.rl.held_eval', 'measure', '--endpoint',
+                            'http://127.0.0.1:8470=64'])):
+        (proc / str(pid)).mkdir(parents=True)
+        (proc / str(pid) / 'cmdline').write_bytes(b'\0'.join(a.encode() for a in argv) + b'\0')
+    monkeypatch.undo()
+    assert pop_rl_actor.held_measure_pids('100.1.2.3', proc) == [21]
+    # a restarted held step waits for the running unit, then resumes with one pop-held.sh
+    out = tmp_path / 'held' / 'policy-8e634a0f46ce'
+    out.mkdir(parents=True)
+    polls = {'n': 0}
+
+    def held_units(pattern='*popheld*'):
+        polls['n'] += 1
+        return ['popheld-policy-8e634a0f46ce-1795481950'] if pattern == f'popheld-{out.name}-*' and polls['n'] < 3 \
+            else []
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', held_units)
+    monkeypatch.setattr(pop_rl_actor, 'stop_pop_fills', lambda: None)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    started = []
+
+    class Done:
+        pid = 1
+        def poll(self):
+            return 0
+    monkeypatch.setattr(ei.subprocess, 'Popen', lambda argv, **kw: started.append(polls['n']) or Done())
+    assert ei.pop_held_measure(out, '/c.pt', pin='/pin', samples=4, manifest='/m.json', poll=0) == 'incomplete'
+    assert started == [3]                       # launched only after the old unit ended
+    stopped = []
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': ['popheld-policy-8e634a0f46ce-1'])
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: stopped.append(argv))
+    assert ei.join_pop_held(out, preempt=lambda: True, poll=0) == 'preempted'
+    assert stopped and stopped[0][-1] == 'popheld-policy-8e634a0f46ce-1.service'
+
+
+def test_publish_round_records_the_code_whose_merge_wrote_the_bytes(tmp_path, monkeypatch):
+    """A VM reproduces the publication's merge only with the same code (r0002 2026-11-24: a VM checkout before
+    0462075ea wrote no FP32 master rows): published.json names the publisher's commit (``code``)."""
+    import expert_iteration as ei
+    from natlang_neuralese.common.code_provenance import code_provenance
+    from natlang_neuralese.export import native_hf
+    from natlang_neuralese.train import learner_state
+    monkeypatch.setattr(learner_state, 'merge_factors_to_checkpoint',
+                        lambda base, factors, out: {'checkpoint_sha256': 'p' * 64})
+    monkeypatch.setattr(native_hf, 'publish_merged_policy', lambda ckpt, **kw: {'checkpoint_sha256': 'p' * 64})
+    (tmp_path / 'factors').mkdir()
+    ei.publish_round(SimpleNamespace(out=tmp_path / 'policy', base_checkpoint=tmp_path / 'base.pt',
+                                     factors=tmp_path / 'factors', base=None, label='aei-r0001'))
+    published = json.loads((tmp_path / 'policy' / 'published.json').read_text())
+    assert published['code'] == code_provenance() and published['code']['git_commit']
+
+
+def _lineage_driver(tmp_path, monkeypatch):
+    """A driver whose lineage is v0 -> v1 -> v2 (rounds r0001 and r0002 published), with round r0003 prepared ahead
+    while r0002 trained: its frontier was measured on v1 against v0."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    v0 = d.controller.current
+    lineage = [v0, *({'version': i, 'sha256': c * 64, 'checkpoint': f'/p/v{i}.pt'} for i, c in ((1, '1'), (2, '2')))]
+    d.controller.state['lineage'] = lineage
+    d.controller.save()
+    rd = d.root / 'r0003'
+    (rd / 'stages').mkdir(parents=True)
+    plans, launched = [], []
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd_, pols, size=None, **k: plans.append(
+        [p['sha256'] for p in pols]) or (['frontier'], [['data']], ['build']))
+    monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: None)
+    monkeypatch.setattr(d, 'expected_hours', lambda report: {})
+    monkeypatch.setattr(d, 'prefer_unseen_for', lambda rd_: [])
+    monkeypatch.setattr(d, 'round_size', lambda: {'placement': 'dgx', 'teacher_budget': 1})
+
+    def ledger(unit, budget, prio, cmd, log, **kw):
+        launched.append(unit.rsplit('-', 1)[1])
+        if unit.endswith('-build'):
+            (rd / 'mix').mkdir(parents=True, exist_ok=True)
+            (rd / 'mix' / 'build.json').write_text(json.dumps({'admitted_episode_keys': ['e']}))
+            (rd / 'mix' / 'chains.pkl').write_bytes(b'x')
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    return ei, d, rd, lineage, plans, launched
+
+
+def test_a_round_prepared_ahead_continues_with_its_policy_after_a_restart(tmp_path, monkeypatch):
+    """2026-11-24 r0003: prepared ahead on v1 (frontier 03:50, data done 04:56 under the old driver, which died
+    before writing data.done); the 04:17 restart after r0002 published v2 began prepare again with v2 and waited
+    --snapshot-min-hours for v2's collection. Now the restarted driver continues with the policies the round
+    recorded (here inferred from the frontier it measured), never waits or snapshots again, recognises the finished
+    data step (its journal and output: a unit launched before exit records) and runs only the build."""
+    ei, d, rd, lineage, plans, launched = _lineage_driver(tmp_path, monkeypatch)
+    v0, v1, v2 = lineage
+    (rd / 'frontier.json').write_text(json.dumps({'policy': v1['sha256'], 'previous_policy': v0['sha256']}))
+    (rd / 'stages' / 'frontier.done').write_text('{}')
+    (rd / 'neuralese-graph-own').mkdir()
+    (rd / 'neuralese-graph-own' / 'chains.pkl').write_bytes(b'data out')
+    monkeypatch.setattr(ei, 'unit_last_run_succeeded', lambda unit: unit == 'aei-r0003-data')
+    monkeypatch.setattr(ei, 'record_collection', lambda *a, **k: (_ for _ in ()).throw(AssertionError('re-snapshot')))
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: (_ for _ in ()).throw(AssertionError('waited for a snapshot')))
+    manifest = d.prepare(rd, [v1, v2])                     # what run() passes after r0002 published v2
+    assert plans == [[v0['sha256'], v1['sha256']]] and launched == ['build']
+    assert manifest['base_policy_sha'] == v1['sha256'] and manifest['previous_policy_sha'] == v0['sha256']
+    assert manifest['frontier_policy'] == v1['sha256']
+    assert json.loads((rd / 'stages' / 'data.done').read_text())['recovered'] == 'journal'
+    assert [p['sha256'] for p in json.loads((rd / 'stages' / 'prepare.json').read_text())['policies']] == \
+        [v0['sha256'], v1['sha256']]
+    log = (d.root / 'drive.log').read_text()
+    assert 'prepare_continues_with' in log and 'step_finished_before_restart' in log
+
+
+def test_a_restart_during_the_snapshot_wait_waits_on_the_recorded_policy_and_steps_record_their_exit(tmp_path,
+                                                                                                      monkeypatch):
+    """A round recorded its policies at its start (prepare.json): a driver restarted during the snapshot wait waits
+    on that policy's collection, not the new one's. Every step's unit records its exit status for its argv, so a
+    step that finished before the driver wrote its marker is not rerun; a failed one (status 1) or one recorded for
+    another argv is."""
+    ei, d, rd, lineage, plans, launched = _lineage_driver(tmp_path, monkeypatch)
+    v0, v1, v2 = lineage
+    (rd / 'stages' / 'prepare.json').write_text(json.dumps({'policies': [v0, v1], 'started_at': 1}))
+    asked = []
+
+    def collections_of(pols):
+        asked.append([p['sha256'] for p in pols])
+        out = []
+        for p in pols:
+            c = tmp_path / 'collect' / p['sha256'][:4]
+            c.mkdir(parents=True, exist_ok=True)
+            (c / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+            out.append(c)
+        return out
+    monkeypatch.setattr(d, 'collections_of', collections_of)
+    snapped = []
+    monkeypatch.setattr(ei, 'record_collection', lambda work, closed=True: snapped.append(Path(work).name))
+    monkeypatch.setattr(ei, 'unit_last_run_succeeded', lambda unit: False)
+    # the frontier finished (its exit record) before the driver died; the data run failed; the build never ran
+    frontier_argv, data_argv = ['frontier'], ['/bin/sh', str(rd / 'data.sh')]
+    (rd / 'stages' / 'frontier.exit').write_text(json.dumps({'rc': 0, 'argv_sha256': ei.argv_digest(frontier_argv)}))
+    (rd / 'stages' / 'data.exit').write_text(json.dumps({'rc': 1, 'argv_sha256': ei.argv_digest(data_argv)}))
+    cmds = {}
+    real = d.c.ledger
+
+    def ledger(unit, budget, prio, cmd, log, **kw):
+        cmds[unit.rsplit('-', 1)[1]] = cmd
+        return real(unit, budget, prio, cmd, log, **kw)
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    d.prepare(rd, [v1, v2])
+    assert asked[0] == [v1['sha256']] and snapped == [v0['sha256'][:4], v1['sha256'][:4]]
+    assert json.loads((rd / 'stages' / 'prepare.json').read_text())['snapshot_at'] > 0
+    assert launched == ['data', 'build'] and json.loads((rd / 'stages' / 'frontier.done').read_text())['recovered'] \
+        == 'exit-status'
+    assert cmds['data'][:2] == ['/bin/sh', '-c'] and cmds['data'][3:] == ['step', *data_argv]
+    assert str(rd / 'stages' / 'data.exit') in cmds['data'][2]
+    assert ei.argv_digest(frontier_argv) != ei.argv_digest(['frontier', '--other'])
+
+
+def test_a_prepare_record_from_a_rolled_back_lineage_starts_over(tmp_path, monkeypatch):
+    ei, d, rd, lineage, plans, launched = _lineage_driver(tmp_path, monkeypatch)
+    v0, v1, v2 = lineage
+    gone = {'version': 9, 'sha256': '9' * 64, 'checkpoint': '/p/v9.pt'}
+    (rd / 'stages' / 'prepare.json').write_text(json.dumps({'policies': [v1, gone], 'snapshot_at': 5}))
+    (rd / 'stages' / 'frontier.done').write_text('{}')
+    (rd / 'frontier.json').write_text('{}')
+    stopped = []
+    monkeypatch.setattr(d.c, 'present', lambda unit: unit == 'aei-r0003-data' and not stopped)
+    monkeypatch.setattr(d.c, 'stop_unit', stopped.append)
+    assert [p['sha256'] for p in d.prepare_policies(rd, [v1, v2])] == [v1['sha256'], v2['sha256']]
+    assert stopped == ['aei-r0003-data'] and not (rd / 'stages' / 'frontier.done').exists()
+    assert not (rd / 'stages' / 'prepare.json').exists() and not (rd / 'frontier.json').exists()
+
+
+def test_restart_arguments_are_adopted_or_refused_never_shadowed_by_the_state(tmp_path, monkeypatch):
+    """2026-11-24 06:20: phase-state.json's reference_policy was sft-v7 while --reference named sft-v9; the stored
+    value silently won and every held verdict was queued against sft-v7. Now a restart adopts --reference (and
+    re-points an open measurement) unless a held verdict adopted the stored reference; --start that differs from the
+    loop's start refuses; --held-every and --prefer-unseen are adopted; each change is in history and the log."""
+    import expert_iteration as ei
+    v7, v9, v12 = ('7' * 64, '/p/v7.pt'), ('9' * 64, '/p/v9.pt'), ('c' * 64, '/p/v12.pt')
+    path = tmp_path / 'phase-state.json'
+    ctrl = ei.PhaseController.initialize(path, start_checkpoint=v9[1], start_sha=v9[0], reference_checkpoint=v7[1],
+                                         reference_sha=v7[0])
+    ctrl.state['measuring'] = {'candidate': {'sha256': 'd' * 64}, 'reference': {'sha256': v7[0], 'checkpoint': v7[1]}}
+    ctrl.save()
+    changes = ctrl.reconcile_arguments(start_checkpoint=v9[1], start_sha=v9[0], reference_checkpoint=v9[1],
+                                       reference_sha=v9[0], held_every=1, held_every_max=8, prefer_unseen=['/m1'])
+    assert changes['reference'] == {'from': {'checkpoint': v7[1], 'sha256': v7[0]},
+                                    'to': {'checkpoint': v9[1], 'sha256': v9[0]}}
+    assert changes['measuring_reference'] == v9[0] and changes['prefer_unseen_added'] == ['/m1']
+    assert changes['base_held_every'] == {'from': 2, 'to': 1}
+    again = ei.PhaseController(path)
+    assert again.state['reference_policy']['sha256'] == v9[0] and again.state['measuring']['reference']['sha256'] == v9[0]
+    assert again.state['held_every'] == 1 and again.state['history'][-1]['action'] == 'arguments'
+    assert again.reconcile_arguments(start_checkpoint=v9[1], start_sha=v9[0], reference_checkpoint=v9[1],
+                                     reference_sha=v9[0], held_every=1, held_every_max=8, prefer_unseen=['/m1']) == {}
+    # a held verdict adopted a later reference: the restart's (original) --reference does not undo it
+    again.state['reference_policy'] = {'checkpoint': v12[1], 'sha256': v12[0]}
+    again.state['history'].append({'action': 'adopt', 'sha256': v12[0]})
+    kept = again.reconcile_arguments(start_checkpoint=v9[1], start_sha=v9[0], reference_checkpoint=v9[1],
+                                     reference_sha=v9[0])
+    assert again.state['reference_policy']['sha256'] == v12[0] and kept['reference_kept']['argument'] == v9[0]
+    with pytest.raises(SystemExit, match='another start is another experiment'):
+        again.reconcile_arguments(start_checkpoint=v7[1], start_sha=v7[0])
+    # a state written before start_policy was recorded: the start comes from the lineage's version-0 entry
+    del again.state['start_policy']
+    with pytest.raises(SystemExit, match='--start names 777777777777'):
+        again.reconcile_arguments(start_checkpoint=v7[1], start_sha=v7[0])
+    assert again.reconcile_arguments(start_checkpoint=v9[1], start_sha=v9[0])['start_policy']['recorded']['sha256'] \
+        == v9[0]
+
+
+def test_a_restarted_driver_adopts_its_reference_argument(tmp_path, monkeypatch):
+    ref7, ref9 = tmp_path / 'v7.pt', tmp_path / 'v9.pt'
+    ref7.write_bytes(b'7')
+    ref9.write_bytes(b'9')
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--reference', str(ref7), '--reference-sha', '7' * 64])
+    assert d.controller.state['reference_policy']['sha256'] == '7' * 64
+    ei, d2 = _driver(tmp_path, monkeypatch, argv=['--reference', str(ref9), '--reference-sha', '9' * 64])
+    assert d2.controller.state['reference_policy'] == {'checkpoint': str(ref9), 'sha256': '9' * 64}
+    assert 'arguments_reconciled' in (d2.root / 'drive.log').read_text()
+
+
+def test_a_held_pair_refused_for_engine_settings_remeasures_the_reference_on_this_series(tmp_path, monkeypatch):
+    """The held loop reused an old sft-v7 result from another engine series; held_eval compare refused the pair and
+    the verdict failed every 5 minutes. Now a refusal sets the reference's result aside and measures it again here
+    (no reuse), then compares; only a refusal after the candidate was measured again too raises."""
+    import subprocess
+    ei, d = _driver(tmp_path, monkeypatch)
+    cand = {'sha256': 'c' * 64, 'checkpoint': '/p/c.pt'}
+    ref = {'sha256': '9' * 64, 'checkpoint': '/p/v9.pt'}
+    held = d.c.held
+    measured = []
+
+    def measure(name, checkpoint, reuse=True):
+        measured.append((name, reuse))
+        out = held / name
+        out.mkdir(parents=True, exist_ok=True)
+        (out / 'result.json').write_text(json.dumps({'complete': True, 'fresh': not reuse}))
+        return out
+    monkeypatch.setattr(d.c, 'measure_held', measure)
+    (held / d.held_name(ref)).mkdir(parents=True)
+    (held / d.held_name(ref) / 'result.json').write_text(json.dumps({'complete': True, 'reused': True}))
+    monkeypatch.setattr(d.c, 'held_result_ok', lambda out: (out / 'result.json').exists())
+    refusal = ('ValueError: results served by different engine settings are not paired: '
+               '{"kv_cache_dtype": ["fp8_e4m3", "bfloat16"]}')
+    runs = []
+
+    def run(argv, **kw):
+        runs.append(argv)
+        first = json.loads(Path(argv[argv.index('compare') + 1]).read_text())
+        if not first.get('fresh'):
+            return subprocess.CompletedProcess(argv, 1, stderr=refusal)
+        Path(argv[argv.index('--out') + 1]).write_text(json.dumps({'primary': {'delta': 0.0, 'permutation_p': 1.0}}))
+        return subprocess.CompletedProcess(argv, 0, stderr='')
+    monkeypatch.setattr(ei.subprocess, 'run', run)
+    record = d.judge_measurement({'candidate': cand, 'reference': ref})
+    assert record['verdict'] in ('neutral', 'success', 'failure') and len(runs) == 2
+    assert measured == [(d.held_name(cand), True), (d.held_name(ref), False)]
+    assert list(held.glob(f'{d.held_name(ref)}-unpaired-*'))          # the reused result kept aside
+    log = (d.root / 'drive.log').read_text()
+    assert 'held_pair_refused' in log and '"remeasure": "reference"' in log
+    # refused even after both were measured here: a real fault, raised (the held loop retries and notes it)
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: subprocess.CompletedProcess(argv, 1, stderr=refusal))
+    with pytest.raises(ei.HeldPairRefused, match='not paired'):
+        d.judge_measurement({'candidate': cand, 'reference': ref})
+    # other compare failures are not refusals
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: subprocess.CompletedProcess(argv, 2, stderr='boom'))
+    with pytest.raises(subprocess.CalledProcessError):
+        d.c.compare(held / d.held_name(ref), held / d.held_name(cand), tmp_path / 'x.json')

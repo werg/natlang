@@ -1,0 +1,54 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "fallow22-broad-graphs-october-20261124",
+  "owner": "dgx",
+  "path": "data_nvme:fallow22-broad-graphs-20261124",
+  "files": [
+    {
+      "path": "avoid-groups.json",
+      "bytes": 2107864,
+      "sha256": "d0a2ebf7f0b8ec50ea46a9aa8749def125c20c5c243d710684beac90a52907c3"
+    },
+    {
+      "path": "avoid-ids.json",
+      "bytes": 1167895,
+      "sha256": "33a0c489a4b66cbd0ee369b8e304910e668827b67f0fc5c2bbb9a94ee90f5abf"
+    },
+    {
+      "path": "conversion.json",
+      "bytes": 1899,
+      "sha256": "e06ce3e24bc8f28e61dc1512324b4f264a927cf26a83e234769f149439e105bb"
+    },
+    {
+      "path": "held-v3v4-groups.json",
+      "bytes": 37400,
+      "sha256": "e675183d90e170c1083ba74279050db486681eb24a26251e2bc4db5355c6888c"
+    },
+    {
+      "path": "held-v3v4-ids.json",
+      "bytes": 64212,
+      "sha256": "d17bed54169ec719f23dccf4fe3fbe320108ec19d76f803b8bb33156c09dbe3e"
+    },
+    {
+      "path": "held-verify-v3.json",
+      "bytes": 705,
+      "sha256": "f3d4d2ce3c1dd09abdbba9cf80c920a7ec5525319c2bd0005be13ac807d79c3d"
+    },
+    {
+      "path": "held-verify-v4.json",
+      "bytes": 667,
+      "sha256": "192e7e8f14b6b3c7d969188f7609a42059065d8729577cedd19dbc3939ec7636"
+    },
+    {
+      "path": "october/fallow22-broad-graphs.jsonl.zst",
+      "bytes": 14982087,
+      "sha256": "b872cde2de7dca8753c61ac9cb19ac7a57b5a887f50612b72b86db598d46c865"
+    },
+    {
+      "path": "sources/tasks.jsonl.zst",
+      "bytes": 9538778,
+      "sha256": "34c9d62473bd0b639b1a3b15f25776ffca9c2a6aa57575b9155f32c7c3562d77"
+    }
+  ],
+  "bytes": 27901507
+}

@@ -237,6 +237,8 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             if not structural and capture.get('decision_sample') is not None:
                 from .decision_policy import validate_decision_sample
                 decision_sample = validate_decision_sample(capture)
+                # A split-tokenized readout scores an option as the logsumexp over its canonical continuation and its
+                # alternatives: each alternative is its own branch node below, and decision_log_policy sums them.
                 if engine is not None:
                     # Option scores served by another engine's export: guarded like its tokens, not exact parity.
                     decision_sample['actor_export'] = engine
@@ -488,10 +490,15 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 turn_nodes[name] = [name]
             else:
                 # A sampled decision: its option nodes share the exact prompt and imports (data.decision_graph).
-                from ..data.decision_graph import option_node_name
+                from ..data.decision_graph import alternative_node_name, option_node_name
                 turn_nodes[name] = []
-                for index, continuation in enumerate(item['decision_sample']['continuations']):
-                    option = option_node_name(name, index)
+                sample = item['decision_sample']
+                # the options' canonical continuations, then every split-tokenization alternative (in option order)
+                branches = [(option_node_name(name, index), continuation)
+                            for index, continuation in enumerate(sample['continuations'])]
+                branches += [(alternative_node_name(name, index, k), ids)
+                             for index, alts in enumerate(sample['alternatives']) for k, ids in enumerate(alts)]
+                for option, continuation in branches:
                     if option in prepared:
                         raise ValueError('native decision option identity collides with an actual episode turn')
                     nodes.append(Invocation(option, (*item['own'], *continuation), imports=tuple(imports)))
@@ -529,15 +536,25 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             continue
         prompt = len(item['own'])
         option_nodes=turn_nodes[name][:len(sample['continuations'])]
+        queries = lambda node, continuation: [
+            {'query': offsets[node] + prompt + index - 1, 'local_query': prompt + index - 1, 'token_id': token,
+             'temperature': 1., 'allowed_token_ids': None, 'banned_token_ids': None}
+            for index, token in enumerate(continuation)]
+        from ..data.decision_graph import alternative_node_name
+        alternative_nodes = [[alternative_node_name(name, index, k) for k in range(len(alts))]
+                             for index, alts in enumerate(sample['alternatives'])]
         decision_actions.append({'kind': 'decision', 'turn': name, 'temperature': sample['temperature'],
             'chosen': sample['chosen'], 'behavior_logps': sample['behavior_logps'], 'prompt_tokens': prompt,
             'option_nodes': list(option_nodes),
             **({'actor_export': sample['actor_export']} if 'actor_export' in sample
                else {'actor_export': inferred_engine, 'actor_export_inferred': True} if inferred_engine else {}),
-            'options': [[{'query': offsets[option] + prompt + index - 1, 'local_query': prompt + index - 1,
-                          'token_id': token, 'temperature': 1., 'allowed_token_ids': None, 'banned_token_ids': None}
-                         for index, token in enumerate(continuation)]
-                        for option, continuation in zip(option_nodes, sample['continuations'])]})
+            'options': [queries(option, continuation)
+                        for option, continuation in zip(option_nodes, sample['continuations'])],
+            # split tokenization: per option its other sequences' nodes and queries (decision_log_policy sums them)
+            **({'alternative_nodes': alternative_nodes,
+                'alternatives': [[queries(node, ids) for node, ids in zip(nodes_, alts)]
+                                 for nodes_, alts in zip(alternative_nodes, sample['alternatives'])]}
+               if any(sample['alternatives']) else {})})
     # a reasoned decision's action reasoning (episode_graph.whole_episode_turns) is part of its action entry's turn
     from .episode_graph import REASONING_SUFFIX
     for name in [name for name in turn_nodes if name.endswith(REASONING_SUFFIX)]:
@@ -608,8 +625,9 @@ from .policy_math import CENTERING_FIELDS as _CENTERING_FIELDS
 
 
 def validate_policy_decision_branches(plan, row):
-    """Bind every sampled decision's option coordinates to its actual graph nodes."""
-    from ..data.decision_graph import option_node_name
+    """Bind every sampled decision's option coordinates (and its split-tokenization alternatives') to its actual
+    graph nodes."""
+    from ..data.decision_graph import alternative_node_name, option_node_name
     nodes={node.name:(node,offset) for node,offset in zip(plan.invocations,plan.offsets,strict=True)}
     decisions=row.get('decision_actions') or ()
     by_turn={}
@@ -622,19 +640,27 @@ def validate_policy_decision_branches(plan, row):
     for turn in episode:
         prefix=turn+':option:'
         actual={name for name in nodes if name not in episode and name.startswith(prefix)
-                and name[len(prefix):].isdigit()}
+                and (name[len(prefix):].isdigit() or _alternative_suffix(name[len(prefix):]))}
         action=by_turn.get(turn)
         if action is None:
             if actual:raise ValueError('sampled decision option branches lack their action')
             continue
         options=action.get('options');names=action.get('option_nodes');prompt=action.get('prompt_tokens')
+        alternatives=action.get('alternatives',[[] for _ in options or ()])
+        alternative_names=action.get('alternative_nodes',[[] for _ in options or ()])
         if (not isinstance(options,list) or len(options)<2 or not isinstance(names,list)
                 or names!=[option_node_name(turn,i) for i in range(len(options))]
-                or set(names)!=actual or type(prompt) is not int or prompt<1
+                or not isinstance(alternatives,list) or len(alternatives)!=len(options)
+                or alternative_names!=[[alternative_node_name(turn,i,k) for k in range(len(alts))]
+                                       for i,alts in enumerate(alternatives)]
+                or set(names)|{n for alts in alternative_names for n in alts}!=actual
+                or type(prompt) is not int or prompt<1
                 or len(action.get('behavior_logps',()))!=len(options)):
             raise ValueError('sampled decision does not cover its complete option graph')
         prefix_tokens=None;imports=None
-        for name,option in zip(names,options,strict=True):
+        branches=[*zip(names,options,strict=True),
+                  *((n,a) for ns,alts in zip(alternative_names,alternatives) for n,a in zip(ns,alts,strict=True))]
+        for name,option in branches:
             node,offset=nodes[name]
             if not option or prompt>=len(node.token_ids):raise ValueError('empty decision option branch')
             if prefix_tokens is None:prefix_tokens=node.token_ids[:prompt];imports=node.imports
@@ -646,6 +672,12 @@ def validate_policy_decision_branches(plan, row):
                            or token.get('banned_token_ids') is not None
                            for i,token in enumerate(option))):
                 raise ValueError('decision option coordinates differ from their graph')
+
+
+def _alternative_suffix(rest):
+    """Whether ``rest`` (after ``TURN:option:``) names a split-tokenization alternative, ``I:alternative:K``."""
+    parts=rest.split(':')
+    return len(parts)==3 and parts[0].isdigit() and parts[1]=='alternative' and parts[2].isdigit()
 
 
 ENGINE_GUARD_SCHEMA = 'natlang.actor-engine-mismatch-guard/1'
@@ -717,14 +749,14 @@ def behavior_logprob_probe(model, hidden, actions, *, graph_id, policy, destinat
                         for i,(a,value) in enumerate(zip(part,current,strict=True)))
     decision_rows=[]
     if decision_actions:
-        from .decision_policy import decision_log_policy
+        from .decision_policy import decision_log_policy, remap_decision
         with torch.no_grad():
             for index, action in enumerate(decision_actions):
                 options=action['options']
-                physical=options if decision_physical_rows is None else [
-                    [{**token,'query':decision_physical_rows[token['query']]} for token in option]
-                    for option in options]
-                actual=decision_log_policy(model,hidden,action,queries=physical).float().cpu().tolist()
+                mapped=action if decision_physical_rows is None else remap_decision(action,decision_physical_rows)
+                actual=decision_log_policy(model,hidden,action,queries=mapped['options'],
+                    **({'alternative_queries':mapped['alternatives']} if 'alternatives' in mapped else {})
+                    ).float().cpu().tolist()
                 behavior=[float(x) for x in action['behavior_logps']]
                 if len(actual)!=len(behavior):raise ValueError('decision option coverage differs')
                 decision_rows.append({'decision_index':index,'turn':action['turn'],'chosen':action['chosen'],
@@ -1347,9 +1379,10 @@ class NativePolicyObjective:
                 info = row.get('jolt') or {}
                 beta = ((self.policy_loss['beta_s'] if info.get('role', 'student') == 'student'
                          else self.policy_loss['beta_t']) if jolt and info.get('privileged') is not None else 0.)
+                from .decision_policy import remap_decision
                 remap = lambda options: [[{**item, 'query': rows[item['query']]} for item in option]
                                          for option in options]
-                decisions = [{**action, 'options': remap(action['options'])} for action in decisions]
+                decisions = [remap_decision(action, rows) for action in decisions]
                 decided, kl_sum = decision_policy_terms(model, hidden, decisions, advantage=row['advantage'],
                     mode=self.spec['mode'], policy_loss=self.policy_loss,
                     chunk_tokens=self.spec.get('chunk_tokens', 128),
@@ -1401,10 +1434,12 @@ class NativePolicyObjective:
                 learner.extend(token_action_logps(model,hidden,actions[start:start+16],chunk_tokens=16).float().cpu().tolist())
             if decisions:
                 from .decision_policy import decision_log_policy
+                from .decision_policy import remap_decision
                 for action in decisions:
-                    queries=action['options'] if physical_rows is None else [
-                        [{**token,'query':physical_rows[token['query']]} for token in option] for option in action['options']]
-                    actual=decision_log_policy(model,hidden,action,queries=queries).float().cpu().tolist()
+                    mapped=action if physical_rows is None else remap_decision(action,physical_rows)
+                    actual=decision_log_policy(model,hidden,action,queries=mapped['options'],
+                        **({'alternative_queries':mapped['alternatives']} if 'alternatives' in mapped else {})
+                        ).float().cpu().tolist()
                     if len(actual)!=len(action['behavior_logps']):raise ValueError('decision option coverage differs')
                     learner.extend(actual); behavior.extend(float(x) for x in action['behavior_logps'])
         record={'schema':'natlang.actor-engine-mismatch/1','graph_id':graph_id,
@@ -1794,7 +1829,9 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 actions, jolt_row = add_privileged_twin(replay, rollout, graph, privileged, turns=turns,
                     beta=jolt['beta_s' if rollout.get('jolt_role', 'student') == 'student' else 'beta_t'])
                 for action, queries in zip(decisions, jolt_row.pop('decision_twin_queries', None) or ()):
-                    if queries is not None:
+                    if isinstance(queries, dict):   # a split-tokenized decision: its alternatives' twin queries too
+                        action['twin_options'], action['twin_alternatives'] = queries['options'], queries['alternatives']
+                    elif queries is not None:
                         action['twin_options'] = queries
             if malformed:
                 actions = [action for action in actions if action['query'] not in malformed]

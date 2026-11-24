@@ -1,4 +1,5 @@
 """scripts/colab/session_keeper.py: decisions from fake `colab` output, and the request/stop/rename sequence."""
+import json
 import importlib.util
 import sys
 import types
@@ -190,3 +191,21 @@ def test_a_pending_serve_is_retried_and_cleared_when_it_serves(tmp_path, monkeyp
     assert d.action == 'serve' and ('other', str(sk.REPO / '.venv-neuralese/bin/python')) in fake.calls
     assert 'pending_serve' not in k.load() and k.load()['last_serve_try'] > 0
     assert k.step().action == 'ok'                       # served: nothing pending, no retry
+
+
+def test_a_recorded_actor_whose_process_is_gone_is_served_again(tmp_path, monkeypatch):
+    """2026-11-24 03:47: a tenant's GPU fault killed the actor's engine; its record still named it and the keeper said
+    'serves'. A recorded actor whose admission process is gone on the VM is down."""
+    fake = FakeColab({'g4a': 'A100'})
+    k, _ = keeper(tmp_path, fake, monkeypatch)
+    (tmp_path / 'actors').mkdir()
+    serve = {'checkpoint': '/c.pt', 'policy_id': 'p' * 64, 'commit': 'c' * 40, 'port': 8570}
+    (tmp_path / 'actors' / 'colab-actor-colab-g4.json').write_text(json.dumps({'pid': 4242, 'serve_args': serve,
+                                                                               'claim': {'vram_gib': 34.0}}))
+    served = []
+    monkeypatch.setattr(k, 'actor_dead', lambda: True)
+    monkeypatch.setattr(k, 'actor_oversized', lambda: False)
+    monkeypatch.setattr(k, 'serve', lambda s, c: served.append((s['policy_id'], c)) or True)
+    assert k.step().action == 'serve' and served == [('p' * 64, 'c' * 40)]
+    monkeypatch.setattr(k, 'actor_dead', lambda: False)
+    assert k.step().action == 'ok'

@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sft-fallow22-broad-graphs-20261124-v1",
+  "owner": "dgx",
+  "path": "data_nvme:sft-fallow22-broad-graphs-20261124-v1",
+  "files": [
+    {
+      "path": "build.json",
+      "bytes": 908667,
+      "sha256": "9e4b468a414e1bd82bf69159a1fb6f19c42cd857dc9019c71bacb09356abefd1"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 116644900,
+      "sha256": "6713fb96ee60a3425eb8d5e91cdf3aa4e7998c4bfdb621f5dc98780c2aef8c9c",
+      "lines": 11259
+    },
+    {
+      "path": "chains.pkl",
+      "bytes": 1289570095,
+      "sha256": "29ed9d1bc59adc49404c310265abcc1274206774505701c6cd6910f91f57b8a2"
+    },
+    {
+      "path": "rows.jsonl.zst",
+      "bytes": 15431866,
+      "sha256": "b9439acddf242f5f694015c2d57f88900fc4e8e0648d22ce14bb7ce59f125415"
+    }
+  ],
+  "bytes": 1422555528
+}

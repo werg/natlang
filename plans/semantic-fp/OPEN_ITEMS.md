@@ -8,8 +8,7 @@ An item leaves the register when its fix lands on main. A finding reported by an
 
 | Item | Owner |
 |---|---|
-| B10 four-engine smoke, fork pin move to b12088 (reasoned decisions on llama-server and wllama), ENGINE_PARITY rows | B10 agent |
-| Decision option scoring under the standard tokenization only. The model may generate another split (`"`,`spam`,`"` vs `"sp`,`am`). Sum both tokenizations per option on all four engines and the learner (8b34839ab) | B10 agent, after the fork release |
+| Pin move to the fork release carrying `reasoning_ids` (89026ef24, run 45324416069), with its ENGINE_PARITY row; then split and reasoning_ids parity across four engines on real readouts (DECISIONS 2026-11-24 05:30) | B10 agent |
 | Tool-call grammar on the collection actors: move the DGX and Colab SGLang checkouts to fork 17e3458c2e (`NATLANG_GRAMMAR_PREFIX`; `training/neuralese/sglang-fork.json`) at the next boundary with no live actor; the Python engine and the learner already apply it (DECISIONS 2026-11-23 "constrained decoding with an exact learner law"). Watch `law_masked_fraction` in `train.jsonl` and `natlang_tool_grammar_refused_openings_total` | coordinator, at the next actor boundary |
 | Managed llama-server and page drop the tool grammar under `x_natlang_rl_capture` (ENGINE_PARITY gap row): exact replay needs the fork to compile the same xgrammar structural tag (server and wasm build) and record it | unassigned (needs a fork release; no training source reads fork captures today) |
 | Benchmark arm D on sft-v9 (specialize, tune, escalate); then regenerate `examples/triage/bench/results/2026-11-23.json` with D | armed driver `semantic-fp-bench/triage-20261123b/driver.sh` (waits for the policy server's 18.9 GB ledger claim); the coordinator commits its `results-ABCD.json` |
@@ -18,16 +17,6 @@ An item leaves the register when its fix lands on main. A finding reported by an
 | Remove the legacy `expert_iteration.py cycle` mode once aei1's round 1 has a held verdict (AGENTS.md: async-drive replaces cycle) | coordinator, after the r0001 verdict |
 | Typed-contracts before/after measurement (30 tasks x 2 samples, prose vs typed): not completed (Colab front taken by aei1's SFT, DGX actor saturated); partial 6/9 vs 3/6 in `ops/typed-contracts-20261123/measure-colab-partial/`. Rerun with `ops/typed-contracts-20261123/driver/supervise2.sh` (set `SHA=` to the current policy) when an actor has room, then append to DECISIONS "typed output contracts" | coordinator (deferred: no free actor 2026-11-23) |
 | aei1 round 1 build, SFT and held verdict | aei1 driver; the coordinator reads its health report |
-
-## Reasoned decisions in training
-
-Found by the GRPO-reasoning agent (DECISIONS 2026-11-23 "GRPO trains the action reasoning"). Owners: the scorer re-tokenization goes to the B10 agent, after its pin move and with the tokenization sum, as one fork release.
-- **The scorers re-tokenize the reasoning.** Every engine scores the options after the reasoning *text*, re-encoded, not
-  after the sampled ids. In aei1 r0000 (16 action readouts, groups g000689/696/701/720) the scored prompt leaves the
-  sampled ids mid-reasoning in 4 of 16 (after 847 of 3476, 531 of 1051, 535 of 2085 and 953 of 1687 tokens; the decoded
-  text is the same). The choice is then scored, and trained, after a tokenization the model never produced. Fix: the
-  score item carries the sampled reasoning ids, and every engine (Python native, SGLang, llama.cpp fork, wllama) uses
-  them. GRPO's lowering counts it each step (`decision_reasoning_ids_rendered` in `train.jsonl` `lowering`).
 
 ## Corpus migration (M2 follow-ups, DECISIONS 2026-11-23 18:30)
 

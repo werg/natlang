@@ -64,13 +64,35 @@ export function scoresFromPromptLogprobs(responses: readonly PromptLogprobRespon
     ...(promptTokens !== undefined ? { prompt_tokens: promptTokens } : {}) };
 }
 
+/**
+ * Whether score items ask for both tokenizations of each option (`split_tokenization`): the engine sums the option's
+ * canonical tokenization and its split one (the options' shared leading and trailing characters tokenized apart, so
+ * `"spam"` is also `"`,`spam`,`"` where the canonical BPE writes `"sp`,`am"`), since the model may write either.
+ * Default on; NATLANG_DECISION_TOKENIZATIONS=canonical scores the canonical tokenization alone. An engine that does
+ * not serve the field scores the canonical one (its result has no `split_tokenization` echo).
+ */
+export function splitTokenization(): boolean {
+  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_DECISION_TOKENIZATIONS !== 'canonical';
+}
+
+/**
+ * Whether a reasoned item carries its reasoning's sampled ids (`reasoning_ids`), which the engine scores in place of the
+ * reasoning text re-encoded. Default on; NATLANG_DECISION_REASONING_IDS=rendered scores after the re-encoded text.
+ */
+export function sendReasoningIds(): boolean {
+  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_DECISION_REASONING_IDS !== 'rendered';
+}
+
 /** One item of the explicit-batch endpoint's request: the prompt and its replies as continuations. */
-export function batchScoreItem(item: Pick<DecisionRequest, 'messages' | 'options'> & Partial<Pick<DecisionRequest, 'adapters' | 'native_state_modes' | 'native_recording' | 'cache_messages' | 'open_reply' | 'reasoning'>>,
+export function batchScoreItem(item: Pick<DecisionRequest, 'messages' | 'options'> & Partial<Pick<DecisionRequest, 'adapters' | 'native_state_modes' | 'native_recording' | 'cache_messages' | 'open_reply' | 'reasoning' | 'reasoning_ids'>>,
   extra?: Json): Json {
   return { ...extra, messages: item.messages, continuations: item.options,
     ...(item.cache_messages ? { cache_messages: item.cache_messages } : {}),
     ...(item.open_reply ? { open_reply: true } : {}),
+    ...(item.options.length >= 2 && splitTokenization() ? { split_tokenization: true } : {}),
     ...(typeof item.reasoning === 'string' ? { reasoning: item.reasoning } : {}),
+    ...(typeof item.reasoning === 'string' && item.reasoning && Array.isArray(item.reasoning_ids) && item.reasoning_ids.length
+      && sendReasoningIds() ? { reasoning_ids: [...item.reasoning_ids] } : {}),
     ...(item.adapters?.length ? { adapters: item.adapters } : {}),
     ...(item.native_state_modes ? { native_state_modes: item.native_state_modes } : {}),
     ...(item.native_recording ? { native_recording: true } : {}) };

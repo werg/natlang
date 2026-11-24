@@ -233,3 +233,28 @@ def test_sglang_front_builds_the_export_tokenizer_info_once(monkeypatch):
     engine.sglang_export_dir = '/exports/b'      # a rebind to another export directory rebuilds it
     engine._tool_grammar_info()
     assert built == ['/exports/a', '/exports/b']
+
+
+def test_concurrent_first_requests_build_the_tokenizer_info_once(monkeypatch):
+    """After an actor start every collection stream's first chat call asked for the export's tokenizer info at once, and
+    each built it (~3 s of GIL-held tokenizer loading; 32 streams of the a034dbf9c front: 4 requests reached SGLang in
+    150 s, 2026-11-24). The first caller builds it while the others wait for it."""
+    import threading
+    import time
+    from natlang_neuralese.serve.sglang_actor import SglangEngine
+    built = []
+
+    def slow(directory):
+        built.append(directory)
+        time.sleep(0.2)
+        return ('info', 'sha')
+    monkeypatch.setattr(tool_grammar, 'info_from_export', slow)
+    engine = SglangEngine.__new__(SglangEngine)
+    engine.sglang_export_dir = '/exports/a'
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(engine._tool_grammar_info())) for _ in range(16)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == [('info', 'sha')] * 16 and built == ['/exports/a']

@@ -611,7 +611,9 @@ def colab_fit(args):
         A.ship_file(plan['rows'], remote_rows, host, cfg, rows_sha)
     body = remote_plan(plan, checkpoint=f'{cfg["checkpoints"]}/{sha}.pt', base=cfg['base'], rows=remote_rows,
                        scratch=f'{remote}/fit-scratch')
-    A.ssh_host(host, f'mkdir -p {shlex.quote(remote)}/fit && cat > {shlex.quote(remote)}/fit/plan.json',
+    # the fit store's scratch directory must exist (tempfile.mkdtemp under it; the DGX plans' existed already)
+    A.ssh_host(host, f'mkdir -p {shlex.quote(remote)}/fit {shlex.quote(remote)}/fit-scratch && '
+                     f'cat > {shlex.quote(remote)}/fit/plan.json',
                input=json.dumps(body, indent=1) + '\n', timeout=60)
     claim = A.colab_layout(A.colab_hardware(host))['tenants']['fit']
     command = A.colab_tenant_command(cfg, tcfg, claim, f'fit-{family[:40]}',
@@ -643,9 +645,73 @@ def colab_fit(args):
     record = {'schema': 'natlang.program-fit-colab/1', 'host': host, 'tenant_commit': tcfg['commit'], 'remote': remote,
               'gpu': A.colab_hardware(host).get('gpu_name'), 'ship_seconds': round(shipped - started, 1),
               'fit_seconds': round(trained - shipped, 1), 'pull_seconds': round(time.time() - trained, 1),
-              'mps_percent': args.mps_percent if args.mps_percent is not None else A.COLAB_TENANT_MPS_PERCENT}
+              'mps': bool(A.COLAB_TENANT_MPS or args.mps_percent is not None),
+              'mps_percent': args.mps_percent if args.mps_percent is not None else
+              (A.COLAB_TENANT_MPS_PERCENT if A.COLAB_TENANT_MPS else None)}
     (fit / 'colab.json').write_text(json.dumps(record, indent=1) + '\n')
     print(json.dumps({'event': 'release home', 'dir': str(directory), **record}))
+    return 0
+
+
+def colab_bank(args):
+    """The bank (``bank``) as a tenant of the Colab session: each program's split.json, rows.jsonl and fit release (the
+    meta-training fits; held programs' rows) shipped to the VM, ``bank`` run there at the tenant commit, and each held
+    program's adapted release (OUT/adapt/<family>/), the bank manifest and the learner state pulled back verified into
+    --out. Resumable (the learner saves every outer step); exit 0 when the releases are home."""
+    import shlex
+    import time
+    import pop_rl_actor as A
+    out = Path(args.out)
+    cfg = A.host_config('colab', host=args.host)
+    host = cfg['host']
+    tcfg = A.colab_tenant_checkout(host, cfg, args.commit)
+    remote = f'{cfg["work_root"]}/tenant-bank-{out.name}'
+    first = json.loads((Path(args.programs[0]) / 'fit' / 'plan.json').read_text())
+    sha = first['manifest']['base']['checkpoint_sha256']
+    A.ensure_remote_checkpoint(host, cfg, first['engine']['checkpoint'], sha)
+    remote_dirs = {}
+    for item in [*args.programs, *args.held]:
+        directory = Path(item)
+        family = json.loads((directory / 'split.json').read_text())['family']
+        target = f'{remote}/programs/{family}'
+        A.ssh_host(host, shlex.join(['mkdir', '-p', f'{target}/fit']))
+        A.copy_resumable(str(directory / 'split.json'), f'{host}:{target}/split.json')
+        rows_sha = sha256_file(directory / 'rows.jsonl')
+        have = A.ssh_host(host, f'sha256sum {shlex.quote(target)}/rows.jsonl 2>/dev/null || true', check=False).split()
+        if not have or have[0] != rows_sha:
+            A.ship_file(str(directory / 'rows.jsonl'), f'{target}/rows.jsonl', host, cfg, rows_sha)
+        if item in args.programs:
+            A.ship_release(host, cfg, str(directory / 'fit' / 'release'), f'{target}/fit/release')
+        remote_dirs[item] = target
+    command = [cfg['python'], f'{tcfg["repo"]}/scripts/neuralese_data/program_tune.py', 'bank',
+               '--programs', *[remote_dirs[p] for p in args.programs], '--held', *[remote_dirs[p] for p in args.held],
+               '--out', f'{remote}/out', '--checkpoint', f'{cfg["checkpoints"]}/{sha}.pt', '--checkpoint-sha256', sha,
+               '--base', cfg['base'], '--dtype', 'bfloat16', '--store-scratch', f'{remote}/scratch',
+               '--steps', str(args.steps), '--max-worlds', str(args.max_worlds),
+               '--held-support-rows', str(args.held_support_rows), *(['--recipe', args.recipe] if args.recipe else [])]
+    A.ssh_host(host, shlex.join(['mkdir', '-p', f'{remote}/scratch']))
+    claim = {'vram_gib': args.vram_gib, 'host_ram_gib': args.host_ram_gib}
+    started = time.time()
+    rc = A.run_detached(host, cfg, remote, A.colab_tenant_command(cfg, tcfg, claim, f'bank-{out.name[:30]}', command))
+    A.log(event='Colab tenant bank ended', host=host, returncode=rc, seconds=round(time.time() - started, 1))
+    if rc != 0:
+        return rc if rc else 1
+    out.mkdir(parents=True, exist_ok=True)
+    for name in ('bank-manifest.json', 'operation.json', 'learner/state.json'):
+        A.pull_verified(f'{remote}/out/{name}', out / name, host)
+    for item in args.held:
+        family = json.loads((Path(item) / 'split.json').read_text())['family']
+        src, staged = f'{remote}/out/adapt/{family}', out / 'adapt' / f'{family}.pull'
+        shutil.rmtree(staged, ignore_errors=True)
+        (staged / 'artifacts').mkdir(parents=True)
+        for name in A.ssh_host(host, f'ls {shlex.quote(src)}/artifacts', timeout=60).split():
+            A.pull_verified(f'{src}/artifacts/{name}', staged / 'artifacts' / name, host)
+        A.pull_verified(f'{src}/result.json', staged / 'result.json', host)
+        shutil.rmtree(out / 'adapt' / family, ignore_errors=True)
+        staged.rename(out / 'adapt' / family)
+    (out / 'colab.json').write_text(json.dumps({'host': host, 'tenant_commit': tcfg['commit'], 'remote': remote,
+                                                'seconds': round(time.time() - started, 1)}, indent=1) + '\n')
+    print(json.dumps({'event': 'bank home', 'out': str(out)}))
     return 0
 
 
@@ -660,11 +726,14 @@ def colab_measure(args):
     import urllib.request
     import pop_rl_actor as A
     dirs = [Path(d) for d in args.dir]
-    if args.arm == 'adapter' and len(dirs) != 1:
-        raise SystemExit('--arm adapter measures one program')
+    if args.arm in ('adapter', 'bank') and len(dirs) != 1:
+        raise SystemExit(f'--arm {args.arm} measures one program')
+    if (args.arm == 'bank') != bool(args.release):
+        raise SystemExit('--arm bank measures a --release (a bank-adapted program, colab-bank OUT/adapt/<family>)')
     plan = json.loads((dirs[0] / 'fit' / 'plan.json').read_text())
     sha = plan['manifest']['base']['checkpoint_sha256']
-    release = dirs[0] / 'fit' / 'release' if args.arm == 'adapter' else None
+    release = (Path(args.release) if args.arm == 'bank' else
+               dirs[0] / 'fit' / 'release' if args.arm == 'adapter' else None)
     record = A.serve_colab_tenant_actor(host=args.host, checkpoint=plan['engine']['checkpoint'], sha=sha,
                                         commit=args.commit, release=str(release) if release else None)
     pin = Path(args.pin).resolve()
@@ -798,16 +867,29 @@ def main(argv=None):
     cf.add_argument('--dir', required=True)
     cf.add_argument('--host', default=None)
     cf.add_argument('--commit', required=True, help='the tenant checkout commit (pushed to origin)')
-    cf.add_argument('--mps-percent', type=int, help='MPS SM share of the fit (default NATLANG_COLAB_TENANT_MPS_PERCENT, 50)')
+    cf.add_argument('--mps-percent', type=int, help='join MPS with this SM share (default: outside MPS, its own context)')
     cf.add_argument('--take-over', action='store_true', help='fit on Colab although a local fit state exists')
     cm = sub.add_parser('colab-measure', help='one dev arm against a Colab tenant actor (held_eval on the DGX)')
     cm.add_argument('--dir', action='append', required=True)
-    cm.add_argument('--arm', choices=('base', 'adapter'), required=True)
+    cm.add_argument('--arm', choices=('base', 'adapter', 'bank'), required=True)
+    cm.add_argument('--release', help='--arm bank: the bank-adapted release directory')
     cm.add_argument('--host', default=None)
     cm.add_argument('--commit', required=True)
     cm.add_argument('--pin', required=True, help='experiment pin (scripts/pin_checkout.py) the episodes run from')
     cm.add_argument('--split', default='dev', help='the manifest directory measured (dev, or a subset such as dev64)')
     cm.add_argument('--series', default='a100', help='result directory suffix: DIR/eval/<arm>-<split>-<series>')
+    cb = sub.add_parser('colab-bank', help='bank meta-learning as a tenant of the Colab session; held releases home')
+    cb.add_argument('--programs', nargs='+', required=True)
+    cb.add_argument('--held', nargs='+', required=True)
+    cb.add_argument('--out', required=True)
+    cb.add_argument('--host', default=None)
+    cb.add_argument('--commit', required=True)
+    cb.add_argument('--steps', type=int, default=0)
+    cb.add_argument('--max-worlds', type=int, default=64)
+    cb.add_argument('--held-support-rows', type=int, default=64)
+    cb.add_argument('--recipe')
+    cb.add_argument('--vram-gib', type=float, default=14.)
+    cb.add_argument('--host-ram-gib', type=float, default=24.)
     ss = sub.add_parser('subset', help='a stable-hash subset of a split as its own pinned manifest (DIR/<split><tasks>)')
     ss.add_argument('--dir', required=True)
     ss.add_argument('--split', default='dev')
@@ -819,7 +901,7 @@ def main(argv=None):
     cm.add_argument('--priority', default='low')
     args = parser.parse_args(argv)
     status = {'split': split, 'rows': rows, 'plan': plan, 'release': release, 'teacher-tasks': teacher_tasks,
-              'bank': bank, 'colab-fit': colab_fit, 'colab-measure': colab_measure,
+              'bank': bank, 'colab-fit': colab_fit, 'colab-measure': colab_measure, 'colab-bank': colab_bank,
               'subset': subset}[args.command](args)
     return status if isinstance(status, int) else 0
 
