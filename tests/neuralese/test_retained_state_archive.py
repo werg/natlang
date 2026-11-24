@@ -212,7 +212,7 @@ def ingestion_fixture(tmp_path, monkeypatch):
     sha = hashlib.sha256(json.dumps(snapshot, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     registry = SimpleNamespace(repo=tmp_path, datasets={'ds': {'id': 'ds', 'path': str(archive),
                 'manifest_sha256': sha, 'native_state_policy': 'recovery-infrastructure-excluded/1'}},
-                snapshots={}, extra_files={})
+                snapshots={}, extra_files={}, consumption=[])
     monkeypatch.setattr(data_registry, 'load', lambda **kw: registry)
     monkeypatch.setattr(data_registry, 'absolute', lambda value, **kw: Path(value))
     monkeypatch.setattr(data_registry, 'stored_manifest', lambda key: snapshot)
@@ -234,7 +234,7 @@ def test_ingested_partial_goal_retires_only_unregistered_pack_infrastructure(tmp
 
 
 @pytest.mark.parametrize('blocker', ['legacy', 'old-snapshot', 'data-file-ref', 'artifact-ref',
-                                    'unrecovered', 'not-ingested', 'missing-ir', 'optout', 'hardlink'])
+                                    'unrecovered', 'not-ingested', 'missing-ir', 'optout', 'hardlink', 'consumer'])
 def test_native_retirement_preserves_real_recovery_and_immutable_dependencies(tmp_path, monkeypatch, blocker):
     import hashlib
     from retained_state_archive import retire_ingested_native_state
@@ -263,6 +263,8 @@ def test_native_retirement_preserves_real_recovery_and_immutable_dependencies(tm
         monkeypatch.setenv('VIBESTUDIO_RETIRE_INGESTED_NATIVE_STATE', '0')
     elif blocker == 'hardlink':
         os.link(pack, tmp_path / 'actual-donor-alias')
+    elif blocker == 'consumer':
+        registry.consumption.append({'items': [{'path': str(pack), 'unregistered': True}]})
     assert retire_ingested_native_state(archive, record, work=work) == []
     assert pack.exists()
 

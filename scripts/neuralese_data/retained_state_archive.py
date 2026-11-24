@@ -352,6 +352,16 @@ def retire_ingested_native_state(archive, record, *, work, registry_repo=None, r
     # Actual validated artifacts can point anywhere; never assume self-containment.
     if any(Path(path).resolve() in targets for path in record['artifact_paths']):
         return []
+    # Explicit consumer paths can also record recovery use (including an
+    # intentionally unregistered diagnostic read). Keep those real inputs.
+    for consumption in registry.consumption:
+        for item in consumption.get('items', []):
+            value = item.get('path')
+            if not value:
+                continue
+            path = Path(value) if os.path.isabs(value) else Path(data_registry.absolute(value, repo=registry.repo))
+            if any(target == path or target.is_relative_to(path) for target in targets):
+                return []
     # Check every overlapping immutable snapshot, not just its latest include
     # globs. Never enumerate unrelated dataset directories or raw/CAS trees.
     snapshots = [*registry.datasets.values(),
