@@ -80,8 +80,9 @@ export function evalDeclarations(session: NativeSession): EvalScopeDeclarations 
       .map(([name, type]) => ({ name, type: formatType(type), mutable: true })),
     captures: Object.values(lam.captures ?? {}).map(cell => ({ name: cell.name, type: cell.type, mutable: cell.mutable })),
     imports: Object.entries(codebase).map(([name, record]) => importOf(name, record, session)),
-    services: Object.keys(session.runtime.services),
-    serviceDeclarations: session.runtime.declarations,
+    services: Object.keys(session.availableServices()),
+    unavailableServices: Object.keys(session.runtime.services).filter(name => !Object.hasOwn(session.availableServices(), name)),
+    serviceDeclarations: session.availableServiceDeclarations(),
     returns: lam.type.kind === 'lambda' ? formatType(lam.type.returns) : undefined,
     opaque: [] };
 }

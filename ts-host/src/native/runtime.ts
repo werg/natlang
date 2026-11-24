@@ -2210,7 +2210,7 @@ export class NativeSession {
     };
     return searchCodebase(query, this.lam.codebase, {
       types,
-      declarations: this.runtime.declarations,
+      declarations: this.availableServiceDeclarations(),
       services: this.availableServices(),
       resolveItem: view ? item => view.record(item) : undefined,
       limit,
@@ -2253,6 +2253,12 @@ export class NativeSession {
         read: { value: (value: unknown) => readNeuraleseForCurrentTask(value), enumerable: true, configurable: true, writable: false } }) : service]));
   }
 
+  /** Types and symbol lookup expose precisely the ports admitted to this invocation. */
+  availableServiceDeclarations(): Record<string, string> {
+    const services = this.availableServices();
+    return Object.fromEntries(Object.entries(this.runtime.declarations).filter(([name]) => Object.hasOwn(services, name)));
+  }
+
   /** read_code, edit_code, diff_code over the codebase record tree. */
   private functionTool(name: string, args: Record<string, unknown>): NativeResult {
     if (name === 'diff_code') {
@@ -2285,7 +2291,7 @@ export class NativeSession {
     }
     // An external service is shown by its declaration, and is not the program's to change.
     const service = requested.split('.')[0]!;
-    if (Object.hasOwn(this.runtime.declarations, service) && !findCodebaseItem(this.lam.codebase, requested) &&
+    if (Object.hasOwn(this.availableServiceDeclarations(), service) && !findCodebaseItem(this.lam.codebase, requested) &&
         !Object.hasOwn(BUILT_IN_DOCS, requested)) {
       if (name === 'edit_code') throw new Reject([{ path: requested, code: 'external', expected:
         `a function of this program; ${service} is an external service: its declaration can be read, but it runs outside this program and cannot be changed` }]);

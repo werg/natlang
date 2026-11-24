@@ -11808,3 +11808,18 @@ Code: `scripts/neuralese_data/subagent_neuralese.py` (acb78d91e, e35ad7411, c78a
 - **Conversion to natlang programs:** scoping only, in the plan's last section. 429 SearchSwarm items have a gold
   answer, a teacher that got it right, and complete recorded evidence. 4,437 teacher-right items have the gold
   somewhere in the recorded outputs. D01 needs upstream gold. Estimate: about 3 agent-days for D02.
+### 2026-11-25 — repair scoped service declarations without broadening authority
+
+Preserved V24 SQLite evidence identifies the reported undefined `spectroliteGoal`
+call as `workOnVaultKnowledgeGoal/chooseKnowledgeStep.nl`; the authored scope
+excludes that chooser and grants its TS coordinator and NL reader. Core7dff's
+value filtering is working. Investigation found independent mismatches:
+`read_code` and symbol search disclosed configured-but-excluded declarations,
+and eval type analysis used the whole task service list rather than admitted
+ports. Repair all three per-invocation views and diagnose a reference to an
+excluded port before execution. Preserve task/project declarations for authored
+TS imports and all existing scope selectors. Actual Node build passed; 46
+existing related regressions passed, and all eight final scope/value tests
+passed on Node+Workerd (including actual allowed method calls and lexical
+shadowing). No model/inference or native full-scope claim. This correctness fix
+enters the next source pin; collection does not wait on a full reference sweep.
