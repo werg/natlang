@@ -188,9 +188,11 @@ Brief E covered only the Neuralese-free capabilities. Open:
 
   Pack each closed run's group directories into one zst per group, which `rl_rollout_files` already reads as
   `g*.rollouts.jsonl.zst`, or move the trees to the HDD/Drive after checking their readers. Owner: coordinator.
-- **The HDD is dominated by data outside natlang's keep rules:** `bgkit-data` holds 591 GB (another project). It is the
-  first Drive candidate (the tier exists since 2026-11-23: `drive_tier.py archive --root bgkit-data` once the owner
-  decides; `NEVER` in drive_tier.py excludes it until then).
+- **`bgkit-data` (591 GB) drains to Drive (owner approved 2026-11-24).** The hourly tier takes it after the round
+  inflow; `multi_news_v1`, `arxiv_v1` and `pubmed_v1` (about 90 GB, view-sources-v3 inputs) stay. At about 5 MB/s
+  shared with the inflow, the bulk takes about 3-4 weeks. Watch: `~/data/drive-tier/manifest.jsonl`. Closes when
+  `bgkit-data` minus the kept inputs is on Drive. `bgkit-checkpoints` and hindsight still await the owner.
+  Owner: coordinator.
 - **`vibe-native-v9-reader-pin*` units failed at 08:15 on 2026-11-23:** `.venv-decider-systempython conflicts with the intended shared root link` in `archive-code-00ab72d28dbc`. The Vibestudio session later reached v9 through other units (`vibe-student-fill-keeper-v9`, `vsingest-semantic-poll-v9`), so this is superseded; the owner is the Vibestudio session.
 - **The Colab keeper's real replacement and upgrade path is untested live.** It is watched by the ops watchdog (`colab` checks).
 
