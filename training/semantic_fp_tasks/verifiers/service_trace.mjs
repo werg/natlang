@@ -11,20 +11,41 @@
 // Candidate value (or files[oracle.file]): an array of `{ action, args?, target?, ... }` or `{ actions: [...] }`.
 const norm = v => typeof v === 'string' ? v.trim().toLowerCase() : v;
 
+function canon(value) {
+  if (typeof value === 'string') return value.trim().toLowerCase();
+  if (Array.isArray(value)) return value.map(canon);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map(k => [k, canon(value[k])]));
+  }
+  return value;
+}
+const same = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+const actionName = entry => entry?.action ?? entry?.tool ?? entry?.op ?? entry?.kind;
+
 function matches(entry, spec) {
   if (!entry || typeof entry !== 'object') return false;
-  const name = entry.action ?? entry.tool ?? entry.op ?? entry.kind;
-  if (spec.action && norm(name) !== norm(spec.action)) return false;
+  if (spec.action && norm(actionName(entry)) !== norm(spec.action)) return false;
   if (spec.match) {
     for (const [k, expected] of Object.entries(spec.match)) {
-      const got = Object.hasOwn(entry, k) ? entry[k] : entry.args?.[k];
-      if (norm(got) !== norm(expected)) return false;
+      const hasDirect = Object.hasOwn(entry, k);
+      const hasArg = entry.args && typeof entry.args === 'object' && Object.hasOwn(entry.args, k);
+      if (!hasDirect && !hasArg) return false;
+      const got = hasDirect ? entry[k] : entry.args[k];
+      if (!same(got, expected)) return false;
     }
   }
   return true;
 }
 
 export function verifyCandidate({ value, files, oracle }) {
+  const hasRules = Boolean(
+    (oracle.required && oracle.required.length) ||
+    (oracle.forbidden && oracle.forbidden.length) ||
+    (oracle.order && oracle.order.length) ||
+    oracle.max_actions !== undefined
+  );
+  if (!hasRules) throw new Error('service_trace verifier: oracle must specify at least one of required, forbidden, order, or max_actions');
+
   const issues = [];
   let raw = value;
   if (oracle.file) {
@@ -50,8 +71,8 @@ export function verifyCandidate({ value, files, oracle }) {
   }
   for (const [before, after] of oracle.order ?? []) {
     total++;
-    const i = actions.findIndex(e => norm(e?.action ?? e?.tool ?? e?.op) === norm(before));
-    const j = actions.findIndex(e => norm(e?.action ?? e?.tool ?? e?.op) === norm(after));
+    const i = actions.findIndex(e => norm(actionName(e)) === norm(before));
+    const j = actions.findIndex(e => norm(actionName(e)) === norm(after));
     if (i >= 0 && j >= 0 && i < j) passed++;
     else issues.push(`order violated: ${before} must occur before ${after}`);
   }

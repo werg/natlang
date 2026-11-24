@@ -10,6 +10,7 @@
  * `runQuery` (query.ts) stays the path for a plan the caller writes.
  */
 import { DatabaseSync } from 'node:sqlite';
+import { untrusted } from '@natlang/node';
 import { SqliteDatabase, type Run } from '../index.js';
 import type { Outcome } from '../types.js';
 import type { QueryDataset, TableValue } from './types.js';
@@ -35,7 +36,10 @@ export function loadDataset(path: string, dataset: QueryDataset): void {
     db.exec('CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, sha256 TEXT NOT NULL, content TEXT NOT NULL)');
     db.exec('DELETE FROM files');
     const insertFile = db.prepare('INSERT INTO files (path, sha256, content) VALUES (?, ?, ?)');
-    for (const file of dataset.files) insertFile.run(file.path, file.sha256, String(file.content));
+    for (const file of dataset.files) {
+      const fencedContent = untrusted(String(file.content), file.path);
+      insertFile.run(file.path, file.sha256, String(fencedContent));
+    }
     for (const [table, rows] of Object.entries(dataset.tables ?? {})) {
       if (!NAME.test(table) || table === 'files' || table.startsWith('_nl')) throw new Error(`table name ${JSON.stringify(table)} is not a plain identifier other than files`);
       const columns = [...new Set(rows.flatMap(row => Object.keys(row)))];

@@ -54,6 +54,9 @@ type HealthLoopState = {
   recovered: boolean;
 };
 
+const CURL_MUTATING_FLAGS =
+  /(?:^|\s)(?:-[a-zA-Z]*[XdFToOKbc]|--(?:request|data(?:-[a-z-]+)?|form(?:-string)?|upload-file|output|remote-name(?:-all)?|json|config|cookie(?:-jar)?|next))\b/;
+
 /**
  * Exact crisp detector for strictly read-only diagnostic commands (no shell chaining, redirection, or mutations).
  */
@@ -64,7 +67,11 @@ export function isRoutineReadOnlyCommand(command: string): boolean {
   if (/\b(rm|drop|delete|truncate|wipe|format|kill|shutdown|reboot|destroy|purge|apply|patch|scale|drain|restart)\b/i.test(trimmed)) {
     return false;
   }
-  return /^(?:kubectl\s+(?:get|describe|logs)\b|systemctl\s+status\b|curl\s+-sf?\s+https?:\/\/\S+\/health\S*|df\s+-h\b|uptime\b|pg_isready\b|redis-cli\s+ping\b)/i.test(trimmed);
+  if (/^curl\b/i.test(trimmed)) {
+    if (CURL_MUTATING_FLAGS.test(trimmed)) return false;
+    return /^curl\s+-sf?\s+https?:\/\/\S+\/health\S*$/i.test(trimmed);
+  }
+  return /^(?:kubectl\s+(?:get|describe|logs)\b|systemctl\s+status\b|df\s+-h\b|uptime\b|pg_isready\b|redis-cli\s+ping\b)/i.test(trimmed);
 }
 
 /**
@@ -202,7 +209,11 @@ export function orderRunbookSteps(steps: readonly RunbookStep[]): RunbookStep[] 
  * returns the earlier result without re-running the underlying operational command.
  */
 export function createOnceOpsService(inner: OpsService): OnceOpsService {
-  const byStepId = new Map<string, OpsCommandResult>();
+  if (ONCE_EFFECTS in inner && typeof (inner as Partial<OnceOpsService>).executedStepCount === 'function') {
+    return inner as OnceOpsService;
+  }
+  // Store the in-flight Promise immediately per stepId so concurrent calls never double-execute.
+  const byStepId = new Map<string, Promise<OpsCommandResult>>();
   const execCount = new Map<string, number>();
 
   return {
@@ -210,14 +221,23 @@ export function createOnceOpsService(inner: OpsService): OnceOpsService {
     async runStep(stepId: string, command: string): Promise<OpsCommandResult> {
       const existing = byStepId.get(stepId);
       if (existing) {
-        return { ...existing, deduplicated: true };
-      }
-      const result = await inner.runStep(stepId, command);
-      if (result.ok) {
-        byStepId.set(stepId, result);
+        return { ...(await existing), deduplicated: true };
       }
       execCount.set(stepId, (execCount.get(stepId) ?? 0) + 1);
-      return result;
+      const pending = Promise.resolve()
+        .then(() => inner.runStep(stepId, command))
+        .then(
+          result => {
+            if (!result.ok) byStepId.delete(stepId);
+            return result;
+          },
+          error => {
+            byStepId.delete(stepId);
+            throw error;
+          },
+        );
+      byStepId.set(stepId, pending);
+      return pending;
     },
     readHealth(stepId: string, attempt: number) {
       return inner.readHealth(stepId, attempt);
@@ -424,9 +444,9 @@ export async function executeRunbook(
   }
 
   const healthCheckedSteps = executions.filter(s => s.recovered !== undefined);
-  const allRecovered = healthCheckedSteps.length === 0
-    ? executions.every(s => s.status === 'executed')
-    : healthCheckedSteps.every(s => s.recovered === true);
+  const allRecovered =
+    executions.every(s => s.status === 'executed') &&
+    healthCheckedSteps.every(s => s.recovered === true);
 
   return {
     runbookTitle: parsed.title,

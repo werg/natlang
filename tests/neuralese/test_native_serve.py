@@ -520,3 +520,41 @@ def test_each_http_request_runs_on_a_thread_that_ends_with_it():
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_a_client_that_hangs_up_leaves_no_traceback_and_other_failures_still_report(capfd):
+    """Collection workers poll /metrics with a 2 s timeout. A front that answered late printed two tracebacks per dropped
+    poll (the handler's and socketserver's), which from hundreds of threads held the GIL and the log and made it later
+    still (aei1 DGX collection stall, 2026-11-24). A closed client is no server error; any other failure is reported."""
+    import socket
+    import time
+
+    gone = threading.Event()
+
+    class Engine:
+        def progress_metrics(self):
+            gone.wait(10)               # the client gives up first
+            time.sleep(0.2)
+            return {'requests': 1}
+    engine = Engine()
+    server = serve(engine, '127.0.0.1', 0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        for _ in range(3):
+            client = socket.create_connection(server.server_address, timeout=10)
+            client.sendall(b'GET /metrics HTTP/1.1\r\nHost: x\r\n\r\n')
+            client.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, b'\x01\x00\x00\x00\x00\x00\x00\x00')
+            client.close()              # reset: the answer's write fails with a broken pipe / reset
+            gone.set()
+            time.sleep(0.5)
+            gone.clear()
+        assert 'Traceback' not in capfd.readouterr().err
+        try:
+            raise RuntimeError('a real server failure')
+        except RuntimeError:
+            server.handle_error(None, ('127.0.0.1', 0))
+        assert 'a real server failure' in capfd.readouterr().err
+    finally:
+        gone.set()
+        server.shutdown()
+        server.server_close()

@@ -20,7 +20,8 @@ natlang test examples/triage                                  # the saved exampl
 - **is_urgent.nl**: `(ticket: Untrusted<string>) => boolean`, also a decision, with the urgency rule in its instructions.
 - **triage.ts**: ordinary TypeScript that imports the two `.nl` files as functions. `escalate(classify, { to: 'teacher', floor: 0.8 })`
   from `@natlang/node/std` scores locally and sends only tickets below 0.8 confidence to the stronger model (`teacher` is
-  the profile your model profile names as `escalate`; without one it runs on the default model). It checks urgency for
+  the profile your model profile names as `escalate`; without one, the local answer stands with `escalated: false` and
+  `reason: 'unavailable:...'`). It checks urgency for
   non-spam tickets, counts labels in code, and shortens the refined inline `nl` summary with `semanticRepair`.
 - **main.ts**: the `triage` target in natlang.json. Wraps incoming ticket strings with `untrusted(...)` and calls `triage`.
 - **natlang.json**: the package: its files, the `triage` target and its arguments, the model, and warm-up calls.

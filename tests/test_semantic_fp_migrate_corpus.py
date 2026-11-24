@@ -83,7 +83,7 @@ def test_apply_and_package_leave_out_reserved(tmp_path, monkeypatch):
     gone.mkdir(parents=True)
     (gone / 'b.nl').write_text('---\nreturns: string\n---\nx\n')
     monkeypatch.setattr(mc, 'REPO', repo)
-    change = {'path': 'a.nl', 'before': 'old', 'after': '---\nreturns: V\nreadout: decision\n---\nnew\n', 'role': 'leaf'}
+    change = {'path': 'a.nl', 'before': '---\nreturns: V\n---\nold\n', 'after': '---\nreturns: V\nreadout: decision\n---\nnew\n', 'role': 'leaf'}
     p1 = proposal_dir(tmp_path, 'design-brief:001', 'candidate', root, [change])
     p2 = proposal_dir(tmp_path, 'design-brief:002', 'delete', gone)
     comparison = {'accepted': True}
@@ -140,7 +140,7 @@ def test_package_cli_leaves_out_pairs_of_held_programs(tmp_path, monkeypatch):
         root.mkdir(parents=True)
         (root / 'a.nl').write_text('---\nreturns: V\n---\nold\n')
     monkeypatch.setattr(mc, 'REPO', repo)
-    change = {'path': 'a.nl', 'before': 'old', 'after': '---\nreturns: V\nreadout: decision\n---\nnew\n', 'role': 'leaf'}
+    change = {'path': 'a.nl', 'before': '---\nreturns: V\n---\nold\n', 'after': '---\nreturns: V\nreadout: decision\n---\nnew\n', 'role': 'leaf'}
     decisions = tmp_path / 'decisions.jsonl'
     decisions.write_text(''.join(json.dumps({'program': f'design-brief:{n}', 'root': str(roots[n]), 'decision': 'accept',
                                              'proposal': str(proposal_dir(tmp_path, f'design-brief:{n}', 'candidate', roots[n], [change])),
@@ -156,3 +156,107 @@ def test_package_cli_leaves_out_pairs_of_held_programs(tmp_path, monkeypatch):
     mc.main(['package', '--decisions', str(decisions), '--out', str(tmp_path / 'out'), '--cases', str(cases)])
     kept = [json.loads(line)['program'] for line in (tmp_path / 'out' / 'pairs.jsonl').read_text().splitlines()]
     assert kept == ['design-brief:001'] and seen == [[['design-briefs:application-001'], ['design-briefs:application-033']]]
+
+
+def test_package_after_apply_reconstructs_before_from_changes(tmp_path, monkeypatch):
+    repo = tmp_path / 'repo'
+    root = repo / 'codebases' / 'design_briefs' / '001-x'
+    root.mkdir(parents=True)
+    orig_nl = '---\nreturns: V\n---\nold\n'
+    new_nl = '---\nreturns: V\nreadout: decision\n---\nnew\n'
+    new_helper = 'export default function run() { return "a"; }\n'
+    (root / 'a.nl').write_text(orig_nl)
+    (root / 'types.ts').write_text('export type V = "a" | "b";\n')
+    monkeypatch.setattr(mc, 'REPO', repo)
+    changes = [
+        {'path': 'a.nl', 'before': orig_nl, 'after': new_nl, 'role': 'driver'},
+        {'path': 'a/run.ts', 'before': None, 'after': new_helper, 'role': 'helper'},
+    ]
+    p1 = proposal_dir(tmp_path, 'design-brief:001', 'candidate', root, changes)
+    decisions = [{'program': 'design-brief:001', 'root': str(root), 'proposal': str(p1), 'decision': 'accept',
+                  'findings': [], 'comparison': {'accepted': True}}]
+    # Run apply FIRST, then package: before must still match the original pre-apply state!
+    mc.apply_decisions(decisions, repo)
+    assert (root / 'a.nl').read_text() == new_nl
+    assert (root / 'a' / 'run.ts').read_text() == new_helper
+    rows, _ = mc.package(decisions, tmp_path / 'out')
+    assert len(rows) == 1
+    assert rows[0]['before']['files']['a.nl'] == orig_nl
+    assert 'a/run.ts' not in rows[0]['before']['files']
+    assert rows[0]['after']['files']['a.nl'] == new_nl
+    assert rows[0]['after']['files']['a/run.ts'] == new_helper
+    assert rows[0]['before']['sha256'] != rows[0]['after']['sha256']
+
+
+def test_program_tasks_filters_by_accepted_source_sha_and_deduplicates(tmp_path):
+    case = lambda cid, sha: {'id': cid, 'split': 'train', 'semantics': {'root': 'a.nl'},
+                             'equivalence': {'program': 'design-brief:001', 'oracle': 'exact', 'split': 'dev', 'source_sha256': sha}}
+    cases = [case('c1', 'failed-sha'), case('c1', 'accepted-sha'), case('c1', 'accepted-sha'), case('c2', 'accepted-sha')]
+    decisions = [{'program': 'design-brief:001', 'decision': 'accept', 'source_sha256': 'accepted-sha'}]
+    rows = mc.program_tasks(cases, decisions, tmp_path / 'out')
+    assert [r['id'] for r in rows] == ['c1:sfp-migrated', 'c2:sfp-migrated']
+    assert all(r['semantic_fp_migration']['source_sha256'] == 'accepted-sha' for r in rows)
+
+
+def test_apply_decisions_handles_worktree_and_pin_paths(tmp_path, monkeypatch):
+    main_repo = tmp_path / 'main'
+    pin_repo = tmp_path / 'pin-abc'
+    target_repo = tmp_path / 'checkout'
+    for base in (main_repo, pin_repo, target_repo):
+        (base / 'codebases' / 'design_briefs' / '001-x').mkdir(parents=True)
+    (pin_repo / '.natlang-pin.json').write_text('{}')
+    (target_repo / 'codebases' / 'design_briefs' / '001-x' / 'a.nl').write_text('old\n')
+    monkeypatch.setattr(mc, 'REPO', main_repo)
+    pin_root = pin_repo / 'codebases' / 'design_briefs' / '001-x'
+    change = {'path': 'a.nl', 'before': 'old\n', 'after': 'new\n', 'role': 'leaf'}
+    p1 = proposal_dir(tmp_path, 'design-brief:001', 'candidate', pin_root, [change])
+    decisions = [{'program': 'design-brief:001', 'root': str(pin_root), 'proposal': str(p1), 'decision': 'accept',
+                  'findings': [], 'comparison': {'accepted': True}}]
+    written, removed = mc.apply_decisions(decisions, target_repo)
+    assert written == ['codebases/design_briefs/001-x/a.nl'] and removed == []
+    assert (target_repo / 'codebases' / 'design_briefs' / '001-x' / 'a.nl').read_text() == 'new\n'
+
+
+def test_settle_judge_forwards_provider_and_model(tmp_path, monkeypatch):
+    seen = {}
+    def fake_run(cmd, **kwargs):
+        seen['cmd'] = cmd
+        seen['env'] = kwargs.get('env', {})
+        return type('P', (), {'stdout': '{"next": "retry"}\n', 'stderr': '', 'returncode': 0})()
+    monkeypatch.setattr(mc.subprocess, 'run', fake_run)
+    judge = mc.settle_judge(tmp_path, provider='openai-codex', model='gpt-6-luna')
+    assert judge({'accepted': False}, 1, []) == 'retry'
+    assert '--provider' in seen['cmd'] and 'openai-codex' in seen['cmd']
+    assert '--model' in seen['cmd'] and 'gpt-6-luna' in seen['cmd']
+
+
+def test_host_ts_signatures_ts_host_nested_driver_and_new_nl_file(tmp_path):
+    """Static + runtime checks on applications/migration/program/host.ts fixes."""
+    host_src = (REPO / 'applications' / 'migration' / 'program' / 'host.ts').read_text()
+    # 1. signatures() filters to named .nl functions
+    assert "c.functions.filter(f => f.source.endsWith('.nl'))" in host_src
+    # 2. problemsOf checks existsSync before reading pre-existing .nl file
+    assert "if (existsSync(existing))" in host_src
+    # 3. typeProblems supports nested drivers (no parts.length === 1 restriction)
+    assert "parts.length === 1" not in host_src
+    assert "existsSync(join(directory, `${folder}.nl`))" in host_src
+    # 4. tsHost() resolves automatically relative to host.ts without NATLANG_TS_HOST / NATLANG_BIN
+    import os
+    import shutil
+    import subprocess
+    node = os.environ.get('NATLANG_NODE') or shutil.which('node')
+    assert node
+    script = (
+        "import { existsSync } from 'node:fs';\n"
+        "import { dirname, join } from 'node:path';\n"
+        f"let dir = {json.dumps(str(REPO / 'applications/migration/program'))};\n"
+        "let found = null;\n"
+        "for (let i = 0; i < 8; i++) {\n"
+        "  const c = join(dir, 'ts-host');\n"
+        "  if (existsSync(join(c, 'package.json'))) { found = c; break; }\n"
+        "  dir = dirname(dir);\n"
+        "}\n"
+        "console.log(found);\n"
+    )
+    res = subprocess.run([node, '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
+    assert Path(res.stdout.strip()) == REPO / 'ts-host'

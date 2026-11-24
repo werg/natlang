@@ -3,7 +3,7 @@ import type { LocalModelRelease } from '../model-catalog.js';
 import { enclosingProgram } from '../calls/feedback.js';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline/promises';
@@ -604,6 +604,38 @@ type IdiomIssue = { file: string; kind: string; stepIndex?: number; excerpt: str
  * rules, external text typed as trusted) on the configured model as `natlang run`, and reports each finding as a
  * diagnostic `idiom-review-<kind>`: a warning, or with --idiom-strict an error when its confidence is at least 0.8.
  */
+function parseIdiomReport(stdout: string): { issues?: IdiomIssue[] } | undefined {
+  const trimmed = stdout.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed) as { issues?: IdiomIssue[] };
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.issues)) return parsed;
+  } catch { /* may have leading log lines before the JSON report */ }
+  for (let index = trimmed.lastIndexOf('{'); index >= 0; index = trimmed.lastIndexOf('{', index - 1)) {
+    try {
+      const parsed = JSON.parse(trimmed.slice(index)) as { issues?: IdiomIssue[] };
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.issues)) return parsed;
+    } catch { /* try an earlier brace */ }
+  }
+  return undefined;
+}
+
+function runReviewerProcess(argv: string[]): Promise<{ status: number | null; stdout: string; stderr: string; error?: Error }> {
+  return new Promise(done => {
+    const child = spawn(process.execPath, argv, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, NO_COLOR: '1' },
+    });
+    let stdout = '', stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', error => done({ status: null, stdout, stderr, error }));
+    child.on('close', status => done({ status, stdout, stderr }));
+  });
+}
+
 async function idiomDiagnostics(parsed: Parsed, project: string): Promise<NatlangDiagnostic[]> {
   const reviewer = idiomReviewerRoot();
   if (!existsSync(join(reviewer, 'natlang.json')))
@@ -614,9 +646,8 @@ async function idiomDiagnostics(parsed: Parsed, project: string): Promise<Natlan
   const escalateTo = option(parsed, '--escalate');
   const argv = [fileURLToPath(new URL('./main.js', import.meta.url)), 'run', reviewer, ...selection,
     ...(parsed.options.has('--yes') ? ['--yes'] : []), '--', root, ...(escalateTo ? ['--escalate-to', escalateTo] : [])];
-  const ran = spawnSync(process.execPath, argv, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, NO_COLOR: '1' } });
-  let report: { issues?: IdiomIssue[] } | undefined;
-  try { report = JSON.parse(ran.stdout.slice(ran.stdout.indexOf('{'))); } catch { report = undefined; }
+  const ran = await runReviewerProcess(argv);
+  const report = parseIdiomReport(ran.stdout);
   if (!report || !Array.isArray(report.issues) || (ran.status !== 0 && ran.status !== 1))
     throw new CliError(`the idiom reviewer did not report: ${(ran.stderr || ran.stdout || String(ran.error ?? '')).trim().split('\n').slice(-3).join(' ')}`,
       EXIT.unavailable);
@@ -624,12 +655,14 @@ async function idiomDiagnostics(parsed: Parsed, project: string): Promise<Natlan
   return report.issues.map(issue => {
     const path = join(root, issue.file);
     const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
-    const probe = issue.excerpt.split('\n').find(line => line.trim())?.trim() ?? '';
+    const excerpt = typeof issue.excerpt === 'string' ? issue.excerpt : '';
+    const probe = excerpt.split('\n').find(line => line.trim())?.trim() ?? '';
     const at = probe ? text.indexOf(probe) : -1;
     const line = at >= 0 ? text.slice(0, at).split('\n').length : 1;
+    const confidence = typeof issue.confidence === 'number' && Number.isFinite(issue.confidence) ? issue.confidence : 0;
     return { file: issue.file, line, column: 1, start: Math.max(at, 0), end: Math.max(at, 0) + probe.length, code: `idiom-review-${issue.kind}`,
-      severity: strict && issue.confidence >= 0.8 ? 'error' : 'warning',
-      message: `${issue.suggestion} (${issue.kind}, p=${issue.confidence.toFixed(2)}${issue.escalated ? ', escalated' : ''})` } satisfies NatlangDiagnostic;
+      severity: strict && confidence >= 0.8 ? 'error' : 'warning',
+      message: `${issue.suggestion} (${issue.kind}, p=${confidence.toFixed(2)}${issue.escalated ? ', escalated' : ''})` } satisfies NatlangDiagnostic;
   });
 }
 

@@ -54,7 +54,7 @@ test('a union of records reports the wrong field of the variant the value matche
   assert.throws(() => coerce({ phase: 'retry' }, type, new TypeEnv(), 'checkpoint'), /^Error|checkpoint: type-mismatch, expected \{/);
 });
 
-test('a value eval computed keeps the fields its declared record does not list; a return_result literal is exact', async () => {
+test('finish:true and return_result reject extra record fields outside the declared return type while locals keep them', async () => {
   const { createNatlangRuntime, loadVirtualNatlang } = await import('../dist/index.js');
   const run = async calls => {
     let step = 0;
@@ -64,23 +64,37 @@ test('a value eval computed keeps the fields its declared record does not list; 
     const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: "{ role: string, text: string }"\n---\nAsk provider.\n' }, 'root.nl');
     try { return await runtime.run(() => fn('Ada')); } catch (error) { return error; }
   };
-  assert.deepEqual(await run([['eval', { code: 'const message = provider.reply(); return message;', finish: true }]]),
-    { role: 'assistant', text: 'hi', durationMs: 12 });
+  const extraFinish = await run([['eval', { code: 'const message = provider.reply(); return message;', finish: true }]]);
+  assert.ok(extraFinish instanceof Error, 'eval finish:true with an unknown record field is refused');
+  assert.deepEqual(
+    await run([
+      ['eval', { code: 'const message = provider.reply(); message.durationMs' }],
+      ['eval', { code: 'return { role: message.role, text: message.text };', finish: true }],
+    ]),
+    { role: 'assistant', text: 'hi' },
+  );
   const literal = await run([['return_result', { status: 'success', value: { role: 'assistant', text: 'hi', extra: 1 } }]]);
   assert.ok(literal instanceof Error, 'a return_result literal with an unknown field is refused');
 });
 
-test('an eval local keeps the fields of a computed value its type does not list', async () => {
+test('an eval local keeps the fields of a computed value its type does not list, while finish:true requires projecting them', async () => {
   const { createNatlangRuntime, loadVirtualNatlang } = await import('../dist/index.js');
   let step = 0;
-  const calls = [['eval', { code: 'const result: { items: { type: "call"; id: string }[] } = view.view(); result.items.length' }],
-    ['eval', { code: 'return result;', finish: true }]];
-  const model = async () => ({ calls: [calls[step++] ?? ['return_result', { status: 'failed', reason: 'no more calls' }]] });
+  const calls = [
+    ['eval', { code: 'const result: { items: { type: "call"; id: string }[] } = view.view(); (result.items[0] as any).signature' }],
+    ['eval', { code: 'return { items: result.items.map(({ type, id }) => ({ type, id })) };', finish: true }],
+  ];
+  const seen = [];
+  const model = async req => {
+    seen.push(String(req.messages.at(-1)?.content ?? ''));
+    return { calls: [calls[step++] ?? ['return_result', { status: 'failed', reason: 'no more calls' }]] };
+  };
   const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' } });
   // The helper's declared return type lists fewer fields than the value carries, as a provider's message can.
   const fn = loadVirtualNatlang({
     'root.nl': '---\nargs: {}\nreturns: "{ items: { type: \\"call\\", id: string }[] }"\n---\nReturn the view.\n',
     'root/view.ts': 'export function view(): { items: { type: "call"; id: string }[] } {\n' +
       '  return { items: [{ type: "call", id: "c1", signature: "sig" }] } as never;\n}\n' }, 'root.nl');
-  assert.deepEqual(await runtime.run(() => fn()), { items: [{ type: 'call', id: 'c1', signature: 'sig' }] });
+  assert.deepEqual(await runtime.run(() => fn()), { items: [{ type: 'call', id: 'c1' }] });
+  assert.ok(seen.some(text => text.includes('"sig"')), 'intermediate local retained extra field');
 });

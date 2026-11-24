@@ -415,8 +415,13 @@ class SglangEngine(Engine):
         """The served export's tokenizer as SGLang's grammar backend loads it (common.tool_grammar.info_from_export)."""
         if getattr(self, 'sglang_export_dir', None) is None:
             return super()._tool_grammar_info()
-        from ..common import tool_grammar
-        return tool_grammar.info_from_export(self.sglang_export_dir)
+        # once per export directory: this runs for every chat call (twice), on the request threads that share the GIL
+        cached = getattr(self, '_tool_grammar_export_cache', None)
+        if cached is None or cached[0] != self.sglang_export_dir:
+            from ..common import tool_grammar
+            cached = self._tool_grammar_export_cache = (
+                self.sglang_export_dir, tool_grammar.info_from_export(self.sglang_export_dir))
+        return cached[1]
 
     def rebind_in_place(self, policy_id, weights_sha256=None, version=None, *, export_dir=None, weights_path=None,
                         checkpoint_path=None, tensor_identity=None):

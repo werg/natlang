@@ -1,0 +1,140 @@
+[
+  {
+    "name": "tune-security-strong-cmek",
+    "function": "scoreCriterion.nl",
+    "group": "flagship:diligence:tune-security-cmek",
+    "inputs": {
+      "dossierName": "VaultCore",
+      "digest": {
+        "sectionId": "sec-1",
+        "title": "Encryption & Isolation",
+        "summary": "Dedicated per-tenant KMS keys with AES-256-GCM at rest, TLS 1.3 in transit, and SOC 2 Type II + ISO 27001 reports.",
+        "keyClaims": ["Per-tenant KMS keys", "SOC 2 Type II and ISO 27001 certified"],
+        "citations": [{ "sectionId": "sec-1", "quote": "Dedicated per-tenant KMS keys with AES-256-GCM at rest" }],
+        "children": []
+      },
+      "criterion": {
+        "id": "security",
+        "name": "Tenant Isolation & Encryption",
+        "guidance": "Must isolate tenant data cryptographically with customer-managed keys and independent security certification.",
+        "weight": 2
+      }
+    },
+    "expected": "strong"
+  },
+  {
+    "name": "tune-security-dealbreaker-training",
+    "function": "scoreCriterion.nl",
+    "group": "flagship:diligence:tune-security-training",
+    "inputs": {
+      "dossierName": "OpenPromptCloud",
+      "digest": {
+        "sectionId": "sec-data",
+        "title": "Terms of Service",
+        "summary": "Submitted prompts and customer documents are retained indefinitely and used to train shared commercial models with no opt-out.",
+        "keyClaims": ["Indefinite retention for model training", "No opt-out available"],
+        "citations": [{ "sectionId": "sec-data", "quote": "used to train shared commercial models with no opt-out" }],
+        "children": []
+      },
+      "criterion": {
+        "id": "security",
+        "name": "Zero Model Training on Customer Data",
+        "guidance": "Customer data must never be used to train shared models; mandatory training without opt-out is a dealbreaker.",
+        "weight": 3
+      }
+    },
+    "expected": "dealbreaker"
+  },
+  {
+    "name": "tune-license-strong-apache",
+    "function": "scoreCriterion.nl",
+    "group": "flagship:diligence:tune-license-apache",
+    "inputs": {
+      "dossierName": "IndexLite",
+      "digest": {
+        "sectionId": "lic-1",
+        "title": "Licensing",
+        "summary": "Dual-licensed under Apache-2.0 and MIT with explicit patent grant and zero copyleft dependencies.",
+        "keyClaims": ["Apache-2.0 / MIT dual license", "Explicit patent grant"],
+        "citations": [{ "sectionId": "lic-1", "quote": "Dual-licensed under Apache-2.0 and MIT with explicit patent grant" }],
+        "children": []
+      },
+      "criterion": {
+        "id": "license",
+        "name": "Permissive Licensing",
+        "guidance": "Must use Apache-2.0, MIT, or BSD without copyleft obligations.",
+        "weight": 2
+      }
+    },
+    "expected": "strong"
+  },
+  {
+    "name": "tune-license-dealbreaker-agpl",
+    "function": "scoreCriterion.nl",
+    "group": "flagship:diligence:tune-license-agpl",
+    "inputs": {
+      "dossierName": "GridStore",
+      "digest": {
+        "sectionId": "lic-1",
+        "title": "License Notice",
+        "summary": "Distributed strictly under AGPL-3.0; no enterprise or commercial license is offered.",
+        "keyClaims": ["AGPL-3.0 only", "No commercial exemption"],
+        "citations": [{ "sectionId": "lic-1", "quote": "Distributed strictly under AGPL-3.0" }],
+        "children": []
+      },
+      "criterion": {
+        "id": "license",
+        "name": "Permissive Licensing",
+        "guidance": "Must use MIT or Apache-2.0; AGPL without commercial waiver is a dealbreaker.",
+        "weight": 3
+      }
+    },
+    "expected": "dealbreaker"
+  },
+  {
+    "name": "tune-reliability-acceptable-sla",
+    "function": "scoreCriterion.nl",
+    "group": "flagship:diligence:tune-reliability-sla",
+    "inputs": {
+      "dossierName": "CacheMesh",
+      "digest": {
+        "sectionId": "ops-1",
+        "title": "Availability SLA",
+        "summary": "Provides 99.9% monthly uptime SLA in two regions with automated daily snapshots.",
+        "keyClaims": ["99.9% uptime SLA", "Daily automated snapshots"],
+        "citations": [{ "sectionId": "ops-1", "quote": "99.9% monthly uptime SLA in two regions" }],
+        "children": []
+      },
+      "criterion": {
+        "id": "reliability",
+        "name": "Operational SLA",
+        "guidance": "Requires at least 99.9% uptime SLA and documented backups.",
+        "weight": 1
+      }
+    },
+    "expected": "acceptable"
+  },
+  {
+    "name": "tune-reliability-concern-single-az",
+    "function": "scoreCriterion.nl",
+    "group": "flagship:diligence:tune-reliability-az",
+    "inputs": {
+      "dossierName": "SoloDB",
+      "digest": {
+        "sectionId": "ops-1",
+        "title": "Deployment Architecture",
+        "summary": "Runs in a single availability zone with manual failover procedures taking up to 4 hours.",
+        "keyClaims": ["Single availability zone", "Manual 4-hour failover"],
+        "citations": [{ "sectionId": "ops-1", "quote": "Runs in a single availability zone with manual failover" }],
+        "children": []
+      },
+      "criterion": {
+        "id": "reliability",
+        "name": "High Availability",
+        "guidance": "Production datastore should support multi-AZ automated failover with RTO under 15 minutes.",
+        "weight": 1.5
+      }
+    },
+    "expected": "concern"
+  }
+]

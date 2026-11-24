@@ -3,7 +3,8 @@
  * natural-language function: eligibility (a pluggable rule or judgment), the verdict (a scored decision under the
  * shop's policy, escalated when unsure) and the reply (refined until it answers the customer).
  */
-import { Context, decide, type PluggableSetting } from '@natlang/node';
+import { Context, type PluggableSetting } from '@natlang/node';
+import { escalate } from '@natlang/node/std';
 import verdict from './verdict.nl';
 import { eligibility } from './rules.js';
 import { replyFor } from './reply.js';
@@ -24,14 +25,14 @@ export type DeskOptions = {
 export async function settle(requests: Request[], options: DeskOptions): Promise<Outcome[]> {
   const eligible = eligibility(options.eligibility);
   // One verdict function, one context per shop: the shop's policy is the `policy` its instructions name.
-  const under = (shop: Shop) => verdict.in(Context.empty().with({ policy: options.policies[shop] }));
+  const under = (shop: Shop) => escalate(verdict.in(Context.empty().with({ policy: options.policies[shop] })), {
+    to: options.stronger ?? 'teacher',
+    floor: options.floor ?? 0.8,
+  });
   const judge = async (request: Request): Promise<{ value: Verdict; confidence: number; escalated: boolean }> => {
     if (!await eligible(request)) return { value: 'decline', confidence: 1, escalated: false };
-    const policy = under(request.order.shop);
-    const { value, confidence } = await decide(policy, request);
-    if (confidence >= (options.floor ?? 0.8)) return { value, confidence, escalated: false };
-    // Unsure: the same function in the same context, on the stronger model.
-    return { value: await policy.on({ model: options.stronger ?? 'teacher' })(request), confidence, escalated: true };
+    const { value, confidence, escalated } = await under(request.order.shop)(request);
+    return { value, confidence, escalated };
   };
   return Promise.all(requests.map(async request => {
     const { value, confidence, escalated } = await judge(request);

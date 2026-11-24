@@ -19,7 +19,10 @@ record assembly are TypeScript; eligibility, the verdict and the reply are judgm
 export async function settle(requests: Request[], options: DeskOptions): Promise<Outcome[]> {
   const eligible = eligibility(options.eligibility);
   // One verdict function, one context per shop: the shop's policy is the `policy` its instructions name.
-  const under = (shop: Shop) => verdict.in(Context.empty().with({ policy: options.policies[shop] }));
+  const under = (shop: Shop) => escalate(verdict.in(Context.empty().with({ policy: options.policies[shop] })), {
+    to: options.stronger ?? 'teacher',
+    floor: options.floor ?? 0.8,
+  });
   ...
   return Promise.all(requests.map(async request => {
     const { value, confidence, escalated } = await judge(request);
@@ -65,19 +68,28 @@ function, or keep the tool loop.
 
 <!-- from: examples/refunds/desk.ts -->
 ```ts
-    const policy = under(request.order.shop);
-    const { value, confidence } = await decide(policy, request);
-    if (confidence >= (options.floor ?? 0.8)) return { value, confidence, escalated: false };
-    // Unsure: the same function in the same context, on the stronger model.
-    return { value: await policy.on({ model: options.stronger ?? 'teacher' })(request), confidence, escalated: true };
+  const under = (shop: Shop) => escalate(verdict.in(Context.empty().with({ policy: options.policies[shop] })), {
+    to: options.stronger ?? 'teacher',
+    floor: options.floor ?? 0.8,
+  });
+  const judge = async (request: Request): Promise<{ value: Verdict; confidence: number; escalated: boolean }> => {
+    if (!await eligible(request)) return { value: 'decline', confidence: 1, escalated: false };
+    const { value, confidence, escalated } = await under(request.order.shop)(request);
+    return { value, confidence, escalated };
+  };
 ```
 
-`fn.on({ model: NAME })` is the same function on another of the runtime's models: in host code an entry of the
-runtime's `models`; under `natlang run`, the profile that the selected profile names as `escalate`. A name the runtime
-does not have runs on its default model. The local model settles high-confidence requests locally, and only the unsure
-or high-risk ones cost a stronger model's call. In a `.nl` body the same floors are instructions: nldb's `database.nl`
-says "decide(classify, request, catalog) ... When its answer is unclear, or no answer has probability at least 0.5,
-change nothing". A driver without a scorer still answers a decision function, with `scored: false` and probability 1.
+`escalate(fn, { to, floor?, risk?, policy? })` (from `@natlang/node/std`) scores locally via `decide` and sends only
+unsure or high-risk calls to `fn.on({ model: to })`, keeping `fn`'s context and recording a `decision_escalate` event
+plus an `escalation` note on the local call. When the runtime has no model named `to`, `escalate` keeps the local
+answer with `escalated: false` and a `reason` starting `unavailable:` rather than rerunning on the default model.
+`policy: 'nl'` asks the shipped `shouldEscalate.nl`, which reads the function's recorded escalation and disagreement
+history and measured tier cost from the call store. For a direct one-off retry without gating, `fn.on({ model: NAME })`
+runs the same function on another runtime model (under `natlang run`, the profile that the selected profile names as
+`escalate`; a name the runtime lacks runs on its default model). In a `.nl` body the same floors are instructions:
+nldb's `database.nl` says "decide(classify, request, catalog) ... When its answer is unclear, or no answer has
+probability at least 0.5, change nothing". A driver without a scorer still answers a decision function, with
+`scored: false` and probability 1.
 
 ## One function, another context: `.in`
 
@@ -100,7 +112,10 @@ when it grants part of it, decline when it grants nothing.
 
 <!-- from: examples/refunds/desk.ts -->
 ```ts
-  const under = (shop: Shop) => verdict.in(Context.empty().with({ policy: options.policies[shop] }));
+  const under = (shop: Shop) => escalate(verdict.in(Context.empty().with({ policy: options.policies[shop] })), {
+    to: options.stronger ?? 'teacher',
+    floor: options.floor ?? 0.8,
+  });
 ```
 
 A data entry of the context (`policy`) is in scope for the call by its name. `Context.fromFolder(dir, nodeSourceFiles(root))` loads a
@@ -159,7 +174,7 @@ Where an exact rule and a judgment both answer one question, give them one inter
 
 <!-- from: examples/refunds/rules.ts -->
 ```ts
-export function eligibility(setting: PluggableSetting) {
+export function eligibility(setting?: PluggableSetting) {
   return pluggable<[Request], boolean>({ crisp: withinWindow, nl: request => eligibleNl(request) }, setting,
     { name: 'refunds.eligible', default: 'crisp', serve: 'crisp' });
 }
@@ -203,7 +218,7 @@ a `semanticMap` or `Promise.all` map.
 
 The standard library (`@natlang/node/std`, in the browser `@natlang/browser/std`) provides typed TypeScript combinators
 around named `.nl` judgments shipped with the package (`meets`, `relates`, `beats`, `intentOf`, `compatible`, `combine`,
-`settled`, `compileRuleFn`, `stepKind`). `instructionsOf(source)` reads a `.nl` source as its front matter, declaration
+`settled`, `compileRuleFn`, `shouldEscalate`, `stepKind`). `instructionsOf(source)` reads a `.nl` source as its front matter, declaration
 and steps, and `stepKind(step, signature, file)` says what one step asks for (`judgment`, `mechanism`,
 `guard-for-type` or `redundant`): tools that review or rewrite programs read them this way. Every shipped judgment is an ordinary natlang function you can call, `decide`, `.in`, `.on`,
 trace and specialise. Every combinator nests its child calls under a `std:<name>` span and passes values by reference so
@@ -439,11 +454,13 @@ specification:
    in shadow, promotes it on evidence, and hands any input no case admits (or a case that fails) back to the model.
    `natlang compilations list`, `show` and `why CALL` explain what served a call
    ([`examples/specialization`](https://github.com/werg/natlang/tree/main/examples/specialization)).
-3. **Escalation.** Below a floor, `fn.on({ model })` asks a stronger model. The escalated calls show which inputs
-   the local model cannot settle yet: save them as cases with `natlang traces fix CALL_ID --expected JSON`.
+3. **Escalation.** Below a confidence floor or risk floor, `escalate` (from `@natlang/node/std`) asks a stronger model
+   and records each disagreement on the local call. Save hard cases with `natlang traces fix CALL_ID --expected JSON`
+   and inspect call-store metrics with `natlang profile`.
 4. **Tuning.** `natlang tune` trains the local model's weights on the program's `examples.json` and activates a
    release; `--rollback` returns to the previous one ([tuning](tuning.md)).
-5. **Improvement.** `natlang improve init --export NAME` writes an improvement case for a program;
-   `natlang improve CASE.json --out DIR --model MODEL` proposes source changes, scores them on the case's train,
-   validation and test cases, and `natlang improve adopt DIR --into CHECKOUT` takes the winner
-   ([adaptation](adaptation.md) covers `natlang eval` and `natlang optimize` for instruction search).
+5. **Improvement.** `natlang improve DIR --model MODEL` diagnoses failures, escalations, disagreements, and fixed
+   traces from the call store, rewrites only instructions (front matter byte-identical), checks the change on
+   deterministic `support`/`dev`/`confirmation` splits, and installs accepted changes with a byte-identical rollback
+   record (`--proposal FILE` checks a patch you wrote; `natlang improve adopt-call CALL_ID` checks and installs a single
+   call's `edit_code` fix; see [neuralese](neuralese.md) and [adaptation](adaptation.md)).

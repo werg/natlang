@@ -25,13 +25,15 @@ whole program in one screen.
 ## The loop
 
 1. `natlang check --json`: types, signatures and call sites, without a model. Fix every diagnostic first; each one
-   says what to write instead.
+   says what to write instead. Add `--idiom` (or `--idiom-strict`) to review `.nl` instructions with the model for
+   mechanism-in-prose, cue-word rules, or untrusted text typed as trusted.
 2. `natlang call route.nl '{"from":"a@b","subject":"Invoice","body":"Can you resend it?"}' --json`: one real call.
    `natlang run` runs the whole program on messages.json, whose messages need no reply; `natlang run . -- '[...]'`
    plans your own messages as JSON, and drafts a reply for each one that needs it.
 3. `natlang test --json`: every case in examples.json. When you change behaviour, add a case first.
 4. `natlang traces show CALL_ID`: every step the model took (each call prints its ID on stderr).
-   `natlang traces fix CALL_ID --expected JSON` turns a wrong result into a saved case.
+   `natlang traces fix CALL_ID --expected JSON` turns a wrong result into a saved case. `natlang profile` summarizes
+   latency, tokens, confidence, escalation rate, and the recommended next optimization across recorded calls.
 
 Exit codes: 0 ok; 1 the program is wrong; 2 usage error; 3 the model is unavailable.
 
@@ -44,18 +46,23 @@ Exit codes: 0 ok; 1 the program is wrong; 2 usage error; 3 the model is unavaila
   that needs it calls it from its callable folder.
 - A property of a result goes in its type (`Is<T, "...">`), and outside text in `Untrusted<T>`. The runtime then
   checks and repairs them, with no instructions needed.
+- Compose with `@natlang/node/std`: `escalate(fn, { to: 'teacher', floor: 0.8 })` settles confident decisions locally
+  and sends only unsure or high-risk cases to a stronger model; `semanticRepair` drives bounded check-and-fix loops;
+  `semanticMatch` pairs collections with exact blocking; `semanticRank` ranks items with debiased pairwise comparisons.
 - Refining until good enough is `iterateOn`: ``iterateOn(revise, draft).until(nl`draft answers every question in
   message`)``. The step function returns the next state, and a natural-language stopping check is allowed.
 - The same function under another policy is `fn.in(context)`; on a stronger model it is `fn.on({ model: NAME })`.
-  Gate on `decide`'s confidence and send only the unsure cases there.
 - A decision with both a code rule and a judgment uses `pluggable({ crisp, nl }, setting)`. In `shadow` mode both
   run, and their disagreements are recorded.
+- A directory reducer (`kind: directory-reducer`) declares `writes:` with a record of allowed file paths (or folder
+  globs) and their text types so the runtime rejects undeclared or mistyped writes (`writes-unsatisfied`).
 - Repeated inputs compile to code: `natlang specialize` turns a function's recorded calls into guarded crisp cases
   that answer without the model, and hands every other input back to it.
 - The program improves from its runs: `natlang tune` trains the local model's weights on this program's examples (it
-  needs a native student model; `natlang doctor` says whether one is set up), and `natlang improve init --export plan`
-  writes an improvement case: give it train, validation and test cases, and `natlang improve CASE.json --out DIR
-  --model MODEL` searches for better source against them.
+  needs a native student model; `natlang doctor` says whether one is set up). `natlang improve DIR --model MODEL`
+  diagnoses failures, escalations, and fixed traces from the call store, rewrites only instructions, checks dev and
+  confirmation splits, and installs with a rollback record (`--proposal FILE` checks a patch you wrote; `natlang
+  improve adopt-call CALL_ID` checks and installs a single call's `edit_code` fix).
 
 ## The model
 

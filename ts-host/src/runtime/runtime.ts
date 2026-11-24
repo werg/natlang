@@ -5,7 +5,7 @@ import { programGuidance as validateProgramGuidance, programGuidanceProgram } fr
 import { isAdaptationBinding, bindAdaptation } from '../adaptation/compatibility.js';
 import { fingerprint } from '../adaptation/identity.js';
 import type { ProgramDescriptor, AdaptationBinding, ExecutorIdentity } from '../adaptation/types.js';
-import type { ProgramGuidance, ProgramGuidanceInput } from '../guidance/program.js';
+import type { AuthoredTextGuidance, ProgramGuidance, ProgramGuidanceInput } from '../guidance/program.js';
 import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import type { DecisionScorer, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
@@ -114,6 +114,8 @@ export type NatlangRuntimeOptions = {
   /** Exact stored native guidance emitted by the memetic guidance exporter: one binding, or a list of scoped bindings
    * of one program (each call imports its function's binding, else the program-wide one). */
   nativeProgramGuidance?: ProgramGuidanceInput;
+  /** Text program guidance (program-wide and/or per-function, e.g. from `guidance.json` in `natlang improve DIR`). */
+  programGuidance?: AuthoredTextGuidance | { program?: string; functions?: Record<string, string>; programId?: string };
   executorIdentity?: ExecutorIdentity;
   isolateModules?: boolean;
   signal?: AbortSignal;
@@ -209,6 +211,7 @@ export type TaskOptions = { program?: ProgramDescriptor; adaptation?: Adaptation
   weights?: readonly WeightBinding[];
   services?: Services; serviceDeclarations?: Record<string, string>;
   nativeProgramGuidance?: ProgramGuidanceInput;
+  programGuidance?: AuthoredTextGuidance | { program?: string; functions?: Record<string, string>; programId?: string };
   serviceScopes?: Record<string, string[]>; signal?: AbortSignal; trace?: TraceSink; name?: string;
   /** Live events of this task (`LiveEvent`), besides the runtime's `onLive`. */
   onLive?: LiveSink;
@@ -262,6 +265,7 @@ export class NatlangTask {
   /** The weight releases pinned at creation; every call of this task, inner calls included, resolves from these. */
   readonly weights: readonly WeightBinding[];
   readonly nativeProgramGuidance?: ProgramGuidance;
+  readonly authoredProgramGuidance?: AuthoredTextGuidance | { program?: string; functions?: Record<string, string>; programId?: string };
   readonly specialization?: SpecializationMode;
   readonly auditOf?: string;
   /** The last failed call per caller and definition revision, so a retry can be recorded against it. */
@@ -335,6 +339,7 @@ export class NatlangTask {
     const program = options.program ?? runtime.options.program ?? binding?.program;
     const guidanceBinding = options.nativeProgramGuidance ?? runtime.options.nativeProgramGuidance;
     this.nativeProgramGuidance = guidanceBinding ? validateProgramGuidance(guidanceBinding) : undefined;
+    this.authoredProgramGuidance = options.programGuidance ?? runtime.options.programGuidance;
     if (this.nativeProgramGuidance) {
       if (!program) throw new Error('native program guidance requires its exact program descriptor');
       if (programGuidanceProgram(this.nativeProgramGuidance) !== program.id)

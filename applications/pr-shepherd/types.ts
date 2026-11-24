@@ -49,6 +49,8 @@ export type HunkSummary = {
   file: string;
   classification: HunkClass;
   crispSkipped: boolean;
+  /** True when `trivialMode: 'nl'` skipped the hunk via the model rather than the crisp fast path. */
+  modelSkipped?: boolean;
 };
 
 /** Draft documentation or test-note update returned by proposeDocFix.nl. */

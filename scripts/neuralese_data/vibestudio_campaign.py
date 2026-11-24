@@ -298,12 +298,21 @@ def _export_trajectories(archive, receipt, held, training):
             write_graph_telemetry(archive, receipt)
         return
     admitted = {}
+    native_state_referenced = False
+    from live_teacher_sources import observed_artifacts
     output = ZstdWriter(final)
     counts = {'completed_goals': 0, 'partial_trajectories': 0, 'supervised_decisions': 0, 'evidence_only': 0}
     try:
         for name, result in receipt.items():
             if result['status'] == 'verified':
-                episode = verified_episode(archive / 'capture' / result['manifest'], held, training)
+                with observed_artifacts() as artifacts:
+                    episode = verified_episode(archive / 'capture' / result['manifest'], held, training)
+                capture_root = (archive / 'capture').resolve()
+                for path in map(Path, artifacts):
+                    if path.is_relative_to(capture_root):
+                        first = path.relative_to(capture_root).parts[0]
+                        if first.startswith('retained-state-') or first == '.retained-state-packs':
+                            native_state_referenced = True
                 outcome = episode['trajectory_ir']['outcome']
                 admitted[name] = outcome
                 counts['completed_goals'] += outcome.get('task_completed', outcome['status'] == 'passed') is True
@@ -320,9 +329,11 @@ def _export_trajectories(archive, receipt, held, training):
     if output.rows:
         dataset = data_registry.record_dataset(f'vibestudio-{archive.parent.name}-{archive.name}'.lower(), archive,
                                                kind='teacher-demos', format='native Vibestudio Luna trajectories and capture evidence',
+                                               exclude=[] if native_state_referenced else ['capture/retained-state-*', 'capture/.retained-state-packs/**'],
                                                include=['capture/**', 'receipt.json', final.name, 'graph-metrics.json',
                                                         *(['wave.json'] if (archive / 'wave.json').is_file() else [])], rows=output.rows,
-                                               extra={'trajectory_counts': counts, 'observed_graph_metrics': graph_summary})
+                                               extra={'trajectory_counts': counts, 'observed_graph_metrics': graph_summary,
+                                                      'native_state_policy': 'recovery-referenced/1' if native_state_referenced else 'recovery-infrastructure-excluded/1'})
     publish(marker, {'verified': output.rows, 'dataset': dataset['id'] if dataset else None, **counts})
 
 

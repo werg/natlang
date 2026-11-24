@@ -9924,3 +9924,450 @@ Mechanism inventory: `scripts/memory_ledger.py` owns all admission, queue, backf
 Deployment: pull the commit in the DGX canonical checkout, restart only the ledger guard so its resident policy updates, and use the new CLI for future launches. Existing waiter processes retain their old Python code; restart only owned implicit waiters with their exact original launch arguments if immediate adoption is necessary. Requeued stored specs are upgraded automatically by the new guard. Do not stop productive jobs for the cleanup audit; its explicit 15 GiB reserve is already correct. All original data and active runtime pins remain untouched.
 
 Validation: actual Tick ledger unit `vibe-ledger-dgx-reserve-tests-a`, 0.5 GiB budget/7.5 GiB reserve, passed all 98 ledger tests in 3.19 s (127.8 MiB peak). Tests cover implicit old specs and queued relaunches, explicit zero/small overrides, non-DGX proportional admission, machine-identity caching and known-DGX policy with unavailable GPU discovery.
+
+## 2026-11-24 00:30 Program tuning on the A100: tenants beside the actor between rounds; the 11-20 fit chain never ran (program-tuning strand, fallow T1-T3)
+
+Owner (11-24): "move forward with all of that comprehensively": real LFM3 program fits, a bank meta-learned from them,
+held programs adapted from the bank, serving parity on every engine, measured outcomes, on the Colab A100 between
+aei1's round SFTs without ever delaying one.
+
+**State found.**
+- **None of the 8 queued fits ran a step.** `progtune-fit-seq-4` (11-20) logged "3 runs without a step" for every
+  program. `program_tune.py plan` wrote `rows` with `.resolve()`. That followed the 11-18 archive symlink of the programs
+  root to the HDD archive, and the archive copy was gone after the directory moved back to the NVMe. Only
+  `ext_decisions_route` (fitted 11-18) has a release. Its dev base arm (Pop, 81.3%) is the only measurement.
+- `progdev-route-window-2` / `-yield-2` had been polling since 11-20 for a guard script (`pop_free.py`) whose
+  grpo-v5 inputs no longer exist (orphaned): stopped. Pop now runs held-v3 every round, so the Pop-window design is
+  retired. The dev arms move to the A100.
+- The A100 runs aei1's round SFT at about 7.5 s/step (r0001: 1,150 steps, from ~22:57). Its actor alone claims 70.5 of
+  78 GiB (mem fraction 0.88), so nothing fits beside it.
+
+**Fixes (defaults, tests).**
+- `program_tune.py plan`/`bank` record paths as written, with symlinks kept (`logical`). The 8 plans were regenerated.
+  verdict resumes from its step 8 (`tune.build` resumes from state.json alone).
+- **Tenants** (`scripts/colab/admission.py --preemptible`). A tenant is admitted only beside a live actor claim
+  (`--beside-label actor-`), so never in the gap after the actor yields to a round. It yields when any normal
+  admission request is waiting: SIGTERM to its process group, SIGKILL after 60 s. Waiting requests are read from the
+  process table, because a round's learner admitted by an older checkout (`run-sft` checks the session out at the
+  driver's pin) writes no waiting record and evicts nobody. With current code a normal claim that does not fit also
+  evicts tenants, newest first. Tenants run under MPS with `CUDA_MPS_ACTIVE_THREAD_PERCENTAGE` 50
+  (`NATLANG_COLAB_TENANT_MPS_PERCENT`), so the actor keeps at least half the SMs.
+- **The actor alone caps its KV at 24 GB on large GPUs** (`ACTOR_ALONE_KV_CAP_GB`; `NATLANG_COLAB_ACTOR_FULL=1` opts
+  out). 128 running used 20% of the L4's 11.2 GB pool (11-23 13:50), so 24 GB is ~10x what the sequences use. The
+  A100 actor then claims 34 GiB and leaves 43 GiB for tenants (`colab_layout(...)['tenants']`: a fit at 12 GiB and a
+  measurement actor at 8 GB KV / 18 GiB). The L4's pool is below the cap and unchanged. This enters the A100 when aei1
+  next starts on a commit that has it (an actor restore runs the driver's pin), or when the keeper serves a
+  replacement session.
+- `program_tune.py colab-fit` runs a fit as a tenant at a tenant commit. The code is ROOT/natlang-tenant, a detached
+  worktree: the session's own checkout belongs to the round. The checkpoint and rows are shipped through Drive, the
+  release is made on the VM and pulled back verified. The fit resumes after an eviction, and only a whole release
+  lands. `fit/colab-claim.json` makes the DGX chain skip the program.
+- `program_tune.py colab-measure` runs a held_eval dev arm on the DGX (ledger, pin) against a tenant measurement actor
+  (`pop_rl_actor.serve_colab_tenant_actor`: base, or base + release on one SGLang adapter slot, port 8571 -> DGX 18732;
+  the policy id comes from the attested binding). A lost actor stops the measure, and its unscored episodes are left
+  out. The driver is `program-tune-20261117/colab-seq.sh COMMIT PIN fits|arms PROGRAM ...`.
+- Commits 62003deb8, ba275577b, 58343e0e6; check-main --quick exit 0.
+
+**Experiment progtune-a100-1 (declared before it runs).**
+- Pin 58343e0e6. Start policy: the untouched base 5ff07638 (no exposure to any program's dev or confirmation tasks).
+- 9 programs: route, verdict, tally, tree, retail, pubmed, searchqa, multihop, neuralese_iterate.
+- Fits: free LoRA rank 16 on every LFM3 target family, 60 steps x 8 support rows, Adam 2e-3, BF16 base / FP32
+  adapter. The DGX chain (`progtune-fit-seq-6`, low priority, 13 GB, 15-step segments) takes them from the decisions
+  end, and A100 tenants from the large end.
+- Arms: held_eval on each program's dev split, 2 samples per task. Engine: SGLang, BF16 weights, FP8 KV, the tenant
+  actor (64 running). Base on every program, then base + the program's release. The pairs are `compare`d (mean
+  per-task change, permutation p, task-bootstrap CI).
+- **Success** per program: a positive change with p < 0.05. **Failure:** a regression with p < 0.05. That starts a
+  diagnosis (row masking, template parity between the fit's rendering and the actor's, served-adapter parity (T3))
+  before the method is judged.
+- Bank: `program_tune.py bank` over the meta-train fits, with 2 programs held out of the meta-train set entirely.
+  Their bank inner-fit releases are measured like a fit (bank vs base, bank vs the program's own LoRA). Success:
+  bank > base on the pooled held programs with p < 0.05.
+- T3 (adapter parity on the four engines) runs as its own strand on the route release (DGX only).
+
+## 2026-11-24 00:45 Placement-aware round budgets; rounds stop repeating each other; teacher reasoning as context
+
+**Why.** The round size (12M weighted target tokens, `ROUND_TARGET_TOKENS`) was set for DGX rounds. On the Colab A100
+a round trains about 5x faster: aei1 r0001 measured 30.8k chain tokens/s on the A100 (steps 337-532, 9.4 s/step)
+against 5.9k on the GB10 (steps 1-354, 48.8 s/step). The owner wants A100 rounds to draw more of the accumulated
+data. Measuring r0001 against r0002 also showed that consecutive rounds repeated each other. r0002 held 3,166 of
+r0001's 3,395 filled units, 1,118 of its 1,645 teacher episodes and 186 of its 459 own episodes. There were two causes:
+- a round is prepared while the previous one trains, and that round's mix entered `prefer_unseen` only at publication;
+- `--prefer-unseen` read only `rows.jsonl.zst` (core episodes), so aux parts never counted as trained. The filled
+  reasoning part (18M of r0002's 39.4M uncapped tokens) was drawn at random each round.
+
+The raw-teacher forward budget was also spent on episodes that a filled unit then replaced. In r0002 that was 2,811
+episodes, about 36% of the 180M budget.
+
+**Built (default on, each with an opt-out; tests in `tests/neuralese/test_async_train.py` and `test_sft_sources.py`):**
+- **Placement-aware size** (`expert_iteration.py` async-drive, `--colab-round-hours 2`, `0` opts out). At preparation
+  the driver checks for a reachable session that passes `colab_sft_fit`.
+  - With one, the round is sized to 2 h of that GPU's learner: `sft_sources build --max-forward-tokens` =
+    hours x chain tokens/s. Throughput comes from `round-speed.json` (written after every round per GPU, from its
+    logs), else the r0001 defaults, else GB10 x `sft_speedup`.
+  - The target cap and the teacher forward budget scale by the same factor against the DGX round, never below it.
+  - The decision is recorded in `rNNNN/size.json` and in `round.json` `size` and `expected_hours`.
+- **Forward-token cap** in `cap_target_tokens`: the tighter of the target and forward bounds sets one fraction, and
+  every part keeps that fraction, unseen units first.
+- **DGX fallback**: if a round sized for a session starts on the DGX (the session was lost or turned unfit before
+  its learner began), `sft_sources recap` first bounds its mix to `--round-target-tokens` into `mix-dgx/`.
+  `round.json` `mix_dir`, `chains_path`, `chains_sha256` and `episode_ids` then point at the recapped mix, and the units
+  it leaves out stay unseen. A round whose learner already trained (a session lost mid-round) keeps its step list and
+  resumes on the DGX; the hand-back moves it back when a fit session answers. `--no-dgx-recap` opts out.
+- **In-flight prefer-unseen**: a round prepared ahead prefers unseen over the mix of the round training now
+  (`--no-prefer-inflight` opts out).
+- **Unit-level prefer-unseen**: each build and recap writes `trained-units.json` ((task, round) of every chain, aux
+  parts included). For older builds `trained_units` reads their `chains.pkl`. Share-bounded aux parts and the cap
+  take unseen units first.
+- **Teacher episodes a filled unit stands in for** are not admitted raw, so they spend no forward budget
+  (`--filled-teacher admit` restores the old rule). The fill unit trains as before.
+- **Teacher reasoning as context (owner 2026-11-24).** Owner: "We can handle training data for SFT where there is
+  teacher reasoning. We just don't train on it, but we still allow it to be part of the training data." What changed:
+  - Observed-live teacher episodes without a fill are no longer dropped in rounds: `--unfilled-live-teacher auto` now
+    keeps them, with the think block as zero-weight context and the actions as targets; `drop` opts out. r0002 dropped
+    45 of them.
+  - The treatment table (`teacher-reasoning-audit-20261120/treatment.json`: default `context`, every model `filled`)
+    already renders `filled` without a fill as `context`, and nothing else in admission requires filled reasoning.
+  - AGENTS.md "State" now says so.
+- The round build's ledger budget is now 32 GB: r0001/r0002 peaked at 21.2/17.1 GB under 24, and the aux parts now
+  load earlier.
+
+**Expected round size.**
+
+| Placement | Forward tokens | Weighted target | Steps | Teacher forward budget | Learner time |
+|---|---|---|---|---|---|
+| A100 | 221.8M | ~21M (scale 1.75 at r0002's 10.57 forward per target) | ~700 | 315M | ~2 h |
+| DGX | ~127M | 12M | ~400 | 180M | ~6 h at 48.8 s/step, ~8 h at 74 s/step |
+
+With unit-level prefer-unseen, the A100 round's 21M is mostly units r0001 did not train. The cap kept 61% of r0002's
+uncapped pool instead of 30%.
+
+**Not checked.**
+- No end-to-end `sft_sources build` on real data. The scratch rebuild of r0002 waited on the ledger: headroom was
+  3.5 GB, and I did not preempt aei1's collection. The first real build is the coordinator's r0002/r0003 build.
+- The time model assumes steps cost in proportion to chain tokens. It was measured on one mix per GPU, and a larger
+  raw-teacher share raises forward per loss token.
+
+
+### 2026-11-24 — Separate native diagnostic infrastructure from training data
+
+Actual0039 retained-state metadata contained692MB/52,364members despitezero authored teacher calls; installed runtimes and build caches dominated. Future joined diagnostic packs omit only exact managed `workspaces/*/state/{builds,native-runtime}` anchors, preserving nativeSQL/WAL/model journals/source/CAS/blobs/effects and user storage. Future dataset snapshots exclude unreferenced native infrastructure; actual verified artifact references override that exclusion. Existing immutable registered packs remain protected. After durable nativeIR extraction and fsynced ingestion, the common ingester retires only unreferenced stopped pack payloads/inventories. Admitted partial/failed goals qualify equally; unresolved/interrupted cases remain for salvage. No original trajectories are removed and no new admission/goal-success gate is imposed. Opt-outs, full mechanism inventory, scope citations and actual145test evidence: `NATIVE_CAPTURE_RETENTION_20261124.md`. This enters new producer/reader pins at their normal resume; no teacher or training hold.
+## 2026-11-24 00:30 Pop is a standing aei1 collection actor whenever no held measurement holds it
+
+Pop's GPU had been idle for hours (held moved to the DGX series; an idle held server was stopped at 00:05). It now
+collects aei1 episodes for the lineage head.
+
+**Engine.** SGLang through `pop_rl_actor serve-checkpoint` (Pop's supported path), front code at the aei1 runtime commit
+bdf4c8721350 (read-back fixes d16437be8 and f109bedfd on by default), collection law: FP8 weights, FP8 KV, hybrid SWA,
+overlap scheduler, 32 running (KV pool 493k tokens, 0.97 GB GPU headroom after graph capture). Ready in 63-108 s.
+Its `/v1/neuralese/info` equals the DGX collection actor's in capabilities (`decide`, `score`, `native.capture`,
+`native.text-write`, ...), routes, prompt rendering identity, dialects and context; the serving engine differs only in
+`max_running` (32 vs 160).
+
+**Fixed on the way.**
+- Pop's fork checkout was at dbc51ddb72: no tool grammar (tool calls sampled unconstrained) and no FP8 weights. Moved to
+  17e3458c2e (the DGX's head, `sglang-fork.json`) by bundle, with no live Pop actor. Pop's held-v4 series changes engine
+  identity with it (telemetry only; it re-measures on the new engine). ENGINE_PARITY notes the per-host checkout check.
+- `pop_rl_actor serve-checkpoint --weight-dtype fp8` on Pop was dropped twice: `serve_checkpoint` did not pass it to
+  `pop_sglang` and `pop_actor_driver.serve_sglang` never sent `--sglang-weight-dtype`. Both pass it now, so an actor
+  attesting `-w-fp8` serves FP8.
+- `--overlap-schedule` for remote serves (Pop driver; held settings carry no key, so held engines are unchanged).
+- Pop serves are serialized across processes (`pop_serve_lock`): a collection serve and a held serve stopped each
+  other's actors when they overlapped.
+- `test_held_dispatch::test_pop_actor_start_reuses...` ran the real `stop_pop_fills` and stopped live units on the
+  host (it stopped this collector at 00:17); it is mocked now.
+
+**Driver** (`expert_iteration async-drive`, takes effect at a driver restart):
+- `--rebind-actor HOST@FRONT_URL[=SLOTS]`: per-actor collector slots (default `--remote-slots`).
+- A target on Pop's host is a standing Pop actor. `pop_step` (every 2 min, SFT phase only) serves the lineage head with
+  the collection law and starts its collector `<collection unit>-pop`. At a new policy it serves the published
+  checkpoint (copied, not rebound in place: Pop's driver relaunches a dead engine from the checkpoint it was served, so
+  an in-place rebind would revert there). The publication's `rebind_remote` skips Pop.
+- **Yield:** every Pop serve stops `*-collect-*-pop` collectors with the fills (`stop_pop_fills`), so a held
+  measurement from any entry point (driver held-v4 via `pop_held_measure`, `pop-held.sh`, grpo `--held-remote pop`)
+  takes the GPU. `pop_step` serves Pop again only when `pop_busy()` is clear: no `pop-held.sh base|ckpt` or
+  `pop_rl_actor held-eval` process on the DGX, no other serve holding the lock, and not held-v4 here (`POP_LOCK`).
+  The collection runs 32 running, not the held engine's 20, so `pop-held.sh` never reuses it.
+
+Tests: `test_async_train.py` (target parsing and slots, Pop unit naming, Colab-only rebind, yield and re-serve,
+GRPO-phase stop, held process detection and serve lock, collection law passed to the driver).
+
+**Throughput** (measurement collector `aei1-collect-v0000-pop`, 32 slots, collecting sft-v9 e15b20a8 into
+`collect/v0000-e15b20a86f1c-pop`, which the round prepare reads with the policy's other collections): 46 finished
+episodes/h over 00:30-01:01 (24 episodes; 33 since 00:20). Pop is not the limit: 5.8 requests in flight on average
+(of 32), 372 generated tok/s, the GPU 25-96% busy; episodes spend most of their time between model calls. Episodes
+scale with slots until Pop saturates (decode ~26 ms a step at 20 running), so the driver argument is 64 slots
+(collector claim 23 GB, measured use 3.5 GB at 32 slots):
+`--rebind-actor pop-os@http://100.73.236.5:18531=64` beside the Colab target (`--remote-slots 64` stays its default).
+## 2026-11-24 01:00 Teacher providers for aei1's campaign: Gemini on Vertex (credits), Nemotron 3.5 Super, ERNIE free; Nemotron 0/48 explained; three harness fixes (teacher-providers strand)
+
+**Nemotron 3 Ultra's 0/48 in `aei1/teacher-r0001`.** 45 of its 48 episodes were third attempts (`-a2`) on tasks Luna and
+Sol had both failed (Sol got 1/3 on that tier); with 1 slot behind 3-attempt routing it only ever saw that tail. Its
+records are well formed (tool calls on 549/549 targets, raw `reasoning_content` on all, 10 tool errors in 181 tool
+results). Its 0-turn `budget_exhaustion` records (12) are 40-call budget stops whose turns were not exported, not
+stalls. Inside the tail two oracle defects that every teacher hit: bAbI task 15 golds the singular species ("wolf" for
+"Sheep are afraid of wolves": Luna, Sol and Nemotron all answered "wolves"), task 19 golds direction letters ("s,e")
+the instruction never asks for (19 + 31 such tasks in the campaign's queue). Fixed in the scorer (below). Not a
+Nemotron harness bug; no harness bug found in its records.
+
+**Providers probed (2026-11-24 00:05-00:45, keys from `~/.config/natlang/*.env`; licenses and terms as facts):**
+- **Google Vertex AI**, project `awareness-481308` via the ADC user credentials (`gcloud auth application-default`):
+  Gemini 3.1 Pro Preview and Gemini 4 Argon serve (`trafficType ON_DEMAND`, billed to the project: the owner's
+  generation credits). Credit balance not readable here (Cloud Billing API disabled on the project; ADC is an
+  `authorized_user`, no `gcloud auth login` account). Reasoning **hidden** (no thoughts without `include_thoughts`;
+  with it Vertex's OpenAI endpoint puts a *thought summary* inside `content` as `<think>...</think>`, which the
+  runtime would treat as the answer text, so it stays off). Thought signatures round-trip (`extra_content`).
+  Gemini API terms (paid tier: prompts not used for product improvement).
+- **Google AI Studio key** (`GEMINI_API_KEY`): **free tier only** — every Pro and Gemini 4 model is `limit: 0`
+  (`generate_content_free_tier_*`, `RESOURCE_EXHAUSTED`); Flash models answer. The credits are on Vertex, not this key.
+- **NVIDIA NIM** (free API credits): Nemotron 3.5 Super VL 120B-A12B, Nemotron 3 Ultra, Mistral Large 4, MiniMax M3.1
+  Flash, Kimi K3.1 Pro, Step 5 Preview, GLM 5.3 Flash answer tool calls with raw `reasoning_content`. One
+  account-wide rate limit (429 "Too Many Requests" with ~12 qualification slots plus production): few slots in total.
+  Kimi K3.1 Pro, Step 5 and GLM 5.3 Flash took 74-180 s for a one-line tool call. Terms: NVIDIA API Catalog trial
+  credits; each model's weight license is on its card (not re-read here; all licenses are acceptable).
+- **OpenRouter**: credit $15.15 bought, $15.15 used ($0 left); free models 1,000 requests/day (the key bought >= $10)
+  and 20 requests/min. An episode uses ~38 requests: ~26 free episodes a day across all free models. ERNIE 5.5 Flash
+  Preview, Ling 3.2 Flash, dots 3 note, Nemotron 3 Ultra `:free` answer with raw reasoning.
+- **Groq** (free tier): gpt-oss-120b (raw reasoning) and Qwen 3.8 27B answer, but 8,000 tokens/min per model: below
+  one of our prompts (80-140k tokens per episode). Not usable. (A Python client needs a User-Agent: Cloudflare 1010.)
+- **Z.ai**: `1113 Insufficient balance or no resource package` on every GLM (5.4, 5.3, 5.3 Flash; general and coding
+  endpoints). **OpenCode Zen**: paid models 402 "Insufficient balance"; its free models are restricted to the official
+  OpenCode client (plans/OPENCODE_GENERATION.md), not a direct API. **Mistral** and **OpenAI platform** keys: invalid.
+- **Codex (Luna, Sol)**: no 429 or usage-limit error in the campaign's 300 Codex episodes at 4 + 2 slots; the
+  subscription's window usage was not readable.
+
+**Qualification** (`ops/ei/teacher-qual-20261124/`, pin 1c177e3fc609 for the first runs, 19459324d after the fixes):
+20 pool tasks of `aei1/teacher-r0001` (10 Luna first-attempt successes, 10 failures, one per family, bAbI 15/19 left
+out; none in the held-v2/v3/v4 closure by `held_eval.training_exclusion_ids`), one episode each, 40-call budget.
+
+| Teacher | Luna-solved half | Luna-failed half | Total | s/episode | Reasoning |
+|---|---|---|---|---|---|
+| Gemini 3.1 Pro Preview (Vertex) | 10/10 | 3/10 | 13/20 | 142 | hidden |
+| Gemini 4 Argon (Vertex) | 10/10 | 7/10 | 17/20 | 182 | hidden |
+| Nemotron 3.5 Super VL 120B-A12B (NIM) | 5/10 | 4/10 | 9/20 | 109 | raw (253/253 targets) |
+| ERNIE 5.5 Flash Preview (OpenRouter free) | 4/10 | 3/10 | 7/20 | 128 | raw (273/384) |
+| Nemotron 3 Ultra (NIM) | 0/2 | | 0/2 (stopped: 1,400 s/episode under NIM throttling) | | raw |
+| Mistral Large 4, MiniMax M3.1, Kimi K3.1 (NIM, after fix 2) | | | 0 finished after 25 min (NIM throttled) | | raw |
+
+Gemini episodes use ~16 calls, ~100k prompt tokens (estimate from rendered messages) and ~2k visible output tokens
+plus hidden thinking: roughly $0.2-0.4 per episode at list price before Vertex's implicit prefix caching (not read
+from billing). Open: Gemini answers some `decide()` calls with 400 "Expected a valid JSON object in the request"
+(259 failed nested calls over 35 episodes, mostly Argon); Vertex returns exactly this for a history function call whose
+`arguments` is not a JSON object (reproduced). The recorded histories hold no such call, so the request that decide()
+builds for a hosted endpoint is the suspect; not yet traced. Ruled out on Vertex (each answers 200): unknown top-level
+fields (`guidance`, `foo`), `tool_choice: required`, a non-object tool `parameters` schema, a non-object
+`response_format` schema, a history with host-written calls and no `tools` (the decision readout's shape), tool
+content as a parts array.
+
+**Specs (`expert_iteration.TEACHERS`, also `ops/ei/teachers.json`):** Haiku 4 (retired while the account is empty),
+Luna 6 and Sol 4 (`min_failed` 1) (were 4 and 2; no Codex limit errors), Nemotron 3.5 Super 2 + Nemotron 3 Ultra 1 (NIM:
+one account limit), ERNIE 5.5 Flash 1 (OpenRouter free quota), Gemini 4 Argon 4 + Gemini 3.1 Pro 2 (`min_failed` 1:
+paid tokens go to tasks another teacher failed). The campaign reads `ops/ei/teachers.json` at each launch from the
+first driver restart on a pin with these commits; until then the running `aei1-teacher` keeps its launch's specs.
+
+**Harness fixes (default on, tests):**
+1. `teacher_gen.completions_url`: an endpoint with a path is the API base. Vertex (`.../endpoints/openapi`), Z.ai
+   (`/api/paas/v4`) and AI Studio (`/v1beta/openai`) got `/v1/chat/completions` appended: 404 on every request.
+2. ts-host `x_natlang_history_reasoning` (`both` default, `reasoning_content`, `reasoning`, `none`): NIM's Mistral
+   Large 4, MiniMax M3.1 and Kimi K3.1 reject the `reasoning` + `reasoning_content` pair the runtime sends on history
+   turns ("duplicate field reasoning_content"): every second turn failed, the task deferred. teacher_gen's NIM default
+   sends `reasoning_content` only. Inventory: the only sender of reasoning history to an OpenAI-compatible server is
+   `ts-host/src/model/chat-completion.ts` (the HTTP transport); the Pi provider path (`pi-translation.ts`) speaks the
+   providers' own formats; engines (managed llama-server, wllama, native, SGLang) are receivers, unchanged.
+3. `task_packet`: bAbI task 15 plural species and task 19 spelled-out directions in gold order are accepted (classifier
+   `babi-alias/4`, `NATLANG_BABI_ALIAS_REPAIR=0` restores `babi-article/3`). **New scoring series** for held tasks of
+   those two families. Not changed: the generator's alias lists (`scripts/rl_tasks/sources/reading.py`).
+4. teacher spec `api_key_command` (a fresh Vertex token per episode; ADC tokens last an hour), `reasoning` recorded per
+   teacher in the manifest (`raw | summary | hidden`; Codex and Claude: summary, NIM/OpenRouter/Groq/Z.ai: raw, Gemini:
+   hidden), Vertex/Groq/OpenCode hosts named, "Insufficient balance" retires a teacher.
+5. `expert_iteration`: the campaign reads `ops/ei/teachers.json` at each launch (else `TEACHERS`), and its launch
+   script sources `openrouter.env`.
+
+**Reasoning path checked end to end** (owner 2026-11-24: teacher reasoning may stay as zero-weight context): a real
+Nemotron episode turn rendered by `sft_sources.call_row` with the round's tokenizer gives 144 zero-weight tokens
+(its raw reasoning through `</think>`) and 25 target tokens (the tool call); round r0001's mix holds 22,312 teacher
+chains (`--teacher-think context`, think treatment default `context`; a filled-reasoning unit replaces an episode only
+where it exists).
+
+### 2026-11-24 — Status probes release the allocator entirely
+
+Observed on DGX: observational `memory_ledger.py status` PID996878 held the allocator flock while waiting for a native subprocess; guard4021707 and roughly19 admission/cancel clients waited behind it. The holder ended naturally. Source inventory found `status` was the only observational CLI using mutating `ledger()`: GPU, unit/cgroup, CUDA and queue-planning probes ran inside its transaction, then status rewrote the state. `claimed_budget`, `owned_units`/`unit_owned`, and `scripts/archive_to_external.py:124` already read atomic state without a lock. The shared strict `read_snapshot` now serves these ledger readers; missing state is empty, corrupt/unreadable existing state remains an error for status and ownership (budget telemetry keeps its existing tolerant fallback). Status projects live probes onto its isolated snapshot and never writes, creates a lock, prunes authoritative ownership or clobbers a concurrent admission.
+
+Remaining allocation-owned I/O is explicit: `run` probes GPU/live claims/CUDA under its admission transaction; `guard` probes live claims, CUDA, checkpoint/ownership/container state while choosing and reserving actions; `adopt` may discover the managed command under its mutation lock. These paths still require transactional revalidation before any probe movement; this narrow fix leaves their allocator policy unchanged. Cancel performs its slow detached-waiter systemctl stop before its state transaction. All engines use the common CLI/ownership readers; no model/runtime restart or engine change is needed.
+
+Actual focused unit `vibe-ledger-lockless-status-tests-a` passed104/104 in0.53s,100.9MiB peak, budget0.5GiB/reserve7.5. Real flock regressions pause status separately at GPU/headroom/CUDA probes while actual run+cancel transactions commit, then prove the observer cannot overwrite them. Further cases cover unchanged state bytes/inode/mtime, no lock creation, missing/corrupt state and reading the last atomic commit while a writer holds its lock. Only external probes and process launch are stubbed; no productive job was interrupted.
+## 2026-11-24 01:20 The A100 actor was down for hours: the keeper never retried a failed serve (program-tuning strand)
+
+- **Finding.** The keeper upgraded L4 -> A100 at 22:15. Its actor serve failed at 22:37 (an `npm ci` error during the
+  serve's checkout). From then on it decided "ok: A100 serves" every minute, because `decide` checks the hardware and
+  not the actor. It had also moved the lost VM's actor record aside, so nothing held the serve arguments any more.
+  aei1's remote collector (`aei1-collect-v0000-remote0`, `--actor 127.0.0.1:18731`) had no A100 actor from 22:37.
+  r0001's `run-sft` found no actor to yield or restore.
+- **Fix (default; 91a253a2a; tests).**
+  - A serve's arguments stay in the keeper state as `pending_serve` until it succeeds. The `serve` decision retries
+    every `--serve-minutes` (10) while no round's learner targets the session.
+  - An actor alone whose recorded claim exceeds the current `colab_layout` actor-alone claim is re-served at the
+    layout's size. An older pin's `run-sft` restores the actor at mem fraction 0.88 (70.5 GiB). The current layout
+    caps the KV at 24 GB (34 GiB), which leaves 43 GiB for tenants.
+- **Deployment.** The shared checkout is 141 commits behind with other strands' uncommitted edits in files upstream
+  changed, so it cannot be fast-forwarded. The keeper (`colab-g4a-keeper`, same name, log and arguments) now runs from
+  pin `program-tune-20261117/pin-91a253a2a6e0`. Move it back to `/home/werg/natlang` once that checkout is synced.
+- The state was seeded with `pending_serve` from the lost record (policy e15b20a8; commit bdf4c872, the session
+  checkout's own commit, so the serve does not move the round's checkout). aei1's driver rebinds the actor to the
+  newest publication.
+
+## 2026-11-24 01:30 aei1 DGX collection stall (23:32 -> 00:51): the SGLang front's GIL, per-call vocabulary hashing and a traceback storm; fixed, collection on a hotfix pin
+
+**Observed.** `aei1-collect-v0000` (pin bdf4c87, 128 slots) ran ~64 SGLang requests at ~1,800 tok/s from 23:07, then at
+23:32:47 dozens of streams were aborted at once and the actor sat at 1-17 running, ~0 tok/s; 3 groups in 70 min against
+~40-60/h on the pre-grammar pin 96a02bd4. The front (port 8470) answered /health but held ~128 in-flight streams with no
+connection to SGLang, 416 threads in futex waits, 227% CPU.
+
+**Cause (measured).** The SGLang front is one Python process whose GIL every stream shares, and three things on it scale
+with the number of streams:
+1. `SglangEngine._tool_grammar_info` (tool grammar, 9ab63c622) called `tool_grammar.info_from_export` on every chat call,
+   twice, and that re-hashed the 65k-token vocabulary each time (`tokenizer_info_sha256`, pure Python). One call ~0.9 s;
+   128 concurrent first calls of a wave take 122 s wall, the first finishing after 92 s (processor sharing; bench on the
+   DGX, pin bdf4c87). After the fix: 0.5 s for all 128.
+2. Every collection worker polls the front's /metrics every 30 s with a 2 s timeout (`run_bonsai_queue.local_decode_progress`);
+   a late answer is a dropped poll, and each dropped poll printed two tracebacks (`_guarded` and socketserver's
+   `handle_error`). py-spy of the live front (hotfix pin, before fix 2): ~190 of ~420 threads per sample formatting or
+   writing those tracebacks, /metrics at 12-30 s, SGLang running falling 125 -> 57. This is the feedback loop: a slow front
+   drops polls, dropped polls make it slower.
+3. Per streamed token the front feeds the grammar matcher with two xgrammar FFI calls (`is_terminated`, `accept_token`),
+   each releasing and retaking the GIL: half of the busy py-spy samples.
+The poll also read only `natlang_native_decode_tokens_total`, which stays 0 on the SGLang front: it carried no signal.
+
+**Fixes** (default on, tests fail on the pinned code): f29b9cd43 tokenizer identity memoized per TokenizerInfo
+(`NATLANG_TOOL_GRAMMAR_INFO_MEMO=0` opts out) and cached per export dir in the SGLang front; 1c151a548: a client
+that hangs up closes the connection without a traceback or an error write (other failures still print),
+`Matcher.accept` makes one FFI call per token, and the worker poll sums the decode counters including
+`natlang_sglang_generated_tokens_total`. Inventory: `tool_grammar` is used by the Python native engine
+(`Engine._tool_grammar_info` already cached, engine.py ~970), the SGLang front (fixed), the learner (`info_from_base`,
+lru-cached, and `row_masks` take the info passed in); llama-server and wllama constrain calls in llama.cpp's own grammar
+(C++), not this module. The HTTP change is in the one front all Python engines share (serve/http.py).
+
+**Restore.** Collection restarted (agent decision, recorded in collect.log) on hotfix pins built from bdf4c87 plus the fixes
+(branch `hotfix/aei1-grammar-info-bdf4c87`; pin-b1e660838750, then pin-596883d9d4a0), at ledger priority high (the medium
+relaunch sat 15 min behind other agents' units while the GPU idled). 01:00-01:30 on pin-b1e660838750: 22 groups (~44/h),
+SGLang 60-125 running, 1,300-2,200 tok/s, under a load average of 70-85 from other units (a 550% Chromium renderer, a CPU
+llama-server parity run at 300%, fallow22 replay workers): the front's one GIL core competes with them.
+
+**Not determined / not checked.** What exactly aborted ~60 streams at 23:32:47 (load was ~8 then; no front error other
+than /metrics broken pipes was logged; the 23:23 burst to 116 running preceded it). The node collector side was read only
+statically (no request timeouts: `headersTimeout`/`bodyTimeout` 0). The remaining per-token Python cost of the front
+(`_sglang_token`, stream decode/emit) at 128 streams is a capacity ceiling, not addressed here; moving the per-token work
+off the GIL (or one front process per ~64 streams) is the next lever if the front stays the bottleneck.
+
+## 2026-11-24: keep declaration documents out of runtime products
+
+Merged Core87e5848c3/fedc95043 into main. Runtime module factories now retain executable
+outputs/source/specifiers rather than the whole BuildResult. The public compiler keeps declaration
+output by default; internal workspace loaders request `declarations:false`. Type checking still
+uses its generated virtual declaration inputs. This removes unused declaration documents from
+runtime transport and caches without sharing mutable module or authority state.
+
+Actual native Base userentry transport produced18,739,424bytes versus64,817,420 previously;
+this is a byte-size comparison, not a paired CPU or resident-memory result. Core24tests,
+declaration-write checks, five Base SDK tests, and all five SDK reproductions passed. Base/System
+successors preserve public declaration access. The installed-workspace optional-feature assembly
+bug is separate and remains under repair; teacher retries are held before model invocation.
+
+Storage actions: removed about10.1GB of redundant diagnostic/runtime copies on DGX and about31GB
+of local npm/pip download caches and obsolete generated projections. Original trajectories, source,
+active dependencies and recovery inputs remain. Lean capture registration/packing is deployed at67b;
+old immutable registered packs were not silently modified.
+
+## 2026-11-24 02:20 Program-tuning tenants on the A100: first live run and yield (program-tuning strand)
+
+- **01:33-01:40.** The keeper's new `serve` decision served the A100 actor again (the first A100 actor since 22:37), at
+  the capped layout: claim 34 GiB, 24 GB KV, 128 running. aei1 rebound it to r0001's publication 8e634a0f.
+- **02:04.** A tenant measurement actor (base 5ff07638, 8 GB KV, 64 running, claim 18 GiB preemptible) was admitted
+  beside it and attested in 136 s at DGX 127.0.0.1:18732.
+- **02:08:46.** r0002's `run-sft` (aei1's pin, older code) stopped the actor, and its learner admission (the session
+  checkout's older `admission.py`, 77 GiB, which writes no waiting record) began waiting. The tenant read it from the
+  process table, terminated its own group (exit 143) and released its claim. The learner started at 02:09:14, 28 s
+  after the actor stop: the normal stop-and-admit path, with no wait on the tenant. held_eval stopped on "actor lost"
+  with 0 episodes scored, so nothing was counted as a failure.
+- **Defects found and fixed.**
+  - `colab-seq.sh` passed no `--host`, so every attempt failed on `host_config` with `None`.
+  - The two tenants' concurrent fetches into the session clone failed on its ref lock. The tenant checkout now runs
+    under `flock` (ed7495022); the arms track is staggered until the next pin.
+- **Disk (coordinator, 01:20).**
+  - Route's finished fit steps (12 GB), T3's SGLang exports and `retired/` moved to `/mnt/external/program-tune-20261117`.
+    Superseded pins removed.
+  - Every program's `fit/build` now points to `/mnt/external`. `tune.build` keeps every step: each step's adapter names
+    the previous one as `source_artifact_id`, which the persisted closure follows, so pruning old steps needs its own
+    change and test before it ships.
+  - The programs root went from 28+ GB to 12 GB on the NVMe.
+- **Next.** After r0002 the actor is restored by the older pin at mem fraction 0.88. The keeper's oversized rule
+  re-serves it at 34 GiB within 10 min, and the tenants resume: the dev64 base arm on 9 programs, then the searchqa
+  fit.
+
+## 2026-11-24 02:30 async-drive: the standing teacher campaign relaunches whenever idle; a supported mix rebuild
+
+**Teacher campaign.** `ensure_teacher` ran only at the end of `prepare`. The campaign ended about 01:00, and a
+restarted driver joining the already-prepared r0002 never relaunched it; the coordinator launched it by hand at 02:10
+(`aei1-teacher`, `r0002/frontier.json`, `teacher-r0002`). Now, whenever the `<name>-teacher` unit is idle, the
+campaign of the newest frontier (the highest `rNNNN/frontier.json` not discarded) runs in `teacher-rNNNN`.
+- Checked: at the top of each loop iteration, after a round's preparation, in every DGX SFT poll
+  (`dgx_sft_between`), in each Colab SFT iteration and the snapshot wait, and by a standing thread every
+  `--teacher-check-minutes` (10). The thread covers the long blocking waits: `run-sft`, ledger stages, publication.
+- A campaign of that frontier that already ran resumes (teacher_gen skips finished tasks) at most once an hour, and
+  not after a driver relaunch that scored nothing new (`teacher-rNNNN/driver-launch.json`); the next frontier starts
+  the next campaign. `--no-teacher-campaign` still opts out.
+- With the hand-launched r0002 campaign running, the driver leaves it alone (unit present). When it ends, the driver
+  resumes it once, an hour later at the earliest. After that, r0002's campaign is done until r0003's frontier.
+
+**Rebuild.** Removing `build.done` and `prepared.done` reran all of `prepare`, including the
+`--snapshot-min-hours` wait (about 2 h for r0002).
+- `--rebuild-round rNNNN` (repeatable) or a `stages/rebuild.request` file reruns only the build step when the round
+  starts. A running driver picks the file up at the round start; the option applies once per build-code commit (the
+  data repo's pin record), so a restart with the same argv does not rebuild again.
+- Inputs are the recorded ones: frontier, data outputs, `size`, previous policy and the `prefer_unseen` list from
+  `round.json`, with the lineage the round was prepared from.
+- The old mix is kept as `mix.pre-rebuild-<time>`, and a failed build puts it back. The new mix is committed blob
+  first (`chains.sha256`, then `round.json`); every other recorded field is kept, including `manual_rebuild` and
+  `profile_changes`. A DGX recap is dropped (it reruns from the new mix if the round starts on the DGX). Each rebuild
+  is appended to `round.json` `rebuilds` (time, reason, build code, old mix and chains sha) and to
+  `stages/build.done`.
+- Refused (noted, request consumed) once the round's SFT started, or when it was prepared from another lineage.
+
+Tests: `tests/neuralese/test_async_train.py` (relaunch from the newest frontier when idle, resume rate limit and
+done rule, discarded frontiers, hooks and standing thread; rebuild from recorded inputs, once per build commit, the
+request file, failure restore, refusal after SFT start, the round loop rebuilding before it trains).
+
+## 2026-11-24 02:55 Round budgets measured on real data; fallow-22 enters the round mix
+
+**The A100-sized build on real data** (scratch rebuild of r0002 inputs with the 00:45 code; r0002 now trains this
+mix: `max_target_tokens` 20.98M, `max_forward_tokens` 221.8M, teacher budget 314.6M).
+- Run: 22 min wall, 22.9 GB peak. This is why the round build's ledger budget went to 32 GB.
+- The forward cap bound (fraction 0.359). It kept 15.48M weighted and 238.2M forward tokens (7% over the forward cap:
+  each part's budget is counted in weighted tokens), 471 steps.
+- On the A100: 35.1k chain tokens/s, 12.4 s/step, so ~1.6 h.
+- Units kept (of them trained before):
+  - teacher: 4,253 (309), against r0002's original 1,645 (489);
+  - filled: 3,913 (3,064). Only 849 unseen filled units exist, and all were kept first;
+  - own: 534 (1);
+  - operators: 1,431 (593).
+- Teacher admission:
+  - 7,948 skipped because their filled unit trains (`filled_instead`), so they spent no budget;
+  - 4,376 over the forward budget (was 17,089);
+  - 45 unfilled observed-live episodes kept, with teacher reasoning as context.
+- Composition: forward per weighted target rose from 10.6 to 15.4, because raw teacher episodes are forward-heavy.
+  The forward cap holds the round's time.
+
+**Fallow-22** (FALLOW_REGISTER row 22; strand commits 9f1be1922..62ea0a6de, `scripts/neuralese_data/broad_graph_october.py`).
+- 11,259 reference-program fan-in episodes (fetaqa, 2wiki, bird) re-rendered on today's runtime: 69.7k calls, 3.26M
+  weighted and 311M forward tokens. Registry: `sft-fallow22-broad-graphs-20261124-v1` on the NVMe.
+- Held separation:
+  - 203 trajectories dropped for two held-v3 BIRD databases (`car_retails`, `soccer_2016`);
+  - `held_eval verify` then shows no overlap with held-v3 or held-v4.
+- They hold no Neuralese state. The native-write spans had been added after the fact, so the re-render keeps each
+  child's answer as plain text in the root's context. This is consistent with how the runtime now reads text states
+  (read-back fix). It trains fan-in over child calls, not Neuralese use.
+- Target mass: 66% child extraction answers, 15% final answers, 19% templated root code (8 templates).
+  About 95 forward tokens per target token.
+- So they enter every round mix at **share 0.01, task_tokens 2000** (`FALLOW22_AUX`; `--no-fallow22-aux` opts out).
+  That is ~1% of the loss and ~10% of a round's forward work. Unit-level prefer-unseen rotates them across rounds.
+- Not checked: no held measurement of their effect, and no Neuralese-declaring variants of these programs.

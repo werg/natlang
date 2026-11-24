@@ -10,7 +10,7 @@
  * - Optional documentation fixes run through `proposeAndVerify` over a `Folder` transaction and only install when the
  *   exact verifier passes.
  */
-import { pluggable, type Folder, type FolderHandle, type FolderProposal, type PluggableSetting } from '@natlang/node';
+import { pluggable, untrusted, type Folder, type FolderHandle, type FolderProposal, type PluggableSetting } from '@natlang/node';
 import { escalate, proposeAndVerify, semanticMap, semanticRank, withContext, type Problems } from '@natlang/node/std';
 import checkHunk from './checkHunk.nl';
 import classifyHunk from './classifyHunk.nl';
@@ -151,12 +151,17 @@ async function applyDocFix(
 
 /** Review a pull request's hunks against team rules, rank findings, gate merge readiness, and optionally verify a doc fix. */
 export async function shepherdPullRequest(
-  hunks: Hunk[],
+  rawHunks: Hunk[],
   rules: Rule[],
   options: ShepherdOptions = {},
 ): Promise<ShepherdReport> {
   const concurrency = options.concurrency ?? 6;
+  const hunks: Hunk[] = rawHunks.map(hunk => ({
+    ...hunk,
+    patch: untrusted(String(hunk.patch), `PR diff ${hunk.file}`),
+  }));
   const isTrivial = createTrivialFilter(options.trivialMode);
+  const isCrispTrivialMode = (options.trivialMode ?? 'crisp') !== 'nl';
 
   const trivialFlags = await semanticMap(hunks, hunk => isTrivial(hunk), { concurrency });
   const hunksToReview: { index: number; hunk: Hunk }[] = [];
@@ -165,7 +170,12 @@ export async function shepherdPullRequest(
   for (let i = 0; i < hunks.length; i++) {
     const hunk = hunks[i]!;
     if (trivialFlags[i]) {
-      hunkSummaries[i] = { file: hunk.file, classification: { kind: 'trivial', risk: 'low' }, crispSkipped: true };
+      hunkSummaries[i] = {
+        file: hunk.file,
+        classification: { kind: 'trivial', risk: 'low' },
+        crispSkipped: isCrispTrivialMode,
+        ...(!isCrispTrivialMode ? { modelSkipped: true } : {}),
+      };
     } else {
       hunksToReview.push({ index: i, hunk });
     }
@@ -197,7 +207,7 @@ export async function shepherdPullRequest(
   const rawFindings: Finding[] = reviews.flatMap(review => review.findings);
 
   const findings = rawFindings.length > 1
-    ? (await semanticRank(rawFindings, 'most critical engineering risk to fix before merging')).ranked
+    ? (await semanticRank(rawFindings, 'most critical engineering risk to fix before merging', { concurrency })).ranked
     : rawFindings;
 
   // Asymmetric safety gate: escalate when unsure (< floor) OR when P(block) >= blockRiskFloor.

@@ -58,7 +58,7 @@ operations.
 ```
 program/host.ts           findings from natlang check, keep or delete, step kinds, rewrites under semanticRepair
 program/worthKeeping.nl     migrate or delete (decision; a program with no passing original case is deleted first)
-program/stepKind.nl         judgment, mechanism, guard-for-type or redundant, per step (decision)
+@natlang/std stepKind       judgment, mechanism, guard-for-type or redundant, per step (shared with idiom-reviewer)
 program/rewriteLeaf.nl      the new instructions of a leaf judgment
 program/rewriteDriver.nl    a driver's fixed steps as a TypeScript helper, and the sentence that calls it
 program/nextAttempt.nl      retry or give up after a rejected equivalence comparison (decision)

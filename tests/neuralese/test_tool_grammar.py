@@ -205,3 +205,31 @@ def test_lowering_and_law_mask_score_each_target_under_its_draw(monkeypatch):
     stale.pop('_law_masks', None)
     with pytest.raises(ValueError, match='recorded over tokenizer'):
         exp0_sft.law_mask([{'segs': [(0, len(reply), stale)]}], info.vocab_size)
+
+
+def test_tokenizer_identity_is_hashed_once_per_info(monkeypatch):
+    """The SGLang front asks for the export's tokenizer identity on every chat call; hashing a real vocabulary is ~0.26 s
+    of GIL-held Python, which starved a 128-stream collection (aei1, 2026-11-24). One hash per TokenizerInfo object."""
+    info, _ = char_info()
+    calls = []
+    real = tool_grammar._tokenizer_info_sha256
+    monkeypatch.setattr(tool_grammar, '_tokenizer_info_sha256', lambda i: calls.append(i) or real(i))
+    tool_grammar._INFO_SHA.clear()
+    first = tool_grammar.tokenizer_info_sha256(info)
+    assert all(tool_grammar.tokenizer_info_sha256(info) == first for _ in range(5)) and len(calls) == 1
+    other, _ = char_info()                      # an equal vocabulary in another object: hashed, same identity
+    assert tool_grammar.tokenizer_info_sha256(other) == first and len(calls) == 2
+    monkeypatch.setenv('NATLANG_TOOL_GRAMMAR_INFO_MEMO', '0')
+    assert tool_grammar.tokenizer_info_sha256(info) == first and len(calls) == 3
+
+
+def test_sglang_front_builds_the_export_tokenizer_info_once(monkeypatch):
+    from natlang_neuralese.serve.sglang_actor import SglangEngine
+    built = []
+    monkeypatch.setattr(tool_grammar, 'info_from_export', lambda d: built.append(d) or ('info', 'sha'))
+    engine = SglangEngine.__new__(SglangEngine)
+    engine.sglang_export_dir = '/exports/a'
+    assert [engine._tool_grammar_info() for _ in range(4)] == [('info', 'sha')] * 4 and built == ['/exports/a']
+    engine.sglang_export_dir = '/exports/b'      # a rebind to another export directory rebuilds it
+    engine._tool_grammar_info()
+    assert built == ['/exports/a', '/exports/b']

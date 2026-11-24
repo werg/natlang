@@ -1,0 +1,107 @@
+[
+  {
+    "name": "migration stops when validation passed",
+    "function": "migrate/settled.nl",
+    "inputs": {
+      "state": {
+        "snapshot": { "revision": "rev-2", "files": [{ "path": "src/a.ts", "sha256": "abc", "lines": 10 }] },
+        "validation": {
+          "revision": "rev-2",
+          "status": "passed",
+          "checks": [{ "id": "unit", "status": "passed", "output": "ok", "output_bytes": 2, "truncated": false }]
+        },
+        "rejected": "",
+        "findings": [],
+        "remaining": 2,
+        "revisions": ["rev-1", "rev-2"]
+      }
+    },
+    "expected": true
+  },
+  {
+    "name": "migration stops when remaining budget is zero",
+    "function": "migrate/settled.nl",
+    "inputs": {
+      "state": {
+        "snapshot": { "revision": "rev-2", "files": [{ "path": "src/a.ts", "sha256": "abc", "lines": 10 }] },
+        "validation": {
+          "revision": "rev-2",
+          "status": "failed",
+          "checks": [{ "id": "unit", "status": "failed", "output": "error TS2339", "output_bytes": 12, "truncated": false }]
+        },
+        "rejected": "",
+        "findings": [{ "check": "unit", "kind": "missed-site", "path": "src/a.ts", "line": 4, "evidence": "error TS2339", "repairable": true }],
+        "remaining": 0,
+        "revisions": ["rev-1", "rev-2"]
+      }
+    },
+    "expected": true
+  },
+  {
+    "name": "migration stops when all findings are unrepairable",
+    "function": "migrate/settled.nl",
+    "inputs": {
+      "state": {
+        "snapshot": { "revision": "rev-1", "files": [{ "path": "src/a.ts", "sha256": "abc", "lines": 10 }] },
+        "validation": {
+          "revision": "rev-1",
+          "status": "failed",
+          "checks": [{ "id": "unit", "status": "failed", "output": "node not installed", "output_bytes": 18, "truncated": false }]
+        },
+        "rejected": "",
+        "findings": [{ "check": "unit", "kind": "environment", "path": "", "line": 0, "evidence": "node not installed", "repairable": false }],
+        "remaining": 2,
+        "revisions": ["rev-1"]
+      }
+    },
+    "expected": true
+  },
+  {
+    "name": "migration continues when checks fail with repairable finding and budget left",
+    "function": "migrate/settled.nl",
+    "inputs": {
+      "state": {
+        "snapshot": { "revision": "rev-2", "files": [{ "path": "src/a.ts", "sha256": "abc", "lines": 10 }] },
+        "validation": {
+          "revision": "rev-2",
+          "status": "failed",
+          "checks": [{ "id": "unit", "status": "failed", "output": "sum is not defined", "output_bytes": 18, "truncated": false }]
+        },
+        "rejected": "",
+        "findings": [{ "check": "unit", "kind": "missed-site", "path": "src/caller.ts", "line": 2, "evidence": "sum is not defined", "repairable": true }],
+        "remaining": 2,
+        "revisions": ["rev-1", "rev-2"]
+      }
+    },
+    "expected": false
+  },
+  {
+    "name": "mines literal rename rule from verified logger migration pairs",
+    "function": "codemod/mineCrispRule.nl",
+    "inputs": {
+      "spec": {
+        "id": "logger-v3",
+        "title": "Rename legacy logger methods",
+        "description": "Rename log.warnMessage to log.warn.",
+        "guidance": "Keep all arguments intact."
+      },
+      "pairs": [
+        {
+          "path": "src/a.ts",
+          "before": "export const a = (msg: string) => log.warnMessage(msg);",
+          "after": "export const a = (msg: string) => log.warn(msg);"
+        },
+        {
+          "path": "src/b.ts",
+          "before": "export const b = () => log.warnMessage('disk full');",
+          "after": "export const b = () => log.warn('disk full');"
+        }
+      ]
+    },
+    "expected": {
+      "description": "Rename log.warnMessage( to log.warn(",
+      "find": "log.warnMessage(",
+      "replace": "log.warn("
+    }
+  }
+]

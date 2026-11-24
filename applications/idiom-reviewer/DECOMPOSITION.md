@@ -5,7 +5,9 @@ Tier 0 flagship tool (WS3 I2, WS6 §2; plans/semantic-fp/03 §3.1). The crisp fl
 is judgment or mechanism.
 
 `natlang run applications/idiom-reviewer -- DIR` reviews every `.nl` under DIR and prints an `IdiomReport`; exit 1 when
-it has findings. `natlang check --idiom` (plan 03 §3.1) does not call it yet.
+it has findings. `natlang check --idiom` invokes this reviewer over the checked project. Sibling `types.ts` definitions are
+resolved transitively so records containing `Untrusted<...>` fields (such as `Hunk`, `IncomingMessage`, `FailureTrace`)
+are recognized as already fenced.
 
 ## Parts
 

@@ -168,3 +168,22 @@ def test_ingest_forwards_one_published_owner_snapshot_to_extraction(campaign, tm
     assert len(extracted) == 1 and len(extracted[0].live_run) == 2
     assert extracted[0].registry_repo == owner and extracted[0].registry_ref == 'published-snapshot'
     assert extracted[0].held_manifest == 'held.json'
+
+
+def test_retirement_runs_after_durable_ingest_and_retries_without_reextracting(campaign, tmp_path, monkeypatch):
+    root, _ = campaign
+    work = tmp_path / 'work'
+    calls = []
+    def retire(directory, record, **kwargs):
+        committed = [json.loads(line) for line in (work / 'ingest.jsonl').read_text().splitlines()]
+        assert record in committed
+        assert kwargs['work'] == work
+        calls.append(record['directory'])
+        raise OSError('diagnostic state temporarily busy')
+    monkeypatch.setattr('retained_state_archive.retire_ingested_native_state', retire)
+    # Housekeeping failure must not invalidate a committed useful partial episode
+    # or hold subsequent extraction/training. The next pass retries old records.
+    new = ing.ingest_once(root, work, 'held.json', extract=lambda args: None)
+    assert len(new) == 3 and len(calls) == 3
+    assert ing.ingest_once(root, work, 'held.json', extract=lambda args: pytest.fail('no reextraction')) == []
+    assert len(calls) == 6

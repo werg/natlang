@@ -46,21 +46,29 @@ Closed 2026-11-23 by the language-gaps agent (DECISIONS "Semantic-FP language ga
 `natlang improve DIR` proposes from the program's runs; `escalate`'s nl policy reads its history from the call store;
 `.d.nl.ts` `import type` for `uses:`; `nl.with<T>` in callable-folder factories typed from `import type`; `natlang check
 --idiom`. Found while closing them, not changed:
-- **`natlang improve DIR`:** memetic guidance changes are not a transformation yet (WS8 N4 names them); the improver
-  revises `.nl` instructions only. Owner: language-gaps agent's next session, or N5.
 - **`Untrusted<T>` in the migration loop:** codemod file texts stay fenced (the fence is keyed by text), but a site
   excerpt or an edited revision of an untrusted file is new text and is not marked. Owner: the untrusted-contract
   follow-up.
-- **Type-only imports in callable-folder TypeScript** that resolve to nothing still make the type `any` silently (the
-  module's TypeScript diagnostics are not reported). Owner: language-gaps agent.
+- **Type-only imports in callable-folder TypeScript:** closed 2026-11-24 (semantic-FP review fixes): inline `type`
+  imports, `export type ... from`, package exports and `.d.ts` targets are followed through the AST; a missing file or
+  package is an error and an unknown member of a loaded type file is TS2305/2614/2724 at load. Still untyped on purpose: a
+  type file outside the loaded root (a sub-function loaded on its own whose `types.ts` lives in the program root), since
+  the loader never reads past its root.
+- **`natlang improve DIR` memetic guidance:** `guidance.json` (program-wide and per-function text guidance) is now a
+  transformation the improver proposes, gates on dev/confirmation and adopts with rollback (2026-11-24).
 
 ## Applications
 
 codemod-studio (now `applications/migration/codemod`, on the migration loop), sem-grep-sql (now `applications/nldb/grep`,
 on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-cause clustering) are closed. Open:
-- diligence has no Neuralese views or tuning.
-- `ts-host/test/repository-migration.test.mjs` keeps its own copy of the scripted migration stages
-  (`test/support/migration-stages.mjs` is the shared one); fold it in when that test next changes.
+- Flagship CLI targets (`main.ts` in every flagship), split-labeled fixture packs (restored for nldb/grep,
+  migration/codemod, diligence) and bench packs for pr-shepherd, sem-sheet and semantic-etl landed 2026-11-24. Open: bench
+  packs for the other flagships, fixture packs at the WS6 §3 scale, and running Arms A-D / `natlang improve DIR` on any
+  flagship. Owner: unassigned.
+- WS1 L5 (general generics beyond the representation generic) and L8 (`natlang check` Neuralese `view` hint) are not
+  built. Owner: unassigned.
+- `npm run check:layering` fails on main: 7 directory cycles from `std/` (and `improvement -> calls`,
+  `runtime -> evaluation`) that predate the review fixes and are not in `layering-baseline.json`. Owner: unassigned.
 
 ## Typed output contracts
 

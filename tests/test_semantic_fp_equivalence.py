@@ -32,11 +32,13 @@ def test_program_files_take_sources_only(tmp_path):
     (tmp_path / 'main.nl').write_text('---\nreturns: string\n---\nSay hi.')
     (tmp_path / 'main' / 'helper.ts').write_text('export const f = 1;')
     (tmp_path / 'main' / 'helper.d.ts').write_text('export declare const f: number;')
+    (tmp_path / 'services.d.ts').write_text('export declare const api: { ping(): void };')
+    (tmp_path / 'main.d.nl.ts').write_text('declare const main: () => Promise<string>; export default main;')
     (tmp_path / 'natlang.json').write_text('{}')
     (tmp_path / 'DECOMPOSITION.md').write_text('notes')
     (tmp_path / 'node_modules').mkdir()
     (tmp_path / 'node_modules' / 'x.ts').write_text('')
-    assert sorted(eq.program_files(tmp_path)) == ['main.nl', 'main/helper.ts', 'natlang.json']
+    assert sorted(eq.program_files(tmp_path)) == ['main.d.nl.ts', 'main.nl', 'main/helper.ts', 'natlang.json', 'services.d.ts']
     (tmp_path / 'empty').mkdir()
     (tmp_path / 'empty' / 'README.md').write_text('no sources')
     with pytest.raises(ValueError):
@@ -114,7 +116,7 @@ def test_report_reads_a_run(tmp_path):
     run.mkdir()
     row = eq.with_version(design_row(), 'design-brief:001', 'original')
     (run / 'packet.jsonl').write_text(json.dumps(row) + '\n')
-    (run / 'run.json').write_text(json.dumps({'policy_id': 'p' * 64, 'code': {'commit': 'c'}, 'judge_model': None}))
+    (run / 'run.json').write_text(json.dumps({'policy_id': 'p' * 64, 'code': {'git_commit': 'abc123'}, 'engine': 'sglang', 'judge_model': None}))
     entries, rewards = [], []
     for sample in range(2):
         out = run / f'row-000/sample-{sample:02d}'
@@ -135,6 +137,7 @@ def test_report_reads_a_run(tmp_path):
     assert out['passes'] == 1 and out['scored'] == 2 and out['ran'] == 2 and out['judge_pending'] == 0
     assert out['calls_mean'] == 1.5 and out['prompt_tokens_mean'] == 150.0 and out['wall_seconds_mean'] == 15.0
     assert out['program'] == 'design-brief:001' and out['split'] == 'dev'
+    assert out['code'] == 'abc123' and out['engine'] == 'sglang'
     # A requeued attempt (journal gone) no longer counts its old reward.
     (run / 'workers' / 's7-task-000-01.journal.jsonl').unlink()
     [out] = eq.report(run)
@@ -168,3 +171,58 @@ def test_requeue_timeouts_only_when_asked(tmp_path):
     (run / 'sealed-queue.jsonl').write_text(json.dumps({'key': 'a', 'output': str(out)}) + '\n')
     assert eq.requeue(run) == []
     assert eq.requeue(run, timeouts=True) == ['a']
+
+
+def test_compare_engine_partial_zero_scored_and_float_epsilon():
+    c_sglang = {**case('a', 4), 'engine': 'sglang'}
+    c_native = {**case('a', 4), 'engine': 'native'}
+    cross = eq.compare([c_sglang], [c_native])
+    assert not cross[0]['accepted'] and any('another engine' in p for p in cross[0]['problems'])
+    allowed = eq.compare([c_sglang], [c_native], allow_other_engine=True)
+    assert allowed[0]['accepted']
+
+    # Partial run rejected
+    partial = {**case('a', 2), 'scored': 2, 'samples': 4}
+    res_partial = eq.compare([case('a', 4)], [partial])
+    assert not res_partial[0]['accepted'] and any('partial run' in p for p in res_partial[0]['problems'])
+
+    # Zero scored cases rejected (e.g. all judge_pending)
+    pending = {**case('a', 0), 'scored': 0, 'judge_pending': 4, 'samples': 4}
+    res_zero = eq.compare([pending], [pending])
+    assert not res_zero[0]['accepted'] and any('no scored cases' in p for p in res_zero[0]['problems'])
+
+    # Float epsilon: 3 cases with 3 samples each: rate_a = 1/3 + 1/3 + 1/3 = 1.0, rate_b = 0.0, slack = 1.0
+    # 0.0 + 1e-9 >= 1.0 - 1.0 even with float imprecision
+    orig = [case('a', 1, samples=3), case('b', 1, samples=3), case('c', 1, samples=3)]
+    cand = [case('a', 0, samples=3), case('b', 0, samples=3), case('c', 0, samples=3)]
+    eps_res = eq.compare(orig, cand, slack_cases=1.0)
+    assert eps_res[0]['accepted']
+
+
+def test_measure_restores_record_result_on_exception(tmp_path, monkeypatch):
+    import types
+    from natlang_neuralese.rl import held_eval
+    if 'natlang_neuralese.common.sampling' not in sys.modules:
+        try:
+            __import__('natlang_neuralese.common.sampling')
+        except ModuleNotFoundError:
+            fake_sampling = types.ModuleType('natlang_neuralese.common.sampling')
+            fake_sampling.RL_TOP_P = 0.95
+            fake_sampling.sampling_law_of = lambda top_p: {'top_p': top_p}
+            monkeypatch.setitem(sys.modules, 'natlang_neuralese.common.sampling', fake_sampling)
+    cases_dir = tmp_path / 'cases'
+    cases_dir.mkdir()
+    (cases_dir / 'cases.jsonl').write_text(json.dumps(eq.with_version(design_row(), 'design-brief:001', 'original')) + '\n')
+    (cases_dir / 'manifest.json').write_text(json.dumps({'tasks': [{'id': 't1'}], 'cases': {'path': 'cases.jsonl'}}))
+    monkeypatch.setattr(held_eval, '_read_info', lambda client: {'rl_policy_binding': {'policy_id': 'p1', 'engine': 'sglang'}, 'context': held_eval.CONTEXT_TOKENS})
+    monkeypatch.setattr(held_eval, 'policy_id_of', lambda binding: 'p1')
+    monkeypatch.setattr(held_eval, 'engine_of', lambda binding: 'sglang')
+    def fake_entries(spec):
+        (Path(spec['dir']) / 'packet.jsonl').write_text('')
+        return []
+    monkeypatch.setattr(held_eval, '_entries', fake_entries)
+    orig = held_eval.record_result
+    monkeypatch.setattr(held_eval, 'run', lambda out: (_ for _ in ()).throw(RuntimeError('boom')))
+    with pytest.raises(RuntimeError, match='boom'):
+        eq.measure(cases_dir, tmp_path / 'run', [('http://127.0.0.1:9', 1)], samples=1)
+    assert held_eval.record_result is orig

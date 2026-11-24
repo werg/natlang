@@ -9,6 +9,7 @@ import { RepositoryMigration, migrate } from '../../applications/dist/migration/
 import settledCrisp from '../../applications/dist/migration/migrate/settledCrisp.js';
 import { readFileSync } from 'node:fs';
 import { appCrisp, scriptedModel, withJudge } from './support/natlang.mjs';
+import { STAGES, renameStages } from './support/migration-stages.mjs';
 
 const CRISP = await appCrisp('migration');
 
@@ -22,18 +23,9 @@ const pending = { ...source, 'test.mjs': "import { add } from './lib.mjs';\nimpo
 const AsyncFunction = (async () => {}).constructor;
 const CHECKS = [{ id: 'scenario', argv: [process.execPath, '--test', 'test.mjs'] }];
 
-// What an interpreter of each stage might write: the algorithm its instructions spell out, over the same data.
-const STAGES = [
-  ['Restate request for the later stages', 'understand'],
-  ['Find the sites of intent at revision', 'survey'], ['Locate the site of hit at revision', 'locate'],
-  ['Classify the use of intent.old', 'classify'], ['Plan the migration of intent over classified', 'plan'],
-  ['Edit the site of classified at revision', 'edit'], ['Write the patches for classified.site', 'patch'],
-  ['Check patches, written for classified.site', 'exactjudge'], ['Find the causes of the failure', 'triage'],
-  ['Repair the candidate at snapshot.revision', 'repair'], ['Run one round on state', 'round'],
-  ['Decide whether the repair loop stops', 'settled'], ['Write the closing words of the migration', 'summarize'],
-];
-
+// Built on the shared `renameStages('sum', 'add')`, specializing the multi-round repair and context-widening stages.
 const DEFAULTS = {
+  ...renameStages('sum', 'add'),
   understand: `return { summary: 'rename sum to add', old: 'sum', new: 'add', queries: [...new Set([...seeds, 'sum'])], invariants: ['total stays 5'] };`,
   survey: `const seen = new Set(); const hits = [];
 for (const q of intent.queries) for (const h of repository.search(q, revision).hits) { const k = h.path + ':' + h.offset; if (!seen.has(k)) { seen.add(k); hits.push(h); } }
@@ -44,7 +36,6 @@ const merged = [];
 for (const s of sites) { const p = merged.at(-1);
   if (p && p.path === s.path && s.from <= p.to) { p.to = Math.max(p.to, s.to); p.text = repository.lines(p.path, p.from, p.to, revision); p.hits += s.hits; } else merged.push({ ...s }); }
 return merged.map((s, i) => ({ ...s, id: 's' + (i + 1) }));`,
-  locate: `return { id: '', path: hit.path, from: hit.line, to: hit.line, text: repository.lines(hit.path, hit.line, hit.line, revision), hits: 1 };`,
   classify: `const t = site.text;
 const pattern = /^\\s*import /.test(t) ? 'import' : /function\\s+sum\\b/.test(t) ? 'declaration' : /sum\\(/.test(t) ? 'call' : /assert/.test(t) ? 'test' : 'unrelated';
 return { pattern, action: pattern === 'unrelated' && !evidence ? 'leave' : 'edit', reason: pattern + ' at ' + site.path + ':' + site.from };`,

@@ -1018,7 +1018,7 @@ def test_round_stages_preempt_the_standing_collection_which_resumes_on_its_polic
     rd = d.root / 'r0001'
     (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
     launched.clear()
-    monkeypatch.setattr(d, 'prepare_plan', lambda rd, policies: (['frontier'], [['data']], ['build']))
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, policies, size=None: (['frontier'], [['data']], ['build']))
     monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
     monkeypatch.setattr(ei, 'write_round_manifest', lambda *a, **kw: {})
     monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
@@ -1065,7 +1065,7 @@ def test_a_restarted_driver_resumes_prepare_after_its_last_finished_step(tmp_pat
     d.collect_dir(cur).mkdir(parents=True)
     (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
     monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
-    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (['frontier'], [['data']], ['build']))
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols, size=None: (['frontier'], [['data']], ['build']))
     monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
     monkeypatch.setattr(d.c, 'present', lambda unit: False)  # simulated ledger owns no real systemd jobs
     rd = d.root / 'r0001'
@@ -1103,7 +1103,7 @@ def test_prepare_never_rewrites_the_data_script_beneath_a_running_data_unit(tmp_
     d.collect_dir(cur).mkdir(parents=True)
     (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
     monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
-    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (['frontier'], [['new-data']], ['build']))
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols, size=None: (['frontier'], [['new-data']], ['build']))
     monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
     rd = d.root / 'r0002'
     (rd / 'stages').mkdir(parents=True)
@@ -1387,7 +1387,7 @@ def test_the_next_rounds_snapshot_waits_for_the_remote_collection_while_the_dgx_
     monkeypatch.setattr(ei.time, 'sleep', sleep)
     monkeypatch.setattr(d.c, 'present', lambda u: u in present)
     monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
-    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols: (_ for _ in ()).throw(StopIteration('snapshot taken')))
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, pols, size=None: (_ for _ in ()).throw(StopIteration('snapshot taken')))
     with pytest.raises(StopIteration):
         d.prepare(d.root / 'r0002', [cur])
     assert len(slept) == 1                      # waited one poll: 2 h after the DGX collection's start
@@ -1529,3 +1529,496 @@ def test_dry_run_shows_the_remote_collection_and_the_dgx_sft_sizing(tmp_path, mo
     assert argv[argv.index('--work') + 1].endswith('-remote0')
     assert argv[argv.index('--checkpoint-sha256') + 1] == d.controller.current['sha256']
     assert plan['sft_dgx'] == {'activation_gb': 56, 'budget_gb': 80}
+
+
+# -- placement-aware round budgets (DECISIONS 2026-11-24) -------------------------------------------------------------
+
+def _colab_driver(tmp_path, monkeypatch, *argv, gpu='NVIDIA A100-SXM4-80GB', fit=True):
+    ei, d = _remote_driver(tmp_path, monkeypatch, '--sft-profile', 'colab', '--colab-hosts', 'colab-g4', *argv)
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'reachable_hosts', lambda profile, hosts: list(hosts))
+    monkeypatch.setattr(pop_rl_actor, 'colab_sft_fit', lambda host: (fit, 'test'))
+    monkeypatch.setattr(pop_rl_actor, 'colab_hardware', lambda host: {'gpu_name': gpu, 'vram_total_gib': 80})
+    d.colab_hosts = ['colab-g4']
+    cur = d.controller.current
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+    return ei, d
+
+
+def test_a_round_for_a_fit_session_is_sized_to_its_hours_and_a_dgx_round_keeps_the_dgx_size(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    size = d.round_size()
+    # 2 h at the A100's 30.8k chain tokens/s: 221.8M forward tokens, 1.73x the 12M-target DGX round (x10.7 forward)
+    assert size['placement'] == 'colab' and size['max_forward_tokens'] == 2 * 3600 * 30_800
+    assert size['scale'] == round(2 * 3600 * 30_800 / (12_000_000 * 10.7), 3)
+    assert abs(size['max_target_tokens'] - 12_000_000 * size['scale']) < 12_000 and size['teacher_budget'] > 180_000_000
+    _, _, build = d.prepare_plan(d.root / 'r0001', [d.controller.current], size)
+    assert build[build.index('--max-forward-tokens') + 1] == str(size['max_forward_tokens'])
+    assert build[build.index('--teacher-forward-budget') + 1] == str(size['teacher_budget'])
+    # measured throughput wins over the default; a GPU with neither uses the GB10's times sft_speedup
+    (d.root / ei.ROUND_SPEED_FILE).write_text(json.dumps({'NVIDIA A100-SXM4-80GB': {'chain_tokens_per_s': 40_000}}))
+    assert d.round_size()['max_forward_tokens'] == 2 * 3600 * 40_000
+    _, unfit = _colab_driver(tmp_path / 'unfit', monkeypatch, fit=False)
+    assert unfit.round_size()['placement'] == 'dgx'
+    _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--colab-round-hours', '0')
+    assert off.round_size()['placement'] == 'dgx'
+    _, _, build = off.prepare_plan(off.root / 'r0001', [off.controller.current])
+    assert '--max-forward-tokens' not in build and build[build.index('--max-target-tokens') + 1] == '12000000'
+    assert build[build.index('--teacher-forward-budget') + 1] == '180000000'
+    # never smaller than the DGX round
+    small = ei.placement_round_size(round_target_tokens=12_000_000, teacher_budget=180_000_000, hours=0.1,
+                                    gpu_name='x', chain_tokens_per_s=30_800)
+    assert small['scale'] == 1.0 and small['max_target_tokens'] == 12_000_000
+
+
+def test_a_round_prepared_ahead_prefers_unseen_over_the_round_training_now(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    trained = d.root / 'r0001' / 'mix'
+    trained.mkdir(parents=True)
+    (trained / 'rows.jsonl.zst').write_bytes(b'')
+    d.controller.state['active_round'] = {'round_id': 'r0001', 'base_sha256': 'a' * 64, 'phase': 'sft'}
+    assert d.prefer_unseen_for(d.root / 'r0002')[-1] == str(trained)
+    assert str(trained) not in d.prefer_unseen_for(d.root / 'r0001')
+    _, _, build = d.prepare_plan(d.root / 'r0002', [d.controller.current])
+    assert build[len(build) - 1 - build[::-1].index('--prefer-unseen') + 1] == str(trained)
+    _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--no-prefer-inflight')
+    off.controller.state['active_round'] = {'round_id': 'r0001'}
+    (off.root / 'r0001' / 'mix').mkdir(parents=True)
+    (off.root / 'r0001' / 'mix' / 'rows.jsonl.zst').write_bytes(b'')
+    assert off.prefer_unseen_for(off.root / 'r0002') == off.controller.state['prefer_unseen']
+
+
+def test_a_round_sized_for_a_session_that_starts_on_the_dgx_is_recapped_first(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'mix' / 'chains.pkl').write_bytes(b'full')
+    ei.write_round_manifest(rd, round_id='r0001', base_policy_sha='a' * 64, previous_policy_sha=None,
+                            chains_path=rd / 'mix' / 'chains.pkl', episode_ids=['e1', 'e2'],
+                            extra={'size': {'placement': 'colab'}, 'mix_dir': str(rd / 'mix')})
+    ran = []
+
+    def ledger(unit, budget, priority, argv, log, **kw):
+        ran.append(list(map(str, argv)))
+        out = Path(argv[argv.index('--out') + 1])
+        out.mkdir(parents=True)
+        (out / 'chains.pkl').write_bytes(b'capped')
+        (out / 'build.json').write_text(json.dumps({'admitted_episode_keys': ['e1'], 'mix': {'forward_tokens': 1},
+                                                    'target_cap': {'kept_weighted_target_tokens': 5}}))
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    # a learner that already trained keeps its step list
+    (rd / 'sft' / 'learner-state').mkdir(parents=True)
+    (rd / 'sft' / 'learner-state' / 'learner_manifest.json').write_text('{}')
+    assert not d.recap_for_dgx(rd) and not ran
+    (rd / 'sft' / 'learner-state' / 'learner_manifest.json').unlink()
+    assert d.recap_for_dgx(rd)
+    argv = ran[0]
+    assert 'recap' in argv and argv[argv.index('--max-target-tokens') + 1] == '12000000'
+    manifest = json.loads((rd / 'round.json').read_text())
+    assert manifest['mix_dir'] == str(rd / 'mix-dgx') and manifest['episode_ids'] == ['e1']
+    assert manifest['chains_sha256'] == hashlib.sha256(b'capped').hexdigest() == (rd / 'chains.sha256').read_text().strip()
+    assert d.round_mix(rd) == rd / 'mix-dgx'
+    assert d.sft_env(rd, d.controller.current, activation_gb=56, preflight_only=False)['CHAINS'] == \
+        str(rd / 'mix-dgx' / 'chains.pkl')
+    assert not d.recap_for_dgx(rd) and len(ran) == 1               # once
+    # a DGX-sized round and the opt-out are never recapped
+    _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--no-dgx-recap')
+    assert not off.recap_for_dgx(rd)
+
+
+def test_round_learner_throughput_is_recorded_per_gpu(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    (rd / 'sft').mkdir(parents=True)
+    ei.write_round_manifest(rd, round_id='r0001', base_policy_sha='a' * 64, previous_policy_sha=None,
+                            chains_path=_touch(rd / 'mix' / 'chains.pkl'), episode_ids=[], profile='colab')
+    steps = lambda first, n, sec: ''.join(json.dumps({'step': first + i, 'of': 100, 'step_seconds': sec,
+                                                      'chain_tokens': 300_000}) + '\n' for i in range(n))
+    (rd / 'sft' / 'train.dgx-1.jsonl').write_text(steps(1, 30, 50.0))
+    (rd / 'sft' / 'train.jsonl').write_text(steps(31, 40, 10.0))
+    (rd / 'sft' / 'handback.json').write_text(json.dumps([{'pushed_step': 31}]))
+    (rd / 'sft' / 'colab-placement.json').write_text(json.dumps({'host': 'colab-g4', 'gpu': 'NVIDIA A100'}))
+    d.record_round_speed(rd)
+    table = json.loads((d.root / ei.ROUND_SPEED_FILE).read_text())
+    assert table['GB10']['chain_tokens_per_s'] == 6000 and table['NVIDIA A100']['chain_tokens_per_s'] == 30_000
+    assert ei.learner_throughput('NVIDIA A100', table)[0] == 30_000
+    assert d.expected_hours({'mix': {'forward_tokens': 30_000 * 3600}})['NVIDIA A100'] == 1.0
+
+
+def _touch(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b'x')
+    return path
+
+
+def test_the_round_cap_binds_on_forward_tokens_and_prefers_unseen_aux_units(tmp_path, monkeypatch):
+    import numpy as np
+    import pickle
+    import sft_sources
+
+    def chain(part, task, round_, n, forward):
+        return {'part': part, 'task': task, 'round': round_, 'ids': np.zeros(forward, dtype=np.int32),
+                'segs': [(4, n, {'sample': np.zeros(n)})]}
+    chains = [chain('filled', 't1', 'filled:a', 100, 1000), chain('filled', 't2', 'filled:b', 100, 1000),
+              chain('operators', 'op1', '0', 100, 1000), chain('operators', 'op2', '0', 100, 1000)]
+    kept, report = sft_sources.cap_target_tokens(chains, 0, max_forward=2000,
+                                                 trained_unit_keys={('t1', 'filled:a'), ('op1', '0')})
+    assert report['binding'] == 'forward' and report['fraction'] == 0.5
+    assert [(c['task'], c['round']) for c in kept] == [('t2', 'filled:b'), ('op2', '0')]
+    assert report['parts']['filled']['unseen_episodes'] == 1 and report['parts']['filled']['kept_trained_before'] == 0
+    # the tighter bound wins
+    assert sft_sources.cap_target_tokens(chains, 100, max_forward=3000)[1]['binding'] == 'target'
+    # trained units: the sidecar, else the build's chains.pkl (aux parts included, which rows.jsonl.zst lacks)
+    legacy, new = tmp_path / 'legacy', tmp_path / 'new'
+    legacy.mkdir()
+    with (legacy / 'chains.pkl').open('wb') as handle:
+        pickle.dump({'chains': chains[:1]}, handle)
+    new.mkdir()
+    sft_sources.write_trained_units(new, chains[2:3])
+    assert sft_sources.trained_units([legacy, new]) == {('t1', 'filled:a'), ('op1', '0')}
+
+
+def test_recap_bounds_a_built_mix_and_records_what_it_left_out(tmp_path, monkeypatch):
+    import numpy as np
+    import pickle
+    import sft_sources
+    monkeypatch.setenv('NATLANG_ALLOW_UNREGISTERED_DATA', '1')
+    monkeypatch.setattr(sft_sources.data_registry, 'record_dataset', lambda *a, **k: None)
+    src = tmp_path / 'mix'
+    src.mkdir()
+
+    def chain(part, task, round_, n):
+        return {'part': part, 'task': task, 'round': round_, 'ids': np.zeros(n, dtype=np.int32),
+                'segs': [(0, n, {'sample': np.zeros(n)})]}
+    chains = [chain('rl-own', 't1', 'own:1', 100), chain('rl-own', 't2', 'own:2', 100),
+              chain('filled', 't3', 'filled:3', 100), chain('filled', 't4', 'filled:4', 100)]
+    with (src / 'chains.pkl').open('wb') as handle:
+        pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle)
+    out = sft_sources.ZstdWriter(src / 'rows.jsonl.zst')
+    for key, task in (('own:1', 't1'), ('own:2', 't2')):
+        out.write({'episode': key, 'task_id': task})
+    out.close()
+    (src / 'build.json').write_text(json.dumps({'admitted_episode_keys': ['own:1', 'own:2'], 'target_cap': {}}))
+    seen = tmp_path / 'seen'
+    seen.mkdir()
+    sft_sources.write_trained_units(seen, [chains[0], chains[2]])
+    sft_sources.ZstdWriter(seen / 'rows.jsonl.zst').close()
+    dst = tmp_path / 'mix-dgx'
+    sft_sources.recap(SimpleNamespace(mix=str(src), out=str(dst), max_target_tokens=200, max_forward_tokens=0,
+                                      prefer_unseen=[str(seen)]))
+    with (dst / 'chains.pkl').open('rb') as handle:
+        assert [c['round'] for c in pickle.load(handle)['chains']] == ['own:2', 'filled:4']
+    report = json.loads((dst / 'build.json').read_text())
+    assert report['admitted_episode_keys'] == ['own:2'] and report['target_cap']['dropped_episode_keys'] == ['own:1']
+    assert sft_sources.trained_in([dst]) == ({'own:2'}, {'t2'})
+    assert sft_sources.trained_units([dst]) == {('t2', 'own:2'), ('t4', 'filled:4')}
+
+
+def _pop_driver(tmp_path, monkeypatch):
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'POP', 'pop-host')
+    monkeypatch.setattr(pop_rl_actor, 'STATE', tmp_path / 'rl-actor.json')
+    ei, d = _remote_driver(tmp_path, monkeypatch, '--rebind-actor', 'pop-host@http://100.1.2.3:18531=24',
+                           '--remote-slots', '64')
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port, bind_host=None:
+                        'http://100.1.2.3:18531' if host == 'pop-host' else f'http://127.0.0.1:{port + 10161}')
+    return ei, d, pop_rl_actor
+
+
+def test_rebind_targets_carry_their_own_slots_and_pop_is_a_standing_actor_with_its_own_unit(tmp_path, monkeypatch):
+    ei, d, pop_rl_actor = _pop_driver(tmp_path, monkeypatch)
+    assert ei.parse_remote_target('colab-g4@http://127.0.0.1:8570', 64) == ('colab-g4', 'http://127.0.0.1:8570', 64)
+    assert ei.parse_remote_target('pop-host@http://100.1.2.3:18531=24', 64) == ('pop-host', 'http://100.1.2.3:18531', 24)
+    t = d.remote_targets()
+    assert [(x['host'], x['slots'], x['pop'], x['suffix']) for x in t] == [
+        ('colab-g4', 64, False, '-remote0'), ('pop-host', 24, True, '-pop')]
+    cur = d.controller.current
+    unit = d.collection_unit(cur)
+    assert d.remote_units(unit) == [f'{unit}-remote0', f'{unit}-pop']
+    assert [a[0] for a in d.remote_actors(include_pop=False)] == ['colab-g4']
+    _u, work, argv, budget = d.remote_collect_argv(cur, t[1], 'http://100.1.2.3:18531')
+    assert work.name.endswith('-pop') and argv[argv.index('--slots') + 1] == '24'
+    assert argv[argv.index('--actor') + 1] == 'http://100.1.2.3:18531=24' and budget == 11
+    assert argv[argv.index('--tasks') + 1] == str(d.collect_dir(cur) / 'tasks.json')
+    # the Colab collector only: Pop's is pop_step's
+    started = []
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: True)
+    monkeypatch.setattr(d.c, 'present', lambda u: False)
+    monkeypatch.setattr(d.c, 'ledger', lambda unit, *a, **kw: started.append(unit))
+    (d.collect_dir(cur)).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    d.ensure_remote_collection(cur)
+    assert started == [f'{unit}-remote0']
+    # the publication rebinds Colab in place and leaves Pop to pop_step
+    rebinds = []
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: False)
+    monkeypatch.setattr(pop_rl_actor, 'rebind_actor', lambda **kw: rebinds.append(kw))
+    d.rebind_remote({'checkpoint_sha256': '1' * 64, 'checkpoint': '/x.pt', 'sglang_export': {'dir': '/x'}}, '/f', 2)
+    assert [r['host'] for r in rebinds] == ['colab-g4'] and rebinds[0]['front_url'] == 'http://127.0.0.1:8570'
+
+
+def test_pop_yields_to_a_held_measurement_and_serves_the_head_again_after_it(tmp_path, monkeypatch):
+    ei, d, pop_rl_actor = _pop_driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    want = d.collection_unit(cur) + '-pop'
+    (d.root / 'collect' / 'v0000-old').mkdir(parents=True)
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    present, stopped, launched, served = {want}, [], [], []
+    monkeypatch.setattr(d.c, 'present', lambda u: u in present)
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), present.discard(u)))
+    monkeypatch.setattr(d.c, 'ledger', lambda unit, *a, **kw: (launched.append(unit), present.add(unit)))
+    busy = {'v': 'held measurement (pid 7)'}
+    monkeypatch.setattr(pop_rl_actor, 'pop_busy', lambda: busy['v'])
+    state = {}
+    monkeypatch.setattr(pop_rl_actor, 'read_json', lambda path, default=None: dict(state) or default)
+    monkeypatch.setattr(pop_rl_actor, 'attested', lambda endpoint, sha, adapters=None: state.get('policy_id') == sha)
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: state.get('policy_id') == sha)
+
+    def run(argv, **kw):
+        served.append(argv)
+        settings, _ = pop_rl_actor.pop_sglang('fp8_e4m3', 32, weight_dtype='fp8', overlap_schedule=True)
+        state.update(policy_id=argv[argv.index('--policy-id') + 1], sglang=settings, endpoint='http://100.1.2.3:18531')
+    monkeypatch.setattr(ei.subprocess, 'run', run)
+    d.pop_step()                                    # a held measurement holds Pop: the collector stops, no serve
+    assert stopped == [want] and not served and not launched
+    busy['v'] = None
+    d.pop_step()                                    # Pop is free: served with the collection law, collector started
+    assert len(served) == 1 and launched == [want]
+    argv = served[0]
+    assert argv[argv.index('--weight-dtype') + 1] == 'fp8' and '--overlap-schedule' in argv
+    assert argv[argv.index('--max-running') + 1] == '32' and argv[argv.index('--commit') + 1] == 'c' * 40
+    d.pop_step()                                    # already serving and collecting: nothing to do
+    assert len(served) == 1 and launched == [want]
+    with d.POP_LOCK:                                # held-v4 here holds Pop: no serve while it does
+        state.clear()
+        present.clear()
+        d.pop_step()
+    assert len(served) == 1
+    d.controller.state['phase'] = 'grpo'            # the GRPO phase: no Pop collection
+    present.add(want)
+    d.pop_step()
+    assert want not in present and len(served) == 1
+
+
+def test_pop_actor_driver_and_serve_pass_the_collection_law(tmp_path):
+    import pop_actor_driver
+    import pop_rl_actor
+    settings, fmt = pop_rl_actor.pop_sglang('fp8_e4m3', 32, weight_dtype='fp8', overlap_schedule=True)
+    assert fmt.endswith('-kv-fp8_e4m3-w-fp8')
+    assert pop_actor_driver.weight_args(settings) == ['--sglang-weight-dtype', 'fp8', '--sglang-overlap-schedule']
+    held, _ = pop_rl_actor.pop_sglang('fp8_e4m3', 20)
+    assert pop_actor_driver.weight_args(held) == [] and 'overlap_schedule' not in held   # held settings unchanged
+
+
+def test_pop_held_processes_are_found_and_the_serve_lock_marks_pop_busy(tmp_path, monkeypatch):
+    import pop_rl_actor
+    proc = tmp_path / 'proc'
+    for pid, argv in ((11, ['/bin/sh', '/ops/grpo-v4/pop-held.sh', '/pin', 'ckpt', '/out', '4', '/c.pt']),
+                      (12, ['/bin/sh', '/ops/grpo-v4/pop-held.sh', '/pin', 'compare', '/a', '/b']),
+                      (13, ['python', '/r/scripts/neuralese_data/pop_rl_actor.py', 'held-eval', '--spec', 's']),
+                      (14, ['python', '/r/scripts/neuralese_data/pop_rl_actor.py', 'serve-checkpoint'])):
+        (proc / str(pid)).mkdir(parents=True)
+        (proc / str(pid) / 'cmdline').write_bytes(b'\0'.join(a.encode() for a in argv) + b'\0')
+    (proc / 'self').mkdir()
+    assert sorted(pop_rl_actor.pop_held_running(proc)) == [11, 13]
+    monkeypatch.setattr(pop_rl_actor, 'SERVE_LOCK', tmp_path / 'pop-serve.lock')
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [])
+    assert pop_rl_actor.pop_busy() is None
+    import fcntl
+    with open(tmp_path / 'pop-serve.lock', 'a') as other:     # another process serving (flock is per open file)
+        fcntl.flock(other, fcntl.LOCK_EX)
+        assert 'serve lock' in pop_rl_actor.pop_busy()
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [11])
+    assert 'held measurement' in pop_rl_actor.pop_busy()
+
+
+def test_the_standing_teacher_campaign_relaunches_from_the_newest_frontier_whenever_idle(tmp_path, monkeypatch):
+    """2026-11-24: the campaign was relaunched only when a round was prepared; it ended about 01:00 and a restarted
+    driver joining the already-prepared r0002 left it idle until a hand launch at 02:10. Now whenever the unit is
+    idle the newest frontier's campaign runs (teacher-r0002), from the main loop, the waits and a standing thread;
+    a campaign of that frontier that ran resumes at most hourly and not after a relaunch that scored nothing."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    for rid in ('r0001', 'r0002'):
+        (d.root / rid).mkdir(parents=True)
+        (d.root / rid / 'frontier.json').write_text('{}')
+    old = d.root / 'teacher-r0001'
+    old.mkdir()
+    (old / 'launches.jsonl').write_text('{}\n')
+    (old / 'manifest.jsonl').write_text('{}\n' * 40)
+    present, launched = {'teacher': True}, []
+    monkeypatch.setattr(d.c, 'present', lambda unit: unit == 'aei-teacher' and present['teacher'])
+
+    def launch(runner, work, frontier, groups, unit, covered_extra=()):
+        launched.append((Path(work).name, Path(frontier).parent.name, unit))
+        Path(work).mkdir(parents=True, exist_ok=True)
+        with (Path(work) / 'launches.jsonl').open('a') as handle:
+            handle.write('{}\n')
+        return 7
+    monkeypatch.setattr(ei, 'launch_teacher', launch)
+    assert d.ensure_teacher() is None and launched == []            # running: nothing
+    present['teacher'] = False
+    assert d.ensure_teacher() == d.root / 'teacher-r0002'
+    assert launched == [('teacher-r0002', 'r0002', 'aei-teacher')]
+    assert d.ensure_teacher() is None and len(launched) == 1        # just launched (and it scored nothing since)
+    (d.root / 'teacher-r0002' / 'manifest.jsonl').write_text('{}\n' * 3)
+    assert d.ensure_teacher() is None and len(launched) == 1        # scored, but within the hour
+    now = time.time()
+    monkeypatch.setattr(ei.time, 'time', lambda: now + 3700)
+    assert d.ensure_teacher() == d.root / 'teacher-r0002' and len(launched) == 2    # resumes
+    monkeypatch.setattr(ei.time, 'time', lambda: now + 9000)
+    assert d.ensure_teacher() is None and len(launched) == 2        # that resume scored nothing new: done
+    (d.root / 'r0003').mkdir()
+    (d.root / 'r0003' / 'frontier.json').write_text('{}')
+    (d.root / 'r0003' / 'discarded.json').write_text('{}')          # a discarded round's frontier is not the newest
+    assert d.newest_frontier() == d.root / 'r0002' / 'frontier.json'
+    (d.root / 'r0004').mkdir()
+    (d.root / 'r0004' / 'frontier.json').write_text('{}')
+    assert d.ensure_teacher() == d.root / 'teacher-r0004' and launched[-1][:2] == ('teacher-r0004', 'r0004')
+    d.a.no_teacher_campaign = True
+    (d.root / 'r0005').mkdir()
+    (d.root / 'r0005' / 'frontier.json').write_text('{}')
+    assert d.ensure_teacher() is None and len(launched) == 3
+    # the hooks: every DGX SFT poll and the standing thread check it (a failure is a note, never the caller's end)
+    calls = []
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: calls.append('teacher'))
+    monkeypatch.setattr(d, 'ensure_remote_collection', lambda policy: None)
+    monkeypatch.setattr(d, 'sft_handback', lambda *a: calls.append('handback'))
+    d.dgx_sft_between(d.root / 'r0002', d.controller.current, 'aei-r0002-sft')
+    assert calls == ['teacher', 'handback']
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) > 2:
+            raise StopIteration
+    monkeypatch.setattr(ei.time, 'sleep', sleep)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: (_ for _ in ()).throw(RuntimeError('ssh')))
+    with pytest.raises(StopIteration):
+        d.teacher_loop()
+    assert sleeps == [600.0] * 3 and 'teacher_check_failed' in (d.root / 'drive.log').read_text()
+
+
+def _prepared_round(tmp_path, monkeypatch, argv=()):
+    ei, d = _driver(tmp_path, monkeypatch, argv=list(argv))
+    (tmp_path / 'pin' / '.natlang-pin.json').write_text(json.dumps({'commit': 'b' * 40}))
+    monkeypatch.setattr(d.c, 'data_repo', lambda: tmp_path / 'pin')     # the build code's pin
+    rd = d.root / 'r0002'
+    (rd / 'stages').mkdir(parents=True)
+    (rd / 'mix').mkdir()
+    (rd / 'mix' / 'chains.pkl').write_bytes(b'old chains')
+    (rd / 'mix' / 'build.json').write_text('{}')
+    cur = d.controller.current
+    size = {'placement': 'colab', 'teacher_budget': 1000, 'max_target_tokens': 5, 'max_forward_tokens': 9}
+    ei.write_round_manifest(rd, round_id='r0002', base_policy_sha=cur['sha256'], previous_policy_sha=None,
+                            chains_path=rd / 'mix' / 'chains.pkl', episode_ids=['e-old'], prefer_unseen=['/x/mix'],
+                            profile_changes=[{'from_profile': 'colab', 'to_profile': 'dgx', 'reason': 'r'}],
+                            extra={'frontier_policy': cur['sha256'], 'size': size, 'manual_rebuild': {'by': 'hand'},
+                                   'recap': {'at': 1}, 'mix_dir': str(rd / 'mix-dgx'), 'collections': ['/c']})
+    for stage in ('frontier', 'data', 'build', 'prepared'):
+        (rd / 'stages' / f'{stage}.done').write_text('{}')
+    plans, units = [], []
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd_, pols, size_=None, prefer_unseen=None: plans.append(
+        (rd_, [p['sha256'] for p in pols], size_, prefer_unseen)) or (['frontier'], [['data']], ['build', 'argv']))
+    monkeypatch.setattr(d, 'expected_hours', lambda report: {'dgx': 1.0})
+
+    def ledger(unit, budget, priority, command, log, **kw):
+        units.append((unit, command))
+        (rd / 'mix').mkdir()
+        (rd / 'mix' / 'chains.pkl').write_bytes(b'new chains')
+        (rd / 'mix' / 'build.json').write_text(json.dumps({'admitted_episode_keys': ['e-new', 'e2']}))
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    return ei, d, rd, cur, plans, units, size
+
+
+def test_a_prepared_rounds_mix_rebuilds_alone_from_its_recorded_inputs(tmp_path, monkeypatch):
+    """2026-11-24: removing build.done and prepared.done to take new build code reran all of prepare, which first
+    waits --snapshot-min-hours (r0002 would have stalled ~2 h). --rebuild-round (or stages/rebuild.request) reruns
+    only the build, with the round's recorded size, previous policy and prefer-unseen list, keeps the old mix aside,
+    and refreshes chains.sha256 and round.json (every recorded field kept, the DGX recap dropped), once per build
+    commit; a failed build restores the old mix; a round whose SFT started is not rebuilt."""
+    import hashlib as _h
+    ei, d, rd, cur, plans, units, size = _prepared_round(tmp_path, monkeypatch, argv=['--rebuild-round', 'r0002'])
+    monkeypatch.setattr(d, 'prepare', lambda *a: (_ for _ in ()).throw(AssertionError('prepare reran')))
+    assert d.rebuild_requested(rd) == f'--rebuild-round under build code {"b" * 40}'
+    assert d.rebuild_round(rd, d.lineage_policies(), d.rebuild_requested(rd))
+    assert plans == [(rd, [cur['sha256']], size, ['/x/mix'])]
+    (unit, command), = units
+    assert unit.startswith('aei-r0002-rebuild-') and command == ['build', 'argv']
+    m = json.loads((rd / 'round.json').read_text())
+    new_sha = _h.sha256(b'new chains').hexdigest()
+    assert m['chains_sha256'] == new_sha and (rd / 'chains.sha256').read_text().split()[0] == new_sha
+    assert m['episode_ids'] == ['e-new', 'e2'] and m['mix_dir'] == str(rd / 'mix') and 'recap' not in m
+    assert m['manual_rebuild'] == {'by': 'hand'} and m['profile_changes'][0]['to_profile'] == 'dgx'
+    assert m['prefer_unseen'] == ['/x/mix'] and m['size'] == size and m['collections'] == ['/c']
+    (old,) = rd.glob('mix.pre-rebuild-*')
+    assert (old / 'chains.pkl').read_bytes() == b'old chains'
+    assert m['rebuilds'][-1]['build_code'] == 'b' * 40 and m['rebuilds'][-1]['old_mix'] == str(old)
+    assert m['rebuilds'][-1]['old_chains_sha256'] == _h.sha256(b'old chains').hexdigest()
+    assert d.rebuild_requested(rd) is None                    # a restart with the same argv does not rebuild again
+    (rd / 'stages' / 'rebuild.request').write_text('')          # a running driver's request
+    assert d.rebuild_requested(rd) == 'stages/rebuild.request'
+
+    def failing(unit, budget, priority, command, log, **kw):
+        (rd / 'mix').mkdir()
+        (rd / 'mix' / 'chains.pkl').write_bytes(b'partial')
+        raise SystemExit('aei-r0002-rebuild failed')
+    monkeypatch.setattr(d.c, 'ledger', failing)
+    before = (rd / 'round.json').read_text()
+    with pytest.raises(SystemExit, match='rebuild failed'):
+        d.rebuild_round(rd, d.lineage_policies(), 'stages/rebuild.request')
+    assert (rd / 'mix' / 'chains.pkl').read_bytes() == b'new chains' and (rd / 'round.json').read_text() == before
+    assert (rd / 'chains.sha256').read_text().split()[0] == new_sha
+    # its SFT started: refused, the request consumed, nothing moved
+    (rd / 'sft' / 'learner-state').mkdir(parents=True)
+    (rd / 'sft' / 'learner-state' / 'learner_manifest.json').write_text('{}')
+    monkeypatch.setattr(d.c, 'ledger', lambda *a, **k: (_ for _ in ()).throw(AssertionError('rebuilt')))
+    assert not d.rebuild_round(rd, d.lineage_policies(), 'stages/rebuild.request')
+    assert not (rd / 'stages' / 'rebuild.request').exists() and (rd / 'round.json').read_text() == before
+    assert 'rebuild_refused' in (d.root / 'drive.log').read_text()
+
+
+def test_the_round_loop_rebuilds_a_requested_round_before_it_trains(tmp_path, monkeypatch):
+    ei, d, rd, cur, plans, units, size = _prepared_round(tmp_path, monkeypatch,
+                                                         argv=['--rebuild-round', 'r0001', '--max-rounds', '1'])
+    rd = d.root / 'r0001'
+    calls = []
+    monkeypatch.setattr(d.c, 'pin_stage', lambda: None)
+    monkeypatch.setattr(d.c, 'require_data_readers', lambda: None)
+    monkeypatch.setattr(d, 'record_reader_sources', lambda: None)
+    monkeypatch.setattr(d, 'held_loop', lambda: None)
+    monkeypatch.setattr(d, 'teacher_loop', lambda: None)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: calls.append('teacher'))
+    monkeypatch.setattr(d, 'ensure_collection', lambda p: None)
+    monkeypatch.setattr(d, 'ensure_remote_collection', lambda p: None)
+    monkeypatch.setattr(d, 'prepare_ahead', lambda rd_, pols: None)
+    monkeypatch.setattr(d, 'health_report', lambda rd_, pols: None)
+
+    def prepare(rd_, pols):
+        if not (rd_ / 'round.json').exists():
+            (rd_ / 'mix').mkdir(parents=True, exist_ok=True)
+            (rd_ / 'mix' / 'chains.pkl').write_bytes(b'old')
+            ei.write_round_manifest(rd_, round_id=rd_.name, base_policy_sha=pols[-1]['sha256'], previous_policy_sha=None,
+                                    chains_path=rd_ / 'mix' / 'chains.pkl', episode_ids=[], extra={'size': size})
+        calls.append('prepare')
+    monkeypatch.setattr(d, 'prepare', prepare)
+    monkeypatch.setattr(d, 'rebuild_round', lambda rd_, pols, reason: calls.append(('rebuild', rd_.name, reason)))
+    monkeypatch.setattr(d, 'train_sft', lambda rd_, p: calls.append('sft') or rd_ / 'sft' / 'factors')
+    monkeypatch.setattr(d, 'publish', lambda rd_, p, f: {'checkpoint': str(rd_ / 'policy' / 'checkpoint.pt'),
+                                                          'checkpoint_sha256': 'e' * 64})
+    monkeypatch.setattr(d, 'rebind_remote', lambda *a: None)
+    assert d.run() == 0
+    assert calls.index('prepare') < calls.index(('rebuild', 'r0001', f'--rebuild-round under build code {"b" * 40}')) \
+        < calls.index('sft') and 'teacher' in calls
+
+
+def test_the_fallow22_fan_in_part_joins_every_round_mix_unless_opted_out(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    _, _, build = d.prepare_plan(d.root / 'r0001', [d.controller.current])
+    aux = [build[i + 1] for i, a in enumerate(build) if a == '--aux']
+    assert ei.FALLOW22_AUX in aux and ei.FALLOW22_AUX.endswith('share=0.01,task_tokens=2000')
+    _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--no-fallow22-aux')
+    _, _, build = off.prepare_plan(off.root / 'r0001', [off.controller.current])
+    assert not any(a.startswith('fallow22=') for a in build)

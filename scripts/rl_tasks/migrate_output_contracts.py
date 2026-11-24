@@ -123,9 +123,27 @@ def output_fields(semantics, root_body, contract_text):
     steps = [part for part in STEP.split(instructions) if part.strip()]
     for path in named_files:
         if path in inputs:
-            if any(path in step and WRITE_VERB.search(step.replace(path, '')) and not re.match(r'\s*read\b', step, re.I)
-                   or any(path in s and WRITE_VERB.search(s) for s in sentences(step)) for step in steps):
-                exact.add(path)
+            pat = re.compile(rf'(?<![\w/.-]){re.escape(path)}(?![\w/-]|\.\w)')
+            for step in steps:
+                if not pat.search(step):
+                    continue
+                other_files = [other for other in named_files if other != path
+                               and re.search(rf'(?<![\w/.-]){re.escape(other)}(?![\w/-]|\.\w)', step)]
+                step_without_path = pat.sub('', step)
+                if not WRITE_VERB.search(step_without_path):
+                    continue
+                if not re.match(r'\s*read\b', step, re.I):
+                    exact.add(path)
+                    break
+                # Step starts with "Read ...": still treat path as written if no other file is named in the step,
+                # or if a later sentence mentions path with a write verb, or if path appears after a write verb.
+                step_sents = sentences(step)
+                if (not other_files
+                        or any(pat.search(s) and WRITE_VERB.search(pat.sub('', s)) and not re.match(r'\s*read\b', s, re.I)
+                               for s in step_sents)
+                        or any(WRITE_VERB.search(step[:m.start()]) for m in pat.finditer(step))):
+                    exact.add(path)
+                    break
         elif not any(path.startswith(d + '/') for d, _ in globs):
             exact.add(path)
     for folder, ext in set(TEMPLATE_PATH.findall(instructions)):
@@ -149,11 +167,18 @@ def output_fields(semantics, root_body, contract_text):
     return fields, written
 
 
+def _mentions_field(sentence, name):
+    if '/*' in name:
+        prefix = name.split('/*')[0] + '/'
+        return bool(re.search(rf'(?<![\w/.-]){re.escape(prefix)}', sentence))
+    return bool(re.search(rf'(?<![\w/.-]){re.escape(name)}(?![\w/-]|\.\w)', sentence))
+
+
 def attribute(contract_text, fields, has_return):
     """(folder sentences, {field: sentences}, return sentences)."""
     general, per_field, returned = [], {name: [] for name in fields}, []
     for sentence in sentences(contract_text, wrapped=True):
-        mentioned = [name for name in fields if (name.split('/*')[0] + '/' if '/*' in name else name) in sentence]
+        mentioned = [name for name in fields if _mentions_field(sentence, name)]
         if RETURN_LEAD.search(sentence) or (RETURN.search(sentence) and not mentioned):
             if has_return:
                 returned.append(sentence)
@@ -288,7 +313,6 @@ def main(argv=None):
             if not line.strip():
                 continue
             row = json.loads(line)
-            has = 'Output contract' in line
             new, reason = migrate(row)
             if new is None:
                 dropped.append({'id': row['id'], 'source': path, 'reason': reason})

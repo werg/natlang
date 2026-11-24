@@ -969,18 +969,20 @@ def test_extract_pass_rates_count_student_samples_only_and_policies_come_from_ea
     assert own[0]['policies'] == ['p1', 'p2']                          # an episode straddling a rebind
 
 
-def test_unfilled_live_teacher_episodes_train_only_through_their_filled_unit():
-    """In a build with filled reasoning (``replaces=teacher``) an observed-live teacher episode no filled unit replaced
-    is left out (its action would train after an empty or teacher think block); other teacher chains and the filled
-    units stay; without a filled part (a Vibestudio-only build) they train as before."""
+def test_unfilled_live_teacher_episodes_train_with_teacher_reasoning_as_context_unless_dropped():
+    """Owner 2026-11-24: an observed-live teacher episode no filled unit replaced stays in an expert-iteration build
+    (its think block is zero-weight context, its actions train); ``drop`` is the opt-out (the old auto rule)."""
     chains = [{'part': 'teacher', 'round': 'live:vibestudio:a:1'}, {'part': 'teacher', 'round': 'live:vibestudio:a:1'},
               {'part': 'teacher', 'round': 'teacher:pool:t:0'}, {'part': 'filled', 'round': 'filled:live:vibestudio:b:2'}]
     filled = [s.parse_aux('filled=/f.pkl,share=all,replaces=teacher')]
-    kept, n = s.drop_unfilled_live(chains, 'auto', filled)
-    assert n == 1 and [c['round'] for c in kept] == ['teacher:pool:t:0', 'filled:live:vibestudio:b:2']
+    assert s.drop_unfilled_live(chains, 'auto', filled) == (chains, 0)
     assert s.drop_unfilled_live(chains, 'auto', [s.parse_aux('live=/l.pkl')]) == (chains, 0)
     assert s.drop_unfilled_live(chains, 'train', filled) == (chains, 0)
-    assert s.drop_unfilled_live(chains, 'drop', [])[1] == 1
+    kept, n = s.drop_unfilled_live(chains, 'drop', filled)
+    assert n == 1 and [c['round'] for c in kept] == ['teacher:pool:t:0', 'filled:live:vibestudio:b:2']
+    # a 'filled' treatment without a fill renders its think block as context, never as a target
+    treatment = s.ThinkTreatment({'default': 'context', 'models': {'m': 'filled'}})
+    assert treatment.render({'source': 'teacher', 'teacher': 'm'}) == 'context'
 
 
 def test_partial_actions_do_not_displace_completed_demonstrations_for_same_goal():

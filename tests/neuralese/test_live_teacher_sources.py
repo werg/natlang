@@ -1043,3 +1043,18 @@ def test_independently_checked_unused_child_preserves_the_correct_public_answer(
     c['checks'] = ['answerCorrect']
     with pytest.raises(ValueError):
         live.declared_return_exclusions([proof], records)
+
+
+def test_artifact_observer_records_actual_bound_reads_and_resets_after_error(tmp_path):
+    from live_teacher_sources import observed_artifacts, bound_file
+    import hashlib
+    path = tmp_path / 'actual-source'; path.write_bytes(b'actual source')
+    with observed_artifacts() as paths:
+        assert bound_file({'path': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}, tmp_path) == path
+    assert paths == {str(path.resolve())}
+    with pytest.raises(ValueError):
+        with observed_artifacts() as failed:
+            bound_file({'path': path.name, 'sha256': 'wrong'}, tmp_path)
+    with observed_artifacts() as later:
+        pass
+    assert later == set() and failed == {str(path.resolve())}

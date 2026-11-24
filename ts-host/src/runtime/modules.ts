@@ -14,7 +14,7 @@ import { NEUTRAL_RUNTIME_SPECIFIER } from '../compiler/runtime-specifier.js';
 import { STD_MODULE_FILE, STD_SPECIFIERS } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { typeScriptText } from '../compiler/eval-check.js';
-import { moduleResolvedImports, moduleTypeSources, NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
+import { moduleResolvedImports, moduleTypeSources, moduleTypeSpecifiers, NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
 import { joinSourcePath } from './source-path.js';
 import * as lowered from './lowered.js';
 import * as surface from './surface.js';
@@ -129,6 +129,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   const relSource = record.source.replace(/\\/g, '/').replace(/^\/+/, '');
   // Package files imported for types only: present in the checker at their package paths, never loaded at run time.
   const typeSources = moduleTypeSources(record);
+  const typeSpecifiers = moduleTypeSpecifiers(record);
   const usePkgRoot = (!!extraImports && Object.keys(extraImports).length > 0 || !!typeSources) && !!relSource && !relSource.startsWith('..');
   const path = usePkgRoot ? `/__natlang__/pkg/${relSource.endsWith('.js') ? `${relSource.slice(0, -3)}.ts` : relSource}` : `${FOLDER}/${record.name}.ts`;
   const virtualDir = path.slice(0, path.lastIndexOf('/'));
@@ -143,7 +144,14 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   const typedRefinement = /\b(?:refine|assume)\s*</.test(text);
   // A non-literal `nl(expr)` call stays a CallExpression after desugarNlCalls and still needs analysis to report `nl-not-tag`.
   const callsNl = /\bnl\s*(?:<[^()]*>)?\s*\(/.test(text);
-  if (containsTaggedTemplate(parsed) || callsNl || FOR_OF.test(text) || /\bNeuralese\s*</.test(`${text}\n${softTypes}`) || generic || typedRefinement) {
+  const hasTypeImports = parsed.statements.some(statement =>
+    (ts.isImportDeclaration(statement) && (!!statement.importClause?.isTypeOnly ||
+      (!!statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings) &&
+        statement.importClause.namedBindings.elements.some(element => element.isTypeOnly)))) ||
+    (ts.isExportDeclaration(statement) && !!statement.moduleSpecifier && (statement.isTypeOnly ||
+      (!!statement.exportClause && ts.isNamedExports(statement.exportClause) &&
+        statement.exportClause.elements.some(element => element.isTypeOnly)))));
+  if (containsTaggedTemplate(parsed) || callsNl || FOR_OF.test(text) || /\bNeuralese\s*</.test(`${text}\n${softTypes}`) || generic || typedRefinement || (hasTypeImports && !!typeSources)) {
     const files: Record<string, string> = { [path]: text };
     for (const [name, item] of Object.entries(level)) {
       if (name === record.name) continue;
@@ -167,7 +175,22 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
         else if (item.kind === 'natlang') { files[mapped] = natlangDeclaration(item); extraPaths[specifier] = [mapped]; }
       }
     }
-    if (usePkgRoot) for (const [source, typeText] of Object.entries(typeSources ?? {})) files[`/__natlang__/pkg/${source}`] ??= typeText;
+    for (const [source, typeText] of Object.entries(typeSources ?? {})) {
+      const mapped = `/__natlang__/pkg/${source}`;
+      files[mapped] ??= typeText;
+    }
+    for (const [specifier, source] of Object.entries(typeSpecifiers ?? {})) {
+      const mapped = `/__natlang__/pkg/${source}`;
+      if (specifier.startsWith('.')) {
+        if (!usePkgRoot) {
+          const resolved = joinSourcePath(virtualDir, specifier);
+          const tsPath = resolved.endsWith('.js') ? `${resolved.slice(0, -3)}.ts` : resolved.endsWith('.ts') ? resolved : `${resolved}.ts`;
+          if (typeSources?.[source] !== undefined) files[tsPath] ??= typeSources[source]!;
+        }
+      } else {
+        extraPaths[specifier] ??= [mapped];
+      }
+    }
     const known = new Set(Object.keys(record.types));
     files[`${virtualDir}/__types.d.ts`] = Object.entries(record.types)
       .map(([name, text]) => `type ${name} = ${typeScriptText(text, known)};`).join('\n') + '\n';
@@ -197,6 +220,35 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
       if (lowered !== text) { text = lowered; files[path] = text; program = createVirtualProgram(files, compilerOptions); }
     }
     const file = program.getSourceFile(path)!;
+    // Surface unresolved members of the package type files the loader read for `import type` / `export type` (the
+    // loader already refuses a type file that does not exist), instead of letting the imported types collapse to any.
+    // Only declarations whose specifier resolves to one of those files are checked: other imports (types.ts aliases,
+    // runtime siblings) are mapped by their own mechanisms and keep their behaviour.
+    if (hasTypeImports && typeSources && usePkgRoot) {
+      const typeFiles = new Set(Object.keys(typeSources).map(source => `/__natlang__/pkg/${source}`));
+      const checked: [number, number][] = [];
+      for (const statement of file.statements) {
+        const specifier = (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
+          statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : undefined;
+        if (!specifier) continue;
+        let target: string | undefined;
+        if (specifier.startsWith('.')) {
+          const resolved = joinSourcePath(virtualDir, specifier);
+          target = resolved.endsWith('.js') ? `${resolved.slice(0, -3)}.ts` : resolved.endsWith('.ts') ? resolved : `${resolved}.ts`;
+        } else if (typeSpecifiers && Object.hasOwn(typeSpecifiers, specifier)) target = `/__natlang__/pkg/${typeSpecifiers[specifier]}`;
+        if (target && typeFiles.has(target)) checked.push([statement.getStart(file), statement.getEnd()]);
+      }
+      const importErrors = checked.length ? program.getSemanticDiagnostics(file).filter(diag =>
+        (diag.code === 2305 || diag.code === 2614 || diag.code === 2724 || diag.code === 2307) && diag.start !== undefined &&
+        checked.some(([start, end]) => diag.start! >= start && diag.start! < end)) : [];
+      if (importErrors.length) {
+        const formatted = importErrors.map(diag => {
+          const pos = file.getLineAndCharacterOfPosition(diag.start!);
+          return `${pos.line + 1}:${pos.character + 1} TS${diag.code}: ${ts.flattenDiagnosticMessageText(diag.messageText, '\n')}`;
+        }).join('\n');
+        throw new NatlangSourceError(record.source, formatted);
+      }
+    }
     const analysis = analyzeInlineLambdas(program, [file], { displayPath: () => record.source,
       sourceRevision: record.revision, authored: true });
     // Iteration sources are classified by type, so a loop the run would refuse is refused when the project is checked.
@@ -243,10 +295,14 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
 const compiled = new Map<string, string>();
 function compiledCode(record: ModuleRecord, level: Record<string, ItemRecord>, target: ModuleTarget): string {
   const extraImports = moduleResolvedImports(record);
+  const typeSources = moduleTypeSources(record);
+  const typeSpecifiers = moduleTypeSpecifiers(record);
   const key = fingerprint({ target, source: record.source, id: record.id, revision: record.revision,
     programId: record.programId ?? null, text: record.text, types: record.types,
     ...(extraImports ? { extraImports: Object.entries(extraImports).map(([specifier, item]) => ({ specifier, kind: item.kind,
       source: item.source, revision: item.kind === 'namespace' ? null : item.revision })) } : {}),
+    ...(typeSources ? { typeSources: Object.entries(typeSources).sort(([a], [b]) => a.localeCompare(b)) } : {}),
+    ...(typeSpecifiers ? { typeSpecifiers: Object.entries(typeSpecifiers).sort(([a], [b]) => a.localeCompare(b)) } : {}),
     siblings: Object.entries(level).map(([name, item]) => ({ name, kind: item.kind,
       text: item.kind === 'namespace' ? null : item.text,
       ...(item.kind === 'natlang' ? { args: item.args, returns: item.returns, types: item.types, subtype: item.subtype,

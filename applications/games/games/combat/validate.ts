@@ -9,5 +9,5 @@ import type { CombatState, CombatSubmission, Settings, Verdict } from '../../typ
 
 export default async function validate(state: CombatState, submission: CombatSubmission, settings: Settings): Promise<Verdict> {
   return pluggable({ crisp: () => rules(state, submission), nl: () => judge(state, submission) },
-    settings.validate, { name: 'combat.validate', same: (crisp, nl) => crisp.ok === nl.ok })();
+    settings.validate, { name: 'combat.validate', same: (crisp, natural) => crisp.ok === natural.ok })();
 }

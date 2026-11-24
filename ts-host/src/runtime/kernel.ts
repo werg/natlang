@@ -3,7 +3,8 @@
  * `iterateOn` step or judge) comes through `invokeDefinition`: it builds one lambda node, runs it
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
-import { authoredTextGuidance, guidanceForCall, programGuidanceProgram } from '../guidance/program.js';
+import { authoredTextGuidance, guidanceForCall, programGuidanceProgram, type AuthoredTextGuidance } from '../guidance/program.js';
+import { writesContainsRefinement } from './writes.js';
 import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
@@ -791,8 +792,20 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const guidanceBound = !!owner && programGuidanceProgram(task.nativeProgramGuidance) === owner;
   const selectedNativeGuidance = !eligibleGuidance ? undefined : guidanceBound ?
     guidanceForCall(task.nativeProgramGuidance, definition.name) : nativeReader ? view.nativeGuidance() : undefined;
-  const selectedAuthoredGuidance = eligibleGuidance && !guidanceBound && !selectedNativeGuidance && !nativeReader && view.guidance() && view.program?.id ?
-    authoredTextGuidance(view.guidance(), view.program.id) : undefined;
+  const resolveExplicitTextGuidance = (): AuthoredTextGuidance | undefined => {
+    const raw = task.authoredProgramGuidance;
+    if (!raw || nativeReader || selectedNativeGuidance) return undefined;
+    if ('kind' in raw && raw.kind === 'authored-text-guidance') return raw;
+    const scoped = raw as { program?: string; functions?: Record<string, string>; programId?: string };
+    const fnKey = definition.source && scoped.functions && Object.hasOwn(scoped.functions, definition.source)
+      ? definition.source
+      : scoped.functions && Object.hasOwn(scoped.functions, definition.name) ? definition.name : undefined;
+    const parts = [scoped.program?.trim(), fnKey ? scoped.functions![fnKey]?.trim() : undefined].filter((part): part is string => !!part);
+    if (!parts.length) return undefined;
+    return authoredTextGuidance(parts.join('\n\n'), scoped.programId ?? owner ?? 'directory-program');
+  };
+  const selectedAuthoredGuidance = resolveExplicitTextGuidance() ?? (eligibleGuidance && !guidanceBound && !selectedNativeGuidance && !nativeReader && view.guidance() && view.program?.id ?
+    authoredTextGuidance(view.guidance(), view.program.id) : undefined);
   const handoffNames = task.runtime.options.escalation?.enabled === false ? [] : task.runtime.options.escalation?.models ?? [];
   if (new Set(handoffNames).size !== handoffNames.length) throw new Error('escalation model chain contains a cycle');
   const configuredModels = task.runtime.options.models ?? {};
@@ -835,7 +848,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     // Live events (plans/STREAMING.md §1.6): the call's model deltas, tagged with the call; nothing without a subscriber.
     ...(task.live ? { onDelta: liveDeltas(task.live, { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null,
       definitionId: definition.id, name: definition.name }) } : {}),
-    ...(signature?.refinedReturns || definition.ensures?.length ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model, frame) } } : {}),
+    ...(signature?.refinedReturns || definition.ensures?.length ||
+      (definition.writes && writesContainsRefinement(definition.writes, signature?.env ?? new TypeEnv(parseAliases(definition.types, false))))
+      ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model, frame) } } : {}),
   }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),

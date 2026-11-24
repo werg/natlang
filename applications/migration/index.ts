@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
-import { IterationLimitError, pluggable, pluggableMode, type NatlangRuntime, type PluggableMode, type PluggableSetting } from '@natlang/node';
+import { IterationLimitError, pluggable, pluggableMode, untrusted, type NatlangRuntime, type PluggableMode, type PluggableSetting } from '@natlang/node';
 import understand from './migrate/understand.nl';
 import survey from './migrate/survey.nl';
 import plan from './migrate/plan.nl';
@@ -84,6 +84,7 @@ export class RepositoryMigration {
   private readonly checks: CheckCommand[];
   private readonly contentsGiven?: Record<string, string>;
   private readonly validator?: (contents: Readonly<Record<string, string>>) => Promise<Check[]> | Check[];
+  private readonly fenceUntrusted: boolean;
   private readonly revisions = new Map<string, Record<string, string>>();
   private readonly events: Record<string, unknown>[] = [];
 
@@ -92,14 +93,16 @@ export class RepositoryMigration {
    * reading `root`, and `validator` judges a revision's texts instead of running commands (a caller's exact verifier,
    * such as codemod's typecheck and tests).
    */
-  constructor(root: string, { files, checks = [], policy = {}, contents, validator }: { files: string[], checks?: CheckCommand[],
+  constructor(root: string, { files, checks = [], policy = {}, contents, validator, fenceUntrusted = false }: { files: string[], checks?: CheckCommand[],
       policy?: Partial<Record<PolicyPoint, Implementation>>, contents?: Record<string, string>,
-      validator?: (contents: Readonly<Record<string, string>>) => Promise<Check[]> | Check[] }) {
+      validator?: (contents: Readonly<Record<string, string>>) => Promise<Check[]> | Check[],
+      fenceUntrusted?: boolean }) {
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.root = resolve(root); this.files = [...files]; this.checks = checks;
+    this.fenceUntrusted = fenceUntrusted;
     if (contents) {
       if (files.some(path => typeof contents[path] !== 'string')) throw new Error('in-memory contents must hold every manifest file');
-      this.contentsGiven = Object.fromEntries(files.map(path => [path, contents[path]!]));
+      this.contentsGiven = Object.fromEntries(files.map(path => [path, fenceUntrusted ? String(untrusted(contents[path]!, `repo file ${path}`)) : contents[path]!]));
     }
     this.validator = validator;
     if (!this.files.length || this.files.some(path => !safe(path)) || new Set(this.files).size !== this.files.length)
@@ -139,7 +142,8 @@ export class RepositoryMigration {
   /** Lines from..to (1-based, inclusive) exactly as stored. */
   lines(path: string, from: number, to: number, revision = this.base): string {
     if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 1 || to < from) throw new Error(`invalid line range: ${from}..${to}`);
-    return this.read(path, revision).split('\n').slice(from - 1, to).join('\n');
+    const slice = this.read(path, revision).split('\n').slice(from - 1, to).join('\n');
+    return this.fenceUntrusted ? String(untrusted(slice, `repo file ${path}:${from}-${to}`)) : slice;
   }
 
   /** How many times text occurs in a file at a revision. */
@@ -159,9 +163,16 @@ export class RepositoryMigration {
     if (typeof query !== 'string' || !query) throw new Error('empty query');
     const hits: SearchHit[] = [];
     for (const [path, text] of Object.entries(this.contents(revision)))
-      for (let at = text.indexOf(query); at >= 0; at = text.indexOf(query, at + query.length))
-        hits.push({ path, offset: at, line: text.slice(0, at).split('\n').length,
-          excerpt: text.slice(Math.max(0, at - 50), Math.min(text.length, at + query.length + 50)) });
+      for (let at = text.indexOf(query); at >= 0; at = text.indexOf(query, at + query.length)) {
+        const line = text.slice(0, at).split('\n').length;
+        const rawExcerpt = text.slice(Math.max(0, at - 50), Math.min(text.length, at + query.length + 50));
+        hits.push({
+          path,
+          offset: at,
+          line,
+          excerpt: this.fenceUntrusted ? String(untrusted(rawExcerpt, `repo file ${path}:${line}`)) : rawExcerpt,
+        });
+      }
     this.events.push({ operation: 'repository.search', query, revision, hits: hits.length });
     return { revision, hits };
   }
@@ -169,7 +180,8 @@ export class RepositoryMigration {
   read(path: string, revision = this.base): string {
     const contents = this.revisions.get(revision);
     if (!contents || !Object.hasOwn(contents, path)) throw new Error('unknown file or revision');
-    return contents[path]!;
+    const text = contents[path]!;
+    return this.fenceUntrusted ? String(untrusted(text, `repo file ${path}`)) : text;
   }
 
   apply(base: string, patches: Patch[]): RepoSnapshot {
@@ -184,7 +196,8 @@ export class RepositoryMigration {
       if (at < 0) throw new Error(`patch context missing: ${patch.path} does not contain the old text ${JSON.stringify(patch.old.slice(0, 80))}`);
       if (text.indexOf(patch.old, at + patch.old.length) >= 0)
         throw new Error(`patch context ambiguous: ${patch.path} contains the old text ${JSON.stringify(patch.old.slice(0, 80))} more than once; extend it with neighboring text`);
-      updated[patch.path] = text.slice(0, at) + patch.new + text.slice(at + patch.old.length);
+      const nextText = text.slice(0, at) + patch.new + text.slice(at + patch.old.length);
+      updated[patch.path] = this.fenceUntrusted ? String(untrusted(nextText, `repo file ${patch.path} (edited)`)) : nextText;
     }
     const revision = this.identity(updated);
     this.revisions.set(revision, updated);

@@ -9,7 +9,7 @@ export const withinWindow = (request: Request): boolean => request.order.days_si
  * Whether a request may be settled at all: the crisp rule, or the judgment that also reads what the customer reports.
  * `shadow` runs both, serves the crisp answer and records each disagreement in the trace (`pluggable_shadow`).
  */
-export function eligibility(setting: PluggableSetting) {
+export function eligibility(setting?: PluggableSetting) {
   return pluggable<[Request], boolean>({ crisp: withinWindow, nl: request => eligibleNl(request) }, setting,
     { name: 'refunds.eligible', default: 'crisp', serve: 'crisp' });
 }

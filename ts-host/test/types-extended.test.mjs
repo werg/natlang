@@ -119,9 +119,9 @@ test('schemaOf emits prefixItems, minItems, and maxItems for tuples', () => {
     { type: 'array', prefixItems: [{ type: 'string' }, { type: 'number' }], minItems: 2, maxItems: 2 },
   ] });
   assert.equal(schemaOf(parseType('[string?, number?]'), env).anyOf.length, 3);
+  // The empty tuple carries no empty prefixItems list (some grammar converters refuse one).
   assert.deepEqual(schemaOf(parseType('[]'), env), {
     type: 'array',
-    prefixItems: [],
     minItems: 0,
     maxItems: 0,
   });

@@ -160,6 +160,14 @@ def adapter_args(job):
             '--sglang-adapter-slots', '1']
 
 
+def weight_args(sglang):
+    """``--sglang-weight-dtype`` (and ``--sglang-overlap-schedule``) of a job whose settings name one (``pop_rl_actor.pop_sglang(weight_dtype='fp8')``:
+    collection actors). Without it the engine served BF16 while the export format attested ``-w-fp8``."""
+    dtype = sglang.get('weight_dtype')
+    return (['--sglang-weight-dtype', dtype] if dtype else []) + \
+        (['--sglang-overlap-schedule'] if sglang.get('overlap_schedule') else [])
+
+
 def serve_sglang(job, checkpoint, transport, stage, work):
     """The DGX actor's own serving path on Pop's GPU: serve_native_checkpoint.py --engine sglang, run on the host (no
     container) from the fork's venv (~/.local/share/natlang/sglang-natlang-venv, the path training/neuralese/
@@ -182,7 +190,7 @@ def serve_sglang(job, checkpoint, transport, stage, work):
                '--sglang-max-running', str(sglang.get('max_running', 10)),
                '--sglang-max-total-tokens', str(sglang.get('max_total_tokens', 131072)),
                '--sglang-kv-cache-dtype', sglang.get('kv_cache_dtype', 'auto'),
-               *adapter_args(job), '--hf-export-dir', str(work / 'sglang-hf' / job['source_sha256'][:16]),
+               *weight_args(sglang), *adapter_args(job), '--hf-export-dir', str(work / 'sglang-hf' / job['source_sha256'][:16]),
                *sglang.get('extra', [])]
     # FlashInfer JIT-compiles kernels with nvcc: Pop has no system CUDA toolkit, the venv's nvidia-cuda-nvcc wheel is it.
     cuda = '/usr/local/cuda'

@@ -3,6 +3,7 @@ import { createNatlangCompilerHost } from './compiler/host.js';
 import type { InlineLambdaPlan, InlineRebindSite, NatlangDiagnostic } from './compiler/inline.js';
 import type { GenericInstantiation, NeuraleseLiteral, NeuraleseReadout } from './compiler/neuralese.js';
 import { authoredCallables, finiteCounterComparison, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
+import { TOOL_MARKUP } from './native/tool-markup.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
 export const SCOPE_COMPILE_VERSION = 3 as const;
@@ -525,7 +526,25 @@ const PYTHON_SYNTAX_LINES = [
   /(?<![\w.$'"])(?:True|False|None)\b(?!['"])/,
 ];
 const PROSE_RUN = /^[A-Za-z][A-Za-z'’,;:.!?-]*(?:\s+[A-Za-z'’,;:.!?-]+){3,}\s*$/;
+const THINK_MARKUP = /<\/?think>/;
 const TYPESCRIPT_ONLY = 'The code argument is run as TypeScript in this call\'s scope. ';
+
+/** Detect leaked tool-call or <think>/<\/think> markup in unparseable eval code before parser cascades. */
+function leakedMarkupHint(source: string): ScopeCompileDiagnostic | undefined {
+  if (!TOOL_MARKUP.test(source) && !THINK_MARKUP.test(source)) return undefined;
+  const lines = source.split('\n');
+  const index = lines.findIndex(line => TOOL_MARKUP.test(line) || THINK_MARKUP.test(line));
+  const at = index >= 0 ? index : 0;
+  const start = lines.slice(0, at).reduce((sum, line) => sum + line.length + 1, 0);
+  return {
+    code: 'typescript-syntax',
+    message: TYPESCRIPT_ONLY + 'Tool-call or <think> markup leaked into eval.code; send only valid TypeScript statements in code and close reasoning before making a tool call.',
+    start,
+    end: start + (lines[at]?.length ?? 0),
+    line: at + 1,
+    column: 1,
+  };
+}
 
 /**
  * One sentence of recovery for eval code that is not TypeScript at all: a Python program, or prose that leaked into
@@ -560,9 +579,14 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   if (!result.ok && typeof source === 'string') {
     const parsed = ts.createSourceFile('eval-source.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
     if (((parsed as unknown as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics ?? []).length) {
-      const hint = foreignCodeHint(source);
-      // The parser's cascade over a whole foreign program buries the sentence; keep it and the first few errors.
-      if (hint) result.diagnostics.splice(0, result.diagnostics.length, hint, ...result.diagnostics.slice(0, 4));
+      const markup = leakedMarkupHint(source);
+      if (markup) {
+        result.diagnostics.splice(0, result.diagnostics.length, markup);
+      } else {
+        const hint = foreignCodeHint(source);
+        // The parser's cascade over a whole foreign program buries the sentence; keep it and the first few errors.
+        if (hint) result.diagnostics.splice(0, result.diagnostics.length, hint, ...result.diagnostics.slice(0, 4));
+      }
     }
   }
   return result;
@@ -756,7 +780,7 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
   const knownHelperNames = new Set([...inputNames, ...localNames, ...helperNames, ...opaqueNames, ...captureNames,
     ...serviceNames, ...bindings.map(binding => binding.name), ...(options.persistentHelperNames ?? []),
     // Eval built-ins present in every call, and the binding model-written Neuralese literals lower to.
-    'nl', 'iterateOn', 'transcript', 'decide', '__neuralese']);
+    'nl', 'iterateOn', 'transcript', 'decide', 'refine', 'assume', 'search_code', 'NatlangContext', 'read', '__neuralese']);
   const transientNames = new Set(bindings.filter(binding => binding.transient).map(binding => binding.name));
   const persistentTypeNames = new Set(options.persistentTypeNames ?? []);
   const helperChecker = helperCandidates.length ? checkerFor(file) : undefined;
@@ -816,6 +840,10 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
       message: `Saved helper ${JSON.stringify(helper.name)} cannot persist because it refers to unavailable ${unknown.join(', ')}; declare those names in the call scope first.` });
   }
 
+  const constLocals = new Set([
+    ...localOptions.filter(binding => !binding.mutable && !shadowedLocals.has(binding.name)).map(binding => binding.name),
+    ...bindings.filter(binding => binding.kind === 'const').map(binding => binding.name),
+  ]);
   const immutable = new Set([...inputNames, ...helperNames, ...opaqueNames, ...serviceNames,
     ...captureOptions.filter(binding => !binding.mutable).map(binding => binding.name),
     ...localOptions.filter(binding => !binding.mutable && !shadowedLocals.has(binding.name)).map(binding => binding.name),
@@ -862,7 +890,9 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
       if (ts.isIdentifier(root) && (deeplyReadonly.has(root.text) || (root === target && immutable.has(root.text))))
         add('invalid-binding', inputNames.includes(root.text) ?
           `${root.text} is a parameter and cannot be changed; declare a new variable for a changed value.` :
-          `Binding ${JSON.stringify(root.text)} is immutable in eval.`, target);
+          constLocals.has(root.text) ?
+            `${JSON.stringify(root.text)} was declared with \`const\` and cannot be reassigned; use \`let\` or a new variable name.` :
+            `Binding ${JSON.stringify(root.text)} is immutable in eval.`, target);
     }
     ts.forEachChild(node, visit);
   };
@@ -954,6 +984,94 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
           `${name} is already defined in this scope; use it directly instead of declaring it again.`;
       diagnostics.push({ code: 'invalid-binding', message, ...rawSpan(binding.start, binding.end) });
     }
+
+  // Catch TDZ self-shadowing (`const intent = await intent(x)`, `const x = x + 1`) across all scopes (top-level
+  // shadowed locals as well as declarations inside blocks, loops, and callbacks), before execution throws a raw
+  // ReferenceError ("Cannot access '...' before initialization").
+  const referencesNameEagerly = (expression: ts.Expression, targetName: string): boolean => {
+    let found = false;
+    const scan = (node: ts.Node): void => {
+      if (found || ts.isFunctionLike(node) || ts.isTypeNode(node)) return;
+      if (ts.isIdentifier(node) && node.text === targetName && !isPropertyName(node) && !isDeclarationName(node)) {
+        const parent = node.parent;
+        if (!(ts.isPropertyAssignment(parent) && parent.name === node)) {
+          found = true;
+          return;
+        }
+      }
+      ts.forEachChild(node, scan);
+    };
+    scan(expression);
+    return found;
+  };
+  const walkTdz = (node: ts.Node, outerNames: ReadonlySet<string>): void => {
+    if (ts.isBlock(node) || ts.isCaseClause(node) || ts.isDefaultClause(node)) {
+      const scopeNames = new Set(outerNames);
+      for (const stmt of node.statements) {
+        if (stmt.getStart(file) < userStart) continue;
+        walkTdz(stmt, scopeNames);
+        if (ts.isVariableStatement(stmt)) {
+          for (const decl of stmt.declarationList.declarations) for (const id of namesOf(decl.name)) scopeNames.add(id.text);
+        } else if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+          scopeNames.add(stmt.name.text);
+        }
+      }
+      return;
+    }
+    if (ts.isFunctionLike(node)) {
+      const scopeNames = new Set(outerNames);
+      for (const param of node.parameters) for (const id of namesOf(param.name)) scopeNames.add(id.text);
+      const body = (node as ts.FunctionLikeDeclarationBase).body;
+      if (body) walkTdz(body, scopeNames);
+      return;
+    }
+    if (ts.isForStatement(node) || ts.isForInStatement(node) || ts.isForOfStatement(node)) {
+      const scopeNames = new Set(outerNames);
+      if (node.initializer) {
+        walkTdz(node.initializer, outerNames);
+        if (ts.isVariableDeclarationList(node.initializer)) {
+          for (const decl of node.initializer.declarations) for (const id of namesOf(decl.name)) scopeNames.add(id.text);
+        }
+      }
+      if (ts.isForStatement(node)) {
+        if (node.condition) walkTdz(node.condition, scopeNames);
+        if (node.incrementor) walkTdz(node.incrementor, scopeNames);
+      } else {
+        walkTdz(node.expression, outerNames);
+      }
+      walkTdz(node.statement, scopeNames);
+      return;
+    }
+    if (ts.isCatchClause(node)) {
+      const scopeNames = new Set(outerNames);
+      if (node.variableDeclaration) for (const id of namesOf(node.variableDeclaration.name)) scopeNames.add(id.text);
+      walkTdz(node.block, scopeNames);
+      return;
+    }
+    if (ts.isVariableDeclaration(node) && node.initializer && node.getStart(file) >= userStart) {
+      const list = node.parent;
+      const isLexical = ts.isVariableDeclarationList(list) && !!(list.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let));
+      const isTopLevelStmt = ts.isVariableDeclarationList(list) && ts.isVariableStatement(list.parent) && list.parent.parent === fn.body;
+      const stmtSpan = isTopLevelStmt ? span(list.parent) : undefined;
+      const wasRemovedAlias = !!stmtSpan && redundantAliases.some(alias => alias.start === stmtSpan.start && alias.end === stmtSpan.end);
+      if (isLexical && !wasRemovedAlias) {
+        const keyword = list.flags & ts.NodeFlags.Const ? 'const' : 'let';
+        for (const id of namesOf(node.name)) {
+          const name = id.text;
+          const alreadyReportedTopLevel = isTopLevelStmt && declared.has(name) && injectedNames.has(name) && !shadowedLocals.has(name);
+          if (!alreadyReportedTopLevel && outerNames.has(name) && referencesNameEagerly(node.initializer, name)) {
+            add('invalid-binding',
+              `Cannot reference outer ${JSON.stringify(name)} inside its own ${keyword} declaration (temporal dead zone); ` +
+              `give the new variable another name, such as \`${keyword} ${name}Result = ...\`.`, id);
+          }
+        }
+      }
+      walkTdz(node.initializer, outerNames);
+      return;
+    }
+    ts.forEachChild(node, child => walkTdz(child, outerNames));
+  };
+  walkTdz(fn.body, injectedNames);
 
   const statements = [...fn.body.statements];
   let finalExpression: ScopeSourceSpan | undefined;

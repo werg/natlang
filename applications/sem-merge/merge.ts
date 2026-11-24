@@ -8,11 +8,29 @@
  * - Genuinely incompatible intents (or unverified repairs) emit explicit `<<<<<<< / ======= / >>>>>>>` conflict
  *   markers instead of silently dropping either side.
  */
-import { decide } from '@natlang/node';
-import { semanticMerge, semanticRepair } from '@natlang/node/std';
+import { decide, untrusted } from '@natlang/node';
+import { semanticMap, semanticMerge, semanticRepair } from '@natlang/node/std';
 import intentsCompatible from './intentsCompatible.nl';
 import mergeHunk from './mergeHunk.nl';
 import type { ConflictHunk, ConflictResolution, MergeOutcome, ThreeWayFile } from './types.js';
+
+/** Raw or already-fenced three-way file input accepted at the merge boundary. */
+export type ThreeWayFileInput = {
+  path: string;
+  base: string;
+  left: string;
+  right: string;
+};
+
+/** Fence all three external branch texts of a file as `Untrusted<string>`. */
+export function fenceThreeWayFile(file: ThreeWayFileInput): ThreeWayFile {
+  return {
+    path: file.path,
+    base: untrusted(String(file.base), `merge:${file.path}:base`),
+    left: untrusted(String(file.left), `merge:${file.path}:left`),
+    right: untrusted(String(file.right), `merge:${file.path}:right`),
+  };
+}
 
 export type MergeOptions = {
   /** Minimum compatibility probability required to attempt semantic hunk synthesis (default `0.7`). */
@@ -115,7 +133,7 @@ function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /** Exact deterministic 3-way line merge decomposing a file into clean chunks and overlapping conflicts. */
-export function crispThreeWayChunks(file: ThreeWayFile): { chunks: Chunk[]; trailingNewline: boolean } {
+export function crispThreeWayChunks(file: ThreeWayFileInput): { chunks: Chunk[]; trailingNewline: boolean } {
   const b = splitNormalized(file.base);
   const l = splitNormalized(file.left);
   const r = splitNormalized(file.right);
@@ -235,8 +253,85 @@ function tryParseJsonObject(text: string): Record<string, unknown> | null {
   }
 }
 
+type UnresolvedJsonEntry = {
+  path: string[];
+  ours: unknown;
+  theirs: unknown;
+};
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function indentMultiline(text: string, indent: string): string {
+  return text.split('\n').map((line, i) => (i === 0 ? line : `${indent}${line}`)).join('\n');
+}
+
+/**
+ * Render a partially merged JSON object preserving every cleanly merged key from `mergedValue`
+ * while emitting explicit Git-style conflict markers only for the unresolved key paths.
+ */
+function renderPartialJsonObject(
+  mergedValue: Record<string, unknown>,
+  unresolved: readonly UnresolvedJsonEntry[],
+  leftLabel: string,
+  rightLabel: string,
+  depth = 0,
+): string {
+  const indent = '  '.repeat(depth);
+  const childIndent = '  '.repeat(depth + 1);
+  const direct = new Map<string, UnresolvedJsonEntry>();
+  const nested = new Map<string, UnresolvedJsonEntry[]>();
+
+  for (const entry of unresolved) {
+    const head = entry.path[0];
+    if (!head) continue;
+    if (entry.path.length === 1) {
+      direct.set(head, entry);
+    } else {
+      const rest = { path: entry.path.slice(1), ours: entry.ours, theirs: entry.theirs };
+      const bucket = nested.get(head);
+      if (bucket) bucket.push(rest);
+      else nested.set(head, [rest]);
+    }
+  }
+
+  const keys: string[] = [...Object.keys(mergedValue)];
+  for (const key of [...direct.keys(), ...nested.keys()]) {
+    if (!keys.includes(key)) keys.push(key);
+  }
+
+  const lines: string[] = ['{'];
+  keys.forEach((key, index) => {
+    const comma = index < keys.length - 1 ? ',' : '';
+    const encodedKey = JSON.stringify(key);
+    const directConflict = direct.get(key);
+    if (directConflict) {
+      const leftSide = directConflict.ours === undefined
+        ? ''
+        : `${childIndent}${encodedKey}: ${indentMultiline(JSON.stringify(directConflict.ours, null, 2), childIndent)}${comma}`;
+      const rightSide = directConflict.theirs === undefined
+        ? ''
+        : `${childIndent}${encodedKey}: ${indentMultiline(JSON.stringify(directConflict.theirs, null, 2), childIndent)}${comma}`;
+      lines.push(formatConflictMarker(leftSide, rightSide, leftLabel, rightLabel));
+      return;
+    }
+    const nestedConflicts = nested.get(key);
+    const current = mergedValue[key];
+    if (nestedConflicts && nestedConflicts.length > 0 && isPlainRecord(current)) {
+      const rendered = renderPartialJsonObject(current, nestedConflicts, leftLabel, rightLabel, depth + 1);
+      lines.push(`${childIndent}${encodedKey}: ${rendered}${comma}`);
+      return;
+    }
+    lines.push(`${childIndent}${encodedKey}: ${indentMultiline(JSON.stringify(current, null, 2), childIndent)}${comma}`);
+  });
+  lines.push(`${indent}}`);
+  return lines.join('\n');
+}
+
 /** Merge a ThreeWayFile: crisp 3-way first, semanticMerge for JSON conflicts, semanticRepair + mergeHunk for text/code. */
-export async function mergeFile(file: ThreeWayFile, options: MergeOptions = {}): Promise<MergeOutcome> {
+export async function mergeFile(rawFile: ThreeWayFileInput, options: MergeOptions = {}): Promise<MergeOutcome> {
+  const file = fenceThreeWayFile(rawFile);
   const leftLabel = options.leftLabel ?? 'left';
   const rightLabel = options.rightLabel ?? 'right';
   const floor = options.compatibilityFloor ?? 0.7;
@@ -273,9 +368,9 @@ export async function mergeFile(file: ThreeWayFile, options: MergeOptions = {}):
             path: file.path,
             startLine: 1,
             endLine: 1,
-            base: JSON.stringify(entry.base),
-            left: JSON.stringify(entry.ours),
-            right: JSON.stringify(entry.theirs),
+            base: untrusted(JSON.stringify(entry.base), `merge:${file.path}:${entry.path.join('.')}:base`),
+            left: untrusted(JSON.stringify(entry.ours), `merge:${file.path}:${entry.path.join('.')}:left`),
+            right: untrusted(JSON.stringify(entry.theirs), `merge:${file.path}:${entry.path.join('.')}:right`),
           },
           status: 'merged' as const,
           mergedText: JSON.stringify(entry.value),
@@ -289,9 +384,9 @@ export async function mergeFile(file: ThreeWayFile, options: MergeOptions = {}):
             path: file.path,
             startLine: 1,
             endLine: 1,
-            base: JSON.stringify(entry.base),
-            left: JSON.stringify(entry.ours),
-            right: JSON.stringify(entry.theirs),
+            base: untrusted(JSON.stringify(entry.base), `merge:${file.path}:${entry.path.join('.')}:base`),
+            left: untrusted(JSON.stringify(entry.ours), `merge:${file.path}:${entry.path.join('.')}:left`),
+            right: untrusted(JSON.stringify(entry.theirs), `merge:${file.path}:${entry.path.join('.')}:right`),
           },
           status: 'unresolved' as const,
           mergedText: formatConflictMarker(
@@ -319,13 +414,15 @@ export async function mergeFile(file: ThreeWayFile, options: MergeOptions = {}):
         };
       }
 
-      // Emit explicit conflict markers so unresolved JSON keys are never silently dropped.
-      const markerContent = formatConflictMarker(file.left.trimEnd(), file.right.trimEnd(), leftLabel, rightLabel) + '\n';
+      // Preserve all cleanly merged JSON keys while emitting conflict markers only for unresolved key paths.
+      const partialContent = isPlainRecord(merged.value)
+        ? `${renderPartialJsonObject(merged.value, merged.unresolved, leftLabel, rightLabel)}\n`
+        : `${formatConflictMarker(file.left.trimEnd(), file.right.trimEnd(), leftLabel, rightLabel)}\n`;
       return {
         path: file.path,
         mode: 'json-semantic',
         status: 'conflict',
-        content: markerContent,
+        content: partialContent,
         llmCallsUsed: true,
         resolutions,
         unresolvedCount: merged.unresolved.length,
@@ -347,9 +444,9 @@ export async function mergeFile(file: ThreeWayFile, options: MergeOptions = {}):
       path: file.path,
       startLine: chunk.startLine,
       endLine: chunk.endLine,
-      base: chunk.base.join('\n'),
-      left: chunk.left.join('\n'),
-      right: chunk.right.join('\n'),
+      base: untrusted(chunk.base.join('\n'), `merge:${file.path}:hunk:${chunk.startLine}:base`),
+      left: untrusted(chunk.left.join('\n'), `merge:${file.path}:hunk:${chunk.startLine}:left`),
+      right: untrusted(chunk.right.join('\n'), `merge:${file.path}:hunk:${chunk.startLine}:right`),
     };
 
     const decision = await decide(intentsCompatible, hunk);
@@ -393,7 +490,7 @@ export async function mergeFile(file: ThreeWayFile, options: MergeOptions = {}):
     const initial = await mergeHunk(hunk, []);
     const repaired = await semanticRepair(initial, {
       check: checkCandidate,
-      fix: (_prev, problems) => mergeHunk(hunk, problems),
+      fix: (prev, problems) => mergeHunk(hunk, problems, prev),
       attempts: options.repairAttempts ?? 2,
     });
 
@@ -433,4 +530,13 @@ export async function mergeFile(file: ThreeWayFile, options: MergeOptions = {}):
     resolutions,
     unresolvedCount,
   };
+}
+
+/** Merge a batch of repository files concurrently, fencing every external branch input at the boundary. */
+export async function mergeRepository(
+  files: readonly ThreeWayFileInput[],
+  options: MergeOptions & { concurrency?: number } = {},
+): Promise<MergeOutcome[]> {
+  const fenced = files.map(fenceThreeWayFile);
+  return semanticMap(fenced, file => mergeFile(file, options), { concurrency: options.concurrency ?? 6 });
 }

@@ -1,0 +1,34 @@
+{
+  "id": "fallow22-sources",
+  "owner": "dgx",
+  "path": "data_nvme:fallow22-sources",
+  "include": [
+    "*.jsonl.zst",
+    "*.json",
+    "*.jsonl",
+    "replay/*/rollouts.jsonl",
+    "replay/*/*.json"
+  ],
+  "kind": "trajectories",
+  "format": "sft_sources WORK: episodes*.jsonl.zst (extracted episodes), replay.jsonl (verdicts), replay/<episode>/rollouts.jsonl (verified replays)",
+  "rows": 125598,
+  "license": "derived: each input keeps its registered license (teacher providers, own rollouts, task sources)",
+  "protected": false,
+  "producer": {
+    "script": "sft_sources.py",
+    "argv": [
+      "replay",
+      "--work",
+      "/home/werg/data/fallow22-sources",
+      "--workers",
+      "16",
+      "--runtime-repo",
+      "/home/werg/data/lfm3-rl-dgx-20261029/ops/ei/pin-bdf4c8721350"
+    ],
+    "git_commit": "818bd5b252345d1f1c96cdd53dc79eb38247abce",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "26c5b5e069428d2ac907ffbae7cdc6208b92f072a983b6ea4d95aea155d3a41b",
+  "training_admission": "registry-recorded"
+}

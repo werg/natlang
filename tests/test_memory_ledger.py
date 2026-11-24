@@ -1524,3 +1524,104 @@ def test_known_dgx_keeps_reserve_when_gpu_discovery_is_unavailable(monkeypatch):
     monkeypatch.setattr(ledger, 'has_gb10', unavailable)
     assert ledger.default_reserve(3 * GIB) == 15 * GIB
     assert ledger.spec_reserve({'reserve': 0, 'reserve_explicit': True}, GIB) == 0
+
+
+@pytest.fixture
+def status_machine(monkeypatch, tmp_path):
+    path = tmp_path / 'ledger.json'
+    monkeypatch.setattr(ledger, 'STATE', str(path))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'cuda_free_bytes', lambda: None)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'orphans', lambda live, gpu: {})
+    monkeypatch.setattr(ledger, 'unit_usage', lambda *args, **kw: None)
+    return path
+
+
+def test_status_projects_live_changes_without_rewriting_or_creating_state(status_machine, capsys):
+    import json
+    from types import SimpleNamespace
+    path = status_machine
+    # Even a missing ledger query creates no allocator lock, parent, or state.
+    ledger.status(SimpleNamespace())
+    assert not path.exists() and not Path(str(path) + '.lock').exists()
+    capsys.readouterr()
+    state = {'schema': 'natlang.memory-ledger/1', 'claims': {
+        'finished.service': {'class': 'experiment', 'budget': GIB, 'admitted': 1, 'command': ['done']}},
+        'events': [], 'waiting': {}}
+    path.write_text(json.dumps(state)); before = path.read_bytes(); info = path.stat()
+    ledger.status(SimpleNamespace())
+    assert json.loads(capsys.readouterr().out)['claims'] == {}  # local finished-claim projection
+    assert path.read_bytes() == before
+    assert (path.stat().st_ino, path.stat().st_mtime_ns) == (info.st_ino, info.st_mtime_ns)
+    assert not Path(str(path) + '.lock').exists()
+
+
+@pytest.mark.parametrize('probe', ['gpu_usage', 'headroom', 'cuda_free_bytes'])
+def test_blocked_status_probe_does_not_block_real_admission_or_cancel_or_clobber_them(
+        status_machine, monkeypatch, probe):
+    import json
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+    path = status_machine
+    state = {'schema': 'natlang.memory-ledger/1', 'claims': {}, 'events': [], 'waiting': {
+        'remove.service': {'priority': 'low', 'since': 1, 'seen': ledger.time.time(), 'budget': GIB, 'reserve': GIB}}}
+    path.write_text(json.dumps(state))
+    reached, release = threading.Event(), threading.Event()
+    original = getattr(ledger, probe)
+    def blocked(*args, **kw):
+        if threading.current_thread().name.startswith('status-observer'):
+            reached.set()
+            assert release.wait(10), 'test must release its blocked observer'
+        return original(*args, **kw)
+    monkeypatch.setattr(ledger, probe, blocked)
+    launched = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda *args, **kw: SimpleNamespace(returncode=0, stdout='not-found\n'))
+    args = SimpleNamespace(cuda_budget_gb=None, budget_gb=1, reserve_gb=1, unit='admitted', priority='high',
+                           cls='experiment', wait=0, resumable=True, host_max_gb=None, oom_policy='stop',
+                           workdir='.', env=[], stop_seconds=None, command=['fixture'], hold_budget=False, container=[])
+    def allocate_and_cancel():
+        ledger.run(args)  # real allocator transaction and actual flock; only host probes/launch are stubbed
+        ledger.cancel(SimpleNamespace(unit='remove'))
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='status-observer') as observer:
+        status = observer.submit(ledger.status, SimpleNamespace())
+        assert reached.wait(5)
+        with ThreadPoolExecutor(max_workers=1) as allocator:
+            transaction = allocator.submit(allocate_and_cancel)
+            try:
+                # The paused observer cannot release its probe until this assertion finishes.
+                transaction.result(timeout=3)
+                committed = path.read_bytes()
+                current = json.loads(committed)
+                assert 'admitted.service' in current['claims']
+                assert 'remove.service' not in current['waiting']
+                assert current['cancel_generations']['remove.service'] == 1
+            finally:
+                release.set()
+            status.result(timeout=5)
+        assert path.read_bytes() == committed  # no stale observer writeback over the new allocation
+    assert launched == ['admitted.service']
+
+
+def test_atomic_observation_sees_last_commit_while_a_writer_holds_lock(status_machine):
+    import json
+    path = status_machine
+    before = {'schema': 'natlang.memory-ledger/1', 'claims': {}, 'events': []}
+    path.write_text(json.dumps(before))
+    with ledger.ledger() as pending:
+        pending['claims']['new.service'] = {'budget': GIB}
+        assert ledger.read_snapshot() == before  # no lock acquisition and no uncommitted writer state
+    assert 'new.service' in ledger.read_snapshot()['claims']
+
+
+def test_status_corruption_remains_an_error_before_any_probe(status_machine, monkeypatch):
+    from types import SimpleNamespace
+    path = status_machine; path.write_text('{broken')
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: pytest.fail('corrupt state must fail before native probes'))
+    with pytest.raises(ValueError):
+        ledger.status(SimpleNamespace())
+    assert path.read_text() == '{broken'
+    assert not Path(str(path) + '.lock').exists()
