@@ -60,11 +60,11 @@ export function health(snap, now, acked = {}) {
   const age = now - snap.ts;
   if (age > SNAP_STALE_MS) items.push({ id: 'stale', level: age > 600_000 ? 'crit' : 'warn', text: `Exporter data is ${dur(age / 1000)} old. The exporter or collector unit may have stopped.`, system: true });
   for (const a of snap.alerts || []) items.push({ id: a.id, level: a.level, text: a.text, machine: a.machine, unit: a.unit });
-  for (const r of snap.runs || []) {
+  const gate = snap.ei?.held?.gate, pair = gate?.pair;
+  if (pair && pair.ci_pts[1] < 0) items.push({ id: `held:${gate.candidate}`, level: 'crit', text: `Held regression: ${gate.candidate} is ${signed(pair.delta_pts, 1)} pts against ${gate.reference} (95% interval ${signed(pair.ci_pts[0], 1)} to ${signed(pair.ci_pts[1], 1)}).` });
+  for (const r of snap.runs || []) {      // retired GRPO runs still alarm if one is live
     if (!r.active) continue;
     if (r.last_ts && now - r.last_ts > RUN_QUIET_MS) items.push({ id: `quiet:${r.id}`, level: 'warn', text: `${r.id} wrote nothing for ${dur((now - r.last_ts) / 1000)}.`, run: r.id });
-    const h = latestHeld(r);
-    if (h && h.p != null && h.p < 0.05 && h.delta_pts < 0) items.push({ id: `held:${r.id}:${h.step}`, level: 'crit', text: `Held regression on ${r.id} step ${h.step}: ${signed(h.delta_pts, 1)} pts (p ${fmt(h.p, 2)}).`, run: r.id });
   }
   const open = items.filter(i => !acked[i.id]);
   const level = open.some(i => i.level === 'crit') ? 'crit' : open.length ? 'warn' : 'ok';
@@ -72,18 +72,90 @@ export function health(snap, now, acked = {}) {
   return { level, title, items, open };
 }
 
-/** Verdict of "is training improving": the held-out paired comparison first (the only metric that counts), reward trend second. */
-export function improving(run) {
-  if (!run) return { tone: 'flat', headline: 'No active run', detail: '' };
-  const h = latestHeld(run);
-  const t = trend(run.spark?.reward_mean || []);
-  if (h) {
-    const sig = h.p != null && h.p < 0.05;
-    const tone = !sig ? 'flat' : h.delta_pts > 0 ? 'good' : 'bad';
-    const word = !sig ? 'not significant' : h.delta_pts > 0 ? 'significant gain' : 'significant regression';
-    return { tone, headline: `${signed(h.delta_pts, 1)} pts`, sub: 'held-out vs base', detail: `step ${h.step}, p ${fmt(h.p, 2)}: ${word}`, held: h, trend: t };
+/** Compact number: 1.2k, 4.5M. */
+export const compact = v => !num(v) ? '—' : Math.abs(v) >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : Math.abs(v) >= 1e4 ? `${Math.round(v / 1e3)}k` : Math.abs(v) >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : String(Math.round(v));
+export const rate = v => num(v) ? `${(100 * v).toFixed(1)}%` : '—';
+/** "≈ 09:39 (in 41m)" for a future timestamp, "overdue" past it. */
+export const etaText = (ts, now) => !num(ts) ? 'ETA unknown' : ts < now ? 'finishing' : `≈ ${clock(ts)} (in ${dur((ts - now) / 1000)})`;
+export const where = w => ({ dgx: 'DGX', pop: 'Pop', colab: 'Colab A100', api: 'API', 'colab-g4a': 'Colab A100', 'colab-g4b': 'Colab L4' })[w] || w;
+
+/** The steps of one round, in order, each done | active | todo with a short detail. `gate` is ei.held.gate. */
+export function roundSteps(r, held, now) {
+  const st = r.stamps, s = r.sft;
+  const sftActive = r.state === 'sft', published = r.state === 'published';
+  const pubResult = r.version != null ? (held?.results || []).filter(x => x.version === r.version).at(-1) : null;
+  const state = (done, active) => done ? 'done' : active ? 'active' : 'todo';
+  const prepActive = r.state === 'preparing';
+  return [
+    { key: 'frontier', label: 'Frontier', state: state(!!st.frontier, prepActive && !st.frontier), detail: r.frontier?.tasks ? `${r.frontier.tasks} tasks` : '' },
+    { key: 'data', label: 'Data', state: state(!!st.data, prepActive && !!st.frontier && !st.data), detail: r.data_progress != null ? `${r.data_progress} filled` : '' },
+    { key: 'build', label: 'Build', state: state(!!st.build, prepActive && !!st.data && !st.build), detail: r.mix ? `${compact(r.mix.chains)}` : '' },
+    { key: 'sft', label: 'SFT', state: state(published || !!st.sft_end, sftActive && !st.sft_end), detail: s ? `${s.step}/${s.of}` : '' },
+    { key: 'publish', label: 'Publish', state: state(published, !published && !!st.sft_end), detail: published ? `v${r.version}` : '' },
+    { key: 'held', label: 'Held', state: state(!!pubResult, published && !pubResult), detail: pubResult ? rate(pubResult.rate) : '' },
+  ];
+}
+
+/** Estimated times for a round: SFT end and publish (merge and export took about five minutes in finished rounds). */
+export function roundEta(r) {
+  if (r.state === 'published') return { sftEnd: r.stamps.sft_end, publish: r.stamps.published };
+  const sftEnd = r.sft?.eta_ts || null;
+  return { sftEnd, publish: sftEnd ? sftEnd + 5 * 60_000 : null };
+}
+
+/** Stage segments of a round for the timeline: [{key,label,from,to,est}] in ms; unfinished ends use `now` or the estimate. */
+export function roundSegments(r, now) {
+  const st = r.stamps, e = roundEta(r), out = [];
+  const push = (key, label, from, to, est = false) => { if (from && to && to > from) out.push({ key, label, from, to, est }); };
+  push('prepare', 'Frontier, data, build', st.start, st.build || (r.state === 'preparing' ? now : null));
+  push('sft', 'SFT', st.sft_start, st.sft_end || (r.state === 'sft' ? now : null));
+  if (r.state === 'sft' && e.sftEnd && e.sftEnd > now) push('sft', 'SFT (estimate)', now, e.sftEnd, true);
+  push('publish', 'Merge and publish', st.sft_end || (r.state === 'sft' ? e.sftEnd : null), st.published || (e.publish && r.state === 'sft' ? e.publish : null), !st.published);
+  return out;
+}
+
+/** Episodes per hour for the last `hours` hours, a bar per hour (missing hours are zero). */
+export function hourlyBars(hourly, now, hours = 12) {
+  const top = Math.floor(now / 3600e3) * 3600e3, map = new Map((hourly || []).map(b => [b.t, b]));
+  return Array.from({ length: hours }, (_, i) => { const t = top - (hours - 1 - i) * 3600e3, b = map.get(t) || {}; return { t, dgx: b.dgx || 0, colab: b.colab || 0, pop: b.pop || 0 }; });
+}
+
+/** Headline of "is training making progress?": the paired held result when there is one, else the newest measured pass rate. */
+export function progress(ei) {
+  const held = ei?.held;
+  if (!held) return { tone: 'flat', headline: '—', sub: 'no held data yet', detail: '' };
+  const gate = held.gate, pair = gate?.pair;
+  const latest = [...(held.results || [])].filter(r => r.version != null).sort((a, b) => b.version - a.version)[0];
+  if (pair) {
+    const tone = pair.ci_pts[0] > 0 ? 'good' : pair.ci_pts[1] < 0 ? 'bad' : 'flat';
+    return { tone, headline: `${signed(pair.delta_pts, 1)} pts`, sub: `${gate.candidate} vs ${gate.reference}, held-v3 paired`,
+      detail: `95% interval ${signed(pair.ci_pts[0], 1)} to ${signed(pair.ci_pts[1], 1)} over ${pair.tasks} tasks: ${tone === 'good' ? 'a gain' : tone === 'bad' ? 'a regression' : 'not distinguishable from noise'}` };
   }
-  return { tone: 'flat', headline: t.state === 'early' ? 'No held eval yet' : `reward ${t.state}`, sub: '', detail: `reward_mean ${t.text}`, trend: t };
+  if (latest) {
+    const prog = (held.in_progress || [])[0];
+    return { tone: 'flat', headline: rate(latest.rate), sub: `${latest.label} on held-v3, ${latest.scored}/${latest.ran} scored`,
+      detail: gate && !gate.reference_same_series ? `Not paired yet: the reference ${gate.reference} is re-measured on this series${prog ? ` (${prog.done}/${prog.of} episodes)` : ''}.` : 'Paired verdict pending.' };
+  }
+  return { tone: 'flat', headline: '—', sub: 'no measured policy', detail: '' };
+}
+
+/** What runs where: the live units grouped by machine and role (one line per role), for the machine cards. */
+export function activity(snap) {
+  const by = { dgx: [], pop: [], 'colab-g4a': [], 'colab-g4b': [], api: [] };
+  const ei = snap?.ei;
+  const sftRound = (ei?.rounds || []).find(r => r.sft_running);
+  if (sftRound) by[/g4b/.test(sftRound.host || '') ? 'colab-g4b' : /colab/.test(sftRound.host || '') ? 'colab-g4a' : 'dgx'].push({ role: 'sft', text: `SFT of ${sftRound.id}${sftRound.sft ? ` · step ${sftRound.sft.step}/${sftRound.sft.of}` : ''}` });
+  for (const a of ei?.collection?.actors || []) by[a.host === 'colab' ? 'colab-g4a' : a.host].push({ role: 'collect', text: `Collecting with v${a.version} · ${a.rate_h}/h` });
+  const counts = new Map();
+  for (const p of (snap?.processes || []).filter(p => p.state === 'running')) {
+    if (['collect', 'sft', 'driver', 'plumbing', 'housekeeping', 'colab', 'test', 'other', 'prepare'].includes(p.role)) continue;
+    if (p.role === 'held' && p.machine !== 'pop') continue;        // the DGX-side launcher of a Pop evaluation
+    const w = p.role === 'held' ? 'pop' : p.role === 'tuning' ? 'colab-g4b' : p.where === 'colab' ? 'colab-g4a' : p.where;
+    const key = `${w}|${p.role === 'fill' ? 'Student fill' : p.title}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  for (const [key, n] of counts) { const [w, text] = key.split('|'); if (by[w]) by[w].push({ role: 'other', text: n > 1 ? `${text} ×${n}` : text }); }
+  return by;
 }
 
 /** Per-run {step -> record} map to [{id, points:[{x: step, y}]}] in the given run order. */
@@ -128,19 +200,3 @@ export function outcomeParts(t) {
 }
 
 export const matches = (row, q) => !q || Object.values(row).some(v => typeof v === 'string' && v.toLowerCase().includes(q.toLowerCase()));
-
-/** Metric presets for the training tab: [title, metric, note]. A chart is a presentation choice; the metric names are the exporter's. */
-export const PRESETS = [
-  ['Mean reward', 'reward_mean', 'Binary or graded task reward of the step\'s episodes; the training signal, not the held-out result.'],
-  ['KL to start policy', 'kl_mean', 'k2 estimate against the start policy; telemetry, never a stop.'],
-  ['Gradient norm', 'grad_norm', 'Pre-clip norm; a spike is more than 5x the run median.'],
-  ['Learning rate', 'lr', 'Effective LR after warmup and the groups-with-spread scale.'],
-  ['Groups with spread', 'groups_with_spread', 'Groups whose episodes differ in reward (the only ones that carry advantage).'],
-  ['Expected </think> closes vs base', 'behaviour.close_ratio', 'Behaviour probe: 1.0 means unchanged, drift away from 1 is the early-close signature.'],
-  ['Base-sample logp change', 'behaviour.logp_change', 'Behaviour probe on 48 start-policy calls.'],
-  ['End of turn after a short answer vs base', 'behaviour.end_logp_change', 'Behaviour probe v2: log p(<|im_end|>) where the start policy ended a decision answer, now minus start; below -1 flags behaviour_shift (a second </think> instead).'],
-  ['Learner tokens per second', 'learner_tokens_per_s', 'Learner throughput.'],
-  ['Actor tokens per second', 'actor_tokens_per_s_collect_phase', 'Actor generation rate (collect phase).'],
-  ['Learner CUDA peak', 'cuda_peak_gib', 'Peak GPU memory of the step (GiB).'],
-  ['Learner CUDA peak (legacy)', 'cuda_peak_gb', 'Peak GPU memory of the step (GiB, legacy label).'],
-];

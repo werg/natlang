@@ -17,6 +17,6 @@ def _node():
 
 @pytest.mark.skipif(not (APP / 'node_modules' / '@tendriller').exists() or not _node(), reason='app packages or node missing')
 def test_app_node_tests():
-    done = subprocess.run([_node(), '--test', 'test/app.test.mjs'], cwd=APP, capture_output=True, text=True, timeout=120,
+    done = subprocess.run([_node(), '--test'], cwd=APP, capture_output=True, text=True, timeout=120,
                           env={**os.environ, 'NODE_NO_WARNINGS': '1'})
     assert done.returncode == 0, done.stdout[-3000:] + done.stderr[-2000:]

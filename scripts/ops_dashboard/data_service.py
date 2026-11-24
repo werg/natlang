@@ -24,7 +24,7 @@ CONFIG = json.load(open(os.path.join(HERE, 'config.json')))
 DATA = os.path.expanduser(CONFIG['data_dir'])
 REPO = os.path.expanduser(CONFIG['repo'])
 DASH = DATA + '/ops/dashboard'
-OUT = DASH + '/out'
+OUT = os.environ.get('NATLANG_OPS_OUT') or DASH + '/out'     # the preview can read a scratch exporter output
 
 HANDLERS = {}
 

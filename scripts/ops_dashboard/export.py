@@ -622,6 +622,26 @@ def unit_event(rec, now, ann):
         'text': f'{rec["unit"]} {t} on {rec["machine"]}'}}
 
 
+_EI = []
+
+
+def ei_module():
+    """ei_export.py sits next to this file; it is absent when the exporter runs from stdin on Pop (collect_host only)."""
+    if not _EI:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import ei_export
+            _EI.append(ei_export)
+        except Exception:
+            _EI.append(None)
+    return _EI[0]
+
+
+def unit_role(name):
+    mod = ei_module()
+    return mod.unit_role(name) if mod else {'role': 'other', 'where': 'dgx', 'title': name}
+
+
 def process_item(rec, state, lines, now, ann):
     a, cmd = annotation_for(ann, rec['unit']), rec.get('cmd', '')
     end = now if rec['state'] == 'running' else rec.get('ended') or now
@@ -629,8 +649,9 @@ def process_item(rec, state, lines, now, ann):
     work = last_arg(cmd, '--work')
     claim = rec.get('claim') or {}
     run = run_id(OPS, work) if work else None
-    return {'machine': rec['machine'], 'unit': rec['unit'], 'kind': kind_of(rec['unit'], cmd),
-            'title': clip(a.get('title') or rec['unit'], 100), 'description': clip(a.get('description') or summarize(cmd), 400),
+    role = unit_role(rec['unit'])
+    return {'machine': rec['machine'], 'unit': rec['unit'], 'kind': kind_of(rec['unit'], cmd), 'role': role['role'], 'where': role['where'],
+            'title': clip(a.get('title') or (role['title'] if role['role'] != 'other' else rec['unit']), 100), 'description': clip(a.get('description') or summarize(cmd), 400),
             'rationale': clip(a.get('rationale', ''), 400), 'investigation': a.get('investigation'),
             'started_ts': ms(rec['started']) if rec.get('started') else None,
             'elapsed_s': round(end - rec['started']) if rec.get('started') else None, 'state': rec['state'],
@@ -736,7 +757,8 @@ def snapshot_record(snap):
              lambda: snap.update(fallow=[{k: v for k, v in r.items() if k != 'fields'} for r in snap['fallow']]),
              lambda: snap.update(processes=[p for p in snap['processes'] if p['state'] == 'running'] + [p for p in snap['processes'] if p['state'] != 'running'][:15]),
              lambda: snap.update(processes=[{**p, 'description': clip(p['description'], 100), 'rationale': ''} for p in snap['processes']]),
-             lambda: snap.update(fallow=snap['fallow'][:40])]
+             lambda: snap.update(fallow=snap['fallow'][:40]),
+             lambda: snap.get('ei') and snap['ei'].update(events=snap['ei']['events'][-30:], registry=snap['ei']['registry'][:4], hist={})]
     for step in steps:
         if line_size(rec) <= SNAP_LIMIT:
             break
@@ -786,13 +808,24 @@ def cycle(out, ops, ann_path, state, once=False, use_pop=True):
     active = {i['unit'] for i in items if i['state'] == 'running'}
     queue = build_queue(ann, ledgers, ops + '/grpo-v2/hunt', active)
     invs = [{**i, 'updated_ts': ms(os.path.getmtime(ann_path))} for i in ann.get('investigations', [])] if os.path.exists(ann_path) else []
+    machines_now = {m: machine_now(m, d, now) for m, d in hosts.items()}
+    ei = None
+    mod = ei_module()
+    if mod:
+        try:
+            ei = mod.build(state, machines_now, items, now)
+            errors += [f'exporter: ei {e}' for e in (ei or {}).get('errors', [])]
+        except Exception as e:
+            errors.append(f'exporter: ei section failed: {clip(e, 120)}')
     alerts = build_alerts({m: d['host'] for m, d in hosts.items()}, ledgers, unit_alerts, errors)
+    if ei and mod:
+        alerts += mod.derived_alerts(ei, FLOORS, machines_now, now)
     try:
         fallow = parse_fallow(open(FALLOW).read())[:80]
     except OSError:
         fallow = []
     try:
-        teachers = teacher_summary(TEACHER_POOL or active_teacher_pool(), state, now)
+        teachers = (ei or {}).get('teacher') or teacher_summary(TEACHER_POOL or active_teacher_pool(), state, now)
     except Exception as e:
         teachers = None
         errors.append(f'exporter: teacher summary failed: {clip(e, 120)}')
@@ -803,9 +836,12 @@ def cycle(out, ops, ann_path, state, once=False, use_pop=True):
             if len(old) > 1 and old[-1][1] > old[0][1]:
                 rate = (old[-1][1] - old[0][1]) / ((old[-1][0] - old[0][0]) / 1000)
                 it['eta_s'] = round((teachers['eligible'] - teachers['tasks_done']) / rate)
-    snap = {'v': 3, 'ts': ms(now), 'machines': {m: machine_now(m, d, now) for m, d in hosts.items()}, 'processes': items[:60],
-            'queue': queue, 'investigations': invs, 'fallow': fallow, 'alerts': alerts, 'teachers': teachers,
-            'runs': runs_summary(state, {i['run'] for i in items if i['state'] == 'running' and i['run']}, now)}
+    runs = runs_summary(state, {i['run'] for i in items if i['state'] == 'running' and i['run']}, now)
+    runs = [r for r in runs if r['held'] or r['active'] or r['kind'] != 'bench'][:16]       # retired GRPO runs: only what has a held result
+    if ei:
+        ei = {k: v for k, v in ei.items() if k != 'teacher'}       # travels once, as snap['teachers']
+    snap = {'v': 3, 'ts': ms(now), 'machines': machines_now, 'processes': items[:60],
+            'queue': queue, 'investigations': invs, 'fallow': fallow, 'alerts': alerts, 'teachers': teachers, 'ei': ei, 'runs': runs}
     mach = []
     for m, d in hosts.items():
         if once or now - state.setdefault('machine_ts', {}).get(m, 0) >= MACHINE_EVERY_S:

@@ -15,9 +15,9 @@ try { const t = JSON.parse(localStorage.getItem('ops.theme')); if (t === 'light'
 <header class="top">
   <div class="brand"><span class="logo" aria-hidden="true"></span><h1>natlang ops</h1></div>
   <button id="health" class="pill" type="button" aria-controls="view"><span class="ic" aria-hidden="true">…</span><span id="health-text">Connecting…</span></button>
-  <nav id="tabs" class="tabs" role="tablist" aria-label="Sections"></nav>
   <div class="meta"><span id="fresh" class="live" role="status"><i></i><span id="fresh-text">no data yet</span></span><button id="theme" class="ghost" type="button">Auto</button></div>
 </header>
+<nav id="tabs" class="tabs" role="tablist" aria-label="Sections"></nav>
 <main id="view" tabindex="-1"></main>
 <footer class="foot"><span id="notices"></span></footer>
 

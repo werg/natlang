@@ -7,16 +7,33 @@ answers reads.
 
 | Piece | Where | Role |
 | --- | --- | --- |
-| `export.py` | ledger unit `ops-dashboard-export-N` (0.3 GB) | every 30 s writes `latest.json`, `metrics.jsonl`, `machines.jsonl`, `events.jsonl` under `<data>/ops/dashboard/out/` (unchanged contract, see `CONTRACT.md` there) |
+| `export.py` + `ei_export.py` | ledger unit `ops-dashboard-export-N` (0.3 GB) | every 30 s writes `latest.json`, `metrics.jsonl`, `machines.jsonl`, `events.jsonl` under `<data>/ops/dashboard/out/` (see `CONTRACT.md` there). `ei_export.py` builds `snap.ei`, the expert-iteration section (below) |
 | `app/ops-peer.mjs` | ledger unit `ops-peer-N` (1.5 GB) | the native participant: owns the native device, coordinates writes, serves reads, applies edits, mirrors the inbox; browser pairing runs under `helpers/participant-lifecycle.mjs` (woken by the host's setup notifications) |
 | `data_service.py` (+ `data_catalog.py`, `data_items.py`, `data_edits.py`) | child of ops-peer (JSON lines) | answers every read: ops state and the training-data catalog, items, runs; applies edits to the edit layers |
 | `app/domain.mjs` | bound into the signed descriptor | the retained state: `proposeEdit`, `recordApplication`, `ask`, `answer`; queries `edits`, `inbox` |
-| `app/ui/` | the signed publication | dashboard (`app.mjs`, `charts.mjs`, `model.mjs`), training data (`data.mjs`), session connection (`connect.mjs`, `page.mjs`; the starter's `connection.mjs` and `connect-view.mjs` unchanged) |
+| `app/ui/` | the signed publication | dashboard shell (`app.mjs`: state, intake, alerts, ask dialog, tabs), views (`views.mjs`: Now, Rounds, Data, Held-out, Machines, Units, Teachers, Open items), charts (`charts.mjs`: line, stacked bars, round Gantt, held ladder), pure helpers (`model.mjs`), training data (`data.mjs`), session connection (`connect.mjs`, `page.mjs`; the starter's `connection.mjs` and `connect-view.mjs` unchanged) |
 | data registry | read by `data_catalog.py` | every dataset, its producer, inputs, license and consumers: `natlang_neuralese.common.data_registry` (git layer `training/corpora` + the producer journal; `scripts/data_registry.py`) |
 
 Private state (handle, signer, epoch key, descriptor, device store) lives in `~/.local/share/tendriller/natlang-ops-app/private/`
 (`NATLANG_OPS_PRIVATE`), never in the repository; the verified release packages (SDK, tools, Chronolog session; `package.json` installs them from there) are in `.../natlang-ops-app/kit-rc17/`;
 the built page in `.../natlang-ops-app/page/`. Node 24: `~/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin`.
+
+## What the page shows (phone first)
+
+Six bottom tabs: **Now** (verdict and tiles, what needs attention, the training round and the one being prepared with their steps and ETAs, held progress, fresh data per hour,
+machine cards, Colab credits and runway, what changed), **Rounds** (round timeline Gantt, policy versions, per round: steps, timings, what it trains on, new versus repeated
+episodes, SFT and validation loss, collection health, frontier tiers), **Data** (episodes per hour by machine, per collector, per policy, student fill, teacher campaign per
+teacher, campaigns by round, newest registry entries), **Held-out** (the gate, measurement in progress, pass rate by policy with its series, paired comparisons, every
+measurement), **Machines** (DGX, Pop, Colab A100, Colab L4 with activity, memory, disks and their fall rate, credits and spend, watchdog, program tuning), **More** (Units grouped by role,
+Teacher details, Training data, Open items and fallow, Investigations, Inbox, Events). Wide screens show every tab in the top bar.
+
+`snap.ei` (built by `ei_export.py`, all readers incremental or cached by mtime and size; state in the exporter's `state.json` under `ei`, rebuilt when `STATE_VERSION` changes):
+`driver`, `phase`, `lineage`, `reference`, `rounds` (stamps, size, SFT series, mix, frontier, health), `collection` (per policy, hourly episodes by machine, live collectors, fill),
+`held` (results with series and task-level standard errors, same-series pairs, the gate, measurements in progress from Pop's held log, the held-v4 queue), `colab` (balance and rate
+from `colab usage` every 10 min in a background thread, balance history, spend per session from `cycle-cost.json`), `watchdog` (active alerts and GPU idle from the ops watchdog's state), `hist`
+(10-minute machine samples, 24 h), `disks` (fall rate), `tuning`, `registry`, `open_items`, `decisions`, `events` (curated from `drive.log`). Derived alerts (driver down, SFT log lag, credits runway,
+disk fall, held gate retrying, stalled collector or teacher) join `snap.alerts`. The driver is discovered as the newest `ops/ei/*/drive.log`. Held pass rates are only comparable inside one measurement series;
+the page and the exporter never pair across series.
 
 ## How data reaches the page
 
@@ -26,6 +43,7 @@ the built page in `.../natlang-ops-app/page/`. Node 24: `~/.local/share/natlang-
   every 30 s and GB-scale training data would otherwise grow the signed history without bound.
 - **Retained facts** are small and human-made: edits and questions (declared commands), the participant's application records
   and the agent's answers. The page reads them with the `edits` and `inbox` queries (live views).
+- The page reads only the snapshot (and the `ops.metrics` stream while the Investigations tab is open, for its old GRPO charts); machine history, events, rounds and held results travel inside the snapshot.
 - Query names: `ops.tick|snapshot|metrics|machines|events`; `data.catalog|dataset|items|item|tokens|chain|task_refs|search|registry`.
   `edits.*` and `inbox.*` are native-only.
 
@@ -97,5 +115,5 @@ release: download it, check `SHA256SUMS`, unpack `packages/` next to the old kit
 
 ## Preview and tests
 
-Layout preview with real data (no session; edits stay in memory): `python preview_server.py` under the ledger, then
-`http://127.0.0.1:8765/`. Tests: `pytest tests/ops_dashboard` (the Python data service and exporter, plus `app/test/app.test.mjs`: the WebSocket close guard and the module graph against the installed packages).
+Layout preview with real data (no session; edits stay in memory): `preview_server.py` under the ledger (it needs `PYTHONPATH=training/neuralese:.` and the repo venv; `NATLANG_OPS_OUT` points it at a scratch exporter output, `--page` at a scratch build from `NATLANG_OPS_BUILD=DIR node build.mjs`), then
+`http://127.0.0.1:8765/`. Tests: `pytest tests/ops_dashboard` (the Python data service, exporter and `ei_export`, plus `node --test` in `app/`: `test/app.test.mjs` the WebSocket close guard and the module graph against the installed packages, `test/model.test.mjs` the pure helpers).
