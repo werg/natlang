@@ -292,8 +292,15 @@ reference server applies the stack through its exact native adapter path.
 | wllama in the page (vendored build of the fork, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | Yes: the fork's native state spans (`nativeStates`) | No (serialized per stack) |
 | SGLang actor (`serve_native_checkpoint.py --engine sglang`; training and held evals) | A request's native stack summed into resident adapter slots (`--sglang-adapter-slots`, `--sglang-adapter-rank`); `--adapter-release DIR` serves a fit by default | Through the native engine | Yes |
 
-LFM3-1.7B: the tuner's target table, fits (`tune.build`) and native/SGLang adapter serving run on LFM3; the parity
-evidence below is LFM2.5-350M unless stated. Training-side program fits, the bank and their task-outcome measurement
+LFM3-1.7B (measured 2026-11-24 on the first real program fit, `ext_decisions_route`, free LoRA rank 16 over every
+LFM3 family; `docs/ENGINE_PARITY.md` "Tuned adapters (LoRA) on LFM3"): the GGUF LoRA export carries all 153 targets
+(attention q/k/v/o_proj and the per-head gate, conv in/out_proj, feed-forward w1/w2/w3) and equals the native low-rank
+deltas exactly. The managed llama-server (f32 GGUF) and the page's wllama (Q8_0) reproduce the native BF16 reference's
+greedy continuations token for token on real program prompts (4.9-6.9k tokens), adapter off and on; the adapter moves
+the native log-probabilities of those tokens by ~1.7-1.9 nats on average and changes every continuation. SGLang slots
+are sized from the release: a rank-r fit over every family packs to 3r in the fused qkv_proj (48 here), which the old
+default slot rank of 32 (and the fit's own rank, passed on Pop and by the Colab measurement actor) sent to the native
+engine. The remaining evidence below is LFM2.5-350M unless stated. Training-side program fits, the bank and their task-outcome measurement
 are `scripts/neuralese_data/program_tune.py` (plans/neuralese/TUNING_RESTORE_20261117.md).
 
 **Soft states on the managed llama.cpp fork.** A soft state is native KV/hybrid state, not text: per position, the
