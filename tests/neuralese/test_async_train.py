@@ -2012,3 +2012,13 @@ def test_the_round_loop_rebuilds_a_requested_round_before_it_trains(tmp_path, mo
     assert d.run() == 0
     assert calls.index('prepare') < calls.index(('rebuild', 'r0001', f'--rebuild-round under build code {"b" * 40}')) \
         < calls.index('sft') and 'teacher' in calls
+
+
+def test_the_fallow22_fan_in_part_joins_every_round_mix_unless_opted_out(tmp_path, monkeypatch):
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    _, _, build = d.prepare_plan(d.root / 'r0001', [d.controller.current])
+    aux = [build[i + 1] for i, a in enumerate(build) if a == '--aux']
+    assert ei.FALLOW22_AUX in aux and ei.FALLOW22_AUX.endswith('share=0.01,task_tokens=2000')
+    _, off = _colab_driver(tmp_path / 'off', monkeypatch, '--no-fallow22-aux')
+    _, _, build = off.prepare_plan(off.root / 'r0001', [off.controller.current])
+    assert not any(a.startswith('fallow22=') for a in build)

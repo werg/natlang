@@ -85,7 +85,13 @@ COLAB_ROUND_HOURS = 2.0
 ROUND_SPEED_FILE = 'round-speed.json'
 DEFAULT_CHAIN_TOKENS_PER_S = (('A100', 30_800), ('GB10', 5_900))
 DGX_GPU = 'GB10'
-FORWARD_PER_TARGET = 10.7     # forward tokens per weighted target token of a round mix (r0001 10.87, r0002 10.57)
+FORWARD_PER_TARGET = 10.7
+# FALLOW-22 (DECISIONS 2026-11-24 "fallow-22 in the round mix"): 11,259 reference-program fan-in episodes (fetaqa,
+# 2wiki, bird) re-rendered on today's runtime (broad_graph_october.py, registry sft-fallow22-broad-graphs-20261124-v1,
+# held-v3/v4 verified). ~95 forward tokens per target token and templated root code: a small share (1% of the loss,
+# ~10% of a round's forward); --no-fallow22-aux opts out.
+FALLOW22_AUX = (f'fallow22={DATA.parent / "sft-fallow22-broad-graphs-20261124-v1" / "chains.pkl"},'
+                'share=0.01,task_tokens=2000')     # forward tokens per weighted target token of a round mix (r0001 10.87, r0002 10.57)
 FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB); 6 kept the Pop fill out beside the SFT
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
@@ -3080,6 +3086,8 @@ class AsyncRoundDriver:
                                '--exclude-run', 'grpo-v2/', '--exclude-run', 'grpo-v4/run1',
                                '--current-surface-run', f'^rl:({surfaces})$'))
         aux = list(self.a.aux)
+        if not getattr(self.a, 'no_fallow22_aux', False) and not any(a.startswith('fallow22=') for a in aux):
+            aux.append(FALLOW22_AUX)
         aux.append(f'filled={round_dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
         aux.append(f'own-neuralese-graph={round_dir / "neuralese-graph-own" / "chains.pkl"},'
                    f'share={self.a.own_neuralese_graph_share},task_tokens=40000')
@@ -4266,6 +4274,8 @@ def main():
                     help='a round prepared while a Colab session fit for SFT answers is sized to this many hours of '
                          'its learner (forward tokens at its measured throughput, round-speed.json; the target cap and '
                          'teacher budget scaled alike, never below the DGX round); 0: every round is the DGX size')
+    ad.add_argument('--no-fallow22-aux', action='store_true',
+                    help='leave the fallow-22 reference-program fan-in part (FALLOW22_AUX, share 0.01) out of the mix')
     ad.add_argument('--no-dgx-recap', action='store_true',
                     help='a round sized for a session that starts on the DGX trains its whole mix there (default: '
                          'recapped to --round-target-tokens first, sft_sources recap)')

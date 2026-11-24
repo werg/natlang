@@ -10336,3 +10336,38 @@ campaign of the newest frontier (the highest `rNNNN/frontier.json` not discarded
 Tests: `tests/neuralese/test_async_train.py` (relaunch from the newest frontier when idle, resume rate limit and
 done rule, discarded frontiers, hooks and standing thread; rebuild from recorded inputs, once per build commit, the
 request file, failure restore, refusal after SFT start, the round loop rebuilding before it trains).
+
+## 2026-11-24 02:55 Round budgets measured on real data; fallow-22 enters the round mix
+
+**The A100-sized build on real data** (scratch rebuild of r0002 inputs with the 00:45 code; r0002 now trains this
+mix: `max_target_tokens` 20.98M, `max_forward_tokens` 221.8M, teacher budget 314.6M).
+- Run: 22 min wall, 22.9 GB peak. This is why the round build's ledger budget went to 32 GB.
+- The forward cap bound (fraction 0.359). It kept 15.48M weighted and 238.2M forward tokens (7% over the forward cap:
+  each part's budget is counted in weighted tokens), 471 steps.
+- On the A100: 35.1k chain tokens/s, 12.4 s/step, so ~1.6 h.
+- Units kept (of them trained before):
+  - teacher: 4,253 (309), against r0002's original 1,645 (489);
+  - filled: 3,913 (3,064). Only 849 unseen filled units exist, and all were kept first;
+  - own: 534 (1);
+  - operators: 1,431 (593).
+- Teacher admission:
+  - 7,948 skipped because their filled unit trains (`filled_instead`), so they spent no budget;
+  - 4,376 over the forward budget (was 17,089);
+  - 45 unfilled observed-live episodes kept, with teacher reasoning as context.
+- Composition: forward per weighted target rose from 10.6 to 15.4, because raw teacher episodes are forward-heavy.
+  The forward cap holds the round's time.
+
+**Fallow-22** (FALLOW_REGISTER row 22; strand commits 9f1be1922..62ea0a6de, `scripts/neuralese_data/broad_graph_october.py`).
+- 11,259 reference-program fan-in episodes (fetaqa, 2wiki, bird) re-rendered on today's runtime: 69.7k calls, 3.26M
+  weighted and 311M forward tokens. Registry: `sft-fallow22-broad-graphs-20261124-v1` on the NVMe.
+- Held separation:
+  - 203 trajectories dropped for two held-v3 BIRD databases (`car_retails`, `soccer_2016`);
+  - `held_eval verify` then shows no overlap with held-v3 or held-v4.
+- They hold no Neuralese state. The native-write spans had been added after the fact, so the re-render keeps each
+  child's answer as plain text in the root's context. This is consistent with how the runtime now reads text states
+  (read-back fix). It trains fan-in over child calls, not Neuralese use.
+- Target mass: 66% child extraction answers, 15% final answers, 19% templated root code (8 templates).
+  About 95 forward tokens per target token.
+- So they enter every round mix at **share 0.01, task_tokens 2000** (`FALLOW22_AUX`; `--no-fallow22-aux` opts out).
+  That is ~1% of the loss and ~10% of a round's forward work. Unit-level prefer-unseen rotates them across rounds.
+- Not checked: no held measurement of their effect, and no Neuralese-declaring variants of these programs.
