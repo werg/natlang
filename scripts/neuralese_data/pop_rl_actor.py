@@ -1149,17 +1149,28 @@ def prune_pop_newest(pattern, keep, protect=()):
     return old
 
 
-def stop_colab(host):
+def colab_yielded_path(host):
+    """The record of an actor ``run-sft`` stopped for a round (``stop_colab(..., yielded=True)``): kept on disk until it
+    is served again, so a run-sft restarted mid-round and the session keeper can restore it. 2026-11-24: r0003's
+    run-sft yielded the actor, a second run-sft took the round over at 06:21 and found no record, the first one's
+    in-memory record never came back, and the A100 had no actor between rounds until 09:58."""
+    return colab_state_path(host).with_name(colab_state_path(host).stem + '.yielded.json')
+
+
+def stop_colab(host, *, yielded=False):
     """Stop the natlang SGLang actor this DGX started on a Colab G4 VM: its admission process group, by the PID the
-    launch recorded (never by pattern: a ``pkill -f`` over ssh matches the remote shell running it)."""
+    launch recorded (never by pattern: a ``pkill -f`` over ssh matches the remote shell running it). ``yielded``: the
+    record moves to ``colab_yielded_path`` (to be served again) instead of being removed."""
     state_file = colab_state_path(host)
     state = read_json(state_file) or {}
     pid = state.get('pid')
     if pid:
         ssh_host(host, f'kill -TERM -- -{int(pid)} 2>/dev/null; for i in $(seq 30); do kill -0 {int(pid)} 2>/dev/null '
                        f'|| exit 0; sleep 2; done; kill -KILL -- -{int(pid)} 2>/dev/null; true', check=False, timeout=120)
+    if yielded and state.get('serve_args'):
+        write_json(colab_yielded_path(host), {**state, 'yielded_at': time.time()})
     state_file.unlink(missing_ok=True)
-    log(event='Colab G4 actor stopped', host=host, pid=pid, previous=state.get('policy_id'))
+    log(event='Colab G4 actor stopped', host=host, pid=pid, previous=state.get('policy_id'), yielded=bool(yielded))
     return state
 
 
@@ -1866,7 +1877,9 @@ def restore_colab_actor(record):
     arguments); a failure is logged, never raised (the round's factors are already home)."""
     try:
         serve_colab(argparse.Namespace(**record['serve_args']))
-    except Exception as error:
+        if record.get('host'):
+            colab_yielded_path(record['host']).unlink(missing_ok=True)
+    except Exception as error:     # the yielded record stays: the keeper serves it again
         log(event='Colab actor restore failed', host=record.get('host'), error=repr(error)[:300])
 
 
@@ -1947,11 +1960,12 @@ def run_remote_sft(args):
     # minutes of transfers since the start check: before the actor yields, the sync thread starts (its pulls replace
     # the local learner-state) or the VM learner starts, no DGX learner may train this run
     refuse_beside_local_learner(args.work, 'before the VM learner starts')
-    yielded = None
+    # an actor an earlier run-sft of this round yielded (it was restarted mid-round) is restored after this learner
+    yielded = read_json(colab_yielded_path(host))
     actor = read_json(colab_state_path(host)) or {}
     if not learner['beside_actor'] and actor.get('pid') is not None:
-        yielded = stop_colab(host) if actor.get('serve_args') else None
-        if yielded is None:
+        yielded = stop_colab(host, yielded=True) if actor.get('serve_args') else yielded
+        if not actor.get('serve_args'):
             log(event='Colab actor without serve arguments: not stopped', host=host, policy=actor.get('policy_id'))
     sft_args = remap_sft_args(recipe, mapping)
     if '--activation-gb' in sft_args:
