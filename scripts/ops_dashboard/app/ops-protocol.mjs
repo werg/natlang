@@ -8,6 +8,10 @@ export const TOPICS = Object.freeze({ query: 'ops/q', reply: 'ops/r', tick: 'ops
 export const CHUNK_CHARS = 12000;                 // base64 characters per reply signal (envelope stays < 16 KiB)
 export const MAX_REPLY_CHUNKS = 160;              // ~1.4 MB compressed per reply; larger answers paginate
 export const REPLY_TTL_MS = 30000;
+/** Clock skew every session's signal channel tolerates (Chronolog's maximum; its default is 2 s). A receiver rejects a frame
+ * issued more than this ahead of its own clock, and Chronolog then tears down the whole peer connection. A phone whose clock
+ * drifted 2 s ahead of the DGX (2026-11-24, ~0.1 s/h) lost every signal to the DGX that way; see README "Clock skew" and werg/tendriller#103. */
+export const SIGNAL_CLOCK_SKEW_MS = 10000;
 /** The reference recordApplication keeps for an edit (its schema bounds strings at 128): the operation id, or its last
  * 128 characters for namespaced ids (native_<attachment>_<attempt hash>), which still contain the full attempt hash. */
 export const editRef = operationId => String(operationId).length <= 128 ? String(operationId) : String(operationId).slice(-128);

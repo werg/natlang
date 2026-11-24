@@ -54,12 +54,39 @@ export const SNAP_STALE_MS = 150_000;
 const RUN_QUIET_MS = 6 * 3600_000;
 export const latestHeld = run => (run.held || []).filter(h => num(h.delta_pts)).sort((a, b) => (a.step ?? 0) - (b.step ?? 0)).at(-1);
 
-/** One verdict for the whole system: level ok|warn|crit plus the items that cause it. `acked` ids are listed but do not count. */
-export function health(snap, now, acked = {}) {
+/**
+ * What the snapshot's age means. `read` is this page's record of its snapshot reads: {okAt, failAt, error, since, cached}, page clock
+ * milliseconds; `since` is when the page last connected or came back to the foreground, `cached` that the snapshot shown is the saved
+ * copy from an earlier visit. A held snapshot is old merely because nobody read for a while (a backgrounded phone), so age alone
+ * never raises the alarm:
+ *   refreshing       no read finished since the page (re)opened: the old snapshot is shown while the fresh read runs;
+ *   link_down        the newest read since then failed (no answer from the DGX): the page cannot reach the DGX, the exporter may be fine;
+ *   exporter_behind  a read succeeded but the exporter's own timestamp was already old at that read;
+ *   live             otherwise.
+ * Without `read` (tests, preview) the age alone decides, as before.
+ */
+export function feedState(snap, now, read = null) {
+  if (!snap) return { state: 'waiting', age: null };
+  const age = now - snap.ts;
+  if (!read) return { state: age > SNAP_STALE_MS ? 'exporter_behind' : 'live', age, lagAtRead: age };
+  const since = read.since ?? 0, okAt = read.okAt ?? null, failAt = read.failAt ?? null;
+  const failedLast = failAt != null && failAt >= since && (okAt == null || failAt > okAt);
+  if (failedLast && age > SNAP_STALE_MS) return { state: 'link_down', age, okAt, failAt, error: read.error || null };
+  if (read.cached || okAt == null || okAt < since) return { state: failedLast ? 'live' : 'refreshing', age };
+  const lagAtRead = okAt - snap.ts;            // page clock minus DGX clock: a few seconds of skew are immaterial against 150 s
+  return { state: lagAtRead > SNAP_STALE_MS ? 'exporter_behind' : 'live', age, okAt, lagAtRead };
+}
+
+/** One verdict for the whole system: level ok|warn|crit plus the items that cause it. `acked` ids are listed but do not count.
+ * `read` (see feedState) separates an exporter that stopped from a page that has no connection to the DGX. */
+export function health(snap, now, acked = {}, read = null) {
   const items = [];
   if (!snap) return { level: 'warn', title: 'Waiting for data', items: [{ id: 'nodata', level: 'warn', text: 'No snapshot received yet.' }], open: [] };
-  const age = now - snap.ts;
-  if (age > SNAP_STALE_MS) items.push({ id: 'stale', level: age > 600_000 ? 'crit' : 'warn', text: `Exporter data is ${dur(age / 1000)} old. The exporter or collector unit may have stopped.`, system: true });
+  const feed = feedState(snap, now, read);
+  if (feed.state === 'exporter_behind') items.push({ id: 'stale', level: feed.lagAtRead > 600_000 ? 'crit' : 'warn', system: true,
+    text: `Exporter behind: the DGX answered${read ? ` at ${clock(feed.okAt)}` : ''}, but its newest data was already ${dur(feed.lagAtRead / 1000)} old. The exporter unit (ops-dashboard-export) may have stopped.` });
+  if (feed.state === 'link_down') items.push({ id: 'link', level: 'warn', system: true,
+    text: `No connection to the DGX: the last read failed at ${clock(feed.failAt)}${feed.error ? ` (${String(feed.error).slice(0, 120)})` : ''}. Showing data from ${dur(feed.age / 1000)} ago; the exporter itself may be fine.` });
   for (const a of snap.alerts || []) items.push({ id: a.id, level: a.level, text: a.text, machine: a.machine, unit: a.unit });
   const gate = snap.ei?.held?.gate, pair = gate?.pair;
   if (pair && pair.ci_pts[1] < 0) items.push({ id: `held:${gate.candidate}`, level: 'crit', text: `Held regression: ${gate.candidate} is ${signed(pair.delta_pts, 1)} pts against ${gate.reference} (95% interval ${signed(pair.ci_pts[0], 1)} to ${signed(pair.ci_pts[1], 1)}).` });
@@ -70,8 +97,12 @@ export function health(snap, now, acked = {}) {
   const open = items.filter(i => !acked[i.id]);
   const level = open.some(i => i.level === 'crit') ? 'crit' : open.length ? 'warn' : 'ok';
   const title = level === 'ok' ? 'Healthy' : `${open.length} ${open.length === 1 ? 'issue needs' : 'issues need'} attention`;
-  return { level, title, items, open };
+  return { level, title, items, open, feed };
 }
+
+/** This device's clock against the DGX's, from a signal's signing time: positive = device ahead. Includes the delivery latency. */
+export const clockSkew = (issuedAtMs, receivedAtMs) => num(issuedAtMs) && num(receivedAtMs) ? receivedAtMs - issuedAtMs : null;
+export const CLOCK_WARN_MS = 5000;
 
 /** Compact number: 1.2k, 4.5M. */
 export const compact = v => !num(v) ? '—' : Math.abs(v) >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : Math.abs(v) >= 1e4 ? `${Math.round(v / 1e3)}k` : Math.abs(v) >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : String(Math.round(v));

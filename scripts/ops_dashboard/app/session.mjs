@@ -13,6 +13,7 @@ import { watchApplicationSetup } from '@tendriller/core/setup';
 import { createCliLifetime } from './helpers/cli-lifetime.mjs';
 import { superviseParticipant } from './helpers/participant-lifecycle.mjs';
 import { createReviewedPairingProcessor } from './pairing-native.mjs';
+import { SIGNAL_CLOCK_SKEW_MS } from './ops-protocol.mjs';
 
 function paths(profile = 'main') {
   if (!/^[A-Za-z0-9_-]{1,48}$/u.test(profile)) throw Error('Choose a retained native profile name.');
@@ -51,7 +52,7 @@ export async function openSession({ signal, mode = 'own', profile = 'main' } = {
       const device = await openNativeDevice({ path: selected.device });
       try {
         session = await openNativeApplication({ device, definition, authority,
-          signals: { limits: { maxQueuedSignals: 2048, maxQueuedBytes: 16777216 } } });
+          signals: { limits: { maxQueuedSignals: 2048, maxQueuedBytes: 16777216, maxClockSkewMs: SIGNAL_CLOCK_SKEW_MS } } });
         pairing = Object.freeze({ descriptor, applicationId: handle.application.id,
           serviceOrigin: new URL(handle.api).origin, pageOrigin: new URL(handle.page_url).origin,
           authority: options => host.peers.application(options),

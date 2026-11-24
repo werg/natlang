@@ -11384,3 +11384,18 @@ out the ~1 min relaunch; resends never spend call budget (ts-host fix); `NATLANG
 (3) held measurement re-runs whatever is still lost (previous entry). Running measurements are untouched: their sealed
 queues keep their entries, and the driver change applies to actors started on the new code. Not checked: whether a
 relaunch keeps Neuralese states that in-flight episodes still reference (the front restarts with the engine).
+
+## 2026-11-24 Ops dashboard: page signals lost for 4.5 h to phone clock drift; the stale alert separates link from exporter
+
+Observed: from 09:50Z the owner's page sent no query or telemetry that reached `ops-peer-25`. Its commands still arrived, and the
+peer's connection flapped every 10-30 s. A peer restart (ops-peer-26) did not help. Cause: the phone's clock drifted ahead of the DGX
+by ~0.1 s/h (0.37 s on 11-23 18:23Z, 1.97 s on 11-24 09:43Z, from the page telemetry's `at` against peer receive time) and crossed
+Chronolog's default `maxClockSkewMs` of 2 s at about 09:50Z. The receiver throws `SIGNAL_CLOCK_INVALID`, and `NetworkPeer` fails on it,
+tearing down the whole connection (werg/tendriller#103). Not a Tendriller deploy: production deploys were at 11-23 23:41Z and 11-24 12:30Z.
+Fixes (commit below): both sessions set `maxClockSkewMs` 10 s (Chronolog's maximum). The page measures and shows its clock skew and
+reports it in telemetry. The page always reads the snapshot after connecting or resuming and whenever no read succeeded for a minute.
+Before, a page restored from its saved snapshot, or resumed with an unchanged held tick, did not read at all until a new tick arrived.
+The stale alert now fires only after a read: "No connection to the DGX" (warn) when a read failed, "Exporter behind" when a read
+succeeded but returned old data; a held snapshot shows "refreshing". A skipped owner-replaced reload is retried after the minute
+instead of leaving a dead page. Not checked: the page-side runtime (no access to the phone); whether Firefox Android freezes the
+SharedWorker in the background; a skew beyond 10 s (it fails the same way).
