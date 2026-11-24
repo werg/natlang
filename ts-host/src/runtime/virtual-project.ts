@@ -88,6 +88,8 @@ export type VirtualProjectOptions = { inlineRecords?: boolean; platform: Platfor
   target?: 'node' | 'browser'; modules?: Record<string, unknown>;
   /** Validate source and produce declarations without emitting JavaScript. */
   emit?: boolean;
+  /** Return generated declaration documents (default true); type checking is unchanged. */
+  declarations?: boolean;
   /** Collect the program descriptor for adaptation. Defaults to true. */
   adaptation?: boolean };
 
@@ -121,7 +123,7 @@ export function compileVirtualProjectProduct(project: VirtualProject, options: V
   const specifiers = [...(options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'])];
   const build = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
     guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
-    inlineRecords:options.inlineRecords,target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
+    inlineRecords:options.inlineRecords,target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, declarations: options.declarations, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
   return { schema: 'natlang.virtual-project-product/1', project: snapshot, runtimeSpecifiers: specifiers, build };
 }
 

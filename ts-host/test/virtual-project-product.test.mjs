@@ -53,3 +53,26 @@ test('an executable owner releases declaration documents after its public build 
  `;
  await promisify(execFile)(process.execPath,['--expose-gc','--input-type=module','--eval',script],{timeout:30000});
 });
+
+test('runtime-only products omit declaration output while preserving JavaScript and type diagnostics',()=>{
+ const files={'answer.nl':'---\nargs: { value: number }\nreturns: string\n---\nDescribe value.','main.ts':'import answer from "./answer.nl"; export async function main(value:number):Promise<string>{return await answer(value);}'};
+ const full=core.compileVirtualProjectProduct({files},options);
+ const runtime=core.compileVirtualProjectProduct({files},{...options,declarations:false});
+ assert.equal(full.build.ok,true,JSON.stringify(full.build.diagnostics));
+ assert.ok(Object.keys(full.build.declarations).length);
+ assert.deepEqual(runtime.build.declarations,{});
+ assert.deepEqual(runtime.build.outputs,full.build.outputs);
+ assert.deepEqual(runtime.build.manifest,full.build.manifest);
+ assert.deepEqual(runtime.build.diagnostics,full.build.diagnostics);
+ const store=core.virtualProjectFiles(files);
+ const build=core.compileProject({project:'/project',files:store,target:'node',module:'commonjs',adaptation:false,declarations:false,surfaceSpecifiers:['@natlang/browser','@natlang/node']});
+ assert.equal(build.ok,true,JSON.stringify(build.diagnostics));
+ assert([...store.outputs.keys()].some(path=>path.endsWith('.js')));
+ assert(![...store.outputs.keys()].some(path=>path.endsWith('.d.nl.ts')));
+ const invalid={files:{...files,'main.ts':'import answer from "./answer.nl";export async function main():Promise<string>{return await answer("wrong");}'}};
+ const fullBad=core.compileVirtualProjectProduct(invalid,options);
+ const runtimeBad=core.compileVirtualProjectProduct(invalid,{...options,declarations:false});
+ assert.equal(fullBad.build.ok,false);
+ assert.deepEqual(runtimeBad.build.diagnostics,fullBad.build.diagnostics);
+ assert.deepEqual(runtimeBad.build.declarations,{});
+});

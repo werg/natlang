@@ -9,11 +9,11 @@ const files={
  'entry.ts':'import describe from "./describe.nl"; export async function summarize(value:number):Promise<{description:string;doubled:number}>{return {description:await describe(value),doubled:value*2};} export async function withOptional(value:number,label?:string):Promise<string>{return (label??"prefix")+await describe(value);} export async function restful(prefix:string,...values:number[]):Promise<string>{return prefix+values.join(",")+":"+await describe(values.length);} export function twice(value:number):number{return value*2;} export function fail(value:string):never{throw new Error(value);}',
  'describe.nl':'---\nargs: { value: number }\nreturns: string\n---\nDescribe the number.',
 };
-function setup(platform=core.nodePlatform(),recording){
+function setup(platform=core.nodePlatform(),recording,declarations){
  const dir=mkdtempSync(join(tmpdir(),'native-entry-actual-')),store=core.CallStore.open(dir);
  store.writeSettings({minFreeBytes:0,specialization:'off'});
  const rt=core.createNatlangRuntime({platform,calls:store,recording,model:async()=>({calls:[['return_result',{status:'success',value:'seven'}]]})});
- const compiled=core.compileVirtualProject({files,root:'/reference'},core,{platform});
+ const compiled=core.compileVirtualProject({files,root:'/reference'},core,{platform,declarations});
  assert.equal(compiled.ok,true,JSON.stringify(compiled.diagnostics));
  return {rt,store,platform,module:compiled.require('entry.ts'),close(){rt.close();store.close();rmSync(dir,{recursive:true,force:true});}};
 }
@@ -179,4 +179,16 @@ for(const mode of ['node','workerd'])test(`actual ${mode} explicit nested-packag
   assert.equal(await rt.run(()=>compiled.require('entry.ts').default()),'actual');
   assert.equal(turns,2);
  }finally{rt.close();store.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+for(const mode of ['node','workerd'])test(`runtime-only ${mode} product executes the same typed root and NL child`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});
+ const env=setup(platform,undefined,false);
+ try{
+  assert.deepEqual(await env.rt.run(()=>env.module.summarize(7)),{description:'seven',doubled:14});
+  assert.equal(await env.rt.run(()=>env.module.withOptional(7)),'prefixseven');
+  assert.equal(await env.rt.run(()=>env.module.restful('items',1,2)),'items1,2:seven');
+  const rows=env.store.calls().map(row=>env.store.call(row.call_id));
+  assert(rows.some(row=>row.definition.name==='describe'));
+ }finally{env.close();}
 });
