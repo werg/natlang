@@ -7,6 +7,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shlex
 import shutil
@@ -149,10 +150,35 @@ def workerd_failure(outcome):
     )
 
 
+def provider_transport_failure(outcome):
+    """Operational call failures, never a model's returned description of a network problem.
+
+    Older immutable receipts retain only the rendered NatlangCallError. Require its
+    failed-call envelope and a transport error at the start of the operational cause.
+    """
+    if outcome['status'] != 'test-failed':
+        return False
+    reason = outcome.get('reason') or ''
+    match = re.match(r'^natlang [^\n]+?: (?:failed|error): (.*)', reason, re.DOTALL)
+    if not match:
+        return False
+    cause = match.group(1)
+    if cause.startswith('Circuit breaker is open; last failure: '):
+        cause = cause.removeprefix('Circuit breaker is open; last failure: ')
+    cause = re.sub(r'^(?:GET|POST|PUT|PATCH|DELETE) https?://\S+: ', '', cause)
+    return bool(re.match(
+        r'^(?:fetch failed(?: \(record |$)|Client network socket disconnected before secure TLS connection was established'
+        r'|(?:connect |read )?(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN)\b|socket hang up(?: \(record |$))',
+        cause))
+
+
 def infrastructure_failure(outcome, case):
     if capture_integrity_errors(outcome.get('capture_errors')):
         return True
     if workerd_failure(outcome):
+        return True
+    if (os.environ.get("NATLANG_CAMPAIGN_TRANSPORT_FAILURES_AS_GOAL_FAILURES") != "1"
+            and provider_transport_failure(outcome)):
         return True
     if outcome['status'] == 'no-capture':
         return True

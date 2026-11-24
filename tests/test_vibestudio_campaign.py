@@ -545,3 +545,41 @@ def test_cohort_exports_are_resumable_for_ledger_backfill(monkeypatch, tmp_path)
     assert 'NATLANG_REPO=/repo' in launched
     assert '/repo/scripts/neuralese_data/vibestudio_campaign.py' in launched
     assert '/archive/vibestudio_campaign.py' not in launched
+
+
+@pytest.mark.parametrize('cause', [
+    'fetch failed',
+    'Circuit breaker is open; last failure: POST https://chatgpt.com/backend-api/codex/responses: fetch failed',
+    'Circuit breaker is open; last failure: GET https://chatgpt.com/backend-api/codex/responses: Client network socket disconnected before secure TLS connection was established',
+    'connect ECONNRESET',
+])
+def test_provider_transport_errors_do_not_spend_goal_retries(tmp_path, cause):
+    outcome = {'status': 'test-failed', 'teacher_model_sampled': True,
+               'reason': 'natlang chooseScope: failed: ' + cause + ' (record real-call/2)'}
+    assert vibestudio_campaign.infrastructure_failure(outcome, {})
+    cases = {'goal': {'workspace': 'system', 'family': 'scope'}}
+    rows = vibestudio_campaign.publish_status(tmp_path, cases, {}, [{'goal': outcome}], None, 2, {},
+        attempt_epoch='release', receipt_epochs=['release'])
+    assert rows['goal']['attempts'] == 0
+    assert rows['goal']['cumulative_teacher_attempts'] == 1
+    assert rows['goal']['epoch_infrastructure_failures'] == 1
+    assert rows['goal']['status'] == 'pending'
+    assert vibestudio_campaign.wave_infrastructure_hold({'goal': outcome}, cases, 1)
+
+
+@pytest.mark.parametrize('reason', [
+    'fetch failed',
+    'natlang describeIncident: quiesced: fetch failed (record reply/2)',
+    'natlang describeIncident: failed: The document says fetch failed',
+    'natlang chooseScope: failed: schema validation failed: fetch failed',
+    'natlang chooseScope: failed: unauthorized',
+    'natlang chooseScope: failed: Circuit breaker is open',
+])
+def test_described_network_failures_are_not_operational_transport_errors(reason):
+    assert not vibestudio_campaign.infrastructure_failure({'status': 'test-failed', 'reason': reason}, {})
+
+
+def test_provider_transport_accounting_opt_out(monkeypatch):
+    monkeypatch.setenv('NATLANG_CAMPAIGN_TRANSPORT_FAILURES_AS_GOAL_FAILURES', '1')
+    assert not vibestudio_campaign.infrastructure_failure(
+        {'status': 'test-failed', 'reason': 'natlang chooseScope: failed: fetch failed'}, {})
