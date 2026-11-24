@@ -2106,3 +2106,119 @@ def test_publish_round_records_the_code_whose_merge_wrote_the_bytes(tmp_path, mo
                                      factors=tmp_path / 'factors', base=None, label='aei-r0001'))
     published = json.loads((tmp_path / 'policy' / 'published.json').read_text())
     assert published['code'] == code_provenance() and published['code']['git_commit']
+
+
+def _lineage_driver(tmp_path, monkeypatch):
+    """A driver whose lineage is v0 -> v1 -> v2 (rounds r0001 and r0002 published), with round r0003 prepared ahead
+    while r0002 trained: its frontier was measured on v1 against v0."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    v0 = d.controller.current
+    lineage = [v0, *({'version': i, 'sha256': c * 64, 'checkpoint': f'/p/v{i}.pt'} for i, c in ((1, '1'), (2, '2')))]
+    d.controller.state['lineage'] = lineage
+    d.controller.save()
+    rd = d.root / 'r0003'
+    (rd / 'stages').mkdir(parents=True)
+    plans, launched = [], []
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd_, pols, size=None, **k: plans.append(
+        [p['sha256'] for p in pols]) or (['frontier'], [['data']], ['build']))
+    monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: None)
+    monkeypatch.setattr(d, 'expected_hours', lambda report: {})
+    monkeypatch.setattr(d, 'prefer_unseen_for', lambda rd_: [])
+    monkeypatch.setattr(d, 'round_size', lambda: {'placement': 'dgx', 'teacher_budget': 1})
+
+    def ledger(unit, budget, prio, cmd, log, **kw):
+        launched.append(unit.rsplit('-', 1)[1])
+        if unit.endswith('-build'):
+            (rd / 'mix').mkdir(parents=True, exist_ok=True)
+            (rd / 'mix' / 'build.json').write_text(json.dumps({'admitted_episode_keys': ['e']}))
+            (rd / 'mix' / 'chains.pkl').write_bytes(b'x')
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    return ei, d, rd, lineage, plans, launched
+
+
+def test_a_round_prepared_ahead_continues_with_its_policy_after_a_restart(tmp_path, monkeypatch):
+    """2026-11-24 r0003: prepared ahead on v1 (frontier 03:50, data done 04:56 under the old driver, which died
+    before writing data.done); the 04:17 restart after r0002 published v2 began prepare again with v2 and waited
+    --snapshot-min-hours for v2's collection. Now the restarted driver continues with the policies the round
+    recorded (here inferred from the frontier it measured), never waits or snapshots again, recognises the finished
+    data step (its journal and output: a unit launched before exit records) and runs only the build."""
+    ei, d, rd, lineage, plans, launched = _lineage_driver(tmp_path, monkeypatch)
+    v0, v1, v2 = lineage
+    (rd / 'frontier.json').write_text(json.dumps({'policy': v1['sha256'], 'previous_policy': v0['sha256']}))
+    (rd / 'stages' / 'frontier.done').write_text('{}')
+    (rd / 'neuralese-graph-own').mkdir()
+    (rd / 'neuralese-graph-own' / 'chains.pkl').write_bytes(b'data out')
+    monkeypatch.setattr(ei, 'unit_last_run_succeeded', lambda unit: unit == 'aei-r0003-data')
+    monkeypatch.setattr(ei, 'record_collection', lambda *a, **k: (_ for _ in ()).throw(AssertionError('re-snapshot')))
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: (_ for _ in ()).throw(AssertionError('waited for a snapshot')))
+    manifest = d.prepare(rd, [v1, v2])                     # what run() passes after r0002 published v2
+    assert plans == [[v0['sha256'], v1['sha256']]] and launched == ['build']
+    assert manifest['base_policy_sha'] == v1['sha256'] and manifest['previous_policy_sha'] == v0['sha256']
+    assert manifest['frontier_policy'] == v1['sha256']
+    assert json.loads((rd / 'stages' / 'data.done').read_text())['recovered'] == 'journal'
+    assert [p['sha256'] for p in json.loads((rd / 'stages' / 'prepare.json').read_text())['policies']] == \
+        [v0['sha256'], v1['sha256']]
+    log = (d.root / 'drive.log').read_text()
+    assert 'prepare_continues_with' in log and 'step_finished_before_restart' in log
+
+
+def test_a_restart_during_the_snapshot_wait_waits_on_the_recorded_policy_and_steps_record_their_exit(tmp_path,
+                                                                                                      monkeypatch):
+    """A round recorded its policies at its start (prepare.json): a driver restarted during the snapshot wait waits
+    on that policy's collection, not the new one's. Every step's unit records its exit status for its argv, so a
+    step that finished before the driver wrote its marker is not rerun; a failed one (status 1) or one recorded for
+    another argv is."""
+    ei, d, rd, lineage, plans, launched = _lineage_driver(tmp_path, monkeypatch)
+    v0, v1, v2 = lineage
+    (rd / 'stages' / 'prepare.json').write_text(json.dumps({'policies': [v0, v1], 'started_at': 1}))
+    asked = []
+
+    def collections_of(pols):
+        asked.append([p['sha256'] for p in pols])
+        out = []
+        for p in pols:
+            c = tmp_path / 'collect' / p['sha256'][:4]
+            c.mkdir(parents=True, exist_ok=True)
+            (c / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+            out.append(c)
+        return out
+    monkeypatch.setattr(d, 'collections_of', collections_of)
+    snapped = []
+    monkeypatch.setattr(ei, 'record_collection', lambda work, closed=True: snapped.append(Path(work).name))
+    monkeypatch.setattr(ei, 'unit_last_run_succeeded', lambda unit: False)
+    # the frontier finished (its exit record) before the driver died; the data run failed; the build never ran
+    frontier_argv, data_argv = ['frontier'], ['/bin/sh', str(rd / 'data.sh')]
+    (rd / 'stages' / 'frontier.exit').write_text(json.dumps({'rc': 0, 'argv_sha256': ei.argv_digest(frontier_argv)}))
+    (rd / 'stages' / 'data.exit').write_text(json.dumps({'rc': 1, 'argv_sha256': ei.argv_digest(data_argv)}))
+    cmds = {}
+    real = d.c.ledger
+
+    def ledger(unit, budget, prio, cmd, log, **kw):
+        cmds[unit.rsplit('-', 1)[1]] = cmd
+        return real(unit, budget, prio, cmd, log, **kw)
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    d.prepare(rd, [v1, v2])
+    assert asked[0] == [v1['sha256']] and snapped == [v0['sha256'][:4], v1['sha256'][:4]]
+    assert json.loads((rd / 'stages' / 'prepare.json').read_text())['snapshot_at'] > 0
+    assert launched == ['data', 'build'] and json.loads((rd / 'stages' / 'frontier.done').read_text())['recovered'] \
+        == 'exit-status'
+    assert cmds['data'][:2] == ['/bin/sh', '-c'] and cmds['data'][3:] == ['step', *data_argv]
+    assert str(rd / 'stages' / 'data.exit') in cmds['data'][2]
+    assert ei.argv_digest(frontier_argv) != ei.argv_digest(['frontier', '--other'])
+
+
+def test_a_prepare_record_from_a_rolled_back_lineage_starts_over(tmp_path, monkeypatch):
+    ei, d, rd, lineage, plans, launched = _lineage_driver(tmp_path, monkeypatch)
+    v0, v1, v2 = lineage
+    gone = {'version': 9, 'sha256': '9' * 64, 'checkpoint': '/p/v9.pt'}
+    (rd / 'stages' / 'prepare.json').write_text(json.dumps({'policies': [v1, gone], 'snapshot_at': 5}))
+    (rd / 'stages' / 'frontier.done').write_text('{}')
+    (rd / 'frontier.json').write_text('{}')
+    stopped = []
+    monkeypatch.setattr(d.c, 'present', lambda unit: unit == 'aei-r0003-data' and not stopped)
+    monkeypatch.setattr(d.c, 'stop_unit', stopped.append)
+    assert [p['sha256'] for p in d.prepare_policies(rd, [v1, v2])] == [v1['sha256'], v2['sha256']]
+    assert stopped == ['aei-r0003-data'] and not (rd / 'stages' / 'frontier.done').exists()
+    assert not (rd / 'stages' / 'prepare.json').exists() and not (rd / 'frontier.json').exists()

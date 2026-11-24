@@ -2317,6 +2317,42 @@ def write_round_manifest(round_dir, *, round_id, base_policy_sha, previous_polic
     return manifest
 
 
+PREPARE_STEPS = ('frontier', 'data', 'build')
+
+
+def argv_digest(argv):
+    """sha256 of a step's argv (its exit record names the command it ran)."""
+    import hashlib
+    return hashlib.sha256(json.dumps([str(a) for a in argv]).encode()).hexdigest()
+
+
+def step_command(argv, exit_path):
+    """``argv`` run by /bin/sh, which then records its exit status, the argv digest and the time in ``exit_path``
+    (atomically) and exits with that status: a driver that died before writing the step's ``.done`` marker still
+    learns that the step finished."""
+    q = _quote
+    record = (f'printf \'{{"rc": %s, "argv_sha256": "{argv_digest(argv)}", "at": %s}}\\n\' "$rc" "$(date +%s)" '
+              f'> {q(str(exit_path))}.tmp && mv -f {q(str(exit_path))}.tmp {q(str(exit_path))}')
+    return ['/bin/sh', '-c', f'"$@"; rc=$?; {record}; exit $rc', 'step', *map(str, argv)]
+
+
+def unit_last_run_succeeded(unit):
+    """Whether ``unit``'s last run (from its last "Started" in the user journal) ended without a failure: systemd
+    logged its resource use ("Consumed") and no failure, kill or stop. False when the journal has no run."""
+    try:
+        out = subprocess.run(['journalctl', '--user', '-u', f'{unit}.service', '-o', 'cat', '--no-pager', '-n', '400'],
+                             capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    lines = out.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith('Started ')]
+    if not starts:
+        return False
+    tail = lines[starts[-1] + 1:]
+    bad = ('Failed with result', 'Main process exited', 'Stopping ', 'Stopped ', 'code=killed', 'code=dumped')
+    return any('Consumed' in line for line in tail) and not any(b in line for line in tail for b in bad)
+
+
 TEACHER_RELAUNCH_MINUTES = 60   # an idle campaign of the same frontier resumes at most this often
 SFT_HANDBACK_MAX = 2          # moves of one round from the DGX back to a session (no ping-pong between two hosts)
 
@@ -3136,18 +3172,83 @@ class AsyncRoundDriver:
                 out.append(v['sha256'])
         return out
 
+    def prepare_policies(self, round_dir, policies):
+        """The policies a round's preparation is for: the ones it recorded when it started (``stages/prepare.json``,
+        else an existing ``frontier.json``'s policy and previous policy), so a driver restarted after the previous
+        round published continues a round prepared ahead with the policy of that time instead of re-snapshotting on
+        the new one (2026-11-24: r0003's frontier and data were done, and the restart waited ~3 h for the v2
+        collection). A record whose policies left the lineage (a rollback) is dropped with its stage markers (its
+        running stage units stopped), and the round prepares from ``policies``."""
+        stages = round_dir / 'stages'
+        record = stages / 'prepare.json'
+        shas = None
+        if record.exists():
+            shas = [p['sha256'] for p in json.loads(record.read_text())['policies']]
+        elif (round_dir / 'frontier.json').exists():
+            f = json.loads((round_dir / 'frontier.json').read_text())
+            shas = [s for s in (f.get('previous_policy'), f.get('policy')) if s]
+        if not shas:
+            return list(policies)
+        by_sha = {p['sha256']: p for p in self.controller.state['lineage']}
+        if all(s in by_sha for s in shas):
+            return [by_sha[s] for s in shas]
+        self.note(round=round_dir.name, prepare_restarted='its recorded policies left the lineage', policies=shas)
+        for name in PREPARE_STEPS:
+            unit = f'{self.a.name}-{round_dir.name}-{name}'
+            if self.c.present(unit):
+                self.c.stop_unit(unit)
+            for suffix in ('.done', '.exit'):
+                (stages / f'{name}{suffix}').unlink(missing_ok=True)
+        record.unlink(missing_ok=True)
+        (round_dir / 'frontier.json').unlink(missing_ok=True)
+        return list(policies)
+
+    def step_finished(self, round_dir, name, unit, argv):
+        """How a preparation step with no ``.done`` marker is known to have finished (the driver died between its end
+        and the marker): its own exit record (``stages/<step>.exit``, written by the unit: status 0 for this argv), or
+        for a unit launched before those records its journal (the last start ended without a failure) together with
+        its output. None when it did not (it runs again)."""
+        exit_path = round_dir / 'stages' / f'{name}.exit'
+        if exit_path.exists():
+            try:
+                rec = json.loads(exit_path.read_text())
+            except ValueError:
+                return None
+            return 'exit-status' if rec.get('rc') == 0 and rec.get('argv_sha256') == argv_digest(argv) else None
+        output = {'frontier': [round_dir / 'frontier.json'],
+                  'data': [round_dir / 'neuralese-graph-own' / 'chains.pkl'],
+                  'build': [round_dir / 'mix' / 'build.json', round_dir / 'mix' / 'chains.pkl']}.get(name, [])
+        if output and all(p.exists() for p in output) and unit_last_run_succeeded(unit):
+            return 'journal'
+        return None
+
     def prepare(self, round_dir, policies):
         """Stage 1 (resumable; ``stages/prepared.done``): wait until the newest policy's collection has run
         ``--snapshot-min-hours`` (the frontier needs its outcomes), register the snapshot, frontier, data, build,
-        ``round.json``."""
+        ``round.json``. The policies and the snapshot are recorded (``stages/prepare.json``): a restarted driver
+        continues with them (``prepare_policies``) and does not wait or snapshot again; a step that finished before
+        the driver died is not rerun (``step_finished``)."""
         if (round_dir / 'stages' / 'prepared.done').exists():
             return json.loads((round_dir / 'round.json').read_text())
         (round_dir / 'stages').mkdir(parents=True, exist_ok=True)
+        from natlang_neuralese.common.jsonio import write_json_durable
+        given = [p['sha256'] for p in policies]
+        policies = self.prepare_policies(round_dir, policies)
+        if [p['sha256'] for p in policies] != given:
+            self.note(round=round_dir.name, prepare_continues_with=[p['sha256'] for p in policies], lineage=given)
         cur = policies[-1]
+        record_path = round_dir / 'stages' / 'prepare.json'
+        record = json.loads(record_path.read_text()) if record_path.exists() else {}
+        if not record:
+            record = {'policies': [{k: p.get(k) for k in ('version', 'sha256', 'checkpoint')} for p in policies],
+                      'started_at': round(time.time(), 1)}
+            write_json_durable(record_path, record)
+        snapshot_taken = bool(record.get('snapshot_at')) or (round_dir / 'stages' / 'frontier.done').exists() \
+            or (round_dir / 'frontier.json').exists()
         # the newest policy's collections: the DGX one and the remote actors' (which keep collecting while a DGX SFT
         # holds the DGX collection stopped: the snapshot waits for them)
         units = [self.collection_unit(cur), *self.remote_units(self.collection_unit(cur))]
-        while True:
+        while not snapshot_taken:
             runs = [d / 'runs.jsonl' for d in self.collections_of([cur])]
             if runs:
                 started = min(json.loads(r.read_text().splitlines()[0])['started'] for r in runs)
@@ -3159,8 +3260,11 @@ class AsyncRoundDriver:
                 raise SystemExit(f'round {round_dir.name}: no collection of {cur["sha256"][:12]} ({self.collect_dir(cur)})')
             self.standing_teacher()
             time.sleep(60)
-        for d in self.collections_of(policies):
-            record_collection(d, closed=False)       # the snapshot the extraction reads (the collection grows on)
+        if not snapshot_taken:
+            for d in self.collections_of(policies):
+                record_collection(d, closed=False)       # the snapshot the extraction reads (the collection grows on)
+            record = {**record, 'snapshot_at': round(time.time(), 1)}
+            write_json_durable(record_path, record)
         # the live WORKs' extractions so far (the ingester keeps adding waves; each round takes what is there)
         if self.a.live_work:
             self.note(live_links=link_live_works(self.c.work, self.a.live_work))
@@ -3170,7 +3274,6 @@ class AsyncRoundDriver:
             size = json.loads(size_path.read_text())
         else:
             size = {**self.round_size(), 'decided_at': round(time.time(), 1)}
-            from natlang_neuralese.common.jsonio import write_json_durable
             write_json_durable(size_path, size)
         self.note(round=round_dir.name, round_size=size)
         frontier, lines, build = self.prepare_plan(round_dir, policies, size)
@@ -3179,10 +3282,19 @@ class AsyncRoundDriver:
         # rerunning frontier and data (hours) beneath a build that may still be reading their outputs.
         def step(name, budget, argv, repo=None):
             done = round_dir / 'stages' / f'{name}.done'
-            if not done.exists():
-                self.c.ledger(f'{self.a.name}-{round_dir.name}-{name}', budget, STAGE_PRIORITY, argv,
-                              round_dir / f'{name}.log', repo=repo)
-                done.write_text(json.dumps({'time': time.time()}) + '\n')
+            if done.exists():
+                return
+            unit = f'{self.a.name}-{round_dir.name}-{name}'
+            if not self.c.present(unit):
+                how = self.step_finished(round_dir, name, unit, argv)
+                if how:
+                    self.note(round=round_dir.name, step_finished_before_restart=name, how=how)
+                    done.write_text(json.dumps({'time': time.time(), 'recovered': how}) + '\n')
+                    return
+                (round_dir / 'stages' / f'{name}.exit').unlink(missing_ok=True)
+            self.c.ledger(unit, budget, STAGE_PRIORITY, step_command(argv, round_dir / 'stages' / f'{name}.exit'),
+                          round_dir / f'{name}.log', repo=repo)
+            done.write_text(json.dumps({'time': time.time()}) + '\n')
         step('frontier', 4, frontier)
         self.c.work_tokenizer()
         script = round_dir / 'data.sh'

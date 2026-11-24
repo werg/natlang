@@ -10599,3 +10599,35 @@ Not checked:
   closed reply ends in `<|im_end|>`; otherwise the option gets no alternative (e.g. the tiny test templates).
 - A live Colab natlang run end to end. The Colab actor still runs code from before open_reply; it serves the 18.5-nat
   shared-`</think>` scores until it moves to current main.
+
+## 2026-11-24 06:00 async-drive: a round prepared ahead keeps its policy across a driver restart; finished steps are not rerun
+
+**What happened (twice tonight).** Round N+1 is prepared ahead while round N trains, on the policy of that time.
+A driver restarted after round N published found N+1 without `prepared.done`. It began `prepare` again with the new
+policy as `cur` and waited `--snapshot-min-hours` for the new policy's collection. It also ignored, or redid, a data
+step that had finished without a marker because the driver died first. r0003: frontier 03:50 and data done 04:56
+under the old driver; the 04:17 restart would have delayed the build to about 07:30. Workaround at 05:20: a hand
+`data.done` and `--snapshot-min-hours 1`.
+
+**Fix.**
+- **Policy record.** `prepare` records its policies in `stages/prepare.json` at its start, and `snapshot_at` once the
+  snapshot is registered. A restarted driver continues with the recorded policies (`prepare_policies`). Without that
+  record (rounds started by older code) it takes them from an existing `frontier.json` (`policy`,
+  `previous_policy`). Once the snapshot was taken (recorded, `frontier.done` or `frontier.json`) it neither waits
+  nor snapshots again.
+- **Stale record.** A record whose policies left the lineage (a rollback) is dropped with the stage markers, its
+  running stage units are stopped, and the round prepares from the current lineage.
+- **Finished steps.** Every step's unit now records its own exit status in `stages/<step>.exit` (status, argv digest,
+  time; `step_command`). A step with no `.done` whose exit record says status 0 for the same argv is marked done
+  (`recovered: exit-status`) and not rerun; a failed one or one for another argv runs again. For units launched
+  before exit records, the user journal decides: the last start ended with its resource line and no
+  failure/kill/stop, and the step's output exists (frontier.json; the data's last output
+  `neuralese-graph-own/chains.pkl`; `mix/build.json` and `chains.pkl`), giving `recovered: journal`. A running unit
+  is joined as before.
+- **Forcing a rerun.** Deleting a `.done` no longer reruns a step that recorded success; use `--rebuild-round` for a
+  build, or delete the step's `.exit` and outputs too.
+
+Tests: `tests/neuralese/test_async_train.py`. The r0003 sequence: prepared ahead on v1, restart with v2, no wait or
+snapshot, data recovered from its journal, only the build runs, round.json on v1/v0. Also: a restart in the
+snapshot wait waits on the recorded policy; exit records (success not rerun, failure rerun); a rolled-back record
+starts over.
