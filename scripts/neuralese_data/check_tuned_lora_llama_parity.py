@@ -16,7 +16,7 @@ Phases (each cached in OUT_DIR):
 4. llama-server, launched as the managed server launches tuned runs (`--lora-init-without-apply --lora-per-sequence
    --lora LORA`), per outtype: each prompt greedily for T tokens through `/v1/completions` with `logprobs`, the
    adapter off (`lora` scale 0) and on (scale 1): `candidates/llama-<outtype>.json`.
-5. Score (the native model loaded once at float32): for every candidate file (llama's and each `--page` file written by
+5. Score (the native model loaded once, at the dtype the release binds: BF16 for LFM3 fits): for every candidate file (llama's and each `--page` file written by
    `ts-host/scripts/wllama-lora-smoke.mjs --parity`), one native forward over the prompt and the candidate's own
    tokens, with the release applied exactly (`run_native`) for adapted runs. Per position: |candidate logprob - native
    logprob| of the candidate's token; greedy agreement = the candidate's token is the native argmax (the first
@@ -46,6 +46,12 @@ parser.add_argument('--top', type=int, default=5, help='top logprobs requested p
 parser.add_argument('--skip-llama', action='store_true', help='reuse candidates/llama-*.json')
 parser.add_argument('--page', type=Path, action='append', default=[], help='wllama-lora-smoke.mjs --parity output')
 parser.add_argument('--device', default='cuda')
+parser.add_argument('--native-greedy', action=argparse.BooleanOptionalAction, default=True,
+                    help="also decode the native reference greedily (2 x prompts x tokens forwards; the candidates' "
+                         'agreement is scored on their own paths either way)')
+parser.add_argument('--native-dtype', default='bfloat16',
+                    help="the reference engine's dtype: the release binds the identity it was fit at (tune.build "
+                         "engine.dtype, bfloat16 on LFM3); another dtype is refused as a different live checkpoint")
 cli = parser.parse_args()
 out = cli.out
 out.mkdir(parents=True, exist_ok=True)
@@ -82,7 +88,7 @@ def stack_and_targets():
 def export_lora(stack, targets):
     from natlang_neuralese.tune.export import export_peft, export_gguf
     peft = out / 'lora.peft'
-    if not (out / 'lora.gguf').exists():
+    if not (out / 'lora.gguf').exists() and not (cli.skip_llama and (peft / 'adapter_config.json').exists()):
         export_peft(stack, {name: targets[name] for name in stack if stack[name].rank}, peft, base_identity=identity,
                     base_model_name_or_path=str(out / 'base' / 'hf-config'))
         export_gguf(peft, out / 'base' / 'hf-config', out / 'lora.gguf')
@@ -138,7 +144,8 @@ def llama_candidates(prompts, outtype):
 
 
 stack, targets, kinds, identity, result = stack_and_targets()
-base_gguf()
+if not cli.skip_llama:  # scoring alone (another host: the candidates, prompts and PEFT shipped) needs no base GGUF
+    base_gguf()
 peft = export_lora(stack, targets)
 print('targets', {kind: sum(1 for name in stack if stack[name].rank and kinds[name] == kind) for kind in sorted(set(kinds.values()))},
       flush=True)
@@ -149,7 +156,7 @@ from natlang_neuralese.model.shared_state import native_step
 engine = None
 prompts_path = out / 'prompts.json'
 if not prompts_path.exists():
-    engine = load_native_engine(str(cli.checkpoint), base=cli.base, device=cli.device, dtype=torch.float32)
+    engine = load_native_engine(str(cli.checkpoint), base=cli.base, device=cli.device, dtype=getattr(torch, cli.native_dtype))
     from natlang_neuralese.serve.targets import target_items
     from natlang_neuralese.tune.rows import reply_message
     rows = [json.loads(line) for line in cli.rows.read_text().splitlines() if line.strip()] if cli.rows else []
@@ -215,7 +222,7 @@ if not cli.skip_llama:
             (out / 'candidates' / f'llama-{outtype}.json').write_text(json.dumps(llama_candidates(prompts, outtype)))
 
 if engine is None:
-    engine = load_native_engine(str(cli.checkpoint), base=cli.base, device=cli.device, dtype=torch.float32)
+    engine = load_native_engine(str(cli.checkpoint), base=cli.base, device=cli.device, dtype=getattr(torch, cli.native_dtype))
 from natlang_neuralese.tune.build import import_archive
 import_archive(engine, [cli.release / 'artifacts'], [])
 adapters = [{'id': item['artifact'], 'scale': 1.0} for item in result['artifacts']]
@@ -223,12 +230,22 @@ model = engine.shared_model
 device = next(model.parameters()).device
 
 
-def native_logprobs(ids, stack_entries):
-    """log-softmax rows predicting ids[1:] (float32), under the release (exact native application) or none."""
+def native_logprobs(ids, stack_entries, start=0):
+    """log-softmax rows predicting ids[start + 1:] (float32), under the release (exact native application) or none. Only
+    those rows go through the head (a 7k-token prompt's full logits are 3.5 GB at LFM3's vocabulary)."""
     def forward():
         with torch.no_grad():
-            hidden = native_step(model, torch.tensor([ids], device=device))['h_final']
+            hidden = native_step(model, torch.tensor([ids], device=device))['h_final'][:, start:-1]
             return torch.log_softmax(model.logits(hidden)[0].float(), -1)
+    return engine._native_run(forward, stack_entries or [])
+
+
+def next_logprobs(ids, stack_entries):
+    """The log-softmax row after the last of ids."""
+    def forward():
+        with torch.no_grad():
+            hidden = native_step(model, torch.tensor([ids], device=device))['h_final'][:, -1:]
+            return torch.log_softmax(model.logits(hidden)[0].float(), -1)[-1]
     return engine._native_run(forward, stack_entries or [])
 
 
@@ -242,7 +259,7 @@ def score(candidate):
         prompt_ids = text_tokens()[run['prompt']] if run.get('prompt_kind') == 'text' else prompt['ids']
         n = len(prompt_ids)
         ids = prompt_ids + run['tokens']
-        tuned = native_logprobs(ids, adapters if run['adapted'] else None)[n - 1:n - 1 + len(run['tokens'])]
+        tuned = native_logprobs(ids + [0], adapters if run['adapted'] else None, n - 1)[:len(run['tokens'])]
         diffs, agree = [], 0
         mismatch = None
         for j, (token, lp) in enumerate(zip(run['tokens'], run['logprobs'])):
@@ -258,7 +275,7 @@ def score(candidate):
         agreement.append(agree / max(len(run['tokens']), 1))
         first.append(mismatch)
         if run['adapted']:
-            base = native_logprobs(ids, None)[n - 1:n - 1 + len(run['tokens'])]
+            base = native_logprobs(ids + [0], None, n - 1)[:len(run['tokens'])]
             effects += [abs(float(tuned[j, t]) - float(base[j, t])) for j, t in enumerate(run['tokens'])]
         plain.setdefault(run['prompt'], {})[run['adapted']] = run['tokens']
     for index, pair in plain.items():
@@ -281,52 +298,52 @@ report = {'release': str(cli.release), 'base_identity': identity, 'prompts': [(p
 # Native continuation: greedy of base and adapted (the adapter must change what the reference says), and the fit target
 # under both (the fit's own tokens: the adapter must raise their likelihood).
 native_runs = []
-for prompt in prompts:
+for prompt in (prompts if cli.native_greedy else []):
     for adapted in (False, True):
         ids = list(prompt['ids'])
         for _ in range(cli.tokens):
-            ids.append(int(native_logprobs(ids, adapters if adapted else None)[-1].argmax()))
+            ids.append(int(next_logprobs(ids, adapters if adapted else None).argmax()))
         native_runs.append({'prompt': prompt['index'], 'adapted': adapted, 'tokens': ids[len(prompt['ids']):]})
 pairs = {}
 for run in native_runs:
     pairs.setdefault(run['prompt'], {})[run['adapted']] = run['tokens']
-report['native_adapter_changes_greedy'] = f"{sum(p[True] != p[False] for p in pairs.values())}/{len(pairs)}"
+if pairs:
+    report['native_adapter_changes_greedy'] = f"{sum(p[True] != p[False] for p in pairs.values())}/{len(pairs)}"
 target_nll = {'base': [], 'adapted': []}
 for prompt in prompts:
     if not prompt['target']:
         continue
     n, ids = len(prompt['ids']), prompt['ids'] + prompt['target']
     for key, entries in (('base', None), ('adapted', adapters)):
-        lp = native_logprobs(ids, entries)[n - 1:len(ids) - 1]
+        lp = native_logprobs(ids, entries, n - 1)
         target_nll[key].append(-float(lp.gather(1, torch.tensor(prompt['target'], device=lp.device)[:, None]).mean()))
 report['native_target_mean_nll'] = {k: sum(v) / max(len(v), 1) for k, v in target_nll.items()}
 (out / 'candidates' / 'native.json').write_text(json.dumps({'engine': 'native', 'runs': native_runs}))
 
-# The export: PEFT dense deltas added to the weights equal the exact native application.
+# The export: the PEFT's dense deltas (as PEFT and llama.cpp apply them) equal the native stack's own low-rank deltas
+# (`lowrank_factors` of the resolved stack, what `run_native` adds), in float64 on every exported target.
 from natlang_neuralese.tune.export import load_peft_dense
-from natlang_neuralese.model.native_adapters import target_parameters
-probe = prompts[0]['ids'] + pairs[prompts[0]['index']][True]
-exact = native_logprobs(probe, adapters)
-params = target_parameters(model)
+from natlang_neuralese.model.native_adapters import lowrank_factors, resolve_adapters
 dense = load_peft_dense(peft)
-saved = {}
-with torch.no_grad():
-    for name, target in targets.items():
-        if not stack[name].rank:
-            continue
-        delta = dense[target.hf_module].to(device=params[name].device, dtype=params[name].dtype)
-        saved[name] = params[name].detach().clone()
-        params[name].add_(delta if target.orientation == 'out_in' else delta.T)
-merged = native_logprobs(probe, None)
-with torch.no_grad():
-    for name, value in saved.items():
-        params[name].copy_(value)
-report['export_dense_vs_native_max_abs_dlogprob'] = float((merged - exact).abs().max())
-report['export_dense_vs_native_top1_equal'] = bool((merged.argmax(-1) == exact.argmax(-1)).all())
+native = lowrank_factors(resolve_adapters(engine, adapters))
+gaps = []
+for name, target in targets.items():
+    if not stack[name].rank:
+        continue
+    factor_b, factor_a = native[name]
+    want = factor_b.double().cpu() @ factor_a.double().cpu()
+    got = dense[target.hf_module] if target.orientation == 'out_in' else dense[target.hf_module].T
+    gaps.append(float((got - want).abs().max() / want.abs().max()))
+report['export_dense_vs_native_max_rel_gap'] = max(gaps)
+report['export_targets_checked'] = len(gaps)
 
 report['engines'] = []
+(out / 'scores').mkdir(exist_ok=True)
 for path in sorted((out / 'candidates').glob('llama-*.json')) + list(cli.page):
-    report['engines'].append(score(json.loads(path.read_text())))
+    cached = out / 'scores' / f'{Path(path).stem}.json'   # per engine: an interrupted scoring run resumes
+    if not cached.exists():
+        cached.write_text(json.dumps(score(json.loads(Path(path).read_text()))))
+    report['engines'].append(json.loads(cached.read_text()))
 (out / 'report.json').write_text(json.dumps(report, indent=1))
 print(json.dumps({k: v for k, v in report.items() if k != 'engines'}, indent=1))
 for item in report['engines']:

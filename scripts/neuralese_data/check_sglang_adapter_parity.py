@@ -41,59 +41,89 @@ cli.add_argument('--prompts', type=int, default=6)
 cli.add_argument('--tokens', type=int, default=48)
 cli.add_argument('--adapter-rank', type=int, help="slot rank (default: serve_native_checkpoint.py's, from the release)")
 cli.add_argument('--kv-gb', type=float, default=2.0)
+cli.add_argument('--max-running', type=int, default=8)
+cli.add_argument('--phase', choices=('both', 'collect', 'reference'), default='both',
+                 help='with --release: collect runs SGLang alone (the front releases its native model once exported, as '
+                      'serve_native_checkpoint.py serves) and saves the captures; reference loads the native engine in '
+                      'a later process and scores them. Two small peaks instead of one large one on a shared host')
 opts = cli.parse_args()
 ck, base, work, port = opts.checkpoint, opts.base, opts.work, opts.port
 work.mkdir(parents=True, exist_ok=True)
-front = load_native_engine(str(ck), base=base, device='cuda', dtype=torch.bfloat16, engine_class=SglangEngine,
-                           store=TensorStore(work / 'store'))
-server_argv = ['--checkpoint', str(ck), '--checkpoint-sha256', sha256_file_hex_cached(ck), '--port', str(port),
-               '--store-dir', str(work), '--hf-export-dir', str(work / 'export'), '--sglang-kv-gb', str(opts.kv_gb),
-               '--sglang-max-running', '8', '--sglang-context', '16384', '--sglang-adapter-slots', '2',
-               *(['--adapter-release', str(opts.release)] if opts.release else []),  # sizes the slot rank as served
-               *(['--sglang-adapter-rank', str(opts.adapter_rank)] if opts.adapter_rank else [])]
-args = build_parser().parse_args(server_argv)
-process = launch_sglang(front, args, ck)
-front.start()
-messages_of = lambda text: {'messages': [{'role': 'user', 'content': text}], 'tools': None}
-if opts.release:
+if opts.phase != 'both' and not opts.release:
+    raise SystemExit('--phase collect/reference needs --release')
+if opts.phase == 'reference':
+    saved = json.loads((work / 'captures.json').read_text())
     from natlang_neuralese.tune.build import import_archive
+    front = load_native_engine(str(ck), base=base, device='cuda', dtype=torch.bfloat16, store=TensorStore(work / 'reference-store'))
     import_archive(front, [opts.release / 'artifacts'], [])
-    result = json.loads((opts.release / 'result.json').read_text())
-    stacks = [[{'id': item['artifact'], 'scale': 1.0} for item in result['artifacts']]]
-    rows = [json.loads(line) for line in opts.rows.read_text().splitlines() if line.strip()]
-    picks = sorted({round(i * (len(rows) - 1) / max(opts.prompts - 1, 1)) for i in range(opts.prompts)})
-    prompts = [{'messages': rows[i]['messages'], 'tools': rows[i]['tools']} for i in picks]
+    jobs = [(j['index'], j['stack'], j['temperature']) for j in saved['jobs']]
+    captures = [j['capture'] for j in saved['jobs']]
 else:
-    available = target_parameters(front.shared_model)
-    names = [n for n in available if any(f'.layers.{i}.' in n for i in (0, 2, 4, 9))]
-    stacks = []
-    for seed in range(3):
-        made = []
-        for kind in ('xs', 'free-lora'):
-            artifact = create_adapter(front, {'kind': kind, 'rank': 4, 'seed': seed * 2 + (kind == 'xs'), 'parameter_names': names}).artifact
-            g = torch.Generator().manual_seed(100 + seed)
-            values = {}
-            for key, value in artifact.tensors.items():
-                scale = 0.6 if kind == 'xs' else (0.02 if key.startswith('lora_B.') else 1.0)
-                values[key] = torch.randn(value.shape, generator=g) * scale if kind == 'xs' or key.startswith('lora_B.') else value
-            made.append(front.store.put_native_tensor_artifact(replace(artifact, tensors=values)).id)
-        stacks.append([{'id': made[0], 'scale': 1.0}, {'id': made[1], 'scale': 0.5 + seed}])
-    prompts = [messages_of(text) for text in (
-        'Explain in two sentences why greenhouses need ventilation.', 'List three prime numbers and add them.',
-        'Write a TypeScript function that returns the largest element of an array.', 'What does a conv layer do?')]
-jobs = [(i, s, t) for i in range(len(prompts)) for s in (*stacks, None) for t in (1.0, 0.0)]
+    # collect: the front loads on the CPU only to export (as Pop's actor does) and releases the model
+    front = load_native_engine(str(ck), base=base, device='cpu' if opts.phase == 'collect' else 'cuda', dtype=torch.bfloat16,
+                               engine_class=SglangEngine, store=TensorStore(work / 'store'))
+if opts.phase != 'reference':
+    server_argv = ['--checkpoint', str(ck), '--checkpoint-sha256', sha256_file_hex_cached(ck), '--port', str(port),
+                   '--store-dir', str(work), '--hf-export-dir', str(work / 'export'), '--sglang-kv-gb', str(opts.kv_gb),
+                   '--sglang-max-running', str(opts.max_running), '--sglang-context', '16384', '--sglang-adapter-slots', '2',
+                   *(['--adapter-release', str(opts.release)] if opts.release else []),  # sizes the slot rank as served
+                   *(['--sglang-adapter-rank', str(opts.adapter_rank)] if opts.adapter_rank else [])]
+    args = build_parser().parse_args(server_argv)
+    # collect: the front releases its native model once exported (serve_native_checkpoint.py's serving); a turn SGLang
+    # cannot serve reloads it
+    process = launch_sglang(front, args, ck, release={'checkpoint': str(ck), 'base': base, 'device': 'cuda', 'participant': None}
+                            if opts.phase == 'collect' else None)
+    front.start()
+    messages_of = lambda text: {'messages': [{'role': 'user', 'content': text}], 'tools': None}
+    if opts.release:
+        from natlang_neuralese.tune.build import import_archive
+        import_archive(front, [opts.release / 'artifacts'], [])
+        result = json.loads((opts.release / 'result.json').read_text())
+        stacks = [[{'id': item['artifact'], 'scale': 1.0} for item in result['artifacts']]]
+        rows = [json.loads(line) for line in opts.rows.read_text().splitlines() if line.strip()]
+        picks = sorted({round(i * (len(rows) - 1) / max(opts.prompts - 1, 1)) for i in range(opts.prompts)})
+        prompts = [{'messages': rows[i]['messages'], 'tools': rows[i]['tools']} for i in picks]
+    else:
+        available = target_parameters(front.shared_model)
+        names = [n for n in available if any(f'.layers.{i}.' in n for i in (0, 2, 4, 9))]
+        stacks = []
+        for seed in range(3):
+            made = []
+            for kind in ('xs', 'free-lora'):
+                artifact = create_adapter(front, {'kind': kind, 'rank': 4, 'seed': seed * 2 + (kind == 'xs'), 'parameter_names': names}).artifact
+                g = torch.Generator().manual_seed(100 + seed)
+                values = {}
+                for key, value in artifact.tensors.items():
+                    scale = 0.6 if kind == 'xs' else (0.02 if key.startswith('lora_B.') else 1.0)
+                    values[key] = torch.randn(value.shape, generator=g) * scale if kind == 'xs' or key.startswith('lora_B.') else value
+                made.append(front.store.put_native_tensor_artifact(replace(artifact, tensors=values)).id)
+            stacks.append([{'id': made[0], 'scale': 1.0}, {'id': made[1], 'scale': 0.5 + seed}])
+        prompts = [messages_of(text) for text in (
+            'Explain in two sentences why greenhouses need ventilation.', 'List three prime numbers and add them.',
+            'Write a TypeScript function that returns the largest element of an array.', 'What does a conv layer do?')]
+    jobs = [(i, s, t) for i in range(len(prompts)) for s in (*stacks, None) for t in (1.0, 0.0)]
 
 
-def run(job):
-    index, stack, temperature = job
-    request = GenerationRequest(messages=prompts[index]['messages'], tools=prompts[index]['tools'], temperature=temperature,
-                                max_tokens=opts.tokens, rl_capture=True, rl_top_k=20, native_recording=True, seed=7,
-                                adapters=stack if stack else [])
-    return front.generate(request)['x_natlang_rl_capture']
+    def run(job):
+        index, stack, temperature = job
+        request = GenerationRequest(messages=prompts[index]['messages'], tools=prompts[index]['tools'], temperature=temperature,
+                                    max_tokens=opts.tokens, rl_capture=True, rl_top_k=20, native_recording=True, seed=7,
+                                    adapters=stack if stack else [])
+        return front.generate(request)['x_natlang_rl_capture']
 
 
-with ThreadPoolExecutor(8) as pool:
-    captures = list(pool.map(run, jobs))
+    with ThreadPoolExecutor(8) as pool:
+        captures = list(pool.map(run, jobs))
+    if opts.phase == 'collect':
+        (work / 'captures.json').write_text(json.dumps({
+            'metrics': {k: v for k, v in front.progress_metrics().items() if 'sglang' in k or 'fallback' in k},
+            'slot_rank': front.sglang_adapter_rank, 'stack_ranks': [front._sglang_adapter_file(stack)[1] for stack in stacks],
+            'jobs': [{'index': i, 'stack': st, 'temperature': t, 'capture': c} for (i, st, t), c in zip(jobs, captures)]}))
+        front.stop()
+        import os, signal
+        os.killpg(process.pid, signal.SIGTERM)
+        print('collected', len(captures), flush=True)
+        raise SystemExit(0)
 
 
 def full(ids, stack):
@@ -146,15 +176,20 @@ for key in top1:
     report[key]['top1_agreement'] = mean(top1[key])
     report[key]['greedy'] = greedy[key]
     report[key]['greedy_agreement'] = mean([g['agree'] for g in greedy[key]])
-metrics = front.progress_metrics()
+if opts.phase == 'reference':
+    metrics = saved['metrics']
+    report['slot_rank'], report['stack_ranks'] = saved['slot_rank'], saved['stack_ranks']
+else:
+    metrics = front.progress_metrics()
+    report['slot_rank'] = front.sglang_adapter_rank
+    report['stack_ranks'] = [front._sglang_adapter_file(stack)[1] for stack in stacks]
 report['metrics'] = {k: v for k, v in metrics.items() if 'sglang' in k or 'fallback' in k}
-report['slot_rank'] = front.sglang_adapter_rank
-report['stack_ranks'] = [front._sglang_adapter_file(stack)[1] for stack in stacks]
 report['failures'] = ([] if report['adapted']['mean_abs_logprob'] <= 1.5 * report['unadapted']['mean_abs_logprob'] + 0.005 else ['adapted'])
 report['failures'] += [] if report['control']['mean_abs_logprob'] > 4 * report['adapted']['mean_abs_logprob'] else ['control_not_separated']
 report['failures'] += [] if metrics.get('natlang_native_fallback_requests_total', 0) == 0 else ['fallbacks']
 (work / 'report.json').write_text(json.dumps(report, indent=1))
 print(json.dumps(report, indent=1), flush=True)
-front.stop()
-import os, signal
-os.killpg(process.pid, signal.SIGTERM)
+if opts.phase == 'both':
+    front.stop()
+    import os, signal
+    os.killpg(process.pid, signal.SIGTERM)
