@@ -11024,3 +11024,111 @@ at 09:59 but its SFT had not started at 10:20: the driver's main thread sits in 
 `v0000-*-remote0` results that the storage sweep moved to `/mnt/external` (HDD, D state); (3) `colab-g4a-tunnel` has
 flapped every 10 s since 07:05 (restart counter 759, HTTP 429) because a client's `ControlPersist yes` master
 (pid 2427383) holds the session; the forwards work through that master.
+
+## 2026-11-24 10:40 Free teacher providers, Gemini thought capture, paid Vertex paused, daily free-model check (teacher-providers strand)
+
+**Paid Vertex paused (owner 10:00: credits almost empty).** `ops/ei/teachers.json` had already lost the Gemini specs,
+but `aei1/teacher-r0005` was launched at 08:40 with Gemini 4 Argon (4) and 3.1 Pro (2) (`min_failed` 1; no Gemini
+episode had started: none in its manifest or queue files). The unit ended at 09:36 and the driver's standing thread
+relaunched r0005 at 09:40 from `teachers.json`: no Vertex teacher. `expert_iteration.TEACHERS` (the fallback when
+`teachers.json` is absent) no longer holds them; `VERTEX_TEACHERS` keeps the specs for a deliberate re-add.
+Vertex spend to date (list price, from the per-call traces): qualification of 3.1 Pro and Argon $4.15 (36 traced
+episodes; Vertex bills hidden thinking as output and the trace's completion tokens may leave it out: a floor), probes
+under $0.10, the capped Model Garden qualification below $0.33 (gpt-oss-120b and DeepSeek V4.1 Flash, 40 episodes, guard at $0.90).
+
+**Owner's question "why Argon": prices (Vertex list, global, <= 200k, per 1M tokens in / cached in / out):** Argon
+$2 / 0.10 / 10 (promotional through 2026-11-30, then $4 / 0.20 / 20); 3.1 Pro $2 / 0.20 / 12; Gemini 4 Hydrogen
+$1.50 / 0.075 / 7.50; Neon $3 / 0.15 / 15; Gemini 3.8 Flash (and 3.7, 3.6) $0.75 / 0.075 / 3.75 (introductory through
+2026-12-31, then $1.50 / 7.50); 3.5 Flash $1.50 / 0.15 / 9; 3.5 Flash-Lite $0.30 / 0.03 / 2.50; 3.1 Flash-Lite $0.25.
+Model Garden (MaaS) callable in this project: DeepSeek V4.1 Flash $0.30 / 0.03 / 1.20, GLM-5.2 $1.40 / 0.14 / 4.40,
+gpt-oss-120b $0.09 / 0.36; listed but "not found or no access" here (Model Garden enablement is the owner's console
+action): DeepSeek V3.2, R1-0528, V3.1, Kimi K2 Thinking, GLM-5, GLM-4.7, Qwen3-Next-80B Thinking, Qwen3-235B, MiniMax M2,
+Llama 4 Maverick. Measured Gemini episodes: ~70k input tokens (16-29k cached), ~1.6k visible output.
+
+**Reasoning kinds (owner: real traces wanted; teacher reasoning stays zero-weight context):**
+- raw: NIM (Nemotron 3.5 Super/Lightning, 3 Ultra, Mistral Large 4, MiniMax M3.1, Step 5, GLM 5.3 Flash), OpenRouter and
+  Kilo free models, Z.ai GLM-4.7/4.5 Flash, Groq gpt-oss, Vertex Model Garden (gpt-oss-120b, GLM-5.2; DeepSeek V4.1 Flash
+  only with `chat_template_kwargs.thinking: true` or `reasoning_effort`), Gemma 4 on AI Studio (its own `<thought>`
+  text in the reply).
+- summary: Codex (Luna, Sol), Claude, Gemini 3.x/4 with `include_thoughts` (Vertex and AI Studio put the summary in the
+  reply text as `<think>...</think>`: now moved to `reasoning_content` by ts-host `x_natlang_include_thoughts`, the
+  Gemini default in teacher_gen).
+- hidden: Gemini Flash-Lite (no thoughts returned even with `include_thoughts`).
+
+**Free-provider sweep (2026-11-24; keys from `~/.config/natlang/*.env`; research agent read the providers' docs):**
+
+| Provider | Key works | Free models worth it | Limits (measured or documented) | Reasoning | Terms facts |
+|---|---|---|---|---|---|
+| NVIDIA NIM | yes | Nemotron 3.5 Super, 3 Ultra, 3.5 Lightning; Mistral Large 4, MiniMax M3.1, Kimi K3.1, Step 5, GLM 5.3 Flash | one account limit (~40 RPM reported); 429 at ~12 slots; Kimi/Step/GLM 74-180 s per one-line call | raw | trial use, logged to improve NVIDIA products |
+| OpenRouter `:free` | yes | ERNIE 5.5 Flash, Ling 3.2 Flash, dots 3, Nemotron (3 Ultra, 3.5 Super/Lightning), Gemma 4 | 1,000 req/day (>= $10 bought), 20 RPM; spent by 09:30 today (ERNIE slot) | raw | free providers may log/train |
+| Kilo gateway | keyless | Beam (free), Nemotron, ERNIE, Ling | keyless allowance used up after ~2 episodes ("PROMOTION_MODEL_LIMIT_REACHED: sign up for free"); a free account is needed (owner's signup) | raw | free router may log prompts |
+| Google AI Studio | free tier only | Gemini 3.5/3.1 Flash-Lite (15 RPM), Gemma 4 26B (16k input TPM: ~2 calls/min); 3.5-3.8 Flash and Gemma 31B 503 (overloaded) today | per-project quotas, not listed by the API | Flash-Lite hidden; Gemma raw `<thought>` | unpaid data used to improve products; "may not use the Services to develop models that compete" |
+| Z.ai | yes (free models only; paid GLM: no balance) | GLM-4.7 Flash, GLM-4.5 Flash | about 1 concurrent request (429s); 1 episode in 25 min | raw (`thinking`) | not found |
+| Groq | yes | gpt-oss-120b, Qwen 3.8 27B | 8k TPM, 200k TPD per model: below one episode | raw | services agreement not read |
+| LLM7 | keyless | gpt-oss 20B, Codestral, Mistral Nemo ("turbo"); the rest is paid "pro" | unpublished | raw (gpt-oss) | provenance unclear |
+| GitHub Models | n/a | retired 2026-07-30 | | | |
+| Cerebras, SambaNova, Together, Fireworks, Chutes, Kimi, Mistral, HF (free acct), Cloudflare (10k neurons/day, ~1-2 episodes) | no key or no free path | | | | Cerebras/DeepSeek terms below |
+| OpenCode Zen | key, no balance | free models only through the official client | | raw | client restriction |
+| DeepSeek API (paid, near-free off-peak $0.15/M in, $0.003 cache hit) | no key | | | raw | ToS allows distillation |
+
+
+**Qualification (same 20 tasks: 10 Luna-solved, 10 Luna-failed; one episode each):** 
+
+| Teacher | Luna-solved | Luna-failed | Total | s/episode | List $/verified success | Reasoning | Limit that binds |
+|---|---|---|---|---|---|---|---|
+| Gemini 4 Argon (Vertex, paid) | 10/10 | 7/10 | 17/20 | 182 | 0.12 (promo; 0.24 after 11-30) | hidden (summary now capturable) | credits |
+| Gemini 3.1 Pro (Vertex, paid) | 10/10 | 3/10 | 13/20 | 142 | 0.16 | hidden (summary now capturable) | credits |
+| DeepSeek V4.1 Flash (Vertex MaaS, paid) | 9/10 | 3/10 | 12/20 | 69 | 0.02 | raw | credits |
+| gpt-oss-120b (Vertex MaaS, paid) | 4/10 | 5/10 | 9/20 | 88 | 0.008 | raw | credits |
+| Nemotron 3.5 Super (NIM, free) | 5/10 | 4/10 | 9/20 | 109 | 0 | raw | NIM account RPM |
+| ERNIE 5.5 Flash (OpenRouter free) | 4/10 | 3/10 | 7/20 | 128 | 0 | raw | 1,000 req/day |
+| Gemini 3.5 Flash-Lite (AI Studio free) | 3/8 | (running) | 3/8 | 137 | 0 | hidden | 15 RPM |
+| Nemotron 3.5 Lightning (NIM, free) | 2/8 | (running) | 2/8 | 257 | 0 | raw | NIM account RPM |
+| Mistral Large 4 / MiniMax M3.1 (NIM) | 2/8, 0/9 | 1/8, 0/10 | 3/16, 0/19 | 1,500-1,800 | 0 | raw | NIM throttling; MiniMax spends its 40 calls on nested calls |
+| GLM-4.7 Flash (Z.ai), Gemma 4 26B (AI Studio), Beam (Kilo) | running / 1/2 (Beam) | | | | 0 | raw | 1 concurrent / 16k TPM / signup |
+| Baseline: Luna (Codex) | 10/10 (by construction) | 0/10 | | | subscription | summary | |
+| Baseline: Sol (Codex), r0001 | | 5/10 | | | subscription | summary | |
+
+The free-tier runs on pin 6263a970f were stopped and rerun on eb31c6f4a after the decide() fix below (their first runs
+lost every decide() call to a 400).
+
+**Harness bug found and fixed (eb31c6f4a): hosted teachers' decide().** The prompt-scoring request a decision readout
+sends (`promptLogprobDecider`) carried every collection control except max_tokens/temperature/stream, so the
+client-side `x_natlang_*` controls reached the server: NIM 400 "Unsupported parameter(s): x_natlang_history_reasoning"
+(188 failed calls in one Lightning run), Gemini 400 "Unknown name x_natlang_omit_seed" (this was the "Expected a valid
+JSON object" decide() 400 of the 01:00 entry). And a hosted server that refuses `prompt_logprobs` itself (400/404/422)
+failed the call instead of falling back to generated decisions (only a missing `prompt_logprobs` field did). Now
+`CLIENT_REQUEST_CONTROLS` are stripped from every scoring request (and the explicit-batch scorer's `request`), and a
+4xx other than 408/429 is `decision-unsupported`: the runtime reads that function's decisions by generation (verified
+on Flash-Lite: `decision_readout unavailable decision-unsupported`, then generated). Inventory: requests built from the
+collection controls are `chatCompletionModelTurn` (strips them), `promptLogprobDecider` and `explicitBatchScoreMany`
+(fixed); the Pi provider path takes provider controls, not these; engines are receivers. Production impact so far:
+1 Nemotron episode in r0001, none found in r0005; but r0005's pin (23a358778fd3) has the NIM `x_natlang_history_reasoning`
+default and not the fix: its NIM teachers' decide() calls fail until the campaign moves to a pin >= eb31c6f4a.
+
+**Recommendation (verified successes per dollar, raw reasoning preferred at similar yield):**
+- Now (free only): keep Luna 6, Sol 4, Nemotron 3.5 Super 2, Nemotron 3 Ultra 1, ERNIE 1 (OpenRouter's 1,000 req/day);
+  add Gemini 3.5 Flash-Lite 1 (AI Studio free, independent quota, hidden reasoning). Lightning, Mistral, MiniMax, Kimi:
+  no (low yield or NIM throttling, and they would share the Super's NIM limit). GLM-4.7 Flash and Gemma 4 26B: add at
+  1 slot if their running qualifications show yield (they are rate-limited to a few episodes an hour). Kilo: a free
+  account (owner) would add Beam and a second Nemotron pool.
+- When Vertex credits are back: DeepSeek V4.1 Flash first (raw, 12/20, ~$0.02/success: 2 slots ~ 100 episodes/h ~
+  $40/day at list price, without min_failed), gpt-oss-120b second (raw, 9/20 with 5/10 on the hard half, ~$0.008/success:
+  2 slots ~ $10/day), Argon only at `min_failed` 1 for the hard tail (~$0.10/episode; 4 slots on failed tasks
+  ~ $50-100/day, doubling after 11-30). Gemini 3.8 Flash ($0.75/$3.75, summary) and Hydrogen not yet qualified
+  (Flash was overloaded on AI Studio; plan: 20 tasks each, ~$1.30 and ~$2.50).
+
+
+**Daily check.** `scripts/teacher_free_models.py check` (timer `natlang-teacher-free-models`, 07:30 daily, ledger
+unit low 0.5 GB) lists OpenRouter `:free`, Kilo `:free`/`-free`, the NIM catalogue, AI Studio generateContent models,
+Z.ai flash models and Groq; the first listing per provider is the baseline (recorded 2026-11-24 09:45: 15 / 12 / 18 /
+28 / 3 / 3); each later new model goes to `ops/teacher-free-models/candidates.jsonl` (`status: new`) and shows in the
+dashboard's open items until `teacher_free_models.py mark MODEL qualified|rejected|admitted`.
+
+**Code (default on, tests):** ts-host `x_natlang_include_thoughts` (Gemini thought summaries asked for and moved out of
+the reply text; Gemma `<thought>` blocks likewise); teacher_gen: Gemini default asks for thoughts and sends no
+reasoning back (`x_natlang_history_reasoning: none`: the signatures carry the state), Vertex open models get plain
+controls (DeepSeek thinking on), Kilo/LLM7 named, reasoning kinds as above.
+
+**Spec changes in `ops/ei/teachers.json`:** added `gemini-3.5-flash-lite` (AI Studio, `GEMINI_API_KEY`, 1 slot, `reasoning: hidden`); no paid
+Vertex teacher. The campaign reads it at its next launch (the running r0005 launched 09:40).
