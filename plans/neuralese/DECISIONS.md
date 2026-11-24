@@ -11095,8 +11095,9 @@ lost every decide() call to a 400).
 **Harness bug found and fixed (eb31c6f4a): hosted teachers' decide().** The prompt-scoring request a decision readout
 sends (`promptLogprobDecider`) carried every collection control except max_tokens/temperature/stream, so the
 client-side `x_natlang_*` controls reached the server: NIM 400 "Unsupported parameter(s): x_natlang_history_reasoning"
-(188 failed calls in one Lightning run), Gemini 400 "Unknown name x_natlang_omit_seed" (this was the "Expected a valid
-JSON object" decide() 400 of the 01:00 entry). And a hosted server that refuses `prompt_logprobs` itself (400/404/422)
+(188 failed calls in one Lightning run), AI Studio 400 "Unknown name x_natlang_omit_seed" (Vertex accepts unknown top-level fields, so its "Expected a
+valid JSON object" decide() 400 of the 01:00 entry is a refusal of the scoring request itself, not proven to be the
+leak; both now fall back). And a hosted server that refuses `prompt_logprobs` itself (400/404/422)
 failed the call instead of falling back to generated decisions (only a missing `prompt_logprobs` field did). Now
 `CLIENT_REQUEST_CONTROLS` are stripped from every scoring request (and the explicit-batch scorer's `request`), and a
 4xx other than 408/429 is `decision-unsupported`: the runtime reads that function's decisions by generation (verified
