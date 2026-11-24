@@ -357,7 +357,10 @@ def test_colab_fit_runs_as_a_preemptible_tenant_and_brings_the_release_home(tmp_
     assert body['engine']['base'].endswith('/base-lfm3') and body['recipe']['steps'] == 3
     command = [c for c in calls if c[0] == 'run'][-1][1]
     assert command[1] == '/t/adm.py' and '--preemptible' in command and command[command.index('--beside-label') + 1] == 'actor-'
-    assert 'CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=50' in command and command[-4:] == ['--plan', f'{remote}/fit/plan.json',
+    # outside MPS (a tenant's GPU fault must not end the actor's context): no SM share, a pipe with no daemon
+    assert not any(c.startswith('CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=') for c in command)
+    assert any(c.startswith('CUDA_MPS_PIPE_DIRECTORY=') and c.endswith('/mps/tenant-no-mps') for c in command)
+    assert command[-4:] == ['--plan', f'{remote}/fit/plan.json',
                                                                                   '--out', f'{remote}/fit/build']
     assert json.loads((prog / 'fit' / 'colab.json').read_text())['tenant_commit'] == 'f' * 40
     assert P.main(args) == 0                                                    # present: nothing runs again
