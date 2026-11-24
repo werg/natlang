@@ -938,7 +938,7 @@ def registry_section(st, now):
 
 def open_items_section(st):
     p = REPO + '/plans/semantic-fp/OPEN_ITEMS.md'
-    s = sig(p)
+    s = [sig(p), sig(OPS + '/teacher-free-models/candidates.jsonl')]
     if st.get('open_items_sig') == s and 'open_items' in st:
         return st['open_items']
     rows, in_flight = [], False
@@ -953,7 +953,23 @@ def open_items_section(st):
                     rows.append({'item': clip(re.sub(r'`', '', cells[0]), 260), 'owner': clip(' | '.join(cells[1:]), 120)})
     except OSError:
         pass
+    rows += free_teacher_candidates()
     st['open_items'], st['open_items_sig'] = rows, s
+    return rows
+
+
+def free_teacher_candidates():
+    """Free models first seen by the daily check (scripts/teacher_free_models.py) and not yet qualified: open items."""
+    rows = []
+    try:
+        for line in open(OPS + '/teacher-free-models/candidates.jsonl'):
+            c = json.loads(line) if line.strip() else {}
+            if c.get('status') == 'new':
+                rows.append({'item': clip(f"Free teacher candidate {c['model']} on {c['provider']} (first seen "
+                                          f"{str(c.get('first_seen', ''))[:10]}): qualify on the teacher set", 260),
+                             'owner': 'teacher-providers (scripts/teacher_free_models.py mark)'})
+    except (OSError, ValueError, KeyError):
+        pass
     return rows
 
 

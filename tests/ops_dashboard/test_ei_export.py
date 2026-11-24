@@ -199,3 +199,16 @@ def test_stalled_collector_and_teacher_alerts():
     assert ids == ['ei:collect-stall:aei1-collect-v0003.service', 'ei:teacher-stall']
     snap['teacher']['tasks_done'] = 41          # a finished campaign is not stalled
     assert 'ei:teacher-stall' not in [a['id'] for a in ei.derived_alerts(snap, {}, {}, now)]
+
+
+def test_open_items_list_unqualified_free_teacher_candidates(tmp_path, monkeypatch):
+    monkeypatch.setattr(ei, 'OPS', str(tmp_path / 'ops'))
+    monkeypatch.setattr(ei, 'REPO', str(tmp_path / 'repo'))
+    lines(tmp_path / 'repo' / 'plans' / 'semantic-fp' / 'OPEN_ITEMS.md',
+          ['## In flight', '| Item | Owner |', '|---|---|', '| fix x | agent |'])
+    lines(tmp_path / 'ops' / 'teacher-free-models' / 'candidates.jsonl',
+          [{'provider': 'openrouter', 'model': 'a/b:free', 'first_seen': '2026-11-25T08:00:00+0100', 'status': 'new'},
+           {'provider': 'kilo', 'model': 'c-free', 'first_seen': '2026-11-25', 'status': 'qualified'}])
+    rows = ei.open_items_section({})
+    assert rows[0] == {'item': 'fix x', 'owner': 'agent'}
+    assert len(rows) == 2 and 'a/b:free on openrouter (first seen 2026-11-25)' in rows[1]['item']

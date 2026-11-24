@@ -232,7 +232,7 @@ export function thoughtsFromContent(message: Json | undefined): Json | undefined
   const match = /^\s*<(think|thought)>([\s\S]*?)<\/\1>\s*/.exec(content);
   if (!match) return message;
   const earlier = message!.reasoning_content ?? message!.reasoning;
-  const thought = match[2].trim();
+  const thought = (match[2] ?? '').trim();
   const { reasoning: _drop, ...rest } = message!;
   return { ...rest, content: content.slice(match[0].length),
     reasoning_content: typeof earlier === 'string' && earlier.trim() ? `${earlier}\n\n${thought}` : thought };
