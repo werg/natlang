@@ -817,7 +817,13 @@ def send_adapter_release(job, work, release, adapters, rank):
     subprocess.run(['rsync', '-a', '--delete', f'{release}/result.json', f'{release}/artifacts',
                     *([f'{release}/states'] if (release / 'states').is_dir() else []), f'{POP}:{remote}/'],
                    check=True, timeout=3600)
-    job['adapter_release'] = {'path': remote, 'rank': rank, 'scale': 1.0, 'result_sha256': adapters}
+    # slot_rank: the SGLang slot the stack needs as the front packs it (serve_native_checkpoint.release_slot_rank; 48
+    # for a rank-16 fit over every LFM3 family), computed here where the release is, so a Pop checkout that predates
+    # the server deriving it serves the same slot. The fit's rank as the slot sent every adapted turn to the native
+    # engine (T3, 2026-11-24)
+    from serve_native_checkpoint import DEFAULT_ADAPTER_RANK, release_slot_rank
+    job['adapter_release'] = {'path': remote, 'rank': rank, 'scale': 1.0, 'result_sha256': adapters,
+                              'slot_rank': max(DEFAULT_ADAPTER_RANK, release_slot_rank(release))}
 
 
 def start(args):

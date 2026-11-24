@@ -216,7 +216,9 @@ def test_pop_actor_serves_an_adapter_release_on_sglang_slots():
     assert pop_actor_driver.adapter_args({}) == ['--sglang-adapter-slots', '0']
     job = {'adapter_release': {'path': '/eval/adapter-ab', 'rank': 16, 'scale': 1.0, 'result_sha256': 'ab'}}
     assert pop_actor_driver.adapter_args(job) == ['--adapter-release', '/eval/adapter-ab', '--adapter-scale', '1.0',
-                                                  '--sglang-adapter-slots', '1']
+                                                  '--sglang-adapter-slots', '1']   # the server derives the slot
+    job['adapter_release']['slot_rank'] = 48   # pop_rl_actor.send_adapter_release: the packed rank, not the fit's 16
+    assert pop_actor_driver.adapter_args(job)[-2:] == ['--sglang-adapter-rank', '48']
 
 
 def test_sglang_slot_rank_fits_a_release_over_every_lfm3_family(monkeypatch, tmp_path):
@@ -243,6 +245,18 @@ def test_sglang_slot_rank_fits_a_release_over_every_lfm3_family(monkeypatch, tmp
     args = S.build_parser().parse_args(['--checkpoint', 'c', '--checkpoint-sha256', 'x', '--adapter-release', str(tmp_path),
                                         '--sglang-adapter-rank', '16'])
     assert S.adapter_slot_rank(args) == 16   # explicit wins (adapted turns over it run on the native engine)
+
+
+def test_pop_adapter_job_carries_the_packed_slot_rank(monkeypatch, tmp_path):
+    """The DGX records the slot the release needs on SGLang (packed q|k|v), not the fit's rank, in the Pop job."""
+    import pop_rl_actor
+    import serve_native_checkpoint as S
+    monkeypatch.setattr(pop_rl_actor, 'ssh', lambda *a, **k: '')
+    monkeypatch.setattr(pop_rl_actor.subprocess, 'run', lambda *a, **k: None)
+    monkeypatch.setattr(S, 'release_slot_rank', lambda release: 48)
+    job = {}
+    pop_rl_actor.send_adapter_release(job, '/eval', tmp_path, 'ab' * 8, 16)
+    assert job['adapter_release']['rank'] == 16 and job['adapter_release']['slot_rank'] == 48
 
 
 def test_pop_attestation_distinguishes_base_and_adapted_actors(monkeypatch):
