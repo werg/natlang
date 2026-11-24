@@ -1,6 +1,6 @@
 ---
 description: Settle a disagreement between a program's expected answer and a strong model's live answer.
-model: judge
+model: reviewer
 readout: decision
 args:
   dispute: Disagreement

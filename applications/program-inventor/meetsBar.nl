@@ -1,6 +1,6 @@
 ---
 description: Decide whether a built program meets one judged requirement.
-model: judge
+model: reviewer
 readout: decision
 args:
   requirement: Requirement
