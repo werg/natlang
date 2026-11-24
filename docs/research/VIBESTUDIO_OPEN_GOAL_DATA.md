@@ -1014,3 +1014,10 @@ Compiler checks passed all 116 entry signatures. Focused validation passed 120
 Host tests, 32 system-testing tests, 30 shared-library/provider tests and 61
 capture-loader tests (122 across loader, ingestion and SFT after integration fixes). Release assembly and live cutover are separate operational
 steps; these source checks do not claim all catalog tasks have succeeded live.
+
+
+The full Luna campaign keeps archival `--wave-size` separate from runtime
+lifetime: `--cases-per-instance` defaults to 12 even for a 64-case wave.
+`--deployment-concurrency` defaults to 2 for waves containing installed
+deployment targets; ordinary waves retain the requested `--concurrency`.
+Override these limits explicitly when the machine budget permits.

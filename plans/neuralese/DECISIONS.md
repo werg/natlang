@@ -10918,3 +10918,10 @@ and 08:18. The rule now runs in `storage_sweep.sh` every 30 min (`SWEEP_EI=0` op
   - `/native-pins/` is never moved: `dgx-moved-20261123/native-pins` holds the lineage's fresh-init base 5ff07638.
   - Before the change: 39.8 GB in 195 files had gone to Drive since 11-23 18:42, at 5-8 GB per hourly pass (3 MiB/s
     nominal).
+
+
+## 2026-11-24 Full VibeStudio collection resumes with bounded runtime generations
+
+Mechanism inventory: `scripts/neuralese_data/vibestudio_campaign.py` overrides the Host collector runtime lifetime with archival wave size; `Host/scripts/collect-live-workflow-teacher.mjs` already supports independent `--cases-per-instance` (default 12), while `scripts/vibestudio/qualify_open_goals.py:143` also defaults to 12. The current native full-sweep controller bounds generations at 16 and joins teardown. These are execution scheduling limits, not a serving-engine feature; engine parity is unchanged. The campaign was the consumer overriding the existing safe lifetime with 64.
+
+Fix the campaign default to 12 cases per runtime, independent of the full 64-case archival wave, preserving eight ordinary workers. Waves declaring nested installed deployment hubs default to two workers because actual four-context native runs reached 14 GiB; these scenarios start additional servers and do not share only a fixed cost. Both limits have explicit CLI overrides, including 0 for unbounded lifetime. Record effective scheduling in immutable wave execution metadata. No task, goal, expected outcome, model sampling, or original trajectory is changed. Existing ready V21 module closure, outcome composition, observation-frontier and prerequisite-check fixes enter Luna collection without waiting for completion of all 2,327 model-free fixtures.

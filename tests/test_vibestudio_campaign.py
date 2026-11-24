@@ -8,6 +8,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts' / 'neural
 import vibestudio_campaign
 
 
+def test_collection_lifetime_and_nested_hub_budget_are_independent_of_wave_size():
+    from types import SimpleNamespace
+    args = SimpleNamespace(concurrency=8, wave_size=64)
+    assert vibestudio_campaign.collection_limits(args, [{}] * 64) == {
+        'cases_per_instance': 12, 'concurrency': 8}
+    assert vibestudio_campaign.collection_limits(args, [{}, {'requiresDeploymentPackage': True}]) == {
+        'cases_per_instance': 12, 'concurrency': 2}
+    args.concurrency = 1
+    assert vibestudio_campaign.collection_limits(args, [{'requiresDeploymentPackage': True}])['concurrency'] == 1
+    args.cases_per_instance = 0
+    args.deployment_concurrency = 8
+    args.concurrency = 8
+    assert vibestudio_campaign.collection_limits(args, [{'requiresDeploymentPackage': True}]) == {
+        'cases_per_instance': 0, 'concurrency': 8}
+
+
 def test_failed_infrastructure_does_not_use_a_teacher_attempt(tmp_path):
     cases = {
         'reset': {'workspace': 'system', 'family': 'settings'},
@@ -166,6 +182,7 @@ def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, 
         assert kwargs['env'] == {'PINNED': 'yes'}
         assert command.count('--case') == 1 and command[-1] == 'retry'
         assert command[command.index('--test-timeout-ms') + 1] == str(teacher_timeout)
+        assert command[command.index('--cases-per-instance') + 1] == '12'
         assert command[command.index('--concurrency') + 1] == '3'
         Path(command[command.index('--out') + 1]).mkdir()
         return SimpleNamespace(returncode=0)
