@@ -2222,3 +2222,102 @@ def test_a_prepare_record_from_a_rolled_back_lineage_starts_over(tmp_path, monke
     assert [p['sha256'] for p in d.prepare_policies(rd, [v1, v2])] == [v1['sha256'], v2['sha256']]
     assert stopped == ['aei-r0003-data'] and not (rd / 'stages' / 'frontier.done').exists()
     assert not (rd / 'stages' / 'prepare.json').exists() and not (rd / 'frontier.json').exists()
+
+
+def test_restart_arguments_are_adopted_or_refused_never_shadowed_by_the_state(tmp_path, monkeypatch):
+    """2026-11-24 06:20: phase-state.json's reference_policy was sft-v7 while --reference named sft-v9; the stored
+    value silently won and every held verdict was queued against sft-v7. Now a restart adopts --reference (and
+    re-points an open measurement) unless a held verdict adopted the stored reference; --start that differs from the
+    loop's start refuses; --held-every and --prefer-unseen are adopted; each change is in history and the log."""
+    import expert_iteration as ei
+    v7, v9, v12 = ('7' * 64, '/p/v7.pt'), ('9' * 64, '/p/v9.pt'), ('c' * 64, '/p/v12.pt')
+    path = tmp_path / 'phase-state.json'
+    ctrl = ei.PhaseController.initialize(path, start_checkpoint=v9[1], start_sha=v9[0], reference_checkpoint=v7[1],
+                                         reference_sha=v7[0])
+    ctrl.state['measuring'] = {'candidate': {'sha256': 'd' * 64}, 'reference': {'sha256': v7[0], 'checkpoint': v7[1]}}
+    ctrl.save()
+    changes = ctrl.reconcile_arguments(start_checkpoint=v9[1], start_sha=v9[0], reference_checkpoint=v9[1],
+                                       reference_sha=v9[0], held_every=1, held_every_max=8, prefer_unseen=['/m1'])
+    assert changes['reference'] == {'from': {'checkpoint': v7[1], 'sha256': v7[0]},
+                                    'to': {'checkpoint': v9[1], 'sha256': v9[0]}}
+    assert changes['measuring_reference'] == v9[0] and changes['prefer_unseen_added'] == ['/m1']
+    assert changes['base_held_every'] == {'from': 2, 'to': 1}
+    again = ei.PhaseController(path)
+    assert again.state['reference_policy']['sha256'] == v9[0] and again.state['measuring']['reference']['sha256'] == v9[0]
+    assert again.state['held_every'] == 1 and again.state['history'][-1]['action'] == 'arguments'
+    assert again.reconcile_arguments(start_checkpoint=v9[1], start_sha=v9[0], reference_checkpoint=v9[1],
+                                     reference_sha=v9[0], held_every=1, held_every_max=8, prefer_unseen=['/m1']) == {}
+    # a held verdict adopted a later reference: the restart's (original) --reference does not undo it
+    again.state['reference_policy'] = {'checkpoint': v12[1], 'sha256': v12[0]}
+    again.state['history'].append({'action': 'adopt', 'sha256': v12[0]})
+    kept = again.reconcile_arguments(start_checkpoint=v9[1], start_sha=v9[0], reference_checkpoint=v9[1],
+                                     reference_sha=v9[0])
+    assert again.state['reference_policy']['sha256'] == v12[0] and kept['reference_kept']['argument'] == v9[0]
+    with pytest.raises(SystemExit, match='another start is another experiment'):
+        again.reconcile_arguments(start_checkpoint=v7[1], start_sha=v7[0])
+    # a state written before start_policy was recorded: the start comes from the lineage's version-0 entry
+    del again.state['start_policy']
+    with pytest.raises(SystemExit, match='--start names 777777777777'):
+        again.reconcile_arguments(start_checkpoint=v7[1], start_sha=v7[0])
+    assert again.reconcile_arguments(start_checkpoint=v9[1], start_sha=v9[0])['start_policy']['recorded']['sha256'] \
+        == v9[0]
+
+
+def test_a_restarted_driver_adopts_its_reference_argument(tmp_path, monkeypatch):
+    ref7, ref9 = tmp_path / 'v7.pt', tmp_path / 'v9.pt'
+    ref7.write_bytes(b'7')
+    ref9.write_bytes(b'9')
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--reference', str(ref7), '--reference-sha', '7' * 64])
+    assert d.controller.state['reference_policy']['sha256'] == '7' * 64
+    ei, d2 = _driver(tmp_path, monkeypatch, argv=['--reference', str(ref9), '--reference-sha', '9' * 64])
+    assert d2.controller.state['reference_policy'] == {'checkpoint': str(ref9), 'sha256': '9' * 64}
+    assert 'arguments_reconciled' in (d2.root / 'drive.log').read_text()
+
+
+def test_a_held_pair_refused_for_engine_settings_remeasures_the_reference_on_this_series(tmp_path, monkeypatch):
+    """The held loop reused an old sft-v7 result from another engine series; held_eval compare refused the pair and
+    the verdict failed every 5 minutes. Now a refusal sets the reference's result aside and measures it again here
+    (no reuse), then compares; only a refusal after the candidate was measured again too raises."""
+    import subprocess
+    ei, d = _driver(tmp_path, monkeypatch)
+    cand = {'sha256': 'c' * 64, 'checkpoint': '/p/c.pt'}
+    ref = {'sha256': '9' * 64, 'checkpoint': '/p/v9.pt'}
+    held = d.c.held
+    measured = []
+
+    def measure(name, checkpoint, reuse=True):
+        measured.append((name, reuse))
+        out = held / name
+        out.mkdir(parents=True, exist_ok=True)
+        (out / 'result.json').write_text(json.dumps({'complete': True, 'fresh': not reuse}))
+        return out
+    monkeypatch.setattr(d.c, 'measure_held', measure)
+    (held / d.held_name(ref)).mkdir(parents=True)
+    (held / d.held_name(ref) / 'result.json').write_text(json.dumps({'complete': True, 'reused': True}))
+    monkeypatch.setattr(d.c, 'held_result_ok', lambda out: (out / 'result.json').exists())
+    refusal = ('ValueError: results served by different engine settings are not paired: '
+               '{"kv_cache_dtype": ["fp8_e4m3", "bfloat16"]}')
+    runs = []
+
+    def run(argv, **kw):
+        runs.append(argv)
+        first = json.loads(Path(argv[argv.index('compare') + 1]).read_text())
+        if not first.get('fresh'):
+            return subprocess.CompletedProcess(argv, 1, stderr=refusal)
+        Path(argv[argv.index('--out') + 1]).write_text(json.dumps({'primary': {'delta': 0.0, 'permutation_p': 1.0}}))
+        return subprocess.CompletedProcess(argv, 0, stderr='')
+    monkeypatch.setattr(ei.subprocess, 'run', run)
+    record = d.judge_measurement({'candidate': cand, 'reference': ref})
+    assert record['verdict'] in ('neutral', 'success', 'failure') and len(runs) == 2
+    assert measured == [(d.held_name(cand), True), (d.held_name(ref), False)]
+    assert list(held.glob(f'{d.held_name(ref)}-unpaired-*'))          # the reused result kept aside
+    log = (d.root / 'drive.log').read_text()
+    assert 'held_pair_refused' in log and '"remeasure": "reference"' in log
+    # refused even after both were measured here: a real fault, raised (the held loop retries and notes it)
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: subprocess.CompletedProcess(argv, 1, stderr=refusal))
+    with pytest.raises(ei.HeldPairRefused, match='not paired'):
+        d.judge_measurement({'candidate': cand, 'reference': ref})
+    # other compare failures are not refusals
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: subprocess.CompletedProcess(argv, 2, stderr='boom'))
+    with pytest.raises(subprocess.CalledProcessError):
+        d.c.compare(held / d.held_name(ref), held / d.held_name(cand), tmp_path / 'x.json')

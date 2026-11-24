@@ -951,6 +951,11 @@ def promote_policy(runner, checkpoint, sha, *, label, why, unit):
                   runner.dir / f'{unit}.log', workdir=str(REPO), repo=REPO)
 
 
+class HeldPairRefused(RuntimeError):
+    """``held_eval compare`` refused the pair: the two results come from different engine settings, sampling laws,
+    budgets or hosts, so they are no paired measurement."""
+
+
 class Cycle:
     def __init__(self, args):
         self.a = args
@@ -1127,9 +1132,11 @@ class Cycle:
             raise SystemExit(f'pin failed: {self.dir}/pin.log')
         self.mark('pin', pin=str(self.pin))
 
-    def measure_held(self, name, checkpoint):
-        """One held-v3 measurement of ``checkpoint`` into DIR/held/NAME on this cycle's held series."""
-        return self.dgx_held(name, checkpoint) if self.held_host == 'dgx' else self.pop_held(name, checkpoint)
+    def measure_held(self, name, checkpoint, reuse=True):
+        """One held-v3 measurement of ``checkpoint`` into DIR/held/NAME on this cycle's held series (``reuse`` False:
+        measured here, never copied from another cycle's result)."""
+        kw = {} if reuse else {'reuse': False}
+        return self.dgx_held(name, checkpoint, **kw) if self.held_host == 'dgx' else self.pop_held(name, checkpoint, **kw)
 
     def held_result_ok(self, out):
         """Whether ``out`` holds a complete result of this cycle's held host; a result of another host (a Pop start
@@ -1147,16 +1154,20 @@ class Cycle:
 
     def set_held_aside(self, out, host='other'):
         aside = out.with_name(f'{out.name}-{host}-{int(time.time())}')
+        n = 0
+        while aside.exists():        # set aside twice within a second
+            n += 1
+            aside = out.with_name(f'{out.name}-{host}-{int(time.time())}-{n}')
         os.replace(out, aside)
         self.note(stage='held', moved_aside=str(aside), reason=f'measured on {host}, the series is {self.held_host}')
 
-    def dgx_held(self, name, checkpoint):
+    def dgx_held(self, name, checkpoint, reuse=True):
         """One held-v3 measurement on the DGX held series (async-train §1): ``dgx-held`` as a ledger unit (the pinned
         held engine as its child: SGLang, vendor projection, FP8 KV, BF16 weights, attested against the held manifest's
         engine.json; ``held_eval measure`` with ``--held-samples`` per task), resumable. Preempted (the SFT outranks
         it), it is relaunched and resumes its episodes."""
         out = self.held / name
-        if self.held_result_ok(out) or self.reuse_held(out, checkpoint):
+        if self.held_result_ok(out) or (reuse and self.reuse_held(out, checkpoint)):
             return out
         from natlang_neuralese.common.hashing import sha256_file_hex_cached
         sha = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
@@ -1179,13 +1190,13 @@ class Cycle:
         self.record_cost(f'held:{name}', 'dgx', time.time() - started)
         return out
 
-    def pop_held(self, name, checkpoint):
+    def pop_held(self, name, checkpoint, reuse=True):
         """One held-v3 measurement on Pop (ops/grpo-v4/pop-held.sh: the pinned harness, 2 samples)."""
         out = self.held / name
         result = out / 'result.json'
         if result.exists() and json.loads(result.read_text()).get('complete'):
             return out
-        if self.reuse_held(out, checkpoint):
+        if reuse and self.reuse_held(out, checkpoint):
             return out
         import pop_rl_actor
         join_pop_held(out)                  # a measure unit a restarted driver left running: never a second one
@@ -1897,9 +1908,14 @@ class Cycle:
         return path.exists() and bool(json.loads(path.read_text()).get('deferred'))
 
     def compare(self, a, b, out):
-        subprocess.run([PY, '-m', 'natlang_neuralese.rl.held_eval', 'compare', str(a / 'result.json'),
-                        str(b / 'result.json'), '--out', str(out)], env=self.held_env, check=True,
-                       stdout=subprocess.DEVNULL)
+        done = subprocess.run([PY, '-m', 'natlang_neuralese.rl.held_eval', 'compare', str(a / 'result.json'),
+                               str(b / 'result.json'), '--out', str(out)], env=self.held_env,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        if done.returncode:
+            err = (done.stderr or '').strip()
+            if 'are not paired' in err or 'are different held' in err:
+                raise HeldPairRefused(err.splitlines()[-1][:600])
+            raise subprocess.CalledProcessError(done.returncode, done.args, stderr=err)
         return json.loads(out.read_text())
 
     def verdict_stage(self):
@@ -2464,6 +2480,7 @@ class PhaseController:
             # an unmeasured start (speculative cycles) is judged against the last held-adopted policy, not itself
             'reference_policy': ({'checkpoint': str(reference_checkpoint), 'sha256': str(reference_sha)}
                                  if reference_checkpoint else {'checkpoint': str(start_checkpoint), 'sha256': str(start_sha)}),
+            'start_policy': {'checkpoint': str(start_checkpoint), 'sha256': str(start_sha)},
             'lineage': [start], 'version_counter': 0, 'trained_rounds': [],
             'prefer_unseen': [str(p) for p in prefer_unseen], 'measuring': None, 'applied_verdicts': [],
             'history': [],
@@ -2475,6 +2492,63 @@ class PhaseController:
     def save(self):
         from natlang_neuralese.common.jsonio import write_json_durable
         write_json_durable(self.path, self.state)
+
+    def reconcile_arguments(self, *, start_checkpoint, start_sha, reference_checkpoint=None, reference_sha=None,
+                            held_every=None, held_every_max=None, prefer_unseen=()):
+        """A restarted driver's arguments against the state they seeded (2026-11-24: the stored reference sft-v7
+        silently outranked --reference sft-v9, and every held verdict was queued against the wrong policy).
+        - ``--start`` names the experiment's start: one that differs from the state's start refuses (SystemExit:
+          another start is another experiment, a fresh ``--root``).
+        - ``--reference``: the state's reference wins only when a held verdict adopted it (the loop moved it on from
+          the argument's policy); otherwise the argument is adopted (an open measurement is re-pointed at it).
+        - ``--held-every`` / ``--held-every-max`` set the base interval and its cap (the current interval is clamped);
+          ``--prefer-unseen`` entries missing from the state are added.
+        Every change is appended to ``history`` (``action`` 'arguments'); returns the changes."""
+        state, changes = self.state, {}
+        recorded = state.get('start_policy')
+        if recorded is None and state['lineage'] and int(state['lineage'][0].get('version', -1)) == 0:
+            recorded = {k: state['lineage'][0][k] for k in ('checkpoint', 'sha256')}
+        if recorded and recorded['sha256'] != str(start_sha):
+            raise SystemExit(f'{self.path}: this loop started at {recorded["sha256"][:12]} ({recorded["checkpoint"]}); '
+                             f'--start names {str(start_sha)[:12]} ({start_checkpoint}): another start is another '
+                             'experiment (use a fresh --root, or pass the recorded --start)')
+        if recorded and 'start_policy' not in state:
+            state['start_policy'] = dict(recorded)
+            changes['start_policy'] = {'recorded': recorded}
+        if reference_checkpoint and reference_sha:
+            stored = state['reference_policy']
+            if stored['sha256'] != str(reference_sha):
+                adopted = any(e.get('action') == 'adopt' and e.get('sha256') == stored['sha256']
+                              for e in state.get('history') or ())
+                if adopted:
+                    changes['reference_kept'] = {'stored': stored, 'argument': str(reference_sha),
+                                                 'why': 'a held verdict adopted the stored reference'}
+                else:
+                    new = {'checkpoint': str(reference_checkpoint), 'sha256': str(reference_sha)}
+                    state['reference_policy'] = new
+                    changes['reference'] = {'from': stored, 'to': new}
+                    job = state.get('measuring')
+                    if job and job.get('reference', {}).get('sha256') != new['sha256']:
+                        job['reference'] = dict(new)
+                        changes['measuring_reference'] = new['sha256']
+        if held_every is not None and int(held_every) != int(state['base_held_every']):
+            changes['base_held_every'] = {'from': state['base_held_every'], 'to': max(1, int(held_every))}
+            if int(state['held_every']) == int(state['base_held_every']):
+                state['held_every'] = max(1, int(held_every))
+            state['base_held_every'] = max(1, int(held_every))
+        if held_every_max is not None and int(held_every_max) != int(state['held_every_max']):
+            changes['held_every_max'] = {'from': state['held_every_max'], 'to': max(1, int(held_every_max))}
+            state['held_every_max'] = max(1, int(held_every_max))
+        if int(state['held_every']) > int(state['held_every_max']):
+            state['held_every'] = int(state['held_every_max'])
+        missing = [str(p) for p in prefer_unseen if str(p) not in state['prefer_unseen']]
+        if missing:
+            state['prefer_unseen'].extend(missing)
+            changes['prefer_unseen_added'] = missing
+        if changes:
+            state['history'].append({'at': round(time.time(), 1), 'action': 'arguments', 'changes': changes})
+            self.save()
+        return changes
 
     @property
     def phase(self):
@@ -2651,7 +2725,14 @@ class AsyncRoundDriver:
             held_every=args.held_every, held_every_max=args.held_every_max, initial_phase=args.initial_phase,
             prefer_unseen=args.prefer_unseen, reference_checkpoint=args.reference,
             reference_sha=args.reference and (args.reference_sha or sha256_file_hex_cached(Path(args.reference))))
+        # the arguments a restart passes against the state they once seeded (adopted or refused, never shadowed)
+        self.argument_changes = self.controller.reconcile_arguments(
+            start_checkpoint=args.start, start_sha=start_sha, reference_checkpoint=args.reference,
+            reference_sha=args.reference and (args.reference_sha or sha256_file_hex_cached(Path(args.reference))),
+            held_every=args.held_every, held_every_max=args.held_every_max, prefer_unseen=args.prefer_unseen)
         self.c = Cycle(self.cycle_args())
+        if self.argument_changes:
+            self.note(arguments_reconciled=self.argument_changes)
         self.lock = threading.RLock()
         self.verdicts = []              # verdict records the held thread produced, applied by the main loop
         self.held_wake = threading.Event()
@@ -3798,11 +3879,34 @@ class AsyncRoundDriver:
         ref_out = self.c.held / self.held_name(ref)
         if not self.c.held_result_ok(ref_out):
             ref_out = self.c.measure_held(self.held_name(ref), ref['checkpoint'])
-        for o in (out, ref_out):
-            if not json.loads((o / 'result.json').read_text()).get('complete'):
-                raise RuntimeError(f'held measurement incomplete: {o}')
+
+        def complete(*outs):
+            for o in outs:
+                if not json.loads((o / 'result.json').read_text()).get('complete'):
+                    raise RuntimeError(f'held measurement incomplete: {o}')
+        complete(out, ref_out)
         (self.root / 'verdicts').mkdir(exist_ok=True)
-        vs = self.c.compare(ref_out, out, self.root / 'verdicts' / f'{cand["sha256"][:12]}-compare.json')
+        compare_path = self.root / 'verdicts' / f'{cand["sha256"][:12]}-compare.json'
+        # a pair compare refuses (different engine settings: 2026-11-24, a reused sft-v7 result of another series) is
+        # no reason to fail every retry: the reference is measured again here, on this series (never reused), then if
+        # need be the candidate too; a third refusal is a real fault and raises
+        for again in ('reference', 'candidate', None):
+            try:
+                vs = self.c.compare(ref_out, out, compare_path)
+                break
+            except HeldPairRefused as error:
+                self.note(held_pair_refused=str(error)[:300], candidate=cand['sha256'], reference=ref['sha256'],
+                          remeasure=again)
+                if again is None:
+                    raise
+                policy, target = (ref, ref_out) if again == 'reference' else (cand, out)
+                self.c.set_held_aside(target, 'unpaired')
+                fresh = self.c.measure_held(self.held_name(policy), policy['checkpoint'], reuse=False)
+                complete(fresh)
+                if again == 'reference':
+                    ref_out = fresh
+                else:
+                    out = fresh
         verdict, adopt = judge(vs, self.a.success_pts, self.a.fail_pts)
         record = {'verdict': verdict, 'adopt': adopt, 'sha256': cand['sha256'], 'checkpoint': cand['checkpoint'],
                   'reference': ref, 'vs_start': {'delta': vs['primary']['delta'], 'p': vs['primary']['permutation_p'],

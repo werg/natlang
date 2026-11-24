@@ -10703,3 +10703,35 @@ starts over.
 **Fix:** with the driver stopped, `reference_policy` and the queued `measuring.reference` in `aei1/phase-state.json` were set to sft-v9 (backup `phase-state.json.pre-reffix-20261124`), and the driver was restarted on the same argv. The held loop now measures sft-v9 on Pop in the current series, then compares.
 
 **Follow-up:** the driver should refuse to start when `--reference` disagrees with the stored `reference_policy` (or adopt the argument and log the change), instead of silently keeping the state's value.
+
+## 2026-11-24 07:00 async-drive: restart arguments are adopted or refused, never shadowed by phase-state; a refused held pair re-measures the reference
+
+**What happened (06:20, corrected by hand 06:25).** `phase-state.json`'s `reference_policy` was sft-v7 (9ebc8799)
+while the driver's `--reference`/`--reference-sha` named sft-v9 (e15b20a8). `PhaseController.initialize` returns
+the stored state as it is, so the stored value won silently. Held verdicts were queued against sft-v7. The held loop
+reused an old sft-v7 result of another engine series, `held_eval compare` refused the pair, and the verdict failed
+every 5 minutes.
+
+**Rule (`PhaseController.reconcile_arguments`, at every driver start).** The state moves some values on by itself;
+the arguments seed them. So an argument is adopted unless the loop's own record shows it moved the value on, and
+an argument that would change the experiment's identity is refused:
+- `--start`: one that differs from the loop's start (`start_policy`, recorded now; for older states the lineage's
+  version-0 entry) refuses with a message. Another start is another experiment: use a fresh `--root`.
+- `--reference`/`--reference-sha`: the stored reference is kept only when a held verdict adopted it (a history
+  `adopt` of that sha). Otherwise the argument is adopted, and an open measurement's reference is re-pointed at it.
+- `--held-every`/`--held-every-max` set the base interval and its cap (the current interval follows a base change
+  and is clamped to the cap). `--prefer-unseen` entries missing from the state are added. `--initial-phase` applies
+  only to a new state (the phase is the loop's).
+- Each change goes to `history` (`action: arguments`) and to the driver log (`arguments_reconciled`).
+
+**Held pairs.**
+- `Cycle.compare` raises `HeldPairRefused` when `held_eval compare` refuses a pairing (engine settings, sampling
+  law, budget, host).
+- `judge_measurement` then sets the reference's result aside (`<name>-unpaired-<time>`) and measures it again on
+  this series without reuse (`measure_held(..., reuse=False)`). If the pair is refused again it does the same for
+  the candidate. A third refusal raises, a real fault.
+
+Tests (`tests/neuralese/test_async_train.py`): the sft-v7/sft-v9 case, a kept verdict-adopted reference, the start
+refusal (recorded and inferred), interval and prefer-unseen adoption, a restarted driver adopting its argument; the
+refused pair re-measuring the reference without reuse, the raise after both were re-measured, other compare failures
+not taken for refusals.
