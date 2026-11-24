@@ -440,7 +440,7 @@ test('the in-page model archives the states it produces and puts archived states
 
     assert.deepEqual(model.neuraleseRuntime(), { store, dialect: 'native-state/lfm3', nativeStateConsumer: { architecture: 'lfm3',
       checkpoint_sha256: '2'.repeat(64), tokenizer_fingerprint: '1'.repeat(64), embedding_weight_sha256: '3'.repeat(64),
-      consumption_modes: ['exact-native-state', 'best-effort-text-retokenization'] } });
+      consumption_modes: ['exact-native-state', 'best-effort-text-retokenization', 'in-context-text'] } });
   } finally { await model.close(); }
 
   // A model without a native identity has no native runtime; a build without the store calls refuses the archive.
@@ -465,7 +465,9 @@ test('an in-page model without loaded states refuses native sentinels before inf
       tools: [], temperature: 0, seed: null, max_tokens: 4 }), /weights-unavailable: native state/);
     const item = { messages: [{ role: 'user', content: nativeStateSentinel('nzs1_' + 'a'.repeat(52)) }], options: ['yes', 'no'] };
     await assert.rejects(model.decide(item), /weights-unavailable: native state/);
-    await assert.rejects(model.decide.scoreMany([item]), /weights-unavailable: native state/);
+    const [settled] = await model.decide.scoreMany([item]);
+    assert.equal(settled.status, 'rejected');
+    assert.match(String(settled.reason?.message ?? settled.reason), /weights-unavailable: native state/);
     assert.equal(calls, 0);
   } finally { await model.close(); }
 });

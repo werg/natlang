@@ -154,3 +154,186 @@ test('policy_eval verifier checks hidden cases and metamorphic paraphrase twins'
   assert.equal(cueShortcut.ok, false);
   assert.ok(cueShortcut.issues.some(i => i.includes('metamorphic twin mismatch')));
 });
+
+test('code_test verifier isolates each case, blocks intrinsic spoofing, handles non-JSON returns, multi-function/export syntax, deep noNulls, and worker OOM', async () => {
+  // 1. State cannot leak across cases & globalThis.__out / JSON.stringify / Promise spoofing fails
+  const isoOracle = {
+    export: 'f',
+    cases: [{ args: [1], expected: 1 }, { args: [2], expected: 2 }],
+    timeout_ms: 300,
+  };
+  const stateful = `let count = 0; export function f(x) { count++; return count; }`;
+  const isoRes = await verifyCode({ value: stateful, oracle: isoOracle });
+  assert.equal(isoRes.ok, false, 'case 2 should see fresh module state (count=1, not 2)');
+
+  const spoofers = [
+    `export function f(x) { globalThis.__out = '1'; return 999; }`,
+    `JSON.stringify = () => '1'; export function f(x) { return 999; }`,
+    `Promise.resolve = () => ({ then: cb => cb(1) }); export function f(x) { return 999; }`,
+  ];
+  for (const code of spoofers) {
+    const r = await verifyCode({ value: code, oracle: { export: 'f', cases: [{ args: [1], expected: 1 }], timeout_ms: 300 } });
+    assert.equal(r.ok, false, code);
+  }
+
+  // 2. Non-JSON-serializable returns fail quickly without hanging until timeout
+  const started = Date.now();
+  const nonJson = [
+    `export function f() { const a = {}; a.self = a; return a; }`,
+    `export function f() { return 1n; }`,
+    `export function f() { return Symbol('x'); }`,
+    `export function f() { return undefined; }`,
+  ];
+  for (const code of nonJson) {
+    const r = await verifyCode({ value: code, oracle: { export: 'f', cases: [{ args: [], expected: 1 }], timeout_ms: 500 } });
+    assert.equal(r.ok, false, code);
+    assert.ok(!r.issues.some(i => i.includes('did not settle')), code);
+  }
+  assert.ok(Date.now() - started < 5000);
+
+  // 3. Multi-function scripts and `export { foo }` / `export { foo as default }`
+  const multiFn = `function helper(x) { return x * 2; }\nfunction transform(x) { return helper(x) + 1; }`;
+  assert.equal((await verifyCode({ value: multiFn, oracle: { cases: [{ args: [3], expected: 7 }] } })).ok, true);
+  const expNamed = `function solve(x) { return x + 5; }\nexport { solve };`;
+  assert.equal((await verifyCode({ value: expNamed, oracle: { export: 'solve', cases: [{ args: [3], expected: 8 }] } })).ok, true);
+  const expDefault = `function solve(x) { return x + 6; }\nexport { solve as default };`;
+  assert.equal((await verifyCode({ value: expDefault, oracle: { cases: [{ args: [3], expected: 9 }] } })).ok, true);
+
+  // 4. assert.noNulls rejects null, objects containing null, and nested nulls
+  const noNullOracle = { export: 'f', cases: [{ args: [], assert: { noNulls: true } }] };
+  for (const bad of ['null', '{ a: null }', '[1, { b: [null] }]']) {
+    const r = await verifyCode({ value: `export function f() { return ${bad}; }`, oracle: noNullOracle });
+    assert.equal(r.ok, false, bad);
+    assert.ok(r.issues.some(i => i.includes('null/undefined')), bad);
+  }
+  assert.equal((await verifyCode({ value: 'export function f() { return { a: [1, 2] }; }', oracle: noNullOracle })).ok, true);
+
+  // 5. Runtime worker OOM is reported as a case runtime error, NOT a compile error
+  const oomCode = `export function f(flag) { if (!flag) return 1; const a = []; for (;;) a.push(new Array(1e6).fill(1)); }`;
+  const oomRes = await verifyCode({
+    value: oomCode,
+    oracle: { export: 'f', cases: [{ name: 'ok', args: [false], expected: 1 }, { name: 'oom', args: [true], expected: 1 }], timeout_ms: 5000 },
+  });
+  assert.equal(oomRes.ok, false);
+  assert.ok(!oomRes.issues.some(i => i.startsWith('compile error:')), oomRes.issues.join('; '));
+  assert.ok(oomRes.issues.some(i => i.startsWith('oom:')), oomRes.issues.join('; '));
+});
+
+test('proper_score verifier checks argmax consistency, Object.hasOwn, duplicate array keys, deep object canonicalization, and missing logLoss penalty', () => {
+  const oracle = {
+    items: { a: { label: { y: 2, x: 1 } }, b: { label: 'ok' } },
+    max_brier: 0.5,
+    max_log_loss: 1.5,
+    min_accuracy: 0.5,
+  };
+  // Deep-canonicalized object label + tie argmax allowed
+  const ok = verifyProperScore({
+    value: {
+      a: { value: { x: 1, y: 2 }, probabilities: [{ value: { x: 1, y: 2 }, probability: 0.9 }, { value: { x: 0, y: 0 }, probability: 0.1 }] },
+      b: { value: 'ok', probabilities: { ok: 0.5, no: 0.5 } },
+    },
+    oracle,
+  });
+  assert.equal(ok.ok, true, ok.issues.join('; '));
+
+  // Non-argmax value rejected even if it matches label
+  const nonArgmax = verifyProperScore({
+    value: {
+      a: { value: { x: 1, y: 2 }, probabilities: [{ value: { x: 1, y: 2 }, probability: 0.2 }, { value: { x: 0, y: 0 }, probability: 0.8 }] },
+      b: { value: 'ok', probabilities: { ok: 0.9, no: 0.1 } },
+    },
+    oracle: { ...oracle, max_brier: 2, max_log_loss: 5 },
+  });
+  assert.equal(nonArgmax.ok, false);
+  assert.ok(nonArgmax.issues.some(i => i.includes('argmax')));
+
+  // Prototype property names rejected via Object.hasOwn
+  const proto = verifyProperScore({
+    value: {
+      a: { value: { x: 1, y: 2 }, probabilities: [{ value: { x: 1, y: 2 }, probability: 1.0 }] },
+      b: { value: 'ok', probabilities: { ok: 1.0 } },
+      toString: { value: 'x', probabilities: { x: 1.0 } },
+    },
+    oracle,
+  });
+  assert.equal(proto.ok, false);
+  assert.ok(proto.issues.some(i => i.includes('unexpected item toString')));
+
+  // Duplicate probability keys in array rejected
+  const dupKey = verifyProperScore({
+    value: {
+      a: { value: { x: 1, y: 2 }, probabilities: [{ value: { x: 1, y: 2 }, probability: 0.5 }, { value: { y: 2, x: 1 }, probability: 0.5 }] },
+      b: { value: 'ok', probabilities: { ok: 1.0 } },
+    },
+    oracle,
+  });
+  assert.equal(dupKey.ok, false);
+
+  // Missing item penalized in meanLogLoss
+  const missing = verifyProperScore({
+    value: { b: { value: 'ok', probabilities: { ok: 1.0 } } },
+    oracle: { ...oracle, max_brier: 2.0, max_log_loss: 1.0, min_accuracy: 0.0 },
+  });
+  assert.equal(missing.ok, false);
+  assert.ok(missing.issues.some(i => i.includes('mean log-loss')));
+});
+
+test('service_trace verifier supports kind in order, deep canonical match, and rejects empty oracle', () => {
+  assert.throws(() => verifyServiceTrace({ value: [], oracle: {} }), /at least one/);
+  const oracle = {
+    required: [{ action: 'notify', match: { meta: { b: 'Two', a: 1 } } }],
+    order: [['auth', 'notify']],
+  };
+  const ok = verifyServiceTrace({
+    value: [{ kind: 'auth' }, { kind: 'notify', args: { meta: { a: 1, b: ' two ' } } }],
+    oracle,
+  });
+  assert.equal(ok.ok, true, ok.issues.join('; '));
+  const protoMatch = verifyServiceTrace({
+    value: [{ kind: 'auth' }, { kind: 'notify', args: {} }],
+    oracle: { required: [{ action: 'notify', match: { toString: 'x' } }] },
+  });
+  assert.equal(protoMatch.ok, false);
+});
+
+test('policy_eval verifier tracks malformed explicitly, uses Object.hasOwn, rejects duplicate array ids, and canonicalizes nested objects', () => {
+  // Case literally named 'unexpected_case' failing should NOT trigger malformed when min_accuracy < 1
+  const oracle = {
+    cases: {
+      unexpected_case: { expected: { status: 'allow', meta: { b: 2, a: 'Ok' } } },
+      c2: { expected: { status: 'deny', meta: { a: 'no', b: 1 } } },
+    },
+    min_accuracy: 0.5,
+  };
+  const okWithMiss = verifyPolicyEval({
+    value: {
+      unexpected_case: { status: 'deny', meta: { a: 'ok', b: 2 } },
+      c2: { meta: { b: 1, a: ' NO ' }, status: 'deny' },
+    },
+    oracle,
+  });
+  assert.equal(okWithMiss.ok, true, okWithMiss.issues.join('; '));
+
+  // Prototype property 'toString' rejected as unexpected case id
+  const proto = verifyPolicyEval({
+    value: {
+      unexpected_case: { status: 'allow', meta: { a: 'ok', b: 2 } },
+      c2: { status: 'deny', meta: { a: 'no', b: 1 } },
+      toString: 'x',
+    },
+    oracle,
+  });
+  assert.equal(proto.ok, false);
+  assert.ok(proto.issues.some(i => i.includes('unexpected case id: toString')));
+
+  // Duplicate IDs in array input rejected
+  const dup = verifyPolicyEval({
+    value: [
+      { id: 'unexpected_case', result: { status: 'allow', meta: { a: 'ok', b: 2 } } },
+      { id: 'unexpected_case', result: { status: 'allow', meta: { a: 'ok', b: 2 } } },
+      { id: 'c2', result: { status: 'deny', meta: { a: 'no', b: 1 } } },
+    ],
+    oracle,
+  });
+  assert.equal(dup.ok, false);
+});

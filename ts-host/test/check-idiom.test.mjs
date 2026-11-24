@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CLI = fileURLToPath(new URL('../dist/cli/main.js', import.meta.url));
-const natlang = (args, env = {}) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1', ...env } });
+const natlang = (args, env = {}) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1', NATLANG_SERVER: 'http://127.0.0.1:9', ...env } });
 
 function program() {
   const dir = mkdtempSync(join(tmpdir(), 'natlang-check-idiom-'));

@@ -86,9 +86,16 @@ export class FolderFs implements IFileSystem {
   async stat(path: string): Promise<FsStat> {
     const kind = this.kind(path);
     if (!kind) throw new Error(`ENOENT: ${path}`);
+    const resolved = this.resolvePath(ROOT, path);
     const size = kind === 'file' && !builtin(path) ? (await this.folder.stat(this.relative(path))).bytes : 0;
+    let hash = 2166136261;
+    for (let index = 0; index < resolved.length; index++) {
+      hash ^= resolved.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    const ino = (hash >>> 0) + 1;
     return { isFile: kind === 'file', isDirectory: kind === 'directory', isSymbolicLink: false,
-      mode: kind === 'file' ? 0o100644 : 0o40755, size, mtime: PINNED_TIME };
+      mode: kind === 'file' ? 0o100644 : 0o40755, size, mtime: PINNED_TIME, dev: 1, ino, identity: resolved };
   }
   async lstat(path: string): Promise<FsStat> { return this.stat(path); }
   async mkdir(path: string, options?: MkdirOptions): Promise<void> {

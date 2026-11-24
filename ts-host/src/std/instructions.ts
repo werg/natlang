@@ -15,14 +15,26 @@ export type Instructions = { front: string; body: string; declaration: string; s
  * paragraphs. A fenced block stays inside the step it belongs to. */
 export function stepsOf(body: string): string[] {
   const lines = body.replace(/\r\n/g, '\n').replace(/\s+$/, '').split('\n');
-  const numbered = lines.some(line => /^\d+\.\s/.test(line));
-  const steps: string[][] = [];
-  let fenced = false;
+  const nextFence = (fence: string | undefined, line: string): string | undefined => {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (!marker) return fence;
+    if (!fence) return marker[0]!.repeat(marker.length);
+    return marker[0] === fence[0] && marker.length >= fence.length ? undefined : fence;
+  };
+  let fence: string | undefined;
+  let numbered = false;
   for (const line of lines) {
-    const opens = !fenced && (numbered ? /^\d+\.\s/.test(line) : line.trim() !== '' && (steps.length === 0 || steps.at(-1)!.at(-1)?.trim() === ''));
+    const updated = nextFence(fence, line);
+    if (!fence && updated === undefined && /^\d+\.\s/.test(line)) { numbered = true; break; }
+    fence = updated;
+  }
+  const steps: string[][] = [];
+  fence = undefined;
+  for (const line of lines) {
+    const opens = !fence && (numbered ? /^\d+\.\s/.test(line) : line.trim() !== '' && (steps.length === 0 || steps.at(-1)!.at(-1)?.trim() === ''));
     if (opens || steps.length === 0) steps.push([]);
     steps.at(-1)!.push(line);
-    if (/^\s*```/.test(line)) fenced = !fenced;
+    fence = nextFence(fence, line);
   }
   return steps.map(step => step.join('\n').trim()).filter(Boolean);
 }

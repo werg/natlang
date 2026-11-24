@@ -10,10 +10,28 @@
     "draftReply.nl",
     "examples.json",
     "fixtures",
+    "main.ts",
     "package.json",
     "pilot.ts",
     "types.ts"
   ],
+  "targets": {
+    "inbox-pilot": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "Triage incoming messages from a JSON file or stdin and output the InboxReport as JSON.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "Path to a JSON file containing { messages, rules?, options? }."
+        }
+      ]
+    }
+  },
   "engines": {
     "natlang": ">=0.1.0",
     "node": ">=22.13.0"

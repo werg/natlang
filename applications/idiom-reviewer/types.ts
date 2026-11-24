@@ -22,11 +22,12 @@ export type IdiomIssue = {
 };
 
 /** One `.nl` source of the reviewed program: its path (relative to the program root) and text. `hasHelpers` says
- * whether its callable folder holds TypeScript helpers. */
+ * whether its callable folder holds TypeScript helpers, and `typesContent` optionally carries sibling `types.ts` source. */
 export type ProgramFile = {
   path: string;
   content: string;
   hasHelpers?: boolean;
+  typesContent?: string;
 };
 
 export type IdiomReport = {

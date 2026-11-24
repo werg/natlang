@@ -1,5 +1,5 @@
 {
-  "name": "@natlang/app-task-author",
+  "name": "@natlang/task-author",
   "private": true,
   "type": "module"
 }

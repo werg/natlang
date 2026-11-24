@@ -10,11 +10,49 @@
     "etl.ts",
     "examples.json",
     "fixtures",
+    "main.ts",
     "package.json",
     "parseAnomalousRow.nl",
     "sameEntity.nl",
     "types.ts"
   ],
+  "targets": {
+    "semantic-etl": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "Run Semantic ETL from a JSON file, stdin, or --rows/--schema/--expectedTotal/--entityLink arguments.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "Path to a JSON file containing { rows, schema?, expectedTotal?, entityLink?, options? }."
+        },
+        {
+          "name": "rows",
+          "type": "RawRow[]",
+          "description": "Raw incoming vendor rows to normalize."
+        },
+        {
+          "name": "schema",
+          "type": "TargetSchema",
+          "description": "Optional target schema (defaults to vendor_invoices_v1)."
+        },
+        {
+          "name": "expectedTotal",
+          "type": "number",
+          "description": "Optional expected monetary conservation total."
+        },
+        {
+          "name": "entityLink",
+          "type": "{ left: EntityRecord[]; right: EntityRecord[] }",
+          "description": "Optional entity records to link via semanticMatch."
+        }
+      ]
+    }
+  },
   "engines": {
     "natlang": ">=0.1.0",
     "node": ">=22.13.0"

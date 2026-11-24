@@ -18,12 +18,12 @@ export type SchemaField = {
 /** Strict target schema enforced on every output row. */
 export type TargetSchema = {
   name: string;
-  idField: string;
-  amountField: string;
-  currencyField: string;
-  vendorField: string;
-  dateField: string;
-  categoryField: string;
+  idField?: string;
+  amountField?: string;
+  currencyField?: string;
+  vendorField?: string;
+  dateField?: string;
+  categoryField?: string;
   fields: SchemaField[];
 };
 
@@ -35,15 +35,8 @@ export type RowMappingSpec = {
   delimiter: 'json' | 'csv' | 'tsv' | 'kv';
   /** Column names in order for delimited (`csv` or `tsv`) rows without inline keys. */
   columns?: string[];
-  /** Target field name to ordered candidate source field names/aliases. */
-  fieldMap: {
-    id: string[];
-    amount: string[];
-    currency: string[];
-    vendor: string[];
-    date: string[];
-    category: string[];
-  };
+  /** Target field name (from `TargetSchema.fields`) to ordered candidate source field names/aliases. */
+  fieldMap: Record<string, string[]>;
   /** Multiplier applied to parsed numeric amounts (for example 0.01 when feed reports cents). */
   amountScale: number;
   /** Default ISO-4217 currency code when a row omits currency. */
@@ -52,14 +45,16 @@ export type RowMappingSpec = {
   dateFormat: 'iso' | 'us' | 'eu' | 'auto';
 };
 
-/** Normalized output row satisfying TargetSchema. */
+/** Normalized output row satisfying TargetSchema (standard invoice fields plus any custom schema fields). */
 export type CleanRow = {
   id: string;
-  amount: number;
-  currency: string;
-  vendor: string;
-  date: string;
-  category: string;
+  amount?: number;
+  currency?: string;
+  vendor?: string;
+  date?: string;
+  category?: string;
+  /** Values for all declared `TargetSchema.fields` (supports arbitrary custom schemas). */
+  fields?: Record<string, string | number | boolean | null>;
   source: 'crisp' | 'semantic';
 };
 

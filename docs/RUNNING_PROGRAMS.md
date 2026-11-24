@@ -83,7 +83,7 @@ A fresh install runs every natural-language call on the stock instruction model 
 on natlang's managed llama.cpp server. Our own LFM3 checkpoints replace it once they are trained.
 
 ```sh
-natlang setup --yes     # natlang's llama.cpp build (natlang-b12076) and the model, verified by SHA-256
+natlang setup --yes     # natlang's llama.cpp build (natlang-b12092) and the model, verified by SHA-256
 natlang doctor          # what would run, and whether it is ready
 ```
 
@@ -134,6 +134,19 @@ runtime is unavailable (not installed, endpoint unreachable, missing credentials
 `{ ok, diagnostics: [{ file, line, column, code, message, hint? }], functions: [{ source, signature }] }` (the full
 manifest with `--manifest`); with `--json`, `natlang test` gives each result its `call_id`, and a model that is
 unavailable is `{ ok: false, error: { kind: "model-unavailable", message, next } }`.
+
+Additional review, profiling, and run-driven improvement commands:
+
+- `natlang check --idiom` (or `--idiom-strict`): runs the model-backed idiom reviewer (`applications/idiom-reviewer`) on
+  `.nl` files, reporting `idiom-review-*` warnings (mechanism in prose, guard-for-type, redundant steps, prose
+  interpreters, cue-word rules, and external text typed as trusted); `--idiom-strict` turns findings with confidence
+  `>= 0.8` into errors.
+- `natlang profile [DIR]`: aggregates the call store per function (calls, p50 latency, average tokens, compiled crisp
+  share, decision confidence p10/p50, escalation rate, failure classes) and reports the recommended next optimization.
+- `natlang improve DIR --model MODEL`: diagnoses failures, escalations, disagreements, postcondition repairs, and fixed
+  traces from the call store, rewrites only `.nl` instructions (keeping front matter byte-identical), gates on
+  deterministic `support`/`dev`/`confirmation` splits, and installs with a rollback record (`--proposal FILE` checks a
+  manual patch; `natlang improve adopt-call CALL_ID` checks and installs a single call's `edit_code` fix).
 
 ## A compiled program carries its model and a warm start
 
@@ -197,7 +210,7 @@ changes what a run computes, only its wall time, since runs on one server share 
 ## llama.cpp
 
 The managed runtime is a release of natlang's llama.cpp fork
-[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese), currently natlang-b12076 (llama.cpp 0.8.0):
+[werg/llama.cpp-neuralese](https://github.com/werg/llama.cpp-neuralese), currently natlang-b12092 (llama.cpp 0.8.0):
 prebuilt CPU builds for Linux and Windows (x64, arm64) and Metal builds for macOS, checked by SHA-256. The release also
 carries the Vulkan, ROCm and Windows CUDA builds that Vibestudio's local-models engine installs; natlang's pin selects
 the CPU or Metal archive of each platform from the release manifest's `os`, `arch` and `backends`. The fork adds

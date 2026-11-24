@@ -60,7 +60,7 @@ export async function authorAndQualifyTask(seed: TaskSeed, options: AuthorOption
   };
   const repaired = await semanticRepair(await draftTask(seed, []), {
     check,
-    fix: (_previous, problems) => draftTask(seed, problems),
+    fix: (previous, problems) => draftTask(seed, problems, previous),
     attempts: options.attempts ?? 3,
   });
   const task = repaired.value;

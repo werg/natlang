@@ -5,6 +5,7 @@
   "description": "Review natlang programs for idiom beyond the crisp floor of natlang check: what each instruction step asks for, prose interpreters, cue-word rules and external text typed as trusted.",
   "include": [
     "DECOMPOSITION.md",
+    "README.md",
     "detectCueWords.nl",
     "detectUntypedExternal.nl",
     "examples.json",

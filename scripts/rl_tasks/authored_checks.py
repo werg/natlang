@@ -45,6 +45,7 @@ is what the keyword baseline already does, and the task exists to need the meani
 """
 from __future__ import annotations
 
+import argparse
 import collections
 import json
 import os
@@ -380,7 +381,6 @@ def round6_worker(task):
 def blind_failure_modes(task, functions):
     """(errors, warnings) for the static blind-solve failure modes (see the module docstring)."""
     errors, warnings = [], []
-    strict = round6_worker(task)
     corpus = world_corpus(task)
     low = corpus.lower()
     root = task['root']
@@ -460,13 +460,47 @@ def blind_failure_modes(task, functions):
 WRITES = re.compile(r'^writes:\s*(.+?)\s*$', re.M)
 
 
+def _scan_type_rhs(text, start):
+    """Scan a TypeScript type alias RHS from ``start`` until a depth-0 ``;`` or EOF, skipping comments and strings."""
+    depth, quote, i, n = 0, None, start, len(text)
+    while i < n:
+        ch = text[i]
+        if quote:
+            if ch == '\\':
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch == '/' and i + 1 < n and text[i + 1] == '/':
+            nl = text.find('\n', i + 2)
+            i = n if nl < 0 else nl + 1
+            continue
+        if ch == '/' and i + 1 < n and text[i + 1] == '*':
+            end = text.find('*/', i + 2)
+            i = n if end < 0 else end + 2
+            continue
+        if ch in '"\'`':
+            quote = ch
+        elif ch in '([{<':
+            depth += 1
+        elif ch in ')]}>':
+            if not (ch == '>' and i > 0 and text[i - 1] == '='):
+                depth = max(0, depth - 1)
+        elif ch == ';' and depth == 0:
+            return text[start:i].strip()
+        i += 1
+    return text[start:].strip()
+
+
 def declared_types(task):
     """Type alias name -> definition text: the root's frontmatter `types:` (one per line) and any `types.ts` of the task."""
     found = {}
     for path, text in task['files'].items():
         if path.endswith('types.ts'):
-            for match in re.finditer(r'(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=\s*(.*?);\s*(?=\n(?:/\*\*|export|type)|\Z)', text, re.S):
-                found[match.group(1)] = match.group(2)
+            for match in re.finditer(r'(?:^|\n)[ \t]*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=\s*', text):
+                found[match.group(1)] = _scan_type_rhs(text, match.end())
     header = split_file(task['files'].get(task['root'], ''))[0]
     block = re.search(r'^types:\s*\n((?:[ \t]+.*\n?)+)', header, re.M)
     for line in (block.group(1).splitlines() if block else []):
@@ -485,7 +519,10 @@ def writes_patterns(task):
     text = match.group(1).strip().strip('\'"')
     text = declared_types(task).get(text, text)
     text = re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
-    return re.findall(r'["\']([^"\']+)["\']\s*\??\s*:', text)
+    body = text.strip()
+    if body.startswith('{') and body.endswith('}'):
+        body = body[1:-1]
+    return [quoted or ident for quoted, ident in re.findall(r'(?:["\']([^"\']+)["\']|\b([A-Za-z_$][\w$]*))\s*\??\s*:', body)]
 
 
 def glob_match(pattern, path):
@@ -631,14 +668,12 @@ def lint_batch(tasks, runtime=None):
 
 
 def main(argv=None):
-    argv = argv or sys.argv[1:]
-    runtime = None
-    if len(argv) == 3 and argv[1] == '--runtime':
-        argv, runtime = argv[:1], argv[2]
-    if len(argv) != 1:
-        raise SystemExit(__doc__)
-    tasks = [json.loads(line) for line in Path(argv[0]).read_text().splitlines() if line.strip()]
-    findings = {k: v for k, v in lint_batch(tasks, runtime).items() if v['errors'] or v['warnings']}
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('tasks', help='path to TASKS.jsonl')
+    parser.add_argument('--runtime', help='path to TS_HOST runtime')
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    tasks = [json.loads(line) for line in Path(args.tasks).read_text().splitlines() if line.strip()]
+    findings = {k: v for k, v in lint_batch(tasks, args.runtime).items() if v['errors'] or v['warnings']}
     print(json.dumps(findings, indent=1))
     return 1 if any(v['errors'] for v in findings.values()) else 0
 

@@ -1,31 +1,94 @@
 [
   {
-    "name": "leaf section preserves id, title, and verbatim citation",
-    "function": "digestSection.nl",
+    "name": "strong encryption and annual soc2 audit scores strong",
+    "function": "scoreCriterion.nl",
     "inputs": {
-      "section": {
-        "id": "sec-security",
+      "dossierName": "VectorVault",
+      "digest": {
+        "sectionId": "sec-security",
         "title": "Security Controls",
-        "text": "All customer data is encrypted at rest using AES-256-GCM with customer-managed KMS keys and audited annually under SOC 2 Type II.",
-        "sections": []
+        "summary": "All customer data is encrypted at rest with AES-256-GCM using customer-managed KMS keys and audited annually under SOC 2 Type II.",
+        "keyClaims": [
+          "AES-256-GCM encryption at rest with customer-managed KMS keys",
+          "Annual SOC 2 Type II attestation"
+        ],
+        "citations": [
+          {
+            "sectionId": "sec-security",
+            "quote": "encrypted at rest with AES-256-GCM using customer-managed KMS keys"
+          }
+        ],
+        "children": []
+      },
+      "criterion": {
+        "id": "security",
+        "name": "Data Security & Key Custody",
+        "guidance": "Must encrypt customer data at rest with customer-controlled keys and maintain independent security audits.",
+        "weight": 2
       }
     },
-    "expected": {
-      "sectionId": "sec-security",
-      "title": "Security Controls",
-      "summary": "Customer data uses AES-256-GCM encryption at rest with customer-managed KMS keys and annual SOC 2 Type II audits.",
-      "keyClaims": [
-        "AES-256-GCM encryption at rest with customer-managed KMS keys",
-        "Annual SOC 2 Type II audit"
-      ],
-      "citations": [
-        {
-          "sectionId": "sec-security",
-          "quote": "encrypted at rest using AES-256-GCM with customer-managed KMS keys"
-        }
-      ],
-      "children": []
-    }
+    "expected": "strong"
+  },
+  {
+    "name": "standard tls encryption without customer kms scores acceptable",
+    "function": "scoreCriterion.nl",
+    "inputs": {
+      "dossierName": "CloudQueue",
+      "digest": {
+        "sectionId": "sec-security",
+        "title": "Security Overview",
+        "summary": "Traffic uses TLS 1.3 and storage uses provider-managed AES-256 encryption with annual penetration testing.",
+        "keyClaims": [
+          "TLS 1.3 in transit",
+          "Provider-managed AES-256 at rest",
+          "Annual penetration test"
+        ],
+        "citations": [
+          {
+            "sectionId": "sec-security",
+            "quote": "storage uses provider-managed AES-256 encryption"
+          }
+        ],
+        "children": []
+      },
+      "criterion": {
+        "id": "security",
+        "name": "Baseline Data Encryption",
+        "guidance": "Must encrypt customer data in transit and at rest with modern ciphers; customer-managed keys are optional.",
+        "weight": 1
+      }
+    },
+    "expected": "acceptable"
+  },
+  {
+    "name": "unbounded subprocessor retention ambiguity scores concern",
+    "function": "scoreCriterion.nl",
+    "inputs": {
+      "dossierName": "MetricPulse",
+      "digest": {
+        "sectionId": "sec-retention",
+        "title": "Data Retention",
+        "summary": "Diagnostic telemetry may be kept in regional backups for up to 18 months; sub-processor deletion timelines are not specified.",
+        "keyClaims": [
+          "Backups retained up to 18 months",
+          "Sub-processor deletion SLA unspecified"
+        ],
+        "citations": [
+          {
+            "sectionId": "sec-retention",
+            "quote": "sub-processor deletion timelines are not specified"
+          }
+        ],
+        "children": []
+      },
+      "criterion": {
+        "id": "retention",
+        "name": "Deletion & Retention Guarantees",
+        "guidance": "Vendor must document deletion timelines for primary stores and all sub-processors within 30 days.",
+        "weight": 1.5
+      }
+    },
+    "expected": "concern"
   },
   {
     "name": "agpl license in proprietary product is a dealbreaker",
@@ -36,14 +99,22 @@
         "sectionId": "root",
         "title": "OmniQueue Technical Brief",
         "summary": "Distributed queue licensed solely under AGPL-3.0 with no commercial license option.",
-        "keyClaims": ["Licensed strictly under AGPL-3.0 without commercial buyout"],
-        "citations": [{ "sectionId": "root", "quote": "licensed solely under AGPL-3.0" }],
+        "keyClaims": [
+          "Licensed strictly under AGPL-3.0 without commercial buyout"
+        ],
+        "citations": [
+          {
+            "sectionId": "root",
+            "quote": "licensed solely under AGPL-3.0"
+          }
+        ],
         "children": []
       },
       "criterion": {
         "id": "license",
         "name": "Permissive Licensing",
-        "guidance": "Must be MIT, Apache-2.0, or BSD-3-Clause; copyleft licenses without commercial exemption are dealbreakers."
+        "guidance": "Must be MIT, Apache-2.0, or BSD-3-Clause; copyleft licenses without commercial exemption are dealbreakers.",
+        "weight": 3
       }
     },
     "expected": "dealbreaker"

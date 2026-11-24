@@ -20,7 +20,7 @@ All commands are non-interactive. Run them from the program directory.
 | Step | Command | What it does |
 |---|---|---|
 | Create | `natlang init DIR` | A runnable inbox planner: `types.ts` (`Untrusted`, `Is`), `route.nl` (`readout: decision`), `main.ts` (`decide` over the messages, an inline `nl<Reply>`, the `main` target), `examples.json`, `messages.json`, `natlang.json`, README, `AGENTS.md`. `--template classifier` writes the one-function `answer.nl` program. Never overwrites. |
-| Check | `natlang check --json` | Types, `nl` signatures, callable-folder scope and loop policy, with no model. Fix every diagnostic before calling a model. |
+| Check | `natlang check --json` | Types, `nl` signatures, callable-folder scope and loop policy, with no model. Fix every diagnostic before calling a model. Add `--idiom` (or `--idiom-strict`) to run the model-backed idiom reviewer (`idiom-review-*` warnings, or errors at confidence >= 0.8 under `--idiom-strict`). |
 | Call | `natlang call route.nl ARG... --json` | One real call. Arguments fill parameters in order: text as written, other types as JSON (`--inputs FILE` takes a JSON object keyed by parameter name). |
 | Test | `natlang test --json` | Runs every case in `examples.json` (`[{ name?, function, inputs, expected }]`, compared exactly) and reports `{ ok, passed, failed, results: [{ expected, received \| error }] }`. Exits 1 if any case fails. |
 | Debug | `natlang traces list`, `natlang traces show CALL_ID` | The recorded calls, and each step the model took in one: evals, tool results, child calls, the outcome. |
@@ -68,7 +68,7 @@ conclusion.
 matter are TypeScript type text read verbatim, so no YAML comments after them. A complete version is in
 [assets/review/](assets/review/) (copy the whole directory). Front matter keys: `description`,
 `args`, `returns`, `types`, `generic`, `kind`, `readout`, `model`, `uses`, `withhold`, `protect`, `budget`,
-`recursive`, `measure`, `ensures`; see
+`recursive`, `measure`, `ensures`, `writes`; see
 [language and source contracts](references/language.md).
 
 **Callable folders.** A function calls exactly the items in its companion folder (`foo/` beside `foo.nl`), and their
@@ -103,9 +103,11 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
    each step uses. Children get distinct sub-questions and the inputs they need, and a parent gets its children's
    results, not their raw inputs.
 4. **Finite answers are decisions.** `readout: decision` on a literal-union, boolean or finite-record result: the
-   model reasons, then every value is scored, and `decide(fn, ...args)` returns the probabilities. Gate actions on
-   confidence, and escalate the unsure cases with `fn.on({ model })`. `readout: instant` scores without reasoning, in
-   one pass, for calls where latency matters more than accuracy.
+   model reasons, then every value is scored, and `decide(fn, ...args)` returns the probabilities. Gate actions and
+   escalate unsure or high-risk cases with `escalate(fn, { to: 'teacher', floor, risk?, policy? })` from
+   `@natlang/node/std` (`policy: 'nl'` uses history-aware `shouldEscalate.nl`, reading prior escalation and disagreement
+   rates from the call store). `readout: instant` scores without reasoning, in one pass, for calls where latency
+   matters more than accuracy.
 5. **Compose with `@natlang/node/std`.** Use the standard library's typed combinators instead of hand-rolling loops:
    collections (`semanticMap`, `semanticFilter`, `semanticPartition`, `semanticReduce`, `semanticMatch`,
    `semanticRank`), convergence (`semanticRepair`, `fixedPoint`, `semanticMerge`), policy (`escalate`, `withContext`,
@@ -121,8 +123,10 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
 7. **Change files and code through transactions.** `folder.propose(reducer)`, check `proposal.folder` and
    `proposal.diff`, then `folder.accept(proposal)`; `folder.apply(reducer)` when success is the check. A verifier is
    a service, never a helper the model can edit.
-8. **Close the loop.** `examples.json` holds the cases. `natlang specialize` compiles hot paths to crisp cases,
-   `natlang tune` adapts the local model, and `natlang improve` searches source changes against the cases.
+8. **Close the loop.** `examples.json` holds the cases. `natlang profile` reports call-store latency, tokens,
+   confidence, escalation rate, and the recommended next optimization; `natlang specialize` compiles hot paths to crisp
+   cases, `natlang tune` adapts the local model, and `natlang improve DIR --model MODEL` diagnoses recorded runs,
+   rewrites instructions, gates on dev/confirmation splits, and installs with a rollback record.
 
 ## How a call executes
 
@@ -158,8 +162,10 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `Revise the result so that ...` (an `ensures:` clause) | The result breaks a postcondition: produce one that meets the clause's message; past the repair budget the call fails `refinement-unsatisfied`, so say in the instructions how to meet it. |
 | `invalid-binding` | A name reused for a result (`const plan = await plan(x)`): keep the result under another name (`planResult`). |
 | `untrusted-instruction` | Pass untrusted text as an argument (``nl`Summarize the message.`(message)``), never interpolate it into instructions. |
-| `protected` (from `edit_code`) | The item judges the call (a `protect:` entry, an item an `ensures:` check names, `types.ts`, the `protect:`, `ensures:`, `measure:` and `recursive:` lines): leave it as it is and fix the code that produces the value it rejects. |
+| `protected` (from `edit_code`) | The item judges the call (a `protect:` entry, an item an `ensures:` check names, `types.ts`, the `protect:`, `ensures:`, `writes:`, `measure:` and `recursive:` lines): leave it as it is and fix the code that produces the value it rejects. |
+| `writes-unsatisfied` | A directory reducer wrote an undeclared file or text that violates its `writes:` type: remove/restore the undeclared file or rewrite the file to its declared type (or update `writes:` outside the call). |
 | `idiom-decision-readout` (warning) | Add `readout: decision` to the function's front matter so the model reasons and its finite result is scored without a tool loop; a function that must call helpers before it answers gets a companion folder for them. |
+| `idiom-review-*` (`natlang check --idiom`) | Model-backed idiom findings (`mechanism-in-prose`, `guard-for-type`, `redundant`, `prose-interpreter`, `cue-word-rule`, `untyped-external-input`; errors at confidence >= 0.8 under `--idiom-strict`): move deterministic steps or keyword rules into TypeScript/pluggable crisp helpers, express constraints in types (`Is<T, P>`, `Untrusted<string>`), and keep each `.nl` function one narrow judgment. |
 | `nl-not-tag` | Write the instructions in place as a template right after `nl` (``nl<T>`...`(x)``, or ``nl<T>(`...`, x)``); put changing values in `${...}` or pass them as arguments, never build the instruction text at run time, and never use `nl` itself as a value. |
 | `readout must be decision (reason, then score the values), instant (score them without reasoning) or template` | Write `readout: decision`, or `readout: instant` for a hot-path call that should skip the reasoning. |
 | `readout: decision needs a finite returns type` (or `readout: instant ...`) | Declare a finite `returns` (a literal union, `boolean`, or a record whose fields are all finite), or drop `readout:` and let the call run its tool loop. |

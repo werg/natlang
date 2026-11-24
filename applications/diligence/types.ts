@@ -4,6 +4,8 @@ export type Section = {
   title: string;
   text: Untrusted<string>;
   sections: Section[];
+  /** Optional precomputed Neuralese compact view slot for large section payloads. */
+  viewSlot?: { view: Neuralese<string> };
 };
 
 /** One candidate vendor, library, or technical paper under diligence review. */
@@ -40,10 +42,14 @@ export type RubricCriterion = {
 /** Calibrated rubric verdict for a single criterion. */
 export type CriterionVerdict = 'strong' | 'acceptable' | 'concern' | 'dealbreaker';
 
+/** Overall diligence recommendation derived from weighted rubric assessments and dealbreaker checks. */
+export type DiligenceRecommendation = 'adopt' | 'adopt-with-mitigations' | 'reject';
+
 /** Scored and optionally escalated assessment for one criterion on one dossier. */
 export type CriterionAssessment = {
   criterionId: string;
   criterionName: string;
+  weight: number;
   verdict: CriterionVerdict;
   confidence: number;
   escalated: boolean;
@@ -62,6 +68,12 @@ export type DossierScore = {
   strongCount: number;
   acceptableCount: number;
   escalatedCount: number;
+  /** Weighted rubric score normalized to [0, 1] using RubricCriterion.weight (default 1). */
+  weightedScore: number;
+  /** Sum of effective criterion weights applied to this dossier. */
+  totalWeight: number;
+  /** Overall recommendation derived from weightedScore and dealbreaker/concern counts. */
+  recommendation: DiligenceRecommendation;
 };
 
 /** Summary ranking entry from debiased pairwise Copeland comparison. */
@@ -70,11 +82,15 @@ export type RankedDossierSummary = {
   dossierName: string;
   wins: number;
   score: number;
+  weightedScore: number;
+  recommendation: DiligenceRecommendation;
 };
 
 /** Final diligence report ranking all evaluated candidates. */
 export type DiligenceReport = {
   goal: string;
+  carryMode: 'text' | 'neuralese';
+  viewsUsed: number;
   ranked: DossierScore[];
   rankings: RankedDossierSummary[];
   totalEscalations: number;

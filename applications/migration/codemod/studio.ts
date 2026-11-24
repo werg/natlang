@@ -183,10 +183,15 @@ export function migrationRequest(spec: CodemodSpec): string {
  *    against already-migrated pairs before admission.
  */
 export async function migrateRepository(
-  files: readonly SourceFile[],
+  rawFiles: readonly SourceFile[],
   spec: CodemodSpec,
   options: CodemodOptions,
 ): Promise<CodemodReport> {
+  // Always fence plain SourceFile.content inputs at entry so callers who skip createSourceFile stay protected.
+  const files: SourceFile[] = rawFiles.map(file => ({
+    path: file.path,
+    content: untrusted(String(file.content), `repo file ${file.path}`),
+  }));
   const activeRules: CrispRule[] = [...(options.crispRules ?? [])];
   const attempts = options.attempts ?? 2;
   const minPairsToMine = options.minPairsToMine ?? 2;
@@ -200,7 +205,7 @@ export async function migrateRepository(
   for (const file of files) {
     const draft = applyCrispRules(file.content, activeRules);
     crispDrafts.set(file.path, draft);
-    workingContents.set(file.path, draft.output);
+    workingContents.set(file.path, draft.changed ? String(untrusted(draft.output, `repo file ${file.path} (crisp)`)) : file.content);
   }
 
   const results: FileResult[] = [];
@@ -231,7 +236,12 @@ export async function migrateRepository(
         return { id: path, status: problems.length ? 'failed' as const : 'passed' as const, output, output_bytes: output.length, truncated: false };
       }));
     };
-    const repository = new RepositoryMigration('.', { files: [...workingContents.keys()], contents: Object.fromEntries(workingContents), validator });
+    const repository = new RepositoryMigration('.', {
+      files: [...workingContents.keys()],
+      contents: Object.fromEntries(workingContents),
+      validator,
+      fenceUntrusted: true,
+    });
     await repository.open();
     llmCalls++;
     const migration = await migrate(options.runtime, repository, migrationRequest(spec), { attempts, checks: targets });
@@ -240,14 +250,15 @@ export async function migrateRepository(
     for (const item of remaining) {
       const path = item.file.path;
       const migrated = repository.read(path, migration.report.revision);
+      const fencedMigrated = untrusted(String(migrated), `repo file ${path} (migrated)`);
       const check = checks.get(path);
       if (check?.status === 'passed') {
-        workingContents.set(path, migrated);
-        semanticPairs.push({ path, before: item.file.content, after: migrated });
-        results.push({ path, status: 'semantic', original: item.file.content, migrated, ruleIds: item.ruleIds,
+        workingContents.set(path, fencedMigrated);
+        semanticPairs.push({ path, before: item.file.content, after: fencedMigrated });
+        results.push({ path, status: 'semantic', original: item.file.content, migrated: String(fencedMigrated), ruleIds: item.ruleIds,
           attempts: migration.rounds + 1, problems: [] });
       } else {
-        results.push({ path, status: 'failed', original: item.file.content, migrated, ruleIds: item.ruleIds, attempts: migration.rounds + 1,
+        results.push({ path, status: 'failed', original: item.file.content, migrated: String(fencedMigrated), ruleIds: item.ruleIds, attempts: migration.rounds + 1,
           problems: check ? check.output.split('\n').filter(Boolean) : ['the migration loop reported no check for this file'] });
       }
     }

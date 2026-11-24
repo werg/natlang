@@ -6,7 +6,7 @@
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
 import { aliasDeclaration } from './type-aliases.js';
-import { writesFields, writesProblem, type WritesField } from '../runtime/writes.js';
+import { writesFields, writesProblem, writesRefinementChecks, type WritesField } from '../runtime/writes.js';
 import { COMPACTED_RESULT, PROMPT_EXAMPLE_SOURCE, PROMPT_EXAMPLE_TEXTS } from './prompt.js';
 import { arrayToStringNeuralese, concatNeuralese, instantiate, invokeWithReceiver, joinNeuralese, mapNeuraleseReadout, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
@@ -226,8 +226,11 @@ function diagnosticArgument(value: unknown, holder: string, liveIdentity?: (valu
   return { $diagnostic_preview: oneLine(value, holder, liveIdentity), complete: false, holder };
 }
 
+const NL_WITH_HINT = 'With `nl.with<T>`, T is the child result type; use `nl.with<CaptureRecord, Result>` only when you want to type both the captures and result. The child input is passed separately.';
 const DIAGNOSTIC_HINTS: Record<string, string> = {
-  'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields. With `nl.with<T>`, T is the child result type; use `nl.with<CaptureRecord, Result>` only when you want to type both the captures and result. The child input is passed separately.',
+  'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields.',
+  'nl-type-arguments': NL_WITH_HINT,
+  'nl-explicit-captures': NL_WITH_HINT,
   'callable-not-invoked': 'This is a natlang child function, not its result. Call it with its declared input, then return or store the value it produces.',
   'unknown-field': 'Use one of the fields listed as expected.',
   'no-such-path': 'Use a variable or field that exists in the scope.',
@@ -379,7 +382,11 @@ Available in eval whenever the call's scope has a codebase.`,
 function rejected(error: Reject): NativeResult {
   const softMismatch = error.diagnostics.some(diagnostic => diagnostic.code === 'type-mismatch' &&
     /\bNeuralese\s*</.test(diagnostic.expected ?? ''));
+  const nlWithIssue = error.diagnostics.some(diagnostic =>
+    diagnostic.code === 'nl-type-arguments' || diagnostic.code === 'nl-explicit-captures' ||
+    /\bnl\.with\b/.test(`${diagnostic.path} ${diagnostic.expected ?? ''} ${diagnostic.text ?? ''}`));
   const hint = softMismatch ? 'At a declared Neuralese<string> argument or final-result slot, an ordinary string is written as that typed value through the configured port; argument conversion applies only to the direct parameter, not nested fields. For a final Neuralese<T> result with a concrete JSON-serializable T, return a value of T or its JSON text; the runtime validates it and writes its canonical JSON through the configured port. These conversions do not apply to locals or other payload types: preserve typed values or use one exact block marker in an explicitly typed position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
+    nlWithIssue ? NL_WITH_HINT :
     error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
@@ -390,7 +397,7 @@ function structuredShape(type: Type, env: TypeEnv): string | undefined {
   const resolved = env.resolve(type);
   if (resolved.kind === 'refined' || resolved.kind === 'untrusted') return structuredShape(resolved.base, env);
   if (resolved.kind === 'record' || resolved.kind === 'dict') return 'an object';
-  if (resolved.kind === 'list') return 'an array';
+  if (resolved.kind === 'list' || resolved.kind === 'tuple') return 'an array';
   if (resolved.kind !== 'union' || !resolved.members.length) return undefined;
   const shapes = new Set(resolved.members.map(member => structuredShape(member, env)));
   if (shapes.has(undefined)) return undefined;
@@ -1648,10 +1655,13 @@ export class NativeSession {
       ...(sourceStack ? { stack: sourceStack.split('\n').slice(0, 12).join('\n').slice(0, 4000) } : {}) };
     this.runtime.trace.emit('scope_failure', { failure_kind: kind, serial: this.failureSerial,
       message: message.slice(0, 1200), diagnostic_count: diagnostics.length });
-    // Report what the model needs to repair the eval: its console output and any effect that already happened.
+    // Report what the model needs to repair the eval: its console output and any effect that actually completed.
     const effectEvents = traceMark === undefined ? [] : this.runtime.trace.events.slice(traceMark)
       .filter(event => event.kind === 'effect' || event.kind === 'host');
-    const effects = effectEvents
+    const completedEffectEvents = effectEvents.filter(event =>
+      event.kind === 'effect' ? event.phase === 'completed' :
+        event.phase === undefined || event.phase === 'completed');
+    const effects = completedEffectEvents
       .map(event => String(event.capability ?? event.operation ?? event.kind));
     const receipts = effectEvents.filter(event => event.kind === 'effect' && event.phase === 'completed').slice(-8)
       .map(event => `${String(event.capability ?? event.operation ?? 'service call')} completed: ${this.show(typeof event.result === 'string' ? event.result : JSON.stringify(event.result) ?? 'null')}`);
@@ -1719,6 +1729,19 @@ export class NativeSession {
     if (!this.lam.writes || !tx?.open) return undefined;
     this.writesChecked ??= writesFields(this.lam.writes, this.env);
     return writesProblem(this.writesChecked, this.env, this.lam.functionName || 'this call', tx.folder.diffSync().changes);
+  }
+  /** Asynchronous `writes:` check: enforces both structural file contracts and `Is<string, P>` file refinements. */
+  async writesProblemAsync(): Promise<string | undefined> {
+    const structural = this.writesProblem();
+    if (structural) return structural;
+    const tx = this.lam.projectTransaction;
+    if (!this.lam.writes || !tx?.open || !this.refinementCheck || !this.writesChecked) return undefined;
+    const checks = writesRefinementChecks(this.writesChecked, this.env, tx.folder.diffSync().changes);
+    for (const check of checks) {
+      const failure = await this.refinementCheck(check.text, check.type, `files/${check.path}`);
+      if (failure) return `${check.path} failed ${check.pattern} (${failure.code}): ${failure.message}`;
+    }
+    return undefined;
   }
   private writesChecked?: WritesField[];
 
@@ -1843,10 +1866,10 @@ export class NativeSession {
       return this.writeNeuraleseResult(value, wanted, source, 'typed-text-result');
     }
     const resultType = this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseTypeCached('null');
-    // A value eval computed (a service's or a callee's result) is assignable as in TypeScript: fields the declared
-    // record does not list are kept, not refused, so returning it never asks for a retyped copy. A literal written
-    // into return_result is still checked exactly.
-    try { return coerce(value, resultType, this.env, 'return', source === 'return_result' ? {} : { preserveRecordExtras: true }); }
+    // Final results (`return_result` and `eval` with `finish: true`) must match the declared record fields strictly;
+    // intermediate locals keep extra fields so provider/callee values can be inspected and projected cleanly.
+    const preserveRecordExtras = source === 'eval-return';
+    try { return coerce(value, resultType, this.env, 'return', preserveRecordExtras ? { preserveRecordExtras: true } : {}); }
     catch (first) {
       if (!(first instanceof Reject)) throw first;
       if (wanted.kind === 'neuralese' && element && !(element.kind === 'prim' && element.name === 'string') &&
@@ -1918,14 +1941,20 @@ export class NativeSession {
           throw new Reject([{ path: 'finish', code: 'bad-action', expected: "a boolean: true completes this eval's fresh typed result" }]);
         return record(await this.evaluate(String(args.code ?? ''), timeout as number | undefined, args.finish === true, toolCallId));
       }
-      if (name === 'return_result' && (args.status ?? 'success') === 'success' && Object.hasOwn(args, 'value') &&
-          this.lam.type.kind === 'lambda') {
-        // A value that is one `${...}` placeholder would be kept as those characters: return_result fills nothing in
-        // (held-v3 after sft-v5: natlang.read calls returned the text `${value}` 23 of 68 times).
-        if (typeof args.value === 'string' && PLACEHOLDER_VALUE.test(args.value.trim()))
-          throw new Reject([{ path: 'value', code: 'bad-action', expected: PLACEHOLDER_ADVICE }]);
-        const value = await this.coerceReturn(args.value, 'return_result', true);
-        return record(this.scopeTool(name, { ...args, value }));
+      if (name === 'return_result' && (args.status ?? 'success') === 'success' && this.lam.type.kind === 'lambda') {
+        if (Object.hasOwn(args, 'value')) {
+          // A value that is one `${...}` placeholder would be kept as those characters: return_result fills nothing in
+          // (held-v3 after sft-v5: natlang.read calls returned the text `${value}` 23 of 68 times).
+          if (typeof args.value === 'string' && PLACEHOLDER_VALUE.test(args.value.trim()))
+            throw new Reject([{ path: 'value', code: 'bad-action', expected: PLACEHOLDER_ADVICE }]);
+          const value = await this.coerceReturn(args.value, 'return_result', true);
+          const unwritten = await this.writesProblemAsync();
+          if (unwritten) throw new Reject([{ path: 'files', code: 'writes-unsatisfied', text: `writes-unsatisfied: ${unwritten}` }]);
+          return record(this.scopeTool(name, { ...args, value }));
+        }
+        const unwritten = await this.writesProblemAsync();
+        if (unwritten) throw new Reject([{ path: 'files', code: 'writes-unsatisfied', text: `writes-unsatisfied: ${unwritten}` }]);
+        return record(this.scopeTool(name, args));
       }
       if (CODE_TOOLS.includes(name)) return record(this.functionTool(name, args));
       if (name === 'bash') {
@@ -2155,7 +2184,7 @@ export class NativeSession {
   private notATool(name: string, args: Record<string, unknown>): { path: string; code: string; text?: string; expected?: string } {
     const root = name.split('.')[0]!;
     const hasCodebase = Object.keys(this.lam.codebase).length > 0;
-    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read', 'NatlangContext', ...(hasCodebase ? ['search_code'] : [])];
+    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read', 'refine', 'assume', 'NatlangContext', ...(hasCodebase ? ['search_code'] : [])];
     const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const scope = new Set([...builtins, ...inputs, ...Object.keys(this.lam.captures ?? {}), ...Object.keys(this.lam.let),
       ...this.persistentScopeHelpers.keys(), ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())]);
@@ -2163,9 +2192,9 @@ export class NativeSession {
       return { path: name, code: 'bad-action', expected: 'a scope-eval tool' };
     const first = Object.values(args).find(value => typeof value === 'string' || typeof value === 'number');
     const shown = first === undefined ? '' : JSON.stringify(first);
-    const awaited = builtins.includes(root) && root !== 'transcript' && root !== 'NatlangContext' && root !== 'search_code' || Object.hasOwn(this.lam.codebase, root) ||
+    const awaited = builtins.includes(root) && root !== 'transcript' && root !== 'NatlangContext' && root !== 'search_code' && root !== 'assume' || Object.hasOwn(this.lam.codebase, root) ||
       this.persistentScopeHelpers.has(root);
-    const value = !awaited && root !== 'transcript' && root !== 'NatlangContext' && root !== 'search_code' && !Object.hasOwn(this.availableServices(), root);
+    const value = !awaited && root !== 'transcript' && root !== 'NatlangContext' && root !== 'search_code' && root !== 'assume' && !Object.hasOwn(this.availableServices(), root);
     const example = name === 'transcript' ? 'transcript.search("…")' : value && name === root ? name :
       `${awaited ? 'await ' : ''}${name}(${shown})`;
     return { path: name, code: 'bad-action', text: `${name}: bad-action, ${name} is not a tool: ${root} is in this call's eval scope. ` +
@@ -2197,8 +2226,14 @@ export class NativeSession {
     const helperNames = [...this.persistentScopeHelpers.keys()];
     const names = [...new Set([...inputs, ...captures, ...locals, ...helperNames, ...Object.keys(this.lam.codebase),
       ...Object.keys(this.availableServices())])];
-    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}read, iterateOn, ` +
-      'transcript and NatlangContext (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
+    const builtIns = [
+      ...(canGenerateNl(this.runtime.frame) ? ['nl'] : []),
+      'read', 'iterateOn', 'decide', 'refine', 'assume', 'transcript', 'NatlangContext',
+      ...(Object.keys(this.lam.codebase).length > 0 ? ['search_code'] : []),
+    ];
+    const builtInList = `${builtIns.slice(0, -1).join(', ')} and ${builtIns.at(-1)}`;
+    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${builtInList} ` +
+      '(read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }
 
   availableServices(): Record<string, object> {
@@ -2945,9 +2980,17 @@ export class NativeSession {
         raw.valueless === true && !isHandle(output.result) ? 'undefined' : this.showValue(output.result ?? null);
       const status = functionResult !== undefined ?
         stagedMessage(functionResult, this.runtime.displayLiveId, this.runtime.untrusted) : notResult;
-      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted)}` +
-        // A Neuralese value is shown as its state; the words beside it say what it is and how to use it.
-        (isNeuraleseRef(value) ? ` (${value.$neuralese.type}: pass it on as is, or write await read(${name}) for an ordinary copy)` : ''));
+      const shownLogs = evaluated.logs?.length ? this.show(evaluated.logs.join('\n')) : '';
+      const logStatus = shownLogs ? `console:\n${shownLogs}\n` : '';
+      const stored = changed.map(([name, , value]) => {
+        const preview = oneLine(value, name, this.runtime.displayLiveId, this.runtime.untrusted);
+        const shown = typeof value === 'string' && preview.includes('<<cut off') && shownLogs && shownLogs.includes(value)
+          ? `(full string printed above, ${value.length} chars)`
+          : preview;
+        return `local ${name} = ${shown}` +
+          // A Neuralese value is shown as its state; the words beside it say what it is and how to use it.
+          (isNeuraleseRef(value) ? ` (${value.$neuralese.type}: pass it on as is, or write await read(${name}) for an ordinary copy)` : '');
+      });
       // Variant effect-receipt: a successful eval lists the service calls it completed, as a failed one does, so a model
       // does not rerun an effectful eval that already succeeded.
       const performed = new Map<string, number>();
@@ -2967,7 +3010,6 @@ export class NativeSession {
         .filter(name => output.bindings[name] === undefined && !Object.hasOwn(this.lam.let, name));
       const unsetStatus = unset.length ? `\nNot kept: ${unset.join(', ')} ${unset.length > 1 ? 'have' : 'has'} no value, and a ` +
         `local without a value is not kept; declare it with one (let ${unset[0]} = …).` : '';
-      const logStatus = evaluated.logs?.length ? `console:\n${this.show(evaluated.logs.join('\n'))}\n` : '';
       // return_result in eval stages its value like a top-level return: the value was computed, so the model
       // sees it before the call finishes. The blocker and error reports carry the model's own text and end the call.
       // return_result({ status, value | reason }) in eval is the tool's request written as code; read it as that when
@@ -2995,6 +3037,8 @@ export class NativeSession {
         this.lam.return = staged;
         this.failureDebug = undefined;
         if (complete) {
+          const unwritten = await this.writesProblemAsync();
+          if (unwritten) throw new Reject([{ path: 'files', code: 'writes-unsatisfied', text: `writes-unsatisfied: ${unwritten}` }]);
           const done=this.scopeTool('return_result',{status:'success',value:staged});
           return {...done,text:`${logStatus}${rendered}${storedStatus}${unsetStatus}\n${done.text}`};
         }
@@ -3018,7 +3062,9 @@ export class NativeSession {
             : '\nFor inspection or staging, omit finish or set false; finish:true needs a fresh value of the declared result type from this eval as its final expression or explicit return, and cannot reuse an older staged value.';
           return {kind:'rejected',text:logStatus+rendered+storedStatus+unsetStatus+notResult+finishHint,codes:[refinementFailure?.code ?? 'missing-fresh-result']};
         }
-        // Finish with the staged value as checked above (computed values keep their extra fields), not a re-check.
+        const unwritten = await this.writesProblemAsync();
+        if (unwritten) throw new Reject([{ path: 'files', code: 'writes-unsatisfied', text: `writes-unsatisfied: ${unwritten}` }]);
+        // Finish with the staged value as checked strictly above.
         const done=this.scopeTool('return_result',{status:'success'});
         return {...done,text:logStatus+rendered+storedStatus+unsetStatus+'\n'+done.text};
       }

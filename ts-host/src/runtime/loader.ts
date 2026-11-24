@@ -148,9 +148,15 @@ const TYPE_ONLY_IMPORTS = new WeakMap<ModuleRecord, string[]>();
  * and an inline `nl` typed by it showed its parameter as `unknown` to the model.
  */
 const MODULE_TYPE_SOURCES = new WeakMap<ModuleRecord, Record<string, string>>();
+/** Specifier -> key in MODULE_TYPE_SOURCES for package-export and relative type-only imports. */
+const MODULE_TYPE_SPECIFIERS = new WeakMap<ModuleRecord, Record<string, string>>();
 /** Text of each package `.ts` file the module imports for types only, by its path from the package root. */
 export function moduleTypeSources(record: ModuleRecord): Readonly<Record<string, string>> | undefined {
   return MODULE_TYPE_SOURCES.get(record);
+}
+/** Map from type-only import specifier to its source key in `moduleTypeSources(record)`. */
+export function moduleTypeSpecifiers(record: ModuleRecord): Readonly<Record<string, string>> | undefined {
+  return MODULE_TYPE_SPECIFIERS.get(record);
 }
 export const nodeKey = (record: NatlangRecord | ModuleRecord): string => `${record.kind}:${record.id}@${record.revision}`;
 export function registerFileRecords(codebase: Record<string, ItemRecord> | ItemRecord): void {
@@ -241,7 +247,7 @@ export function readNatlangFrontmatter(source: string): Record<string, unknown> 
   function readTyped(key: string, inline: string, body: string[]): void {
     if (key in typed) throw new Error(`frontmatter repeats ${key}`);
     if (key === 'returns' || key === 'writes') {
-      const text = unquoteType([inline, ...body.map(line => line.trim())].join(' '));
+      const text = unquoteType([inline, ...body.map(line => line.trim())].filter(Boolean).join('\n'));
       if (!text) throw new Error(`${key} needs a type`);
       typed[key] = text;
     } else if (inline || body[0]?.trim().startsWith('{')) {
@@ -845,7 +851,7 @@ export function resolveImportedSource(specifier: string, from: string, files: So
 function attachModuleImports(record: ModuleRecord, path: string, siblings: Record<string, ItemRecord>,
     files: SourceFiles, seen = new Map<string, ModuleRecord>()): void {
   if (files === PATH_ONLY) return;
-  attachTypeSources(record, path, files);
+  attachTypeSources(record, path, siblings, files);
   if (!record.imports.length) return;
   const normSelf = normalizePath(path);
   seen.set(normSelf, record);
@@ -908,27 +914,102 @@ function attachModuleImports(record: ModuleRecord, path: string, siblings: Recor
   if (Object.keys(resolved).length) MODULE_IMPORTS.set(record, resolved);
 }
 
-/** Read the package `.ts` files a module imports for types only (MODULE_TYPE_SOURCES), following their own type imports. */
-function attachTypeSources(record: ModuleRecord, path: string, files: SourceFiles): void {
+const NODE_BUILTINS = new Set(['assert', 'async_hooks', 'buffer', 'child_process', 'cluster', 'console', 'constants', 'crypto',
+  'dgram', 'diagnostics_channel', 'dns', 'domain', 'events', 'fs', 'http', 'http2', 'https', 'inspector', 'module', 'net',
+  'os', 'path', 'perf_hooks', 'process', 'punycode', 'querystring', 'readline', 'repl', 'stream', 'string_decoder', 'timers',
+  'tls', 'trace_events', 'tty', 'url', 'util', 'v8', 'vm', 'wasi', 'worker_threads', 'zlib']);
+
+function hasInstalledNodePackage(specifier: string, root: string, files: SourceFiles): boolean {
+  if (specifier.startsWith('node:') || NODE_BUILTINS.has(specifier.split('/')[0]!)) return true;
+  const parts = specifier.split('/');
+  const pkgName = specifier.startsWith('@') && parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0]!;
+  for (let current = root; ; current = files.dirname(current)) {
+    if (files.isDirectory(files.join(current, 'node_modules', ...pkgName.split('/')))) return true;
+    if (files.dirname(current) === current) break;
+  }
+  return false;
+}
+
+/** Collect every module specifier referenced by imports or re-exports in a TypeScript file (parsed via AST). */
+function typeFileSpecifiers(filePath: string, text: string): string[] {
+  const sf = ts.createSourceFile(filePath, text, ts.ScriptTarget.ES2022, false, ts.ScriptKind.TS);
+  const out: string[] = [];
+  for (const statement of sf.statements) {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
+      out.push(statement.moduleSpecifier.text);
+    } else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+      out.push(statement.moduleSpecifier.text);
+    }
+  }
+  return out;
+}
+
+/** Read the package `.ts` files a module imports for types only (MODULE_TYPE_SOURCES), following their own imports/exports. */
+function attachTypeSources(record: ModuleRecord, path: string, siblings: Record<string, ItemRecord>, files: SourceFiles): void {
   const specifiers = TYPE_ONLY_IMPORTS.get(record) ?? [];
   if (!specifiers.length) return;
   const root = packageRoot(files.dirname(path), files);
+  const normRoot = normalizePath(root).replace(/\/+$/, '');
   const sources: Record<string, string> = {};
-  const fromRoot = (file: string) => normalizePath(file).slice(normalizePath(root).length).replace(/^\/+/, '');
-  const visit = (from: string, specifier: string, depth: number) => {
-    if (depth > 8 || !(specifier.startsWith('./') || specifier.startsWith('../'))) return;
-    const base = normalizePath(files.join(files.dirname(from), ...specifier.replace(/\.js$/, '').split('/')));
-    if (escapesBoundary(path, base, files)) return;
-    const target = resolveTargetFile(base, files, ['ts']);
-    if (!target || target.endsWith('.d.ts')) return;
-    const source = fromRoot(target);
-    if (Object.hasOwn(sources, source)) return;
-    const text = files.read(target);
-    sources[source] = text;
-    for (const match of text.matchAll(/^\s*import\s+type\s[^'"]*['"]([^'"]+)['"]/gm)) visit(target, match[1]!, depth + 1);
+  const specifierTargets: Record<string, string> = {};
+  const fromRoot = (file: string): string => {
+    const norm = normalizePath(file);
+    return isWithinRoot(normRoot, norm) ? norm.slice(normRoot.length).replace(/^\/+/, '') : norm.replace(/^\/+/, '');
   };
-  for (const specifier of specifiers) visit(path, specifier, 0);
+  const resolveTypeFile = (base: string): string | undefined =>
+    resolveTargetFile(base, files, ['ts']) ??
+    (base.endsWith('.d.ts') && files.isFile(base) ? base : undefined) ??
+    (files.isFile(`${base}.d.ts`) ? `${base}.d.ts` : undefined) ??
+    (files.isFile(files.join(base, 'index.ts')) ? files.join(base, 'index.ts') : undefined) ??
+    (files.isFile(files.join(base, 'index.d.ts')) ? files.join(base, 'index.d.ts') : undefined);
+
+  const loadFile = (target: string, depth: number): string => {
+    const source = fromRoot(target);
+    if (!Object.hasOwn(sources, source)) {
+      const text = files.read(target);
+      sources[source] = text;
+      for (const next of typeFileSpecifiers(target, text)) visit(target, next, depth + 1, false);
+    }
+    return source;
+  };
+
+  const visit = (from: string, specifier: string, depth: number, isRootModule: boolean): void => {
+    if (depth > 8 || RUNTIME_OR_BUILTIN_IMPORT.test(specifier)) return;
+    if (specifier.startsWith('./') || specifier.startsWith('../')) {
+      if (isRootModule && specifier.startsWith('./') && siblingHasSpecifier(specifier, siblings)) return;
+      const base = normalizePath(files.join(files.dirname(from), ...specifier.replace(/\.js$/, '').split('/')));
+      // A type file outside the loaded root (a sub-function loaded on its own whose types live in the program root) is
+      // not read: the loader never reads past its root, and type-only imports never load at run time, so the imported
+      // names stay untyped there, as before. Missing files and packages inside the root are still errors below.
+      if (escapesBoundary(path, base, files)) return;
+      const target = resolveTypeFile(base);
+      if (!target) {
+        // Synthesized sibling `./types` backed by inherited/record types, or a `.nl` sibling/target.
+        if (isRootModule && /^\.\/types(?:\.(?:ts|js))?$/.test(specifier) && Object.keys(record.types).length > 0) return;
+        if (resolveTargetFile(base, files, ['nl'])) return;
+        throw new NatlangSourceError(from, `cannot import type ${JSON.stringify(specifier)}: no matching .ts file exists`);
+      }
+      const source = loadFile(target, depth);
+      if (isRootModule) specifierTargets[specifier] = source;
+      return;
+    }
+    if (specifier.startsWith('/')) {
+      throw new NatlangSourceError(from, `cannot import type ${JSON.stringify(specifier)}: absolute type imports are not allowed`);
+    }
+    const exported = resolvePackageExport(specifier, root, files, ['ts']);
+    if (exported.error)
+      throw new NatlangSourceError(from, `cannot import type ${JSON.stringify(specifier)}: ${exported.error}`);
+    if (exported.target) {
+      const source = loadFile(exported.target, depth);
+      specifierTargets[specifier] = source;
+      return;
+    }
+    if (!hasInstalledNodePackage(specifier, root, files))
+      throw new NatlangSourceError(from, `cannot import type ${JSON.stringify(specifier)}: package or export not found`);
+  };
+  for (const specifier of specifiers) visit(path, specifier, 0, true);
   if (Object.keys(sources).length) MODULE_TYPE_SOURCES.set(record, sources);
+  if (Object.keys(specifierTargets).length) MODULE_TYPE_SPECIFIERS.set(record, specifierTargets);
 }
 
 function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string,
@@ -1061,8 +1142,16 @@ export function parseModule(path: string, text: string, inherited: Record<string
   const isDefault = (node: ts.Node) => !!ts.getModifiers(node as ts.HasModifiers)?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword);
   for (const statement of file.statements) {
     if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
-      if (!statement.importClause?.isTypeOnly) imports.push(statement.moduleSpecifier.text);
-      else typeImports.push(statement.moduleSpecifier.text);
+      const clause = statement.importClause;
+      const allNamedTypeOnly = !clause?.name && !!clause?.namedBindings && ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.length > 0 && clause.namedBindings.elements.every(element => element.isTypeOnly);
+      const hasNamedTypeOnly = !!clause?.namedBindings && ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.some(element => element.isTypeOnly);
+      if (clause?.isTypeOnly || allNamedTypeOnly) typeImports.push(statement.moduleSpecifier.text);
+      else {
+        imports.push(statement.moduleSpecifier.text);
+        if (hasNamedTypeOnly) typeImports.push(statement.moduleSpecifier.text);
+      }
     } else if (ts.isFunctionDeclaration(statement) && isExported(statement)) {
       const name = isDefault(statement) ? 'default' : statement.name?.text;
       if (!name) throw new NatlangSourceError(path, 'exported functions need names');
@@ -1080,8 +1169,15 @@ export function parseModule(path: string, text: string, inherited: Record<string
         const local = locals.get((element.propertyName ?? element.name).text);
         exports[element.name.text] = local ? describe(element.name.text, local) : { kind: 'value' };
       }
-    } else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && !options.compiled)
-      throw new NatlangSourceError(path, 're-exports from other modules are not supported; import and export explicitly');
+    } else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier) {
+      const allExportTypeOnly = statement.isTypeOnly || (!!statement.exportClause && ts.isNamedExports(statement.exportClause) &&
+        statement.exportClause.elements.length > 0 && statement.exportClause.elements.every(element => element.isTypeOnly));
+      if (allExportTypeOnly && ts.isStringLiteral(statement.moduleSpecifier)) {
+        typeImports.push(statement.moduleSpecifier.text);
+      } else if (!options.compiled) {
+        throw new NatlangSourceError(path, 're-exports from other modules are not supported; import and export explicitly');
+      }
+    }
   }
   for (const name of Object.keys(exports)) if (!options.compiled && name !== 'default') checkName(path, name);
   const name = files.basename(path, files.extname(path));
@@ -1095,8 +1191,8 @@ export function parseModule(path: string, text: string, inherited: Record<string
   const source = files.relative?.(path) ?? path;
   const moduleRecord: ModuleRecord = { kind: 'module', id: `ts:${source}`, name, source, revision: revisionOf(text), text, types, exports, imports, codebase: {},
     ...(Object.keys(declared.declarations).length ? { declarations: declared.declarations } : {}) };
-  const relativeTypeImports = typeImports.filter(specifier => specifier.startsWith('./') || specifier.startsWith('../'));
-  if (relativeTypeImports.length) TYPE_ONLY_IMPORTS.set(moduleRecord, relativeTypeImports);
+  const externalTypeImports = [...new Set(typeImports.filter(specifier => !RUNTIME_OR_BUILTIN_IMPORT.test(specifier)))];
+  if (externalTypeImports.length) TYPE_ONLY_IMPORTS.set(moduleRecord, externalTypeImports);
   return moduleRecord;
 }
 

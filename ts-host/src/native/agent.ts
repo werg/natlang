@@ -42,7 +42,7 @@ import { modelFacing, promptRevision } from '../runtime/model-facing.js';
 import { argumentInstructions, compactionPageChars, framedState, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
 import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
-import { writtenReturnResult } from './pseudo-call.js';
+import { literalText, writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsGuidance, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
@@ -121,6 +121,9 @@ export const SEARCH_BUILT_INS_LINE = promptRevision() === '2026-11-22' ? BUILT_I
 export const INLINE_BUILT_INS_LINE = BUILT_INS_LINE;
 export const NL_DEPTH_LIMIT_BUILT_INS_LINE = (promptRevision() === '2026-11-22' ? 'Eval has iterateOn, transcript and decide; read_code shows how to use each. ' :
   'Eval has iterateOn, transcript, decide and NatlangContext; read_code shows how to use each. ') +
+  'This is the fifth ad hoc layer: make further judgments here or call an existing named function from a file.';
+export const NL_DEPTH_LIMIT_SEARCH_BUILT_INS_LINE = promptRevision() === '2026-11-22' ? NL_DEPTH_LIMIT_BUILT_INS_LINE :
+  'Eval has iterateOn, transcript, decide, NatlangContext and search_code; read_code shows how to use each. ' +
   'This is the fifth ad hoc layer: make further judgments here or call an existing named function from a file.';
 /**
  * What one call's opening message adds after its scope: the program's guidance, then the function-tools, folder and
@@ -306,7 +309,9 @@ export function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, un
   if (resolved.kind === 'tuple') {
     const elements = resolved.elements.map(element => schemaOf(element, env, depth + 1));
     const minItems = resolved.minLength ?? elements.length;
-    const exact = (length: number) => ({ type: 'array', prefixItems: elements.slice(0, length), minItems: length, maxItems: length });
+    const exact = (length: number) => length === 0
+      ? { type: 'array', minItems: 0, maxItems: 0 }
+      : { type: 'array', prefixItems: elements.slice(0, length), minItems: length, maxItems: length };
     // An optional tail is one exact-length tuple per admitted length (docs/ENGINE_PARITY.md "Result schemas: tuples"):
     // llama.cpp's grammar (the managed server and the page) writes every prefixItems element and ignores minItems, so
     // `[A, B?]` as one prefixItems schema forced B. NATLANG_TUPLE_SCHEMA=prefix-items keeps that one schema.
@@ -1459,8 +1464,9 @@ export class NativeToolAgent {
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
       ...(noDirectServices ? ['', 'This call has no directly bound host services. Work from its inputs and the callables available here.'] : []),
       ...(lam.skills?.listing ? ['', lam.skills.listing] : []),
-      '', !canGenerateNl(session.runtime.frame) ? NL_DEPTH_LIMIT_BUILT_INS_LINE :
-        largeCallableScope(lam.codebase) ? SEARCH_BUILT_INS_LINE : BUILT_INS_LINE,
+      '', !canGenerateNl(session.runtime.frame)
+        ? (largeCallableScope(lam.codebase) ? NL_DEPTH_LIMIT_SEARCH_BUILT_INS_LINE : NL_DEPTH_LIMIT_BUILT_INS_LINE)
+        : (largeCallableScope(lam.codebase) ? SEARCH_BUILT_INS_LINE : BUILT_INS_LINE),
     ].join('\n');
   }
 
@@ -1645,7 +1651,10 @@ export class NativeToolAgent {
         catch (error) { if (error instanceof Reject) return MISSING; throw error; }
       };
       value = attempt(args.value);
-      if (value === MISSING && typeof args.value === 'string') { try { value = attempt(JSON.parse(args.value)); } catch { /* not JSON */ } }
+      if (value === MISSING && typeof args.value === 'string') {
+        const parsed = literalText(args.value);
+        if (parsed) value = attempt(parsed.value);
+      }
     } else value = lam.return;
     if (value === MISSING) return;
     const callId = session.runtime.currentCallId ?? null;
@@ -1738,13 +1747,36 @@ export class NativeToolAgent {
         throw new Error('decision readout sampled an option outside its option set');
       return { scores, probabilities: softmax(scores.log_probs) };
     };
+    const logSoftmax = (logProbs: readonly number[]): number[] => {
+      const peak = Math.max(...logProbs);
+      const lse = peak + Math.log(logProbs.reduce((sum, lp) => sum + Math.exp(lp - peak), 0));
+      return logProbs.map(lp => lp - lse);
+    };
+    const tieBreakFirst = typeof process !== 'undefined' && (process.env.NATLANG_DECISION_TIEBREAK ?? '').trim() === 'first';
+    const chooseOption = (probabilities: readonly number[], sampleLogProbs: readonly (readonly number[])[], options: readonly string[]): number => {
+      if (tieBreakFirst) return probabilities.indexOf(Math.max(...probabilities));
+      const maxProb = Math.max(...probabilities);
+      let tied = probabilities.map((_, index) => index).filter(index => maxProb - probabilities[index]! <= 1e-12);
+      if (tied.length <= 1) return tied[0] ?? 0;
+      if (sampleLogProbs.length) {
+        const normalized = sampleLogProbs.map(logSoftmax);
+        const meanLog = new Map(tied.map(index => [index, normalized.reduce((sum, row) => sum + row[index]!, 0) / normalized.length]));
+        const maxLog = Math.max(...tied.map(index => meanLog.get(index)!));
+        tied = tied.filter(index => maxLog - meanLog.get(index)! <= 1e-12);
+        if (tied.length === 1) return tied[0]!;
+      }
+      const key = hexDigest(JSON.stringify({ question, options }));
+      const tieSeed = deriveSeed(session.runtime.seedPolicy.root ?? 0, `${runSeedKey(session.runtime.options)}:${key}`, session.lam.attempts, 'decision-tiebreak', 0);
+      return tied[Math.abs(tieSeed) % tied.length]!;
+    };
     // The readout's probabilities: the instant readout's softmax, or the mean of the conditional softmaxes after each
     // reasoning sample (the reasoned policy's answer distribution, estimated from `samples` draws). The answer is the
-    // most probable option, or the sampling scorer's choice on the action sample (a draw from that mixture).
+    // most probable option (breaking ties by mean log-probability across samples, then a deterministic seed), or the
+    // sampling scorer's choice on the action sample (a draw from that mixture).
     const score = async (options: string[], open: boolean) => {
       if (!reasonings.length) {
         const { scores, probabilities } = await scoreOne(options, open);
-        return { scores, probabilities, chosen: scores.chosen ?? probabilities.indexOf(Math.max(...probabilities)) };
+        return { scores, probabilities, chosen: scores.chosen ?? chooseOption(probabilities, [scores.log_probs], options) };
       }
       const each = await Promise.all(reasonings.map(reasoning => scoreOne(options, open, reasoning)));
       const probabilities = options.map((_, index) => each.reduce((sum, item) => sum + item.probabilities[index]!, 0) / each.length);
@@ -1752,7 +1784,7 @@ export class NativeToolAgent {
         prompt_tokens: each.every(item => item.scores.prompt_tokens !== undefined) ?
           each.reduce((sum, item) => sum + item.scores.prompt_tokens!, 0) : undefined };
       const sampled = each[action]!.scores.chosen;
-      return { scores, probabilities, chosen: sampled ?? probabilities.indexOf(Math.max(...probabilities)),
+      return { scores, probabilities, chosen: sampled ?? chooseOption(probabilities, each.map(item => item.scores.log_probs), options),
         reasoned: { samples: each.length, action, conditionals: each.map(item => item.probabilities),
           log_probs: each.map(item => item.scores.log_probs) } };
     };

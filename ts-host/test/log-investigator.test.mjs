@@ -106,7 +106,7 @@ test('natlang investigates a burst: significance, clustering, hypotheses over th
     gap('gap1', 4, 'collector unavailable'), line('e5', 5, 'auth_failed', 'Fourth failed login'),
     line('e6', 6, 'health_probe', 'ERROR token used in test fixture')];
   const model = logModel();
-  const runtime = createNatlangRuntime({ model: { driver: model.driver, maxTurns: 6 } });
+  const runtime = createNatlangRuntime({ model: { driver: model.driver, maxTurns: 6, decisionSamples: 0 } });
   let state = emptyIncidentState();
   for (const event of events) state = await runtime.run(() => step(logs, state, event), logs.runOptions());
   assert.equal(state.observed, 5);
@@ -130,7 +130,7 @@ test('natlang investigates a burst: significance, clustering, hypotheses over th
 test('the crisp significance setting judges lines without the model; quiet incidents close on their timer', async () => {
   const logs = new LogWorkspace({ significance: 'crisp', threshold: 99, quietMs: 10_000 });
   const model = logModel();
-  const runtime = createNatlangRuntime({ model: { driver: model.driver, maxTurns: 6 } });
+  const runtime = createNatlangRuntime({ model: { driver: model.driver, maxTurns: 6, decisionSamples: 0 } });
   let state = emptyIncidentState();
   for (const event of [line('i1', 0, 'note', 'all fine', 'INFO'), line('w1', 1, 'slow', 'slow response', 'WARN'),
     line('w2', 2, 'slow', 'slow response again', 'WARN')]) state = await runtime.run(() => step(logs, state, event), logs.runOptions());

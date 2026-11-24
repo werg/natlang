@@ -9,5 +9,5 @@ import rules from './validate/rules.js';
 
 export default async function validate(known: string[], submission: Submission, settings: Settings): Promise<Verdict> {
   return pluggable({ crisp: () => rules(known, submission), nl: () => judge(known, submission) },
-    settings.validate, { name: 'economy.validate', same: (crisp, nl) => crisp.ok === nl.ok })();
+    settings.validate, { name: 'economy.validate', same: (crisp, natural) => crisp.ok === natural.ok })();
 }

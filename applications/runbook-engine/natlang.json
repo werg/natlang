@@ -11,9 +11,27 @@
     "engine.ts",
     "examples.json",
     "fixtures",
+    "main.ts",
     "package.json",
     "types.ts"
   ],
+  "targets": {
+    "runbook-engine": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "Execute a Markdown runbook specification from a JSON file or stdin and output the ExecutionReport as JSON.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "Path to a JSON file containing { markdown, confirmedStepIds?, healthByStep?, options? }."
+        }
+      ]
+    }
+  },
   "engines": {
     "natlang": ">=0.1.0",
     "node": ">=22.13.0"

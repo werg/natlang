@@ -58,7 +58,14 @@ export function parseArgs(args: string[]): Parsed {
     // A name is checked before it can take the next word as its value, so a typo is reported as one.
     if (!BOOLEAN.has(name) && !VALUED.has(name)) throw unknownOption(name, [...BOOLEAN, ...VALUED], words[0]);
     if (BOOLEAN.has(name)) {
-      if (equal >= 0) throw usageError(`${name} does not take a value`);
+      if (equal >= 0) {
+        if (name === '--idiom' && value.slice(equal + 1) === 'strict') {
+          set('--idiom', true);
+          set('--idiom-strict', true);
+          continue;
+        }
+        throw usageError(`${name} does not take a value`);
+      }
       set(name, true);
     } else if (equal >= 0) set(name, value.slice(equal + 1));
     else {

@@ -37,5 +37,59 @@
       }
     },
     "expected": "regression"
+  },
+  {
+    "name": "bisection stops when tested commit fails with unrelated build error",
+    "function": "bisectSettled.nl",
+    "inputs": {
+      "state": {
+        "trace": {
+          "id": "tr-reg",
+          "job": "unit-pricing",
+          "log": "AssertionError: expected discount(100, 0.2) to equal 80, got 20",
+          "commits": ["c1", "c2", "c3", "c4", "c5", "c6"]
+        },
+        "commits": ["c1", "c2", "c3", "c4", "c5", "c6"],
+        "low": 0,
+        "high": 3,
+        "tested": ["c3"],
+        "observations": [
+          {
+            "commit": "c3",
+            "fails": true,
+            "log": "Error: Cannot find module './legacy-config' during TypeScript build"
+          }
+        ],
+        "done": false
+      }
+    },
+    "expected": true
+  },
+  {
+    "name": "bisection continues when tested commit reproduces the same assertion failure",
+    "function": "bisectSettled.nl",
+    "inputs": {
+      "state": {
+        "trace": {
+          "id": "tr-reg",
+          "job": "unit-pricing",
+          "log": "AssertionError: expected discount(100, 0.2) to equal 80, got 20",
+          "commits": ["c1", "c2", "c3", "c4", "c5", "c6"]
+        },
+        "commits": ["c1", "c2", "c3", "c4", "c5", "c6"],
+        "low": 0,
+        "high": 3,
+        "tested": ["c3"],
+        "observations": [
+          {
+            "commit": "c3",
+            "fails": true,
+            "log": "AssertionError: expected discount(100, 0.2) to equal 80, got 20"
+          }
+        ],
+        "done": false
+      }
+    },
+    "expected": false
   }
 ]

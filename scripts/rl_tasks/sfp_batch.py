@@ -104,9 +104,15 @@ def qualify(batch, runtime, n, concurrency):
     def every_row(paths, target):
         target.write_text(''.join(json.dumps(dict(row, split='train')) + '\n' for path in paths for row in rows(path)))
         return str(target)
-    overlap = (measure_repetition.overlap_with_pool([every_row([cases], batch / f'.held-v4-batch-{n}.jsonl')],
-                                                    [every_row(held_v4, batch / f'.held-v4-pool-{n}.jsonl')])
-               if held_v4 and converted else {})
+    tmp_batch = batch / f'.held-v4-batch-{n}.jsonl'
+    tmp_pool = batch / f'.held-v4-pool-{n}.jsonl'
+    try:
+        overlap = (measure_repetition.overlap_with_pool([every_row([cases], tmp_batch)],
+                                                        [every_row(held_v4, tmp_pool)])
+                   if held_v4 and converted else {})
+    finally:
+        tmp_batch.unlink(missing_ok=True)
+        tmp_pool.unlink(missing_ok=True)
     held['held_v4_overlap'] = {k: overlap.get(k) for k in ('pool_rows', 'rows_with_instruction_in_pool',
                                                             'rows_with_program_in_pool', 'rows_with_functional_program_in_pool')}
     (batch / f'held-{n}.json').write_text(json.dumps(held, indent=1) + '\n')

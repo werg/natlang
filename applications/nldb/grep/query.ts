@@ -1,5 +1,6 @@
 /**
- * Sem-Grep-SQL (WS6 §3 A8): cross-cutting semantic + relational queries over repositories, docs, and CSV/SQLite tables.
+ * Repository semantic + relational queries (`applications/nldb/grep`, WS6 §3 A8): cross-cutting queries over
+ * repositories, docs, and CSV/SQLite tables.
  * Exact hash joins, predicate pushdown, CSV parsing, grouping, sorting, and aggregations stay in TypeScript;
  * content-addressed caching keyed by (sha256, predicate) avoids repeating semantic calls on unchanged files;
  * uncached files run concurrently through `semanticFilter` and `semanticMap` with optional `Neuralese<T>` view hooks.
@@ -259,8 +260,16 @@ export async function runQuery(
   const concurrency = options.concurrency ?? 8;
   const viewHook = options.neuraleseView;
 
+  const fencedDataset: QueryDataset = {
+    ...dataset,
+    files: dataset.files.map(file => ({
+      ...file,
+      content: untrusted(String(file.content), file.path),
+    })),
+  };
+
   // 1. Exact relational join + exact predicate pushdown (0 LLM calls).
-  let candidates = joinFiles(dataset, plan);
+  let candidates = joinFiles(fencedDataset, plan);
   if (plan.exactFilters && plan.exactFilters.length > 0) {
     candidates = candidates.filter(row => plan.exactFilters!.every(f => matchesExactFilter(row, f)));
   }

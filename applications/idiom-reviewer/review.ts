@@ -7,6 +7,8 @@
  * The step judgment (`stepKind`) and the step splitter (`instructionsOf`) are `@natlang/std`'s, shared with the program
  * migrator (applications/migration/program).
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { escalate, instructionsOf, semanticMap, stepKind } from '@natlang/node/std';
 import detectCueWords from './detectCueWords.nl';
 import detectUntypedExternal from './detectUntypedExternal.nl';
@@ -20,7 +22,116 @@ export type ReviewOptions = {
   floor?: number;
   /** Maximum concurrent decision calls (default `8`). */
   concurrency?: number;
+  /** Optional program root directory used to locate sibling `types.ts` files for alias resolution. */
+  rootDir?: string;
+  /** Optional in-memory `types.ts` source strings keyed by path for resolving `Untrusted<...>` inside type aliases. */
+  typeSources?: Record<string, string>;
 };
+
+/** Parse `type Name = ...` and `interface Name { ... }` bodies from TypeScript source text. */
+export function parseTypeAliases(source: string): Map<string, string> {
+  const aliases = new Map<string, string>();
+  const cleaned = source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
+
+  const declRe = /\b(?:export\s+)?(?:type\s+([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*=|interface\s+([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?(?:\s+extends\s+[^{]+)?\s*\{)/g;
+  for (const match of cleaned.matchAll(declRe)) {
+    const name = match[1] ?? match[2];
+    if (!name) continue;
+    const isInterface = Boolean(match[2]);
+    let pos = (match.index ?? 0) + match[0].length;
+    if (isInterface) {
+      let depth = 1;
+      const start = pos;
+      for (; pos < cleaned.length && depth > 0; pos++) {
+        if (cleaned[pos] === '{') depth++;
+        else if (cleaned[pos] === '}') depth--;
+      }
+      aliases.set(name, cleaned.slice(start, Math.max(start, pos - 1)));
+    } else {
+      let brace = 0;
+      let paren = 0;
+      let angle = 0;
+      const start = pos;
+      for (; pos < cleaned.length; pos++) {
+        const ch = cleaned[pos]!;
+        if (ch === '{') brace++;
+        else if (ch === '}') brace = Math.max(0, brace - 1);
+        else if (ch === '(') paren++;
+        else if (ch === ')') paren = Math.max(0, paren - 1);
+        else if (ch === '<') angle++;
+        else if (ch === '>') angle = Math.max(0, angle - 1);
+        else if (ch === ';' && brace === 0 && paren === 0 && angle === 0) break;
+      }
+      aliases.set(name, cleaned.slice(start, pos));
+    }
+  }
+  return aliases;
+}
+
+/** Whether `typeExpr` directly or transitively contains `Untrusted<...>` via parsed `types.ts` aliases. */
+export function typeContainsUntrusted(
+  typeExpr: string,
+  aliases: ReadonlyMap<string, string>,
+  seen = new Set<string>(),
+): boolean {
+  if (/\bUntrusted\s*</.test(typeExpr)) return true;
+  const identifiers = typeExpr.match(/\b[A-Za-z_$][\w$]*\b/g) ?? [];
+  for (const ident of identifiers) {
+    if (seen.has(ident)) continue;
+    const body = aliases.get(ident);
+    if (!body) continue;
+    seen.add(ident);
+    if (typeContainsUntrusted(body, aliases, seen)) return true;
+  }
+  return false;
+}
+
+function collectTypeAliases(files: readonly ProgramFile[], options: ReviewOptions): Map<string, string> {
+  const merged = new Map<string, string>();
+  const ingest = (source: string) => {
+    for (const [name, body] of parseTypeAliases(source)) {
+      if (!merged.has(name)) merged.set(name, body);
+    }
+  };
+
+  if (options.typeSources) {
+    for (const source of Object.values(options.typeSources)) ingest(source);
+  }
+  for (const file of files) {
+    if (file.path.endsWith('.ts')) ingest(file.content);
+    if (file.typesContent) ingest(file.typesContent);
+  }
+  if (options.rootDir) {
+    const root = resolve(options.rootDir);
+    const checkedDirs = new Set<string>();
+    const dirsToCheck = new Set<string>([root]);
+    for (const file of files) {
+      let current = resolve(root, dirname(file.path));
+      for (let guard = 0; guard < 16; guard++) {
+        dirsToCheck.add(current);
+        if (current === root) break;
+        const parent = dirname(current);
+        if (parent === current) break;
+        current = parent;
+      }
+    }
+    for (const dir of dirsToCheck) {
+      if (checkedDirs.has(dir)) continue;
+      checkedDirs.add(dir);
+      const typesPath = join(dir, 'types.ts');
+      if (existsSync(typesPath)) {
+        try {
+          ingest(readFileSync(typesPath, 'utf8'));
+        } catch {
+          // Ignore unreadable sibling types.ts
+        }
+      }
+    }
+  }
+  return merged;
+}
 
 /** The `args:` of a front matter, by name (block form `args:\n  name: Type` or flow form `args: { name: Type }`). */
 export function argsOf(front: string): Record<string, string> {
@@ -95,9 +206,15 @@ export async function reviewProgramIdioms(files: ProgramFile[], options: ReviewO
       suggestion: 'State what the judgment means instead of trigger words, or make the exact rule a crisp `pluggable` side.' });
   }
 
-  const params = parsed.flatMap(entry => Object.entries(argsOf(entry.front))
-    .filter(([, type]) => !/\bUntrusted\s*</.test(type))
-    .map(([name, type]) => ({ file: entry.file.path, name, type, body: entry.body })));
+  const typeAliases = collectTypeAliases(files, options);
+  const params = parsed.flatMap(entry => {
+    const entryAliases = entry.file.typesContent
+      ? new Map([...typeAliases, ...parseTypeAliases(entry.file.typesContent)])
+      : typeAliases;
+    return Object.entries(argsOf(entry.front))
+      .filter(([, type]) => !typeContainsUntrusted(type, entryAliases))
+      .map(([name, type]) => ({ file: entry.file.path, name, type, body: entry.body }));
+  });
   const externals = await semanticMap(params, async param => ({ param, decision: await judgeExternal(param.name, param.type, param.body) }), { concurrency });
   for (const { param, decision } of externals) {
     if (decision.value) issues.push({ file: param.file, kind: 'untyped-external-input', excerpt: `${param.name}: ${param.type}`,

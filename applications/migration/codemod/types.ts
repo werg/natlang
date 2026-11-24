@@ -38,7 +38,7 @@ export type MinedRuleCandidate = {
 export type VerifiedMigrationPair = {
   path: string;
   before: Untrusted<string>;
-  after: string;
+  after: Untrusted<string>;
 };
 
 /** Outcome of verifying a mined crisp rule against already-migrated files before admitting it. */

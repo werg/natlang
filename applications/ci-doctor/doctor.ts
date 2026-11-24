@@ -10,9 +10,11 @@
  */
 import {
   Folder,
+  decide,
   iterateOn,
   pluggable,
   untrusted,
+  type Decision,
   type FolderProposal,
   type FolderSnapshot,
   type PluggableSetting,
@@ -161,12 +163,62 @@ export function checkAssertionsPreserved(proposal: FolderProposal<FixProposal>):
   return problems;
 }
 
-/** Trimmed source lines that contain an active `assert(...)` / `assert.*(...)` / `expect(...)` call. */
+const ASSERTION_START_RE = /\bassert(?:\.\w+)?\s*\(|\bexpect\s*\(/;
+const CHAIN_CONTINUATION_RE = /^\.(?:not|resolves|rejects|toEqual|toStrictEqual|toBe\w*|toMatch\w*|toThrow\w*|toHave\w*|toContain\w*|toCloseTo|toSatisfy)\b/;
+
+function parenDelta(line: string): number {
+  let delta = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (quote) {
+      if (ch === '\\' && i + 1 < line.length) i++;
+      else if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+    } else if (ch === '(') {
+      delta++;
+    } else if (ch === ')') {
+      delta--;
+    }
+  }
+  return delta;
+}
+
+/**
+ * Trimmed source lines belonging to active `assert(...)` / `assert.*(...)` / `expect(...)` calls,
+ * stripping `/* ... *\/` block comments and `//` line comments and preserving multi-line assertion chains.
+ */
 function assertionLines(source: string): string[] {
-  return source
-    .split('\n')
-    .map(line => line.replace(/\/\/.*$/, '').trim())
-    .filter(line => /\bassert(?:\.\w+)?\s*\(|\bexpect\s*\(/.test(line));
+  const withoutBlockComments = source.replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, ' '));
+  const rawLines = withoutBlockComments.split('\n').map(line => line.replace(/\/\/.*$/, '').trim());
+  const kept: string[] = [];
+  let inAssertion = false;
+  let openParens = 0;
+
+  for (const line of rawLines) {
+    if (!line) {
+      if (openParens <= 0) inAssertion = false;
+      continue;
+    }
+    if (ASSERTION_START_RE.test(line)) {
+      kept.push(line);
+      openParens = Math.max(0, parenDelta(line));
+      inAssertion = true;
+      continue;
+    }
+    if (inAssertion && (openParens > 0 || CHAIN_CONTINUATION_RE.test(line))) {
+      kept.push(line);
+      openParens = Math.max(0, openParens + parenDelta(line));
+      if (openParens === 0 && line.endsWith(';')) {
+        inAssertion = false;
+      }
+      continue;
+    }
+    inAssertion = false;
+    openParens = 0;
+  }
+  return kept;
 }
 
 /**
@@ -290,12 +342,19 @@ export async function diagnoseAndFixCi(
   const traces = rawTraces.map(fenceTrace);
 
   // Pluggable known-flake detector: crisp matches known signatures (0 model calls); nl asks classifyFailure.nl;
-  // shadow runs both, records agreement, and serves crisp. Traces it does not settle go to semanticPartition.
+  // shadow runs both, records agreement, and serves crisp. Memoize `decide(classifyFailure, trace)` per trace so
+  // `flakeMode: 'shadow'` never calls `classifyFailure` twice on the same trace while preserving calibrated confidence.
   const flakeMode = options.flakeMode ?? 'crisp';
+  const classified = new Map<string, Promise<Decision<FailureKind>>>();
+  const classifyOnce = (trace: FailureTrace): Promise<Decision<FailureKind>> => {
+    let pending = classified.get(trace.id);
+    if (!pending) classified.set(trace.id, pending = decide(classifyFailure, trace));
+    return pending;
+  };
   const detectFlake = pluggable(
     {
       crisp: (trace: FailureTrace): boolean => detectKnownFlakeSignature(String(trace.log)) !== null,
-      nl: async (trace: FailureTrace): Promise<boolean> => (await classifyFailure(trace)) === 'flake',
+      nl: async (trace: FailureTrace): Promise<boolean> => (await classifyOnce(trace)).value === 'flake',
     },
     flakeMode,
     { default: 'crisp', serve: 'crisp', name: 'ci-known-flake-detector' },
@@ -307,13 +366,47 @@ export async function diagnoseAndFixCi(
     if (flakeMode !== 'nl' && await detectFlake(trace)) crispFlakes.push(trace);
     else remaining.push(trace);
   }
-  const partition = remaining.length > 0
+  const partitionFloor = options.partitionFloor ?? 0.75;
+  const undecided = remaining.filter(trace => !classified.has(trace.id));
+  const undecidedPartition = undecided.length > 0
     ? await semanticPartition<FailureTrace, FailureKind>(
-        remaining,
+        undecided,
         trace => classifyFailure(trace),
-        { floor: options.partitionFloor ?? 0.75, concurrency: options.concurrency ?? 6 },
+        { floor: partitionFloor, concurrency: options.concurrency ?? 6 },
       )
     : { groups: {} as Record<FailureKind, FailureTrace[]>, uncertain: [] };
+
+  // Merge any already-classified traces (from shadow mode) with newly partitioned traces in input order.
+  const partition: {
+    groups: Partial<Record<FailureKind, FailureTrace[]>>;
+    uncertain: Array<{ item: FailureTrace; label: FailureKind; confidence: number }>;
+  } = { groups: {}, uncertain: [] };
+  if (classified.size === 0) {
+    Object.assign(partition.groups, undecidedPartition.groups);
+    partition.uncertain.push(...undecidedPartition.uncertain);
+  } else {
+    const undecidedById = new Map<string, { label: FailureKind; uncertain?: { item: FailureTrace; label: FailureKind; confidence: number } }>();
+    for (const [kind, items] of Object.entries(undecidedPartition.groups) as Array<[FailureKind, FailureTrace[]]>) {
+      for (const item of items) undecidedById.set(item.id, { label: kind });
+    }
+    for (const entry of undecidedPartition.uncertain) {
+      undecidedById.set(entry.item.id, { label: entry.label, uncertain: entry });
+    }
+    for (const trace of remaining) {
+      if (classified.has(trace.id)) {
+        const decision = await classifyOnce(trace);
+        if (decision.confidence < partitionFloor) {
+          partition.uncertain.push({ item: trace, label: decision.value, confidence: decision.confidence });
+        } else {
+          (partition.groups[decision.value] ??= []).push(trace);
+        }
+      } else {
+        const found = undecidedById.get(trace.id);
+        if (found?.uncertain) partition.uncertain.push(found.uncertain);
+        else if (found) (partition.groups[found.label] ??= []).push(trace);
+      }
+    }
+  }
 
   // Known flake signatures are exact clusters; the classified traces cluster by root cause within their kind.
   const clusters: Cluster[] = [];

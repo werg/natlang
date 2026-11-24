@@ -1,5 +1,5 @@
 {
-  "name": "@natlang/app-runbook-engine",
+  "name": "@natlang/runbook-engine",
   "private": true,
   "type": "module"
 }

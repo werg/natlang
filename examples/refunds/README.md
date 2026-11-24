@@ -21,9 +21,9 @@ natlang traces show CALL_ID                                    # what one call d
   the context it is bound to.
 - **rules.ts**: eligibility as `pluggable({ crisp, nl }, setting)`: the 30-day return window on the order record, or the
   judgment. `shadow` runs both, serves the rule and records every disagreement as a `pluggable_shadow` trace event.
-- **desk.ts**: `settle`, one independent pipeline per request, all at once. The verdict is
-  `decide(verdict.in(Context.empty().with({ policy })), request)`: the same function bound to each shop's policy.
-  Below the floor (0.8) the same function in the same context runs on a stronger model, `.on({ model: 'teacher' })`.
+- **desk.ts**: `settle`, one independent pipeline per request, all at once. The verdict is wrapped with
+  `escalate(verdict.in(Context.empty().with({ policy })), { to: 'teacher', floor: 0.8 })` from `@natlang/node/std`:
+  the same function bound to each shop's policy, scored locally and escalated only below the confidence floor (0.8).
 - **reply.ts**: an inline `nl` writes the reply, and `iterateOn(revise, first).until(nl\`reply answers every question
   the customer asks in request.\`)` revises it until the natural-language check holds.
 - **ledger.ts**: records the outcomes as one folder transaction: `folder.propose(reducer)` writes a case file per
@@ -32,6 +32,7 @@ natlang traces show CALL_ID                                    # what one call d
 - **main.ts**: the `desk` target. The ledger lives in the program's state directory.
 - **policies/**: each shop's written refund policy; **requests.json**: the sample requests.
 
-`teacher` is the profile that your model profile names as `escalate` (a stronger hosted or local model); without one
-the unsure verdicts run again on the default model. `natlang run examples/refunds -- --eligibility shadow` runs both
-eligibility implementations and traces where they disagree.
+`teacher` is the profile that your model profile names as `escalate` (a stronger hosted or local model); without one,
+`escalate` keeps the local answer (`escalated: false`, `reason: 'unavailable:...'`) instead of rerunning on the
+default model. `natlang run examples/refunds -- --eligibility shadow` runs both eligibility implementations and traces
+where they disagree.

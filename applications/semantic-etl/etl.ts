@@ -9,6 +9,7 @@
  * - Links vendor/counterparty entities across feeds using `semanticMatch` with exact blocking and `sameEntity.nl`
  *   (`readout: decision`).
  */
+import { untrusted } from '@natlang/node';
 import { semanticMap, semanticMatch, semanticRepair } from '@natlang/node/std';
 import buildMapper from './buildMapper.nl';
 import parseAnomalousRow from './parseAnomalousRow.nl';
@@ -21,6 +22,7 @@ import type {
   EtlReport,
   RawRow,
   RowMappingSpec,
+  SchemaField,
   TargetSchema,
 } from './types.js';
 
@@ -213,63 +215,204 @@ function normalizeDate(value: unknown, format: RowMappingSpec['dateFormat']): st
   return null;
 }
 
-/** Validate a CleanRow strictly against TargetSchema invariants. */
-export function validateCleanRow(row: CleanRow): string[] {
+const DEFAULT_INVOICE_FIELDS: readonly SchemaField[] = [
+  { name: 'id', type: 'string', required: true },
+  { name: 'amount', type: 'currency', required: true },
+  { name: 'currency', type: 'string', required: true },
+  { name: 'vendor', type: 'string', required: true },
+  { name: 'date', type: 'date', required: true },
+  { name: 'category', type: 'string', required: true },
+];
+
+function schemaFieldsOf(schema?: TargetSchema): readonly SchemaField[] {
+  return schema && Array.isArray(schema.fields) && schema.fields.length > 0
+    ? schema.fields
+    : DEFAULT_INVOICE_FIELDS;
+}
+
+function readRowField(row: CleanRow, fieldName: string): unknown {
+  if (row.fields && Object.hasOwn(row.fields, fieldName)) {
+    return row.fields[fieldName];
+  }
+  return (row as Record<string, unknown>)[fieldName];
+}
+
+function parseNumberValue(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().replaceAll(',', '');
+  if (!/^-?\d+(?:\.\d+)?$/.test(trimmed)) return null;
+  const num = Number(trimmed);
+  return Number.isFinite(num) ? num : null;
+}
+
+function parseBooleanValue(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return null;
+  }
+  if (typeof value !== 'string') return null;
+  const lower = value.trim().toLowerCase();
+  if (lower === 'true' || lower === '1' || lower === 'yes' || lower === 'y') return true;
+  if (lower === 'false' || lower === '0' || lower === 'no' || lower === 'n') return false;
+  return null;
+}
+
+function resolveAmountFieldName(schema?: TargetSchema): string {
+  if (schema?.amountField) return schema.amountField;
+  const currencyField = schema?.fields.find(f => f.type === 'currency');
+  if (currencyField) return currencyField.name;
+  return 'amount';
+}
+
+function resolveIdFieldName(schema?: TargetSchema): string {
+  return schema?.idField || 'id';
+}
+
+/** Validate a CleanRow strictly against every field declared in `TargetSchema.fields`. */
+export function validateCleanRow(row: CleanRow, schema?: TargetSchema): string[] {
   const problems: string[] = [];
-  if (!row.id || !row.id.trim()) problems.push('Row id is missing or empty.');
-  if (typeof row.amount !== 'number' || !Number.isFinite(row.amount)) problems.push(`Row ${row.id}: amount is not a finite number.`);
-  if (!CURRENCY_CODE_RE.test(row.currency)) problems.push(`Row ${row.id}: currency "${row.currency}" is not a 3-letter ISO code.`);
-  if (!row.vendor || !row.vendor.trim()) problems.push(`Row ${row.id}: vendor is missing.`);
-  if (!ISO_DATE_RE.test(row.date)) problems.push(`Row ${row.id}: date "${row.date}" is not YYYY-MM-DD.`);
-  if (!row.category || !row.category.trim()) problems.push(`Row ${row.id}: category is missing.`);
+  const fields = schemaFieldsOf(schema);
+  const idField = resolveIdFieldName(schema);
+  const currencyField = schema?.currencyField ?? 'currency';
+  const rowId = String(readRowField(row, idField) ?? row.id ?? '').trim();
+  if (!rowId) problems.push('Row id is missing or empty.');
+
+  for (const field of fields) {
+    const value = readRowField(row, field.name);
+    const missing = value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
+    if (missing) {
+      if (field.required !== false) {
+        problems.push(`Row ${rowId || '(unknown)'}: required field "${field.name}" is missing.`);
+      }
+      continue;
+    }
+    if (field.type === 'currency' || field.type === 'number') {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        problems.push(`Row ${rowId || '(unknown)'}: field "${field.name}" is not a finite number.`);
+      }
+    } else if (field.type === 'date') {
+      if (typeof value !== 'string' || !ISO_DATE_RE.test(value)) {
+        problems.push(`Row ${rowId || '(unknown)'}: field "${field.name}" ("${String(value)}") is not YYYY-MM-DD.`);
+      }
+    } else if (field.type === 'boolean') {
+      if (typeof value !== 'boolean') {
+        problems.push(`Row ${rowId || '(unknown)'}: field "${field.name}" is not a boolean.`);
+      }
+    } else if (field.type === 'string') {
+      if (typeof value !== 'string' || !value.trim()) {
+        problems.push(`Row ${rowId || '(unknown)'}: field "${field.name}" must be a non-empty string.`);
+      } else if (field.name === currencyField && !CURRENCY_CODE_RE.test(value)) {
+        problems.push(`Row ${rowId || '(unknown)'}: currency "${value}" is not a 3-letter ISO code.`);
+      }
+    }
+  }
   return problems;
 }
 
-/** Compile a verified `RowMappingSpec` into a fast, zero-LLM-call deterministic TypeScript row transform. */
-export function compileRowTransform(spec: RowMappingSpec, _schema: TargetSchema): (row: RawRow) => CrispParseResult {
+/** Compile a verified `RowMappingSpec` into a fast, zero-LLM-call deterministic TypeScript row transform honoring `schema.fields`. */
+export function compileRowTransform(spec: RowMappingSpec, schema: TargetSchema): (row: RawRow) => CrispParseResult {
   const scale = Number.isFinite(spec.amountScale) && spec.amountScale > 0 ? spec.amountScale : 1;
   const fallbackCurrency = (spec.defaultCurrency || 'USD').trim().toUpperCase();
+  const fields = schemaFieldsOf(schema);
+  const idField = resolveIdFieldName(schema);
+  const currencyField = schema.currencyField ?? 'currency';
+  const categoryField = schema.categoryField ?? 'category';
 
   return (row: RawRow): CrispParseResult => {
     const record = parseRawRecord(String(row.raw), spec);
     if (!record) return { ok: false, error: `Could not parse raw payload as ${spec.delimiter}.` };
 
-    const rawId = lookupField(record, spec.fieldMap.id);
-    const id = rawId !== undefined ? String(rawId).trim() : row.id.trim();
-    if (!id) return { ok: false, error: 'Missing row id.' };
+    const parsedFields: Record<string, string | number | boolean | null> = {};
+    let detectedCurrency: string | undefined;
 
-    const rawAmount = lookupField(record, spec.fieldMap.amount);
-    const parsedAmount = parseAmount(rawAmount, scale);
-    if (!parsedAmount) return { ok: false, error: `Invalid amount value: ${String(rawAmount)}.` };
+    // First pass: parse currency/numeric/date/boolean/string fields (currency fields may detect ISO codes).
+    for (const field of fields) {
+      if (field.name === currencyField) continue;
+      const aliases = spec.fieldMap?.[field.name] ?? [field.name, ...(field.aliases ?? [])];
+      const rawValue = lookupField(record, aliases);
 
-    const rawCurrency = lookupField(record, spec.fieldMap.currency);
-    const currencyCandidate = rawCurrency !== undefined
-      ? String(rawCurrency).trim().toUpperCase()
-      : (parsedAmount.detectedCurrency ?? fallbackCurrency);
-    const currency = CURRENCY_SYMBOLS[currencyCandidate] ?? currencyCandidate;
-    if (!CURRENCY_CODE_RE.test(currency)) return { ok: false, error: `Invalid currency code: ${currency}.` };
+      if (field.name === idField) {
+        const idVal = rawValue !== undefined ? String(rawValue).trim() : row.id.trim();
+        if (!idVal) return { ok: false, error: `Missing row ${field.name}.` };
+        parsedFields[field.name] = idVal;
+        continue;
+      }
 
-    const rawVendor = lookupField(record, spec.fieldMap.vendor);
-    const vendor = rawVendor !== undefined ? String(rawVendor).trim() : '';
-    if (!vendor) return { ok: false, error: 'Missing vendor field.' };
+      if (rawValue === undefined) {
+        if (field.name === categoryField) {
+          parsedFields[field.name] = 'uncategorized';
+          continue;
+        }
+        if (field.required !== false) {
+          return { ok: false, error: `Missing required field "${field.name}".` };
+        }
+        parsedFields[field.name] = null;
+        continue;
+      }
 
-    const rawDate = lookupField(record, spec.fieldMap.date);
-    const date = normalizeDate(rawDate, spec.dateFormat);
-    if (!date) return { ok: false, error: `Invalid date value: ${String(rawDate)}.` };
+      if (field.type === 'currency') {
+        const parsedAmount = parseAmount(rawValue, scale);
+        if (!parsedAmount) return { ok: false, error: `Invalid currency value for "${field.name}": ${String(rawValue)}.` };
+        parsedFields[field.name] = parsedAmount.amount;
+        if (parsedAmount.detectedCurrency && !detectedCurrency) {
+          detectedCurrency = parsedAmount.detectedCurrency;
+        }
+      } else if (field.type === 'number') {
+        const parsedNum = parseNumberValue(rawValue);
+        if (parsedNum === null) return { ok: false, error: `Invalid numeric value for "${field.name}": ${String(rawValue)}.` };
+        parsedFields[field.name] = parsedNum;
+      } else if (field.type === 'date') {
+        const normalized = normalizeDate(rawValue, spec.dateFormat);
+        if (!normalized) return { ok: false, error: `Invalid date value for "${field.name}": ${String(rawValue)}.` };
+        parsedFields[field.name] = normalized;
+      } else if (field.type === 'boolean') {
+        const parsedBool = parseBooleanValue(rawValue);
+        if (parsedBool === null) return { ok: false, error: `Invalid boolean value for "${field.name}": ${String(rawValue)}.` };
+        parsedFields[field.name] = parsedBool;
+      } else {
+        const text = String(rawValue).trim();
+        if (!text && field.required !== false) return { ok: false, error: `Missing required field "${field.name}".` };
+        parsedFields[field.name] = field.name === categoryField ? text.toLowerCase() : text;
+      }
+    }
 
-    const rawCategory = lookupField(record, spec.fieldMap.category);
-    const category = rawCategory !== undefined ? String(rawCategory).trim().toLowerCase() : 'uncategorized';
+    // Second pass: currency field (if declared in schema.fields) can use detectedCurrency or defaultCurrency.
+    const ccySchemaField = fields.find(f => f.name === currencyField);
+    if (ccySchemaField) {
+      const aliases = spec.fieldMap?.[ccySchemaField.name] ?? [ccySchemaField.name, ...(ccySchemaField.aliases ?? [])];
+      const rawCurrency = lookupField(record, aliases);
+      const currencyCandidate = rawCurrency !== undefined
+        ? String(rawCurrency).trim().toUpperCase()
+        : (detectedCurrency ?? fallbackCurrency);
+      const currency = CURRENCY_SYMBOLS[currencyCandidate] ?? currencyCandidate;
+      if (!CURRENCY_CODE_RE.test(currency)) {
+        return { ok: false, error: `Invalid currency code for "${ccySchemaField.name}": ${currency}.` };
+      }
+      parsedFields[ccySchemaField.name] = currency;
+    }
 
+    const cleanId = String(parsedFields[idField] ?? row.id.trim());
     const clean: CleanRow = {
-      id,
-      amount: parsedAmount.amount,
-      currency,
-      vendor,
-      date,
-      category,
+      id: cleanId,
+      ...(typeof parsedFields.amount === 'number' ? { amount: parsedFields.amount } : {}),
+      ...(typeof parsedFields.currency === 'string' ? { currency: parsedFields.currency } : {}),
+      ...(typeof parsedFields.vendor === 'string' ? { vendor: parsedFields.vendor } : {}),
+      ...(typeof parsedFields.date === 'string' ? { date: parsedFields.date } : {}),
+      ...(typeof parsedFields.category === 'string' ? { category: parsedFields.category } : {}),
+      fields: parsedFields,
       source: 'crisp',
     };
-    const issues = validateCleanRow(clean);
+    // Expose custom schema fields directly on the returned object as well as under `clean.fields`.
+    for (const [k, v] of Object.entries(parsedFields)) {
+      if (!(k in clean)) {
+        (clean as Record<string, unknown>)[k] = v;
+      }
+    }
+
+    const issues = validateCleanRow(clean, schema);
     if (issues.length > 0) return { ok: false, error: issues.join(' ') };
     return { ok: true, row: clean };
   };
@@ -281,12 +424,16 @@ export function verifyConservation(
   outputRows: readonly CleanRow[],
   expectedTotal?: number,
   tolerance = 0.01,
+  schema?: TargetSchema,
 ): ConservationReport {
   const problems: string[] = [];
+  const idField = resolveIdFieldName(schema);
+  const amountField = resolveAmountFieldName(schema);
+
   if (outputRows.length !== inputRows.length) {
     problems.push(`Row count mismatch: input had ${inputRows.length} rows, output has ${outputRows.length}.`);
   }
-  const outputIds = new Set(outputRows.map(r => r.id));
+  const outputIds = new Set(outputRows.map(r => String(readRowField(r, idField) ?? r.id ?? '')));
   for (const input of inputRows) {
     if (!input.id || !input.id.trim()) {
       problems.push('Input batch contains an empty row id.');
@@ -296,9 +443,10 @@ export function verifyConservation(
   }
   let sum = 0;
   for (const row of outputRows) {
-    const rowProblems = validateCleanRow(row);
+    const rowProblems = validateCleanRow(row, schema);
     problems.push(...rowProblems);
-    if (Number.isFinite(row.amount)) sum += row.amount;
+    const amountValue = readRowField(row, amountField);
+    if (typeof amountValue === 'number' && Number.isFinite(amountValue)) sum += amountValue;
   }
   const actualTotal = Math.round(sum * 100) / 100;
   if (expectedTotal !== undefined && Math.abs(actualTotal - expectedTotal) > tolerance) {
@@ -369,7 +517,7 @@ function checkMappingOnSamples(
     }
   }
   if (problems.length > 0) return problems;
-  const conservation = verifyConservation(samples, parsed, expectedSampleTotal, tolerance);
+  const conservation = verifyConservation(samples, parsed, expectedSampleTotal, tolerance, schema);
   return conservation.problems;
 }
 
@@ -377,14 +525,18 @@ function checkMappingOnSamples(
  * Run Semantic ETL end-to-end:
  * 1. Synthesize and verify a crisp `RowMappingSpec` on sample rows (`buildMapper.nl` + `semanticRepair`).
  * 2. Execute the compiled pure-TypeScript transform over all bulk rows (0 LLM calls per normal row).
- * 3. Fall back to `parseAnomalousRow.nl` ONLY for anomalous rows that failed crisp validation.
+ * 3. Fall back to `parseAnomalousRow.nl` wrapped in `semanticRepair` ONLY for anomalous rows that failed crisp validation.
  * 4. Verify exact conservation invariants and optionally link entities via `semanticMatch` + exact blocking.
  */
 export async function runSemanticEtl(
-  rows: RawRow[],
+  rawRows: RawRow[],
   schema: TargetSchema,
   options: EtlOptions = {},
 ): Promise<EtlReport> {
+  const rows: RawRow[] = rawRows.map(row => ({
+    id: row.id,
+    raw: untrusted(String(row.raw), `vendor feed row ${row.id}`),
+  }));
   const concurrency = options.concurrency ?? 8;
   const tolerance = options.totalTolerance ?? 0.01;
   const sampleSize = Math.min(options.sampleSize ?? 5, rows.length);
@@ -399,7 +551,7 @@ export async function runSemanticEtl(
     const initial = await buildMapper(samples, schema, []);
     const repaired = await semanticRepair(initial, {
       check: spec => checkMappingOnSamples(spec, samples, schema, options.expectedSampleTotal, tolerance),
-      fix: (_spec, problems) => buildMapper(samples, schema, problems),
+      fix: (prev, problems) => buildMapper(samples, schema, problems, prev),
       attempts: options.repairAttempts ?? 2,
     });
     mappingSpec = repaired.value;
@@ -423,13 +575,36 @@ export async function runSemanticEtl(
     }
   }
 
-  // Semantic fallback pass: invoked ONLY on rows that failed the crisp schema check.
+  // Semantic fallback pass: invoked ONLY on rows that failed the crisp schema check, wrapped in semanticRepair.
   if (anomalous.length > 0) {
+    const idField = resolveIdFieldName(schema);
+    const normalizeFallback = (parsed: CleanRow, rowId: string): CleanRow => {
+      const normalized: CleanRow = {
+        ...parsed,
+        id: parsed.id || rowId,
+        source: 'semantic' as const,
+      };
+      if (idField !== 'id' && !readRowField(normalized, idField)) {
+        (normalized as Record<string, unknown>)[idField] = rowId;
+        if (normalized.fields) normalized.fields[idField] = rowId;
+      }
+      return normalized;
+    };
+
     const fallbackRows = await semanticMap(
       anomalous,
       async entry => {
-        const parsed = await parseAnomalousRow(entry.row, schema, entry.error);
-        return { index: entry.index, row: { ...parsed, id: parsed.id || entry.row.id, source: 'semantic' as const } };
+        const initial = normalizeFallback(await parseAnomalousRow(entry.row, schema, entry.error), entry.row.id);
+        const repaired = await semanticRepair(initial, {
+          check: candidate => validateCleanRow(candidate, schema),
+          fix: async (prev, problems) =>
+            normalizeFallback(
+              await parseAnomalousRow(entry.row, schema, `${entry.error}; ${problems.join(' ')}`, problems, prev),
+              entry.row.id,
+            ),
+          attempts: options.repairAttempts ?? 2,
+        });
+        return { index: entry.index, row: repaired.value };
       },
       { concurrency },
     );
@@ -439,7 +614,7 @@ export async function runSemanticEtl(
   }
 
   const cleanRows = resolved.filter((r): r is CleanRow => r !== undefined);
-  const conservation = verifyConservation(rows, cleanRows, options.expectedTotal, tolerance);
+  const conservation = verifyConservation(rows, cleanRows, options.expectedTotal, tolerance, schema);
 
   let linkedEntities: EntityPair[] = [];
   let unmatchedLeft: EntityRecord[] = [];

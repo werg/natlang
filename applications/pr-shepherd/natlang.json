@@ -12,12 +12,40 @@
     "examples.json",
     "fixtures",
     "isTrivialHunk.nl",
+    "main.ts",
     "mergeVerdict.nl",
     "package.json",
     "proposeDocFix.nl",
     "shepherd.ts",
     "types.ts"
   ],
+  "targets": {
+    "pr-shepherd": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "Review pull-request hunks against team rules from a JSON file, stdin, or --hunks/--rules arguments.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "Path to a JSON file containing { hunks, rules, options? }."
+        },
+        {
+          "name": "hunks",
+          "type": "Hunk[]",
+          "description": "Pull-request hunks to review directly instead of reading a file."
+        },
+        {
+          "name": "rules",
+          "type": "Rule[]",
+          "description": "Team engineering rules to check against non-trivial hunks."
+        }
+      ]
+    }
+  },
   "engines": {
     "natlang": ">=0.1.0",
     "node": ">=22.13.0"

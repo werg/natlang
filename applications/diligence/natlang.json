@@ -2,7 +2,7 @@
   "schema": "natlang.package/v2",
   "name": "@natlang/diligence",
   "version": "0.1.0",
-  "description": "Evaluate papers, libraries or vendors against a rubric: recursive section digests with verified citations, scored criteria and escalation of dealbreakers.",
+  "description": "Evaluate papers, libraries or vendors against a rubric: recursive section digests with verified citations, weighted scoring, Neuralese compaction and escalation of dealbreakers.",
   "include": [
     "DECOMPOSITION.md",
     "README.md",
@@ -10,10 +10,30 @@
     "digestSection.nl",
     "diligence.ts",
     "examples.json",
+    "fixtures",
+    "main.ts",
     "package.json",
     "scoreCriterion.nl",
+    "tune.examples.json",
     "types.ts"
   ],
+  "targets": {
+    "diligence": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "Evaluate vendor, library, or paper dossiers against a weighted rubric from a JSON file or stdin.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "Path to a JSON file containing { dossiers, rubric, options? }."
+        }
+      ]
+    }
+  },
   "engines": {
     "natlang": ">=0.1.0",
     "node": ">=22.13.0"

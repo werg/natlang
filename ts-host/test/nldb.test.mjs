@@ -189,8 +189,10 @@ test('the SQLite database: requests compile to one transaction; a failing statem
       { semantic: [{ criterion: 'mentions a late delivery', table: 'orders', column: 'note' }] });
     return null;
   });
-  const runtime = createNatlangRuntime({ model: withGeneratedDecisions(model.driver, inputs => {
-    assert.equal(typeof inputs.value, 'string'); judged.push(inputs.value); return /late/.test(inputs.value);
+  // judge.nl takes value as Untrusted<string>: the model sees it as a fenced data block, not a literal.
+  const runtime = createNatlangRuntime({ model: withGeneratedDecisions(model.driver, (inputs, opening) => {
+    const value = /value: Untrusted<string> = \n```untrusted data from sqlite:orders\.note\n([^\n]*)\n```/.exec(opening)?.[1];
+    assert.equal(typeof value, 'string'); judged.push(value); return /late/.test(value);
   }) });
   const db = new SqliteDatabase(join(root, 'shop.sqlite'), fn => runtime.run(fn), () => '2026-10-07');
   try {

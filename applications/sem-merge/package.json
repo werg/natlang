@@ -1,5 +1,5 @@
 {
-  "name": "@natlang/app-sem-merge",
+  "name": "@natlang/sem-merge",
   "private": true,
   "type": "module"
 }

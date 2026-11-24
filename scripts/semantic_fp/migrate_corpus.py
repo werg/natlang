@@ -194,7 +194,18 @@ def settle(original_rows, candidate_rows, proposal_dir, *, attempts_left=0, hist
         # A 'candidate' passed problemsOf: no check error, no floor finding in any changed file, and every flagged file
         # is changed, so its floor is clean; the comparison is the remaining condition.
         if comparison['accepted']:
-            decisions.append({**base, 'decision': 'accept', 'comparison': comparison})
+            cand_shas = {r.get('source_sha256') for r in rows if r.get('source_sha256')}
+            if len(cand_shas) == 1:
+                source_sha = next(iter(cand_shas))
+            elif directory.is_dir():
+                try:
+                    source_sha = equivalence.files_sha256(equivalence.program_files(directory))
+                except ValueError:
+                    source_sha = None
+            else:
+                source_sha = None
+            extra_accept = {'source_sha256': source_sha} if source_sha else {}
+            decisions.append({**base, 'decision': 'accept', 'comparison': comparison, **extra_accept})
             continue
         prior = (history or {}).get(program, [])
         judged = judge({'accepted': False, 'problems': problems,
@@ -207,16 +218,19 @@ def settle(original_rows, candidate_rows, proposal_dir, *, attempts_left=0, hist
     return decisions
 
 
-def settle_judge(scratch):
-    """The program's ``settle`` target as a function (on the served model the environment names)."""
+def settle_judge(scratch, *, server=None, model=None, provider=None):
+    """The program's ``settle`` target as a function (on the configured provider/server model or environment)."""
     scratch = Path(scratch)
     scratch.mkdir(parents=True, exist_ok=True)
+    extra = (['--provider', provider] + (['--model', model] if model else [])) if provider else []
+    env = model_env(None if provider else (server or os.environ.get('NATLANG_SERVER')),
+                    model or os.environ.get('NATLANG_MODEL'))
 
     def judge(comparison, attempts_left, history):
         path = scratch / f'settle-{abs(hash(json.dumps(comparison, sort_keys=True)))}.json'
         path.write_text(json.dumps({'comparison': comparison, 'attemptsLeft': attempts_left, 'history': history}))
-        done = subprocess.run(natlang_command(['--', 'settle', str(path)]), capture_output=True, text=True, cwd=REPO,
-                              env=model_env(os.environ.get('NATLANG_SERVER'), os.environ.get('NATLANG_MODEL')))
+        done = subprocess.run(natlang_command([*extra, '--', 'settle', str(path)]), capture_output=True, text=True,
+                              cwd=REPO, env=env)
         try:
             return json.loads(done.stdout.strip().splitlines()[-1])['next']
         except Exception:
@@ -225,14 +239,33 @@ def settle_judge(scratch):
 
 
 # ---- commit and package -----------------------------------------------------------------------------------------------
+def _relative_program_root(decision, repo):
+    root = Path(decision['root']).resolve()
+    for base in (REPO.resolve(), Path(repo).resolve()):
+        if root.is_relative_to(base):
+            return root.relative_to(base)
+    for parent in root.parents:
+        if (parent / '.git').exists() or (parent / '.natlang-pin.json').exists():
+            return root.relative_to(parent)
+    if decision.get('program'):
+        try:
+            return program_root(decision['program'], Path(repo)).relative_to(Path(repo))
+        except (ValueError, IndexError):
+            pass
+    parts = root.parts
+    for anchor in ('codebases', 'applications'):
+        if anchor in parts:
+            return Path(*parts[parts.index(anchor):])
+    raise ValueError(f'cannot determine repository-relative path for {root}')
+
+
 def apply_decisions(decisions, repo):
     """Write accepted files into ``repo`` (a checkout) and delete the programs the keep judgment deleted. Returns the
     paths written and removed, repository-relative."""
     repo = Path(repo)
     written, removed = [], []
     for decision in decisions:
-        root = Path(decision['root'])
-        rel_root = root.relative_to(REPO) if root.is_relative_to(REPO) else root.relative_to(repo)
+        rel_root = _relative_program_root(decision, repo)
         if decision['decision'] == 'accept':
             proposal = json.loads((Path(decision['proposal']) / 'proposal.json').read_text())
             for change in proposal['changes']:
@@ -274,7 +307,18 @@ def package(decision_rows, out, *, reserved=frozenset(), source_groups=None):
             continue
         proposal = json.loads((Path(decision['proposal']) / 'proposal.json').read_text())
         root = Path(decision['root'])
-        before = equivalence.program_files(root)
+        if isinstance(proposal.get('before_files'), dict):
+            before = dict(proposal['before_files'])
+        elif isinstance(proposal.get('snapshot'), dict):
+            before = dict(proposal['snapshot'])
+        else:
+            before = equivalence.program_files(root) if root.is_dir() else {}
+            for change in proposal['changes']:
+                if 'before' in change:
+                    if change['before'] is None:
+                        before.pop(change['path'], None)
+                    else:
+                        before[change['path']] = change['before']
         after = dict(before)
         for change in proposal['changes']:
             if change['after'] is None:
@@ -293,20 +337,46 @@ def package(decision_rows, out, *, reserved=frozenset(), source_groups=None):
     return rows, skipped
 
 
+def _accepted_source_sha256(decision):
+    if decision.get('source_sha256'):
+        return decision['source_sha256']
+    comp = decision.get('comparison') or {}
+    if comp.get('second_source_sha256'):
+        return comp['second_source_sha256']
+    prop = decision.get('proposal')
+    if prop:
+        cand_dir = Path(prop) / 'program'
+        if cand_dir.is_dir():
+            try:
+                return equivalence.files_sha256(equivalence.program_files(cand_dir))
+            except ValueError:
+                pass
+    return None
+
+
 def program_tasks(case_rows, decision_rows, out, *, reserved=frozenset(), oracles=('exact', 'verifier')):
     """The accepted programs' own cases as ordinary ``natlang.program/2`` tasks whose root is the migrated program
     (07 §5 "an idiomatic program for the RL pool"): the measured candidate rows, with their original split restored,
     an id of their own (the split group, and so held exclusion by group, is unchanged) and the migration recorded."""
     accepted = {}
+    accepted_shas = {}
     for decision in decision_rows:
         if decision['decision'] == 'accept':
             accepted[decision['program']] = decision
+            accepted_shas[decision['program']] = _accepted_source_sha256(decision)
     rows = []
+    seen_ids = set()
     for row in case_rows:
         marker = row.get('equivalence') or {}
         program = marker.get('program')
         if program not in accepted or program in reserved or marker.get('oracle') not in oracles:
             continue
+        expected_sha = accepted_shas.get(program)
+        if expected_sha is not None and marker.get('source_sha256') != expected_sha:
+            continue
+        if row['id'] in seen_ids:
+            continue
+        seen_ids.add(row['id'])
         rows.append({**{k: v for k, v in row.items() if k != 'equivalence'}, 'id': f"{row['id']}:sfp-migrated",
                      'split': marker.get('split') or row.get('split'),
                      'semantic_fp_migration': {'program': program, 'source_sha256': marker.get('source_sha256'),
@@ -350,6 +420,9 @@ def main(argv=None):
     s.add_argument('--out', type=Path, required=True)
     s.add_argument('--attempts-left', type=int, default=0)
     s.add_argument('--history', type=Path, action='append', default=[])
+    s.add_argument('--server')
+    s.add_argument('--model')
+    s.add_argument('--provider')
     a = sub.add_parser('apply')
     a.add_argument('--decisions', type=Path, required=True)
     a.add_argument('--repo', type=Path, required=True)
@@ -390,7 +463,8 @@ def main(argv=None):
                 history.setdefault(d['program'], []).extend(d.get('history') or [])
         decisions = settle(list(read_jsonl(args.original)), list(read_jsonl(args.candidate)) if args.candidate else [],
                            args.proposals, attempts_left=args.attempts_left, history=history,
-                           judge=settle_judge(args.out.parent / 'settle-inputs'))
+                           judge=settle_judge(args.out.parent / 'settle-inputs',
+                                              server=args.server, model=args.model, provider=args.provider))
         args.out.write_text(''.join(json.dumps(d, sort_keys=True) + '\n' for d in decisions))
         print(json.dumps(collections.Counter(d['decision'] for d in decisions)))
     elif args.command == 'apply':

@@ -231,6 +231,14 @@ export async function semanticReduce<T, S>(items: readonly T[], initial: S, step
   const carry = carryOf(options.carry, 'semanticReduce');
   const view = options.view ?? defaultSoftView;
   const read = options.read ?? defaultSoftRead;
+  const finishCarry = async (value: unknown): Promise<S> => {
+    if (carry !== 'neuralese') return value as S;
+    const out = await span.run(() => read(value));
+    if (!options.read && typeof out === 'string' && typeof initial !== 'string' && !isNeuraleseRef(initial)) {
+      try { return JSON.parse(out) as S; } catch { /* not JSON text; keep read value */ }
+    }
+    return out as S;
+  };
   const span = new StdSpan('semanticReduce');
   return span.around(async () => {
     if (!items.length) return initial;
@@ -242,7 +250,7 @@ export async function semanticReduce<T, S>(items: readonly T[], initial: S, step
           state = await span.run(() => view(state, options.viewInstructions));
         span.stage('step', { index, ...(carry === 'neuralese' ? { carry } : {}) });
       }
-      return (carry === 'neuralese' ? await span.run(() => read(state)) : state) as S;
+      return finishCarry(state);
     }
     const initState = (carry === 'neuralese' ? await span.run(() => view(initial, options.viewInstructions)) : initial) as S;
     let level = await mapBounded(items, concurrency, async (item, index) => {
@@ -264,7 +272,7 @@ export async function semanticReduce<T, S>(items: readonly T[], initial: S, step
       level = combined;
       span.stage('combine', { round: ++round, count: level.length, ...(carry === 'neuralese' ? { carry } : {}) });
     }
-    return (carry === 'neuralese' ? await span.run(() => read(level[0]!)) : level[0]!) as S;
+    return finishCarry(level[0]!);
   }, () => `reduced ${items.length} items (${mode})`);
 }
 
