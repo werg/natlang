@@ -775,14 +775,17 @@ def frontier_rare(frontier_path, rate=0.25):
             if v['tier'] in ('never',) or v['successes'] / max(1, v['scored']) <= rate]
 
 
-def teacher_command(pin, work, covered, student_groups, limit):
-    """``teacher_gen.py`` on a policy's new failures (gap tiers: student_rare first from ``student_groups``; every
-    campaign in ``covered`` covers its successes)."""
+def teacher_command(pin, work, covered, student_groups, limit, student_rates=(), frontier=None):
+    """``teacher_gen.py`` on a policy's new failures (gap tiers: student_rare first from ``student_rates`` (every
+    collection's rates), ``student_groups`` and the ``frontier``, newest winning; every campaign in ``covered`` covers
+    its successes); ``limit`` 0: the whole ordered queue."""
     return [PY, str(Path(pin) / 'scripts/neuralese_data/teacher_gen.py'),
             '--work', str(work), '--pause-below-available-gb', '25', '--exclude-family-regex', '(?!)',
             *[x for c in covered if Path(c) != Path(work) and (Path(c) / 'manifest.jsonl').exists()
               for x in ('--covered-by', str(c))],
-            *[x for g in student_groups for x in ('--student-groups', str(g))], '--rare-rate', '0.25',
+            *[x for r in student_rates for x in ('--student-rates', str(r))],
+            *[x for g in student_groups for x in ('--student-groups', str(g))],
+            *(['--frontier-rates', str(frontier)] if frontier else []), '--rare-rate', '0.25',
             '--limit', str(limit), '--attempts', '3', *[x for t in teachers() for x in ('--teacher', json.dumps(t))]]
 
 
@@ -801,16 +804,20 @@ def teachers():
     return TEACHERS
 
 
-def launch_teacher(runner, work, frontier_path, student_groups, unit, covered_extra=()):
-    """Launch the teacher campaign for ``frontier_path``'s rare tasks as ledger unit ``unit`` (detached) through
-    ``runner`` (a Cycle: its pin and ledger); returns the number of target tasks (0: nothing launched)."""
+def launch_teacher(runner, work, frontier_path, student_groups, unit, covered_extra=(), standing=False, student_rates=()):
+    """Launch the teacher campaign as ledger unit ``unit`` (detached) through ``runner`` (a Cycle: its pin and ledger):
+    as many tasks of the ordered queue as ``frontier_path`` has rare tasks, or with ``standing`` the whole queue
+    (every teacher-eligible task, the frontier's measurements winning: it runs until a newer frontier drains it).
+    Returns the number of the frontier's rare tasks (0 without ``standing``: nothing launched)."""
     rare = frontier_rare(frontier_path)
-    if not rare:     # teacher_gen --limit 0 means every task
+    if not rare and not standing:     # teacher_gen --limit 0 means every task
         return 0
     work = Path(work)
     work.mkdir(parents=True, exist_ok=True)
+    (work / 'DRAIN').unlink(missing_ok=True)      # a relaunch of a drained queue runs
     covered = [*TEACHER_POOLS, *sorted(OPS.glob('ei/*/teacher')), *covered_extra]
-    command = teacher_command(runner.pin, work, covered, student_groups, len(rare))
+    command = teacher_command(runner.pin, work, covered, student_groups, 0 if standing else len(rare),
+                              student_rates, frontier_path if standing else None)
     script = work / 'launch.sh'
     script.write_text('#!/bin/bash\n# expert-iteration teacher frontier (expert_iteration.py launch_teacher)\nset -u\n'
                       f'set -a; for f in {" ".join(TEACHER_ENV_FILES)}; do . {Path.home()}/.config/natlang/$f.env; done; set +a\n'
@@ -2742,6 +2749,7 @@ class AsyncRoundDriver:
         self.held_v4_cadence = parse_held_v4_cadence(getattr(args, 'held_v4_cadence', HELD_V4_CADENCE))
         self.held_v4 = HeldV4Queue(self.root / 'held-v4' / 'queue.json')
         self.teacher_lock = threading.Lock()   # one campaign launch at a time (main loop, waits, the standing thread)
+        self.teacher_draining = False           # the running campaign drains for a newer frontier: check every minute
         self.handback_next = {}         # round -> when its DGX SFT is next checked for a move to a session
         self.handback_blocked = set()   # rounds whose Colab learner failed: they stay on the DGX
         self.handed_back = None         # the round a hand-back just moved (ends the DGX wait)
@@ -3078,9 +3086,27 @@ class AsyncRoundDriver:
                  if not (f.parent / 'discarded.json').exists()]
         return found[-1] if found else None
 
+    def running_teacher_work(self):
+        """The campaign WORK the driver launched last (``teacher-*/driver-launch.json`` with the newest ``at``)."""
+        found = []
+        for path in self.root.glob('teacher-*/driver-launch.json'):
+            try:
+                found.append((float(json.loads(path.read_text()).get('at', 0)), path.parent))
+            except (OSError, ValueError):
+                continue
+        return max(found)[1] if found else None
+
+    def student_rates_files(self):
+        """The newest collection's ``tasks.rates.json`` (``select``: every student outcome so far, newest first)."""
+        found = sorted(self.root.glob('collect/*/tasks.rates.json'), key=lambda p: p.stat().st_mtime)
+        return found[-1:]
+
     def ensure_teacher(self, round_dir=None):
         """The teacher campaign stands: whenever its unit is idle, the newest frontier's campaign runs
-        (``teacher-rNNNN``). Called from the main loop, the end of a round's preparation, the SFT and preparation
+        (``teacher-rNNNN``): a standing queue of every teacher-eligible task (2026-11-24: a campaign of only the
+        frontier's rare tasks, 41-46 of them with the 1 h snapshots, finished in ~30 min and left its 24 slots idle until
+        the next frontier, ~2 h). A newer frontier re-prioritises it: the running campaign drains (WORK/DRAIN: its running
+        episodes finish, it takes no new task and exits) and the next check launches the newer frontier's queue. Called from the main loop, the end of a round's preparation, the SFT and preparation
         waits and a standing thread every ``--teacher-check-minutes`` (2026-11-24: called only when a round was
         prepared, the campaign stayed idle from 01:00 until a hand launch at 02:10 under a restarted driver joining an
         already-prepared round). A campaign of that frontier which already ran resumes (teacher_gen skips finished
@@ -3092,9 +3118,18 @@ class AsyncRoundDriver:
             return None
         with self.teacher_lock:
             frontier = self.newest_frontier()
-            if frontier is None or self.c.present(unit):
+            if frontier is None:
                 return None
             work = self.root / f'teacher-{frontier.parent.name}'
+            if self.c.present(unit):
+                running = self.running_teacher_work()
+                if running is not None and running != work and not (running / 'DRAIN').exists():
+                    from natlang_neuralese.common.jsonio import write_json_durable
+                    write_json_durable(running / 'DRAIN', {'at': round(time.time(), 1), 'frontier': str(frontier)})
+                    self.note(teacher_drain=str(running), newer_frontier=str(frontier))
+                self.teacher_draining = running is not None and running != work
+                return None
+            self.teacher_draining = False
             record_path = work / 'driver-launch.json'
             scored = sum(1 for line in (work / 'manifest.jsonl').open() if line.strip()) \
                 if (work / 'manifest.jsonl').exists() else 0
@@ -3105,20 +3140,23 @@ class AsyncRoundDriver:
                     return None                 # the last relaunch scored nothing: this frontier's campaign is done
                 if time.time() - float(last.get('at', 0)) < 60 * TEACHER_RELAUNCH_MINUTES:
                     return None
+            standing = not getattr(self.a, 'no_standing_teacher', False)
             n = launch_teacher(self.c, work, frontier,
                                [self.collect_dir(p) / 'groups' / 'g*' for p in self.lineage_policies()], unit,
-                               covered_extra=sorted(self.root.glob('teacher-*')))
-            if n:
+                               covered_extra=sorted(self.root.glob('teacher-*')), standing=standing,
+                               student_rates=self.student_rates_files() if standing else ())
+            if n or standing:
                 from natlang_neuralese.common.jsonio import write_json_durable
                 write_json_durable(record_path, {'at': round(time.time(), 1), 'frontier': str(frontier),
-                                                 'scored_at_launch': scored, 'resume': launched, 'tasks': n})
+                                                 'scored_at_launch': scored, 'resume': launched, 'tasks': n,
+                                                 'standing': standing})
             self.note(teacher=unit, frontier=str(frontier), frontier_tasks=n, work=str(work), resume=launched)
             return work
 
     def teacher_loop(self):
         """The standing campaign's check, beside every wait the main loop makes (run-sft, ledger units, held)."""
-        while True:
-            time.sleep(60 * self.a.teacher_check_minutes)
+        while True:   # a draining campaign is checked every minute: its successor starts as soon as it ends
+            time.sleep(60 if getattr(self, 'teacher_draining', False) else 60 * self.a.teacher_check_minutes)
             try:
                 self.ensure_teacher()
             except Exception as error:
@@ -4569,6 +4607,9 @@ def main():
     ad.add_argument('--fill-repo', help='immutable fill-reader checkout (default: --data-repo or controller source); use --pin path to opt out')
     ad.add_argument('--fill-inflight', type=int, default=32)
     ad.add_argument('--no-teacher-campaign', action='store_true')
+    ad.add_argument('--no-standing-teacher', action='store_true',
+                    help="the teacher campaign takes only as many tasks as the newest frontier has rare ones (before "
+                         "2026-11-24) instead of the standing queue of every teacher-eligible task")
     ad.add_argument('--teacher-check-minutes', type=float, default=10.0,
                     help='how often the standing teacher campaign is checked (relaunched from the newest frontier when '
                          'its unit is idle) beside the waits')

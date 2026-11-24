@@ -13,19 +13,27 @@ successes are the distillation set, failures keep their scores.
 Tasks are the GRPO pools minus the held closure (`grpo.load_tasks`: held-v3 `exclusion_ids` incl. held-v2, shared source
 groups, `ops/pool-errata`, the missing ext_codebase repos), ordered once into `WORK/tasks.jsonl`: tasks in the base's pass band
 first, then tasks the base fails, then unmeasured ones, then those it solves, each tier round-robin over families.
-A gap campaign (`--covered-by` earlier WORKs) keeps only the tasks without a teacher success there, ordered by GAP_TIERS:
-those the student rarely solves (`--rare-rate`, over the base rates plus `--student-groups`), new task supply
-(`--priority-pool`), tasks no teacher tried, tasks a teacher failed (offered to a different teacher first).
+A gap campaign (`--covered-by` earlier WORKs) keeps only the tasks without a teacher success there, ordered by GAP_TIERS
+(expected value of a teacher attempt): tasks the student rarely or never solves that no teacher failed (`--rare-rate`, over
+the base rates, `--student-rates`, `--student-groups` and `--frontier-rates`, newest measurement first), new task supply
+(`--priority-pool`), tasks in the student's pass band (a teacher success adds a solved variant), unmeasured tasks no teacher
+tried, then tasks teachers failed (fewest failures first; the student-rare ones last: 1-3% teacher yield on 2026-11-24).
+Tasks the student solves at least the band's upper rate are left out. Without `--limit` the campaign is a standing queue:
+every eligible task, until the driver asks it to drain (WORK/DRAIN) for a newer frontier's re-prioritised queue.
 Several teachers share one WORK: each claims a task before running it (WORK/claims), so faster teachers take more.
 
   pause:   touch WORK/PAUSE   (running episodes finish, no new ones start; remove the file to continue);
            --pause-below-available-gb N does the same while host MemAvailable is below N GB
+  drain:   touch WORK/DRAIN   (running episodes finish, no new ones start, the process exits: a newer queue replaces it)
   stop:    systemctl --user stop <unit>   (killed episodes are redone on the next launch)
   resume:  launch the same command again (finished tasks are skipped)
-  routing: each task goes first to the teacher with the best yield on its family (--route-ratio, over the --covered-by
-           campaigns' and this campaign's verdicts); a teacher far below --route-floor on a family leaves it alone; a
-           task a teacher fails here goes on to another teacher (--attempts teachers per task, episodes/tNNNNNN-aK);
-           a teacher spec's "min_failed" reserves a (stronger, scarcer) teacher for tasks that many teachers failed
+  routing: each teacher takes the first task of the ordered queue it may take; a task goes first to the teacher with
+           the best yield on its family (--route-ratio, over the --covered-by campaigns' and this campaign's verdicts);
+           a teacher far below --route-floor on a family leaves it alone; a weak teacher (measured yield on fresh,
+           teacher_untried tasks below --weak-yield) never takes the student-rare tiers, which the strong teachers take
+           first; a task a teacher fails here goes on to another teacher (--attempts teachers per task,
+           episodes/tNNNNNN-aK); a teacher spec's "min_failed" reserves a (stronger, scarcer) teacher for tasks that many
+           teachers failed
   provider failures (an episode ending before its first model turn, or with exhausted provider retries: 429s, quota windows,
   refused or expired credentials) are no verdict: deferred.jsonl, retried twice; a teacher whose provider keeps failing
   backs off (--provider-cooldown, doubling per consecutive failure up to an hour); a refused account (credit balance,
@@ -56,9 +64,17 @@ BASE_RATES = resolve_str('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'exp1-rft',
 
 
 BASE_TIERS = ['band', 'base_fails', 'unmeasured', 'base_solves']
-# --covered-by (gap campaigns): tasks without a teacher success in the earlier campaigns, by how much a demonstration is
-# worth now: the student rarely solves it, it is new task supply (--priority-pool), no teacher tried it, a teacher failed it
-GAP_TIERS = ['student_rare', 'priority_pool', 'teacher_untried', 'teacher_failed']
+# --covered-by (gap campaigns): tasks without a teacher success in the earlier campaigns, by the expected value of a teacher
+# attempt (value of a success x teacher yield, measured 2026-11-24 over the aei1 campaigns): the student rarely solves it
+# and no teacher failed it (Luna/Sol 42%), new task supply (--priority-pool), the student's pass band, unmeasured and
+# untried (Luna 48%, Sol 57%), teachers failed it (Luna 31%, Sol 40% on the older pools), the student rarely solves it and
+# teachers failed it (Luna/Sol 3% after three failures: last)
+GAP_TIERS = ['student_rare', 'priority_pool', 'student_band', 'teacher_untried', 'teacher_failed', 'student_rare_failed']
+# tiers a weak teacher (--weak-yield) leaves to the strong ones: a failure there costs one of the task's few attempts and
+# demotes it for every later campaign (Nemotron 0/99 on the aei1 student-rare tasks)
+HARD_TIERS = ('student_rare', 'student_rare_failed')
+# the tier whose verdicts measure a teacher's strength: fresh tasks (unmeasured, no teacher failed them)
+FRESH_TIER = 'teacher_untried'
 # family routing: a teacher's family rate is shrunk towards its overall rate with this many episodes of weight; a teacher
 # with no record at all starts at ROUTE_DEFAULT
 ROUTE_PRIOR, ROUTE_DEFAULT = 5, 0.3
@@ -130,11 +146,23 @@ def add_stats(stats, record):
         entry[1] += 1
 
 
-def student_rates(base_rates, group_globs):
-    """task id -> (successes, scored): the measured base rates plus every student sample of the given GRPO group
-    directories (`rewards.jsonl`; JOLT+ teacher attempts left out)."""
+def rates_file(path):
+    """task id -> (successes, scored) of a rates file: ``expert_iteration select``'s ``tasks.rates.json`` (every
+    collection's outcomes, newest first) or a round's ``frontier.json`` (``{"tasks": {...}}``)."""
+    data = json.loads(Path(path).read_text())
+    data = data.get('tasks', data) if isinstance(data.get('tasks'), dict) else data
+    return {k: (v['successes'], v['scored']) for k, v in data.items() if isinstance(v, dict) and v.get('scored')}
+
+
+def student_rates(base_rates, group_globs, rate_files=(), newest_files=()):
+    """task id -> (successes, scored), the newest measurement of each task winning: the base rates, then each of
+    ``rate_files`` (``rates_file``), then the student samples of the given GRPO group directories together
+    (`rewards.jsonl`; JOLT+ teacher attempts left out), then each of ``newest_files`` (the newest frontier)."""
     import glob
-    rates = {k: [v['successes'], v['scored']] for k, v in base_rates.items() if v.get('scored')}
+    rates = {k: (v['successes'], v['scored']) for k, v in base_rates.items() if v.get('scored')}
+    for path in rate_files:
+        rates.update(rates_file(path))
+    groups = {}
     for pattern in group_globs:
         for path in sorted(glob.glob(str(Path(pattern) / 'rewards.jsonl'))):
             for line in Path(path).open():
@@ -143,33 +171,42 @@ def student_rates(base_rates, group_globs):
                 row = json.loads(line)
                 if row.get('reward') is None or row.get('jolt_role', 'student') != 'student':
                     continue
-                entry = rates.setdefault(row['task_id'], [0, 0])
+                entry = groups.setdefault(row['task_id'], [0, 0])
                 entry[0] += row['reward'] == 1.0
                 entry[1] += 1
-    return {k: tuple(v) for k, v in rates.items()}
+    rates.update({k: tuple(v) for k, v in groups.items()})
+    for path in newest_files:
+        rates.update(rates_file(path))
+    return rates
 
 
-def gap_rank(coverage, rates, priority_ids, rare):
-    """GAP_TIERS rank of a row, or None (left out): a teacher success already exists, or the student solves it more often
-    than `rare` (unless it is priority-pool supply)."""
+def gap_rank(coverage, rates, priority_ids, rare, solved=0.9):
+    """GAP_TIERS rank of a row, or None (left out): a teacher success already exists, or the student solves it at least
+    ``solved`` of the time (unless it is priority-pool supply)."""
     def rank(row):
         entry = coverage.get(row['id'])
         if entry and entry['success']:
             return None
+        failed = bool(entry and entry['failed_by'])
         rate = rates.get(row['id'])
-        if rate and rate[1] and rate[0] / rate[1] <= rare:
-            return 0
+        p = rate[0] / rate[1] if rate and rate[1] else None
+        if p is not None and p <= rare:
+            return 5 if failed else 0
         if row['id'] in priority_ids:
             return 1
-        if rate and rate[1]:
+        if p is not None and p >= solved:
             return None
-        return 2 if not entry else 3
+        if failed:
+            return 4
+        return 2 if p is not None else 3
     return rank
 
 
-def order_tasks(rows, rank, seed):
-    """Rows ordered by tier (`rank`; None leaves a row out), each tier round-robin over a shuffled family order: no
-    family repeats within a tier before every family had its turn."""
+def order_tasks(rows, rank, seed, sub=None):
+    """Rows ordered by tier (`rank`; None leaves a row out), within a tier by ``sub`` (e.g. how many teachers failed it;
+    fewest first), each (tier, sub) round-robin over a shuffled family order: no family repeats within it before every
+    family had its turn."""
+    sub = sub or (lambda row: 0)
     rng = random.Random(seed)
     rows = [row for row in rows if rank(row) is not None]
     families = {}
@@ -183,9 +220,9 @@ def order_tasks(rows, rank, seed):
         rng.shuffle(members)
         seen = {}
         for row in members:   # the k-th task of its tier in this family comes in the tier's k-th family round
-            tier = rank(row)
+            tier = (rank(row), sub(row))
             seen[tier] = seen.get(tier, -1) + 1
-            keyed.append(((tier, seen[tier], order), row))
+            keyed.append(((*tier, seen[tier], order), row))
     keyed.sort(key=lambda item: item[0])
     return [row for _, row in keyed]
 
@@ -342,7 +379,6 @@ class Generator:
         from natlang_neuralese.rl.held_eval import series
         self.env['NATLANG_MODEL_FACING'] = series()['model_facing']
         self.tasks = [json.loads(line) for line in (self.work / 'tasks.jsonl').open()]
-        self.cursor = 0
         self.manifest = self.work / 'manifest.jsonl'
         self.teachers = teachers
         # routing evidence: the earlier campaigns' verdicts plus this one's (updated as verdicts come in)
@@ -351,6 +387,11 @@ class Generator:
         for (_, model), (wins, scored) in self.stats.items():
             entry = self.overall.setdefault(model, [0, 0])
             entry[0], entry[1] = entry[0] + wins, entry[1] + scored
+        # a teacher's strength: its yield on fresh tasks (FRESH_TIER verdicts), for the weak-teacher routing
+        self.fresh = {}           # teacher model id -> [successes, scored] on FRESH_TIER tasks
+        for work in args.covered_by:
+            for record in verdicts(work):
+                self._note_fresh(record)
         self.tried = {}           # index -> teacher model ids with a verdict on it in this campaign
         self.solved = set()
         self.recorded = {}        # index -> manifest records (voided included): the next attempt's episode directory
@@ -373,17 +414,31 @@ class Generator:
                     task['failed_by'] = sorted({*task.get('failed_by', ()), record['teacher']['model_id']})
         self.done = {index for index in self.tried if self._finished(index)}
         (self.work / 'claims').mkdir(exist_ok=True)
-        self.retry = []           # tasks whose episodes the provider failed (no verdict), retried after the cursor
+        self.retry = {}           # index -> time: tasks whose episodes the provider failed (no verdict), retried then
         self.attempts = {}
         self.running = 0
-        # tasks a teacher leaves for a better-placed one (it failed the task in an earlier campaign or here, another
-        # teacher has a much better yield on its family, or it is reserved for teachers with `min_failed`): the better
-        # teachers take them first; once the cursor is through, any eligible teacher does
-        self.passed = []
+        self.active = set()       # indices this process runs now
+
+    def _note_fresh(self, record):
+        if record.get('base_rank') == FRESH_TIER:
+            entry = self.fresh.setdefault(record['teacher']['model_id'], [0, 0])
+            for episode in record['episodes']:
+                entry[0] += episode['outcome'] == 'task_success' and (episode.get('reward') or 0) >= 1
+                entry[1] += 1
+
+    def strength(self, teacher):
+        """(posterior yield on fresh tasks, scored episodes): ROUTE_PRIOR episodes of ROUTE_DEFAULT weight."""
+        s, n = self.fresh.get(teacher.model_id, (0, 0))
+        return (s + ROUTE_DEFAULT * ROUTE_PRIOR) / (n + ROUTE_PRIOR), n
+
+    def weak(self, teacher):
+        """A teacher whose measured fresh-task yield is below --weak-yield: it leaves HARD_TIERS to the others."""
+        return self.strength(teacher)[0] < getattr(self.args, 'weak_yield', 0)
 
     def _note_verdict(self, record):
         index, model = record['index'], record['teacher']['model_id']
         add_stats(self.stats, record)
+        self._note_fresh(record)
         entry = self.overall.setdefault(model, [0, 0])
         for episode in record['episodes']:
             entry[0] += episode['outcome'] == 'task_success' and (episode.get('reward') or 0) >= 1
@@ -488,45 +543,38 @@ class Generator:
             path.unlink(missing_ok=True)
 
     def _take(self, teacher):
+        """The first task of the ordered queue (the first --limit tasks; all without it) this teacher may take: not
+        done, not running, not waiting for its provider retry, eligible (``_eligible``), not a HARD_TIERS task for a weak
+        teacher, and not one it leaves to a better-placed teacher (``_passes``); when only such passed tasks are left
+        for it, the first of them. A task a teacher failed here stays at its place for the next teacher."""
         while time.time() < teacher.cool_until and not self.stop.is_set():
             self.stop.wait(5)
         with self.lock:
             if not teacher.enabled:
                 return None
             end = min(len(self.tasks), self.args.limit or len(self.tasks))
-            for position, (when, index) in enumerate(self.retry):
-                if (when <= time.time() or self.cursor >= end) and self._eligible(index, teacher):
-                    del self.retry[position]
-                    if index not in self.done and self._claim(index, teacher):
-                        return index
-                    break
-            for position, index in enumerate(self.passed):
-                if self._eligible(index, teacher) and (self.cursor >= end or not self._passes(index, teacher)):
-                    del self.passed[position]
-                    if index not in self.done and self._claim(index, teacher):
-                        return index
-                    break
-            while self.cursor < end:
-                index = self.cursor
-                self.cursor += 1
-                if index in self.done or index % self.args.shard[1] != self.args.shard[0]:
+            now, weak, passed = time.time(), self.weak(teacher), None
+            for index in range(end):
+                if (index in self.done or index in self.active or self.retry.get(index, 0) > now
+                        or index % self.args.shard[1] != self.args.shard[0]):
                     continue
-                if not self._eligible(index, teacher) or self._passes(index, teacher):
-                    self.passed.append(index)
+                if weak and self.tasks[index].get('base_rank') in HARD_TIERS:
+                    continue
+                if not self._eligible(index, teacher):
+                    continue
+                if self._passes(index, teacher):
+                    passed = index if passed is None else passed
                     continue
                 if self._claim(index, teacher):
-                    return index
-            # the cursor is through: the passed tasks go to whichever eligible teacher asks
-            for position, index in enumerate(self.passed):
-                if index in self.done:
-                    continue
-                if self._eligible(index, teacher):
-                    del self.passed[position]
-                    if self._claim(index, teacher):
-                        return index
-                    break
-            self.passed = [index for index in self.passed if index not in self.done and not self._finished(index)]
+                    return self._took(index)
+            if passed is not None and self._claim(passed, teacher):
+                return self._took(passed)
             return None
+
+    def _took(self, index):
+        self.active.add(index)
+        self.retry.pop(index, None)
+        return index
 
     def run_task(self, index, teacher):
         from natlang_neuralese.common.jsonio import read_jsonl
@@ -605,7 +653,9 @@ class Generator:
                     teacher.cool_until = max(teacher.cool_until, time.time() + min(
                         3600., self.args.provider_cooldown * 2 ** (teacher.failures - 1)))
                 if self.attempts[index] < 3:
-                    self.retry.append((time.time() + 600, index))
+                    self.retry[index] = time.time() + 600
+                else:
+                    self.done.add(index)     # three provider failures: no further attempt in this launch
                 self._release(index, 'deferred', teacher)
                 print(json.dumps({'event': 'task deferred', 'index': index, 'attempt': self.attempts[index]}), flush=True)
                 return report
@@ -618,15 +668,16 @@ class Generator:
             if self._finished(index):
                 self.done.add(index)
                 self._release(index, 'done', teacher)
-            else:   # another teacher tries it (it now counts this one in failed_by)
+            else:   # another teacher tries it (it now counts this one in failed_by), at its place in the queue
                 self._release(index, 'retry', teacher)
-                self.passed.insert(0, index)
         print(json.dumps({'event': 'task scored', **{k: record[k] for k in ('index', 'task_id', 'seconds', 'episodes')}}),
               flush=True)
         return report
 
     def slot(self, teacher):
         while not self.stop.is_set() and teacher.enabled:
+            if (self.work / 'DRAIN').exists():   # a newer queue replaces this one: running episodes finish, then exit
+                return
             if (self.work / 'PAUSE').exists() or mem_available_gb() < self.args.pause_below_available_gb:
                 self.stop.wait(10)
                 continue
@@ -648,6 +699,7 @@ class Generator:
             finally:
                 with self.lock:
                     self.running -= 1
+                    self.active.discard(index)
 
 
 def validate_pool_resume(work, args):
@@ -762,12 +814,20 @@ def main():
     p.add_argument('--priority-pool', action='append', default=[], metavar='POOL',
                    help='gap campaign: rows of these pools (new task supply) are kept whatever their student rate (repeatable)')
     p.add_argument('--rare-rate', type=float, default=0.25,
-                   help='gap campaign: a measured task is kept when the student solves it at most this often')
+                   help='gap campaign: a task the student solves at most this often is in the first tier (student_rare)')
+    p.add_argument('--student-rates', action='append', default=[], metavar='FILE',
+                   help='gap campaign: rates files (expert_iteration select tasks.rates.json: every collection) over the base '
+                        'rates, before --student-groups (repeatable; later files win)')
+    p.add_argument('--frontier-rates', action='append', default=[], metavar='FRONTIER',
+                   help="gap campaign: the newest round frontier.json; its tasks' rates win over every other measurement")
+    p.add_argument('--weak-yield', type=float, default=0.25,
+                   help="a teacher whose posterior yield on fresh (teacher_untried) tasks is below this leaves the "
+                        "student-rare tiers to the stronger teachers (0: off)")
     p.add_argument('--attempts', type=int, default=2,
                    help='distinct teachers of this campaign that try a task until one succeeds (1: one verdict per task)')
     p.add_argument('--route-ratio', type=float, default=2.0,
                    help='a teacher leaves a task to another one whose yield on its family is at least this many times its '
-                        'own; it takes it itself once the cursor is through (0: no family routing)')
+                        'own; it takes it itself once only such tasks are left for it (0: no family routing)')
     p.add_argument('--route-floor', type=float, default=0.03,
                    help='a teacher whose family yield is below this (over at least --route-min-scored episodes) never '
                         'takes that family\'s tasks')
@@ -795,17 +855,21 @@ def main():
         if args.covered_by:
             from natlang_neuralese.common.jsonio import read_jsonl
             coverage = teacher_coverage(args.covered_by)
-            student = student_rates(rates, args.student_groups)
+            student = student_rates(rates, args.student_groups, args.student_rates, args.frontier_rates)
             priority = {row['id'] for path in args.priority_pool for row in read_jsonl(path)}
-            rank, tiers = gap_rank(coverage, student, priority, args.rare_rate), GAP_TIERS
+            rank, tiers = gap_rank(coverage, student, priority, args.rare_rate, args.pass_band[1]), GAP_TIERS
             selection = {'covered_by': [{'work': str(Path(w).resolve()),
                                          'manifest_sha256': sha256_file_hex(Path(w) / 'manifest.jsonl')} for w in args.covered_by],
                          'student_groups': args.student_groups, 'student_measured_tasks': len(student),
+                         'student_rates': [{'path': str(p), 'sha256': sha256_file_hex(Path(p))}
+                                           for p in [*args.student_rates, *args.frontier_rates]],
+                         'solved_rate': args.pass_band[1],
                          'priority_pools': [{'path': str(p), 'sha256': sha256_file_hex(Path(p))} for p in args.priority_pool],
                          'rare_rate': args.rare_rate, 'tiers': GAP_TIERS}
         else:
             coverage, rank, tiers = {}, base_rank(rates, args.pass_band), BASE_TIERS
-        ordered = order_tasks(rows, rank, args.seed)
+        ordered = order_tasks(rows, rank, args.seed,
+                              sub=lambda row: len((coverage.get(row['id']) or {}).get('failed_by') or ()))
         counts = {}
         with (work / 'tasks.jsonl.tmp').open('w') as handle:
             for row in ordered:
@@ -838,6 +902,11 @@ def main():
                                  'teachers': [{k: v for k, v in vars(t).items() if k not in ('cool_until', 'failures')} for t in teachers]}) + '\n')
     record_campaign(work, args, teachers)
     generator = Generator(args, teachers)
+    for teacher in teachers:   # the routing evidence of this launch, in its log
+        rate, n = generator.strength(teacher)
+        print(json.dumps({'event': 'teacher routing', 'teacher': teacher.model_id, 'fresh_yield': round(rate, 3),
+                          'fresh_scored': n, 'weak': generator.weak(teacher), 'min_failed': teacher.min_failed,
+                          'slots': teacher.slots}), flush=True)
 
     def stop(signum, frame):
         generator.stop.set()

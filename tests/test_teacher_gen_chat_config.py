@@ -63,15 +63,34 @@ def test_gap_selection_tiers_and_failed_by(tmp_path):
         {'task_id': 'often', 'reward': 1.0}, {'task_id': 'often', 'reward': 1.0},
         {'task_id': 'often', 'reward': 0.0, 'jolt_role': 'teacher'},
         {'task_id': 'supply-often', 'reward': 1.0}, {'task_id': 'rare', 'reward': 0.0}]))
-    rates = teacher_gen.student_rates({'rare': {'successes': 1, 'scored': 4}}, [str(tmp_path / 'run/groups/g*')])
-    assert rates['often'] == (2, 2) and rates['rare'] == (1, 5)
+    rates = teacher_gen.student_rates({'rare': {'successes': 1, 'scored': 4}, 'band': {'successes': 0, 'scored': 9}},
+                                      [str(tmp_path / 'run/groups/g*')])
+    # the newest measurement wins: the lineage's groups replace the base rate of 'rare'
+    assert rates['often'] == (2, 2) and rates['rare'] == (0, 1) and rates['band'] == (0, 9)
+    select = tmp_path / 'tasks.rates.json'
+    select.write_text(json.dumps({'band': {'successes': 1, 'scored': 2}, 'rare': {'successes': 2, 'scored': 2},
+                                  'untried-measured': {'successes': 3, 'scored': 4}}))
+    frontier = tmp_path / 'frontier.json'
+    frontier.write_text(json.dumps({'tasks': {'often': {'successes': 3, 'scored': 4, 'tier': 'sometimes'}}}))
+    rates = teacher_gen.student_rates({}, [str(tmp_path / 'run/groups/g*')], [select], [frontier])
+    assert rates['band'] == (1, 2) and rates['rare'] == (0, 1) and rates['often'] == (3, 4)
     rank = teacher_gen.gap_rank(coverage, rates, {'supply', 'supply-often'}, 0.25)
-    tiers = {i: rank({'id': i}) for i in ('solved', 'failed', 'rare', 'often', 'supply', 'supply-often', 'untried')}
-    assert tiers == {'solved': None, 'failed': 3, 'rare': 0, 'often': None, 'supply': 1, 'supply-often': 1,
-                     'untried': 2}
+    tiers = {i: rank({'id': i}) for i in ('solved', 'failed', 'rare', 'often', 'supply', 'supply-often', 'untried',
+                                          'band', 'untried-measured')}
+    # rare and luna failed it: last; 'often' at 3/4 is in the band, luna failed it: teacher_failed
+    assert tiers == {'solved': None, 'failed': 4, 'rare': 5, 'often': 4, 'supply': 1, 'supply-often': 1,
+                     'untried': 3, 'band': 2, 'untried-measured': 2}
+    assert teacher_gen.GAP_TIERS[0] == 'student_rare' and teacher_gen.GAP_TIERS[-1] == 'student_rare_failed'
+    solved = teacher_gen.gap_rank(coverage, {'x': (9, 10)}, set(), 0.25)
+    assert solved({'id': 'x'}) is None and teacher_gen.gap_rank({}, {'x': (0, 3)}, set(), 0.25)({'id': 'x'}) == 0
     rows = [{'id': i, 'family': f} for i, f in (('failed', 'a'), ('rare', 'b'), ('supply', 'a'), ('untried', 'c'),
-                                                ('solved', 'a'))]
-    assert [r['id'] for r in teacher_gen.order_tasks(rows, rank, 1)] == ['rare', 'supply', 'untried', 'failed']
+                                                ('solved', 'a'), ('band', 'b'))]
+    assert [r['id'] for r in teacher_gen.order_tasks(rows, rank, 1)] == ['supply', 'band', 'untried', 'failed', 'rare']
+    # within a tier the tasks fewer teachers failed come first
+    many = {'id': 'many', 'family': 'a'}
+    order = teacher_gen.order_tasks([many, {'id': 'one', 'family': 'a'}], lambda row: 4,
+                                    1, sub=lambda row: 3 if row['id'] == 'many' else 1)
+    assert [r['id'] for r in order] == ['one', 'many']
 
 
 def test_task_a_teacher_failed_goes_to_another_teacher_first(tmp_path):

@@ -909,3 +909,28 @@ def test_teacher_specs_come_from_the_ops_file_at_each_launch(tmp_path, monkeypat
     with pytest.raises(SystemExit):
         ei.teachers()
     assert 'openrouter' in ei.TEACHER_ENV_FILES
+
+
+def test_the_standing_teacher_queue_takes_every_task_with_every_collections_rates(tmp_path, monkeypatch):
+    """2026-11-24: a campaign took only --limit = the newest frontier's rare tasks (41-46 with 1 h snapshots) and its 24
+    slots sat idle ~1.5 h of every 2. The standing launch passes --limit 0 (the whole ordered queue), the newest
+    collection's tasks.rates.json and the frontier (newest measurement), and clears a drain request of its WORK."""
+    import json
+    monkeypatch.setattr(ei, 'TEACHERS_FILE', tmp_path / 'none.json')
+    frontier = tmp_path / 'r0005' / 'frontier.json'
+    frontier.parent.mkdir()
+    frontier.write_text(json.dumps({'tasks': {'a': {'successes': 4, 'scored': 4, 'tier': 'solved'}}}))
+    work = tmp_path / 'teacher-r0005'
+    work.mkdir()
+    (work / 'DRAIN').write_text('{}')
+    launches = []
+    runner = argparse.Namespace(pin=tmp_path / 'pin', ledger=lambda unit, gb, prio, argv, log, detach: launches.append(argv))
+    assert ei.launch_teacher(runner, work, frontier, [], 'aei-teacher') == 0 and not launches   # no rare task
+    rates = tmp_path / 'tasks.rates.json'
+    assert ei.launch_teacher(runner, work, frontier, ['g/*'], 'aei-teacher', standing=True, student_rates=[rates]) == 0
+    assert not (work / 'DRAIN').exists()
+    script = (work / 'launch.sh').read_text()
+    assert "'--limit' '0'" in script or '--limit 0' in script
+    assert f'--student-rates {rates}' in script and f'--frontier-rates {frontier}' in script
+    command = ei.teacher_command(tmp_path, work, [], [], 7)
+    assert command[command.index('--limit') + 1] == '7' and '--frontier-rates' not in command

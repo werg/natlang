@@ -10928,3 +10928,53 @@ and 08:18. The rule now runs in `storage_sweep.sh` every 30 min (`SWEEP_EI=0` op
   - `multi_news_v1`, `arxiv_v1` and `pubmed_v1` stay on the HDD (`KEEP_SUBPATHS`): the registered view-sources-v3
     corpus reads them on a rebuild.
   - `bgkit-checkpoints` and the hindsight data stay out (not approved).
+
+## 2026-11-24 10:30 The teacher campaign is a standing queue of every teacher-eligible task, routed by measured yield
+
+**Observed (09:30).** Each campaign took `--limit` = the newest frontier's rare-task count: 234 for r0002, then 46
+(r0004) and 41 (r0005) once `--snapshot-min-hours` went from 2 to 1. A campaign ended in ~30 min, and its 24 slots sat
+idle until the next frontier, ~2 h. The frontier only set the count. teacher_gen took the first N tasks of its own gap
+order, and 38 of r0005's 41 frontier-rare tasks already had a teacher success. Gemini Argon (`min_failed: 1`) had 3
+episodes, because few tasks in a 41-task campaign were teacher-failed. Measured yields (all manifests, Luna and Sol):
+aei1 student-rare tasks with no prior teacher failure 10/24 (42%), with three prior failures 7/242 (3%); fresh
+unmeasured tasks (`teacher_untried`) Luna 178/371 (48%), Sol 109/190 (57%). Nemotron Ultra and Super scored 0/99 on the
+aei1 student-rare tasks and ERNIE 0/23 overall.
+
+**Decision (built; opt-out `async-drive --no-standing-teacher`).**
+- **Standing queue.** `ensure_teacher` launches the newest frontier's campaign with `--limit 0`: the whole ordered
+  queue. Rates come from the newest collection's `tasks.rates.json` (every collection, newest first), then the lineage
+  groups, then the frontier; the newest measurement wins (`teacher_gen --student-rates/--frontier-rates`). When a
+  newer frontier appears, the running campaign gets `WORK/DRAIN`: its running episodes finish, it takes no new task
+  and exits. The driver checks every minute while a drain is pending and launches the re-prioritised queue (earlier
+  campaigns cover their successes). Exclusions are unchanged: held-v3/v2/v4 closure via `grpo.load_tasks`,
+  `ops/pool-errata`, and teacher-covered tasks.
+- **Order by expected value** (`GAP_TIERS`):
+  1. `student_rare`: rate <= 0.25 and no teacher failed it.
+  2. `priority_pool`.
+  3. `student_band`: rate between 0.25 and 0.9, where a teacher success adds a solved variant.
+  4. `teacher_untried`: unmeasured.
+  5. `teacher_failed`.
+  6. `student_rare_failed`: last, at 3% yield.
+
+  Tasks the student solves >= 0.9 are left out. Within a tier, fewer teacher failures come first, family round-robin.
+  A dry run at 10:20 on r0005's inputs gave 7,442 queued tasks: 29 / 0 / 44 / 5,429 / 1,882 / 58. Of the
+  `teacher_failed` tasks, 1,777 have three failures.
+- **Routing by measured yield.** A teacher's strength is its posterior yield on `teacher_untried` verdicts (all
+  covered campaigns, 5 episodes of prior at 0.3). A teacher below `--weak-yield 0.25` never takes the student-rare
+  tiers. A failure there spends one of the task's attempts and demotes it for every later campaign. Today that means
+  Nemotron Ultra (0.19), Nemotron Super (0.16) and ERNIE (0.07); Luna, Sol and the Gemini models are strong.
+  - Each teacher takes the first queue task it may take, so strong teachers take the hard tiers first. Family routing
+    (`--route-ratio`, `--route-floor`) is unchanged.
+  - A task a teacher fails here stays at its queue position for the next teacher. That feeds Luna's fresh failures to
+    Sol and Gemini (`min_failed: 1`, kept as configured) ahead of the three-times-failed backlog.
+  - Each launch logs a `teacher routing` line per teacher: fresh yield, episodes, weak, min_failed, slots.
+- **Rate limits.** Unchanged: per-teacher provider cooldowns, deferral and retirement on a refused account. A task
+  deferred three times is done for the launch, instead of being re-taken.
+
+**Expected.** About 350-500 episodes/h and 100-170 successes/h (estimate):
+- Luna: 6 slots x 60-90 s.
+- Sol and Gemini: on failed tasks.
+- Previously: ~44 successes/h while running, less with the idle gaps.
+
+The Codex subscription limit at a sustained Luna+Sol rate is not measured. Gemini's Vertex spend rises from ~3
+episodes per campaign to its 6 slots busy; the owner is deciding that spend (`ops/ei/teachers.json` slots).

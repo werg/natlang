@@ -1854,7 +1854,8 @@ def test_the_standing_teacher_campaign_relaunches_from_the_newest_frontier_whene
     present, launched = {'teacher': True}, []
     monkeypatch.setattr(d.c, 'present', lambda unit: unit == 'aei-teacher' and present['teacher'])
 
-    def launch(runner, work, frontier, groups, unit, covered_extra=()):
+    def launch(runner, work, frontier, groups, unit, covered_extra=(), standing=False, student_rates=()):
+        assert standing
         launched.append((Path(work).name, Path(frontier).parent.name, unit))
         Path(work).mkdir(parents=True, exist_ok=True)
         with (Path(work) / 'launches.jsonl').open('a') as handle:
@@ -1879,7 +1880,17 @@ def test_the_standing_teacher_campaign_relaunches_from_the_newest_frontier_whene
     assert d.newest_frontier() == d.root / 'r0002' / 'frontier.json'
     (d.root / 'r0004').mkdir()
     (d.root / 'r0004' / 'frontier.json').write_text('{}')
+    # a newer frontier while the standing queue runs: it drains (running episodes finish), then the newer one launches
+    present['teacher'] = True
+    assert d.running_teacher_work() == d.root / 'teacher-r0002'
+    assert d.ensure_teacher() is None and len(launched) == 2 and d.teacher_draining
+    assert json.loads((d.root / 'teacher-r0002' / 'DRAIN').read_text())['frontier'].endswith('r0004/frontier.json')
+    assert 'teacher_drain' in (d.root / 'drive.log').read_text()
+    present['teacher'] = False
     assert d.ensure_teacher() == d.root / 'teacher-r0004' and launched[-1][:2] == ('teacher-r0004', 'r0004')
+    assert not d.teacher_draining and d.running_teacher_work() == d.root / 'teacher-r0004'
+    present['teacher'] = True
+    assert d.ensure_teacher() is None and not (d.root / 'teacher-r0004' / 'DRAIN').exists()   # the newest: runs on
     d.a.no_teacher_campaign = True
     (d.root / 'r0005').mkdir()
     (d.root / 'r0005' / 'frontier.json').write_text('{}')
