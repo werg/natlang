@@ -172,6 +172,16 @@ def test_record_outcome_reads_students_only(tmp_path):
         {'task_id': 't', 'reward': 1.0, 'jolt_role': 'teacher'})))
     c._record_outcome(tmp_path)
     assert c.own['t'] == (0, 2)
+    (tmp_path / 'rewards.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in (
+        {'task_id': 't', 'reward': 1.0, 'outcome': 'task_success'},
+        {'task_id': 't', 'reward': None, 'outcome': 'infrastructure_error'},     # left out
+        {'task_id': 't', 'reward': None, 'outcome': 'unresolved'})))            # the policy's failure
+    c._record_outcome(tmp_path)
+    assert c.own['t'] == (1, 2)
+    (tmp_path / 'rewards.jsonl').write_text(json.dumps({'task_id': 'v', 'reward': None,
+                                                         'outcome': 'infrastructure_error'}) + '\n')
+    c._record_outcome(tmp_path)
+    assert 'v' not in c.own
 
 
 EPISODE = {'key': 'teacher:x:0', 'source': 'teacher', 'task_id': 't', 'family': 'f', 'task': TASK, 'turns': [

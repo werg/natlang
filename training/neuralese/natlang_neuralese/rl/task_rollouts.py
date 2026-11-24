@@ -127,6 +127,50 @@ def reward_of(outcome: str, finish: dict[str, Any] | None = None) -> float | Non
     return 1.0 if outcome == "task_success" else 0.0
 
 
+# Resends of one failed actor request before its episode fails. An actor engine that dies is relaunched within about a
+# minute (pop_actor_driver, serve_native_checkpoint's ENGINE_DIED_EXIT); at the remote 15 s retry delay and the 30 s
+# cap, 6 resends wait about 2.5 minutes, so in-flight episodes ride out a relaunch instead of being lost (aei1 held,
+# 2026-11-24: 32 episodes failed after the default single resend). A resend never spends call budget (ts-host
+# collector). NATLANG_ACTOR_REQUEST_RETRIES overrides it (1: the collector default).
+ACTOR_REQUEST_RETRIES = 6
+
+
+def actor_request_retries() -> int:
+    value = os.environ.get("NATLANG_ACTOR_REQUEST_RETRIES")
+    if value is None:
+        return ACTOR_REQUEST_RETRIES
+    if not value.isdigit():
+        raise ValueError("NATLANG_ACTOR_REQUEST_RETRIES must be a nonnegative integer")
+    return int(value)
+
+
+def infra_lost(row: dict[str, Any]) -> bool:
+    """Whether a rollout row was lost to infrastructure (``infrastructure_error``, or a held sample's ``infra_lost``
+    label): it says nothing about the policy, so pass rates leave it out. Any other unscored row (a wall-clock stop, an
+    unresolved run) counts as a failure in a pass rate, though it never trains (aei1 held re-judgement, 2026-11-24)."""
+    if row.get("infra_lost"):
+        return True
+    return row.get("outcome") == "infrastructure_error"
+
+
+def pass_rate_counts(rows) -> tuple[int, int]:
+    """(successes, counted) of rollout rows for a task's pass rate: rows lost to infrastructure are left out, other
+    unscored rows are failures; a success is a reward of 1 (a float, or a reward dict's ``quality``) or a memetic
+    episode's ``memetic_success``."""
+    successes = counted = 0
+    for row in rows:
+        if infra_lost(row):
+            continue
+        counted += 1
+        if "memetic_success" in row:
+            successes += bool(row["memetic_success"])
+            continue
+        reward = row.get("reward")
+        reward = reward.get("quality") if isinstance(reward, dict) else reward
+        successes += reward == 1.0
+    return successes, counted
+
+
 def entry_outcome(entry: dict[str, Any], task: dict[str, Any], finish: dict[str, Any] | None) -> tuple[str, float | None, float | None]:
     """(outcome class, binary reward, graded reward) of one finished queue entry, classified as ``score`` classifies it
     (memetic improvement tasks aside): read before its group is complete (grpo.py dynamic sampling)."""
@@ -795,6 +839,7 @@ def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: 
     if packet_tasks and len(packet_tasks) != rows:
         raise ValueError("queue row count must match the authenticated task packet")
     entries = []
+    retries = actor_request_retries()
     for index in range(rows):
         # A memetic improvement episode runs its program on support (and, at the end, query) worlds inside the
         # episode; its world declares the wall budget that needs (rl.memetic_tasks).
@@ -806,7 +851,7 @@ def build_queue(packet: Path, rows: int, group: int, out: Path, *, temperature: 
                 "key": f"s7-task-{index:03d}-{sample:02d}", "index": index, "count": 1, "source": str(packet),
                 "seed": seed_base + 1000 * index + sample, "temperature": temperature,
                 "case_seconds": seconds, "max_model_requests": max_model_requests, "max_turns": max_turns,
-                "jobs": str(case / "jobs"), "log": str(case / "collector.log"), "output": str(case / "results.jsonl"),
+                "request_retries": retries, "jobs": str(case / "jobs"), "log": str(case / "collector.log"), "output": str(case / "results.jsonl"),
                 "group": index, "sample": sample,
                 **({"task_id": packet_tasks[index]["id"], "packet_sha256": packet_sha256}
                    if packet_tasks else {}),

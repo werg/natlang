@@ -30,6 +30,7 @@ holds it, then swaps in the symlink; it never runs the HDD below ``--hdd-floor-g
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -111,7 +112,11 @@ def plan(driver: Path, state: dict, current_policy: dict | None) -> list[dict]:
     if collect.is_dir():
         for d in sorted(collect.iterdir(), key=lambda p: p.name):
             m = COLLECTION.match(d.name)
-            if not m or d.is_symlink() or not d.is_dir() or m.group(2) in keep12:
+            if not m or not d.is_dir() or m.group(2) in keep12:
+                continue
+            actions.append({'op': 'trim', 'path': str(d.resolve() if d.is_symlink() else d),
+                            'why': f'collection of unprotected policy {m.group(2)}: reproducible and diagnostic files'})
+            if d.is_symlink():          # moved earlier: only the trim applies
                 continue
             export = d / 'actor' / 'sglang-hf'
             if export.is_dir() and not export.is_symlink():
@@ -301,6 +306,93 @@ def delete(path: Path) -> int:
     return size
 
 
+# ---------- collection trim ----------
+# What a closed collection keeps: the episodes (results.jsonl, rollouts.jsonl, rewards, journals, partial episodes and
+# their evidence, error records), memetic evaluations, task and rate files, collect.log. What goes once its policy has
+# left the last two lineage entries (reproducible or diagnostic only; readers checked 2026-11-24, DECISIONS):
+TRIM_KINDS = {
+    # byte copy of the sample's results.jsonl; the run-time job accounting the scorer checks lives in the journal's
+    # finish record (task_rollouts output_accounting), and exp1_collect already drops this copy when an episode ends
+    'duplicate-result': 'groups/*/row-*/*/jobs/*.result.json',
+    'trace': 'groups/*/row-*/*/jobs/*.trace.jsonl',          # ts-host execution traces (audit scripts only)
+    'log': ('groups/*/workers/*.log', 'groups/*/row-*/*/collector.log', 'actor.log'),
+    # atomic-write leftovers of killed writers (run_bonsai_queue removes these too once the writer is gone)
+    'tmp': 'groups/*/row-*/*/jobs/*.tmp-*',
+    # the actor's native-state cache: SFT trains imports as pass-through from the recorded write (sft_sources
+    # whole-graph rows), the GRPO learner reads only its own run's store, and grpo.collect_blocks drops trained ones
+    'native-state-cache': 'actor/blocks/*/nzs1_*.safetensors',
+}
+TMP_NAME = re.compile(r'\.tmp-\d+-[0-9a-f-]{36}$')
+QUIET_SECONDS = 3600
+
+
+def _same_bytes(a: Path, b: Path) -> bool:
+    if a.stat().st_size != b.stat().st_size:
+        return False
+    with open(a, 'rb') as x, open(b, 'rb') as y:
+        while True:
+            u, v = x.read(8 << 20), y.read(8 << 20)
+            if u != v:
+                return False
+            if not u:
+                return True
+
+
+def trim_plan(collection: Path) -> list[tuple[Path, str, int]]:
+    """(path, kind, bytes) of the files a closed collection can lose; regular files only (never a link or a Drive
+    stub). Any doubt keeps the file: a result copy is listed only when its bytes equal results.jsonl's."""
+    found = []
+    for kind, patterns in TRIM_KINDS.items():
+        for pattern in (patterns if isinstance(patterns, tuple) else (patterns,)):
+            for path in sorted(collection.glob(pattern)):
+                if path.is_symlink() or not path.is_file():
+                    continue
+                if kind == 'tmp' and not TMP_NAME.search(path.name):
+                    continue
+                if kind == 'duplicate-result':
+                    results = path.parent.parent / 'results.jsonl'
+                    try:
+                        if results.is_symlink() or not results.is_file() or not _same_bytes(path, results):
+                            continue
+                    except OSError:
+                        continue
+                found.append((path, kind, path.stat().st_size))
+    return found
+
+
+def trim(collection: Path, apply: bool) -> dict:
+    """Trim one closed collection. Refused (nothing removed) while its collect.log was written in the last hour. The
+    list goes to COLLECTION/trimmed.json (appended per pass) before any file is removed. Returns bytes per kind."""
+    log_file = collection / 'collect.log'
+    if log_file.exists() and time.time() - log_file.stat().st_mtime < QUIET_SECONDS:
+        raise RuntimeError('collection written in the last hour: still open')
+    if not (collection / 'groups').is_dir():
+        raise RuntimeError('not a collection (no groups/)')
+    planned = trim_plan(collection)
+    by_kind = collections.Counter()
+    for _, kind, size in planned:
+        by_kind[kind] += size
+    if not apply or not planned:
+        return dict(by_kind)
+    record = collection / 'trimmed.json'
+    previous = json.loads(record.read_text()) if record.exists() else {'schema': 'natlang.ei-collection-trim/1',
+                                                                          'passes': []}
+    previous['passes'].append({'at': time.time(), 'by': 'scripts/ei_round_tier.py', 'kinds': dict(by_kind),
+                               'files': [{'path': str(p.relative_to(collection)), 'kind': k, 'bytes': b}
+                                         for p, k, b in planned]})
+    tmp = record.with_name(record.name + '.partial')
+    tmp.write_text(json.dumps(previous) + '\n')
+    os.replace(tmp, record)
+    removed = collections.Counter()
+    for path, kind, size in planned:
+        try:
+            path.unlink()
+            removed[kind] += size
+        except FileNotFoundError:
+            pass
+    return dict(removed)
+
+
 # ---------- the pass ----------
 
 def keep_marker(path: Path, root: Path) -> bool:
@@ -341,6 +433,20 @@ def run(args) -> dict:
                 summary['skipped'] += 1
                 log(event='kept', path=str(path), reason=(why or ['marker .keep-on-nvme'])[:3])
                 continue
+            if action['op'] == 'trim':
+                try:
+                    kinds = trim(path, args.apply)
+                except Exception as error:      # open, unreadable or odd: the whole collection stays
+                    summary['skipped'] += 1
+                    log(event='trim skipped', path=str(path), reason=repr(error)[:200])
+                    continue
+                if kinds:
+                    freed = sum(kinds.values())
+                    summary['trimmed_bytes'] = summary.get('trimmed_bytes', 0) + freed
+                    summary['actions'] += 1
+                    log(event='trimmed' if args.apply else 'would trim', path=str(path), gb=round(freed / GIB, 2),
+                        kinds={k: round(v / GIB, 2) for k, v in kinds.items()}, why=action['why'])
+                continue
             size = size_of(path)
             if not args.apply:
                 log(event='would ' + action['op'], path=str(path), gb=round(size / GIB, 2), why=action['why'])
@@ -372,15 +478,58 @@ def run(args) -> dict:
     return summary
 
 
+def _own_tree() -> set[int]:
+    """This process and its ancestors."""
+    pids, pid = set(), os.getpid()
+    while pid > 1 and pid not in pids:
+        pids.add(pid)
+        try:
+            pid = int(Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return pids
+
+
+def _own_unit() -> str | None:
+    try:
+        for part in reversed(Path('/proc/self/cgroup').read_text().strip().split('/')):
+            if part.endswith('.service'):
+                return part
+    except OSError:
+        pass
+    return None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--max-minutes', type=float, default=20.0)
     parser.add_argument('--hdd-floor-gb', type=float, default=100.0)
+    parser.add_argument('--trim', action='append', default=[], metavar='COLLECTION',
+                        help='trim only these closed collections (e.g. an earlier cycle\'s, outside any driver state); '
+                             'no other action runs')
     args = parser.parse_args(argv)
+    if args.trim:
+        # the paths are on this pass's own command line (and its ledger unit's): those never count as readers
+        own_pids, own_unit = _own_tree(), _own_unit()
+        procs = [r for r in process_references() if int(r[0]) not in own_pids]
+        units = [u for u in unit_commands() if u[0] != own_unit]
+        for path in map(Path, args.trim):
+            why = references(str(path), procs, units, [])
+            if why or keep_marker(path, path):
+                log(event='kept', path=str(path), reason=(why or ['marker .keep-on-nvme'])[:3])
+                continue
+            try:
+                kinds = trim(path, args.apply)
+                log(event='trimmed' if args.apply else 'would trim', path=str(path),
+                    gb=round(sum(kinds.values()) / GIB, 2), kinds={k: round(v / GIB, 2) for k, v in kinds.items()})
+            except Exception as error:
+                log(event='trim skipped', path=str(path), reason=repr(error)[:200])
+        return 0
     summary = run(args)
     root_free = shutil.disk_usage('/').free
     log(event='summary', **summary, deleted_gb=round(summary['deleted_bytes'] / GIB, 1),
+        trimmed_gb=round(summary.get('trimmed_bytes', 0) / GIB, 1),
         moved_gb=round(summary['moved_bytes'] / GIB, 1), root_free_gb=round(root_free / GIB, 1))
     return 0
 

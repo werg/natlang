@@ -742,9 +742,12 @@ class Collector:
             rows = list(read_jsonl(directory / 'rewards.jsonl'))
         except OSError:
             return
-        scored = [row for row in rows if row.get('reward') is not None and row.get('jolt_role', 'student') == 'student']
-        if scored:
-            self.own[scored[0]['task_id']] = (sum(row['reward'] == 1.0 for row in scored), len(scored))
+        # a sample lost to infrastructure is left out, any other unscored one is the policy's failure
+        from natlang_neuralese.rl.task_rollouts import pass_rate_counts
+        students = [row for row in rows if row.get('jolt_role', 'student') == 'student']
+        successes, counted = pass_rate_counts(students)
+        if counted:
+            self.own[students[0]['task_id']] = (successes, counted)
             self.rates_changed = self.prior_stale = True
 
     def _learnable(self):

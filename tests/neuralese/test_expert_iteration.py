@@ -36,7 +36,18 @@ def test_group_outcomes_count_student_samples_only(tmp_path):
     a = write_group(tmp_path, 'g000000', 't1', [1.0, 0.0, None, 1.0])
     b = write_group(tmp_path, 'g000001', 't1', [1.0], role='teacher')
     c = write_group(tmp_path, 'g000002', 't2', [0.5, 0.0])
-    assert ei.group_outcomes([a, b, c, tmp_path / 'missing']) == {'t1': [2, 3], 't2': [0, 2]}
+    assert ei.group_outcomes([a, b, c, tmp_path / 'missing']) == {'t1': [2, 4], 't2': [0, 2]}   # unscored: a failure
+
+
+def test_group_outcomes_leave_infrastructure_losses_out(tmp_path):
+    directory = tmp_path / 'groups' / 'g000000'
+    directory.mkdir(parents=True)
+    rows = [{'task_id': 't', 'reward': 1.0, 'outcome': 'task_success'},
+            {'task_id': 't', 'reward': None, 'outcome': 'infrastructure_error'},   # the actor died: no measurement
+            {'task_id': 't', 'reward': None, 'outcome': 'unresolved'},            # the policy ran out of wall clock
+            {'task_id': 'u', 'reward': None, 'outcome': 'infrastructure_error'}]
+    (directory / 'rewards.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    assert ei.group_outcomes([directory]) == {'t': [1, 2]}
 
 
 @pytest.mark.parametrize('s,n,expected', [(4, 4, 'solved'), (3, 4, 'solved'), (1, 4, 'sometimes'), (0, 4, 'never'),

@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -152,3 +153,71 @@ def test_tree_copy_drops_a_file_that_does_not_verify(tmp_path, monkeypatch):
     except RuntimeError:
         pass
     assert not dest.exists() and not (tmp_path / 'dest.partial' / 'x.bin').exists()
+
+
+def _collection(root):
+    c = root / 'v0003-6f57450a2aad'
+    s = c / 'groups' / 'g000001' / 'row-000' / 'sample-00'
+    (s / 'jobs').mkdir(parents=True)
+    (s / 'results.jsonl').write_bytes(b'{"turns": 1}\n')
+    (s / 'jobs' / '000000-aa.result.json').write_bytes(b'{"turns": 1}\n')      # byte copy: goes
+    (s / 'jobs' / '000000-aa.trace.jsonl').write_bytes(b't\n')
+    (s / 'jobs' / '000000-bb.partial.json.tmp-123-0f0e0d0c-1111-2222-3333-444455556666').write_bytes(b'x')
+    (s / 'collector.log').write_text('log')
+    other = c / 'groups' / 'g000001' / 'row-000' / 'sample-01'
+    (other / 'jobs').mkdir(parents=True)
+    (other / 'results.jsonl').write_bytes(b'{"turns": 2}\n')
+    (other / 'jobs' / '000000-cc.result.json').write_bytes(b'{"turns": 3}\n')  # differs: stays
+    (other / 'jobs' / '000000-cc.partial.json').write_bytes(b'{}')               # partial episode: stays
+    (other / 'jobs' / '000000-cc.partial.json.evidence-x.jsonl').write_bytes(b'{}\n')
+    (other / 'jobs' / '000000.error.json').write_bytes(b'{}')
+    (c / 'groups' / 'g000001' / 'workers').mkdir()
+    (c / 'groups' / 'g000001' / 'workers' / 's7-task-000-00.log').write_text('w')
+    (c / 'groups' / 'g000001' / 'workers' / 's7-task-000-00.journal.jsonl').write_text('{}\n')
+    (c / 'groups' / 'g000001' / 'rollouts.jsonl').write_text('{}\n')
+    (c / 'actor' / 'blocks' / 'ab').mkdir(parents=True)
+    (c / 'actor' / 'blocks' / 'ab' / 'nzs1_abcdef.safetensors').write_bytes(b'b' * 10)
+    (c / 'actor' / 'store.sqlite').write_bytes(b's')
+    (c / 'actor.log').write_text('a')
+    log = c / 'collect.log'
+    log.write_text('done')
+    os.utime(log, (time.time() - 7200, time.time() - 7200))
+    return c
+
+
+def test_trim_removes_only_reproducible_and_diagnostic_files(tmp_path):
+    m = load()
+    c = _collection(tmp_path)
+    before = {p for p in c.rglob('*') if p.is_file()}
+    assert sum(m.trim(c, apply=False).values()) > 0 and {p for p in c.rglob('*') if p.is_file()} == before
+    kinds = m.trim(c, apply=True)
+    assert set(kinds) == {'duplicate-result', 'trace', 'log', 'tmp', 'native-state-cache'}
+    left = {str(p.relative_to(c)) for p in c.rglob('*') if p.is_file()}
+    assert left == {'groups/g000001/row-000/sample-00/results.jsonl',
+                    'groups/g000001/row-000/sample-01/results.jsonl',
+                    'groups/g000001/row-000/sample-01/jobs/000000-cc.result.json',
+                    'groups/g000001/row-000/sample-01/jobs/000000-cc.partial.json',
+                    'groups/g000001/row-000/sample-01/jobs/000000-cc.partial.json.evidence-x.jsonl',
+                    'groups/g000001/row-000/sample-01/jobs/000000.error.json',
+                    'groups/g000001/workers/s7-task-000-00.journal.jsonl', 'groups/g000001/rollouts.jsonl',
+                    'actor/store.sqlite', 'collect.log', 'trimmed.json'}
+    record = json.loads((c / 'trimmed.json').read_text())
+    assert len(record['passes'][0]['files']) == 7
+
+
+def test_trim_refuses_an_open_collection_and_plan_trims_moved_ones(tmp_path):
+    m = load()
+    c = _collection(tmp_path / 'hdd')
+    (c / 'collect.log').write_text('still writing')
+    try:
+        m.trim(c, apply=True)
+        raise AssertionError('an open collection must be refused')
+    except RuntimeError:
+        pass
+    assert (c / 'actor' / 'blocks' / 'ab' / 'nzs1_abcdef.safetensors').exists()
+    driver = tmp_path / 'aei1'
+    (driver / 'collect').mkdir(parents=True)
+    (driver / 'collect' / c.name).symlink_to(c)
+    state = {'lineage': [{'sha256': 'f' * 64, 'round_id': 'r0007'}, {'sha256': 'e' * 64, 'round_id': 'r0008'}]}
+    actions = m.plan(driver, state, None)
+    assert [a['op'] for a in actions] == ['trim'] and actions[0]['path'] == str(c.resolve())

@@ -470,6 +470,67 @@ def _finished(journal):
     return journal.exists() and any(row.get('event') == 'finish' for row in read_jsonl(journal))
 
 
+# An episode lost to infrastructure is measured again, at most this many attempts in all (a task that fails the
+# harness every time stays lost after them: ``compare`` leaves its pairs out on both sides).
+INFRA_ATTEMPTS = 3
+RESEND_EVENT = b'collector_provider_request_retry_scheduled'
+
+
+def _finish_of(journal):
+    """The last finish row of an episode journal, or None."""
+    if not journal.exists():
+        return None
+    finishes = [row for row in read_jsonl(journal) if row.get('event') == 'finish']
+    return finishes[-1] if finishes else None
+
+
+def infra_loss(entry, finish):
+    """Why a finished episode was lost to infrastructure (a reason string), or None when it measured the policy.
+
+    Lost: the scorer's ``infrastructure_error`` (``classify_case``: a transport failure such as an unreachable actor,
+    a host-aborted invocation, a collector that ended without a result), and a call-budget stop in an episode whose
+    collector resent a failed provider request (ts-host before the resend fix counted resends against the 40-call
+    budget, so an actor outage turned episodes near the budget into budget failures; aei1 round 1, 2026-11-24).
+    Everything else that is unscored (a wall-clock stop, an unresolved run) is the policy's and counts as a failure in
+    ``compare``. Measurements re-run lost episodes (``collect``) and ``compare`` leaves leftovers out of both sides."""
+    if not finish:
+        return None
+    from ..eval.task_packet import classify_case
+    output = Path(entry['output']) if entry.get('output') else None
+    rows = read_jsonl(output) if output and output.is_file() and output.stat().st_size else []
+    outcome = classify_case(rows[0] if rows else None, finish)
+    if outcome == 'infrastructure_error':
+        return 'infrastructure_error'
+    if outcome == 'budget_exhaustion' and finish.get('resource_limit_reason') == 'model_request_budget':
+        jobs = Path(entry.get('jobs') or '')
+        if entry.get('jobs') and jobs.is_dir() and any(
+                RESEND_EVENT in path.read_bytes() for path in jobs.glob('*.evidence-*.jsonl')):
+            return 'request_budget_spent_on_resends'
+    return None
+
+
+def _set_lost_attempt_aside(directory, entry):
+    """Move a lost episode's files (its sample directory and worker journal) to ``<sample>.lost-N`` so it runs again
+    from scratch; returns the number of earlier lost attempts (N)."""
+    sample_dir = Path(entry['output']).parent
+    n = len(list(sample_dir.parent.glob(sample_dir.name + '.lost-*'))) + 1
+    aside = sample_dir.with_name(f'{sample_dir.name}.lost-{n}')
+    if sample_dir.exists():
+        os.replace(sample_dir, aside)
+    else:
+        aside.mkdir(parents=True)
+    journal = Path(directory) / 'workers' / f"{entry['key']}.journal.jsonl"
+    if journal.exists():
+        os.replace(journal, aside / 'worker.journal.jsonl')
+    return n
+
+
+def lost_attempts(entry):
+    """How many earlier attempts of ``entry`` were set aside as lost to infrastructure."""
+    sample_dir = Path(entry['output']).parent
+    return len(list(sample_dir.parent.glob(sample_dir.name + '.lost-*')))
+
+
 def _finish_seconds(journal):
     """The episode's wall seconds from its journal's finish row (None while unfinished)."""
     if not journal.exists():
@@ -553,24 +614,50 @@ class Dispatch:
 STOP_DRAIN_SECONDS = 120   # after a stop: terminated episodes get this long, then they are killed and collection returns
 
 
+def _pending(directory, entries, *, log=None, rerun_lost=True):
+    """(entries to run, observed seconds per task): the unfinished ones, and (``rerun_lost``) finished ones lost to
+    infrastructure (``infra_loss``) with fewer than ``INFRA_ATTEMPTS`` attempts, whose files are set aside first."""
+    work = Path(directory) / 'workers'
+    todo, observed = [], collections.defaultdict(list)
+    for entry in entries:
+        finish = _finish_of(work / f"{entry['key']}.journal.jsonl")
+        if finish is None:
+            todo.append(entry)
+            continue
+        reason = infra_loss(entry, finish) if rerun_lost else None
+        if reason and lost_attempts(entry) + 1 < INFRA_ATTEMPTS:
+            attempt = _set_lost_attempt_aside(directory, entry)
+            if log:
+                log(json.dumps({'event': 'held eval rerun', 'key': entry['key'], 'reason': reason, 'lost_attempts': attempt}))
+            todo.append(entry)
+        elif isinstance(finish.get('elapsed_seconds'), (int, float)):
+            observed[entry['task_id']].append(float(finish['elapsed_seconds']))
+    return todo, observed
+
+
 def collect(directory, entries, endpoints, *, repo, runtime, env, stop, log=None, prior=None, order='longest-first',
-            drain_seconds=STOP_DRAIN_SECONDS):
+            drain_seconds=STOP_DRAIN_SECONDS, rerun_lost=True):
     """Work-stealing slots (``endpoints``: [(url, slots)]) over the sealed ``entries``, one ``run_bonsai_queue`` process per
     episode under ``directory/workers`` (a slow episode never holds a shard of others back). Entries with a finished journal
-    are skipped (resume). The next entry is ``Dispatch``'s choice (``prior``, ``order``). Returns once every entry ran or,
-    after ``stop``, within ``drain_seconds``: running episodes get SIGTERM, those still alive at half the drain SIGKILL,
-    and a slot thread still blocked at the end is left behind (daemon) with every thread's stack in the log, so the
-    partial result is always written (the 2026-11-17 Pop smoke's measure sat 55 min after its SIGTERM)."""
+    are skipped (resume), except episodes lost to infrastructure (``infra_loss``: an actor that died or restarted under
+    them), which run again from scratch, in passes after the main one and on resume, up to ``INFRA_ATTEMPTS`` attempts
+    (``rerun_lost`` False: never). The next entry is ``Dispatch``'s choice (``prior``, ``order``). Returns once every
+    entry ran or, after ``stop``, within ``drain_seconds``: running episodes get SIGTERM, those still alive at half the
+    drain SIGKILL, and a slot thread still blocked at the end is left behind (daemon) with every thread's stack in the
+    log, so the partial result is always written (the 2026-11-17 Pop smoke's measure sat 55 min after its SIGTERM)."""
+    for _ in range(INFRA_ATTEMPTS):
+        todo, observed = _pending(directory, entries, log=log, rerun_lost=rerun_lost)
+        if not todo or stop.is_set():
+            return
+        _collect_pass(directory, todo, observed, endpoints, repo=repo, runtime=runtime, env=env, stop=stop, log=log,
+                      prior=prior, order=order, drain_seconds=drain_seconds)
+
+
+def _collect_pass(directory, todo, observed, endpoints, *, repo, runtime, env, stop, log, prior, order, drain_seconds):
+    """One work-stealing pass of ``collect`` over ``todo``."""
     directory, repo = Path(directory), Path(repo)
     work = directory / 'workers'
     work.mkdir(exist_ok=True)
-    todo, observed = [], collections.defaultdict(list)
-    for entry in entries:
-        seconds = _finish_seconds(work / f"{entry['key']}.journal.jsonl")
-        if seconds is None:
-            todo.append(entry)
-        elif isinstance(seconds, (int, float)):
-            observed[entry['task_id']].append(float(seconds))
     dispatch = Dispatch(todo, prior=prior, order=order, observed=observed)
     lock, children, done = threading.Lock(), set(), [0]
     started = time.time()
@@ -702,8 +789,10 @@ def _timed_out(finish):
 
 
 def finalize(directory, spec, started, *, complete):
-    """Score the finished episodes into ``result.json``. A wall-clock timeout (``case_wall_budget``: load-dependent, not
-    the policy's) is unscored and counted apart (``timeouts``), never as a failure; ``success_rate`` is over the scored."""
+    """Score the finished episodes into ``result.json``. Each sample records ``infra_lost`` (``infra_loss``: the reason
+    an episode was lost to infrastructure, else None) and its earlier lost attempts. ``success_rate`` is over the
+    episodes that measured the policy (ran, not lost to infrastructure): a wall-clock timeout or another unscored
+    episode counts as a failure there, as in ``compare``'s primary statistic."""
     from . import task_rollouts
     directory = Path(directory)
     journal = directory / 'journal.jsonl'
@@ -728,7 +817,9 @@ def finalize(directory, spec, started, *, complete):
                         'elapsed_seconds': (finish or {}).get('elapsed_seconds'),
                         'completion_tokens': (finish or {}).get('completion_tokens'),
                         'model_calls': efficiency.get('model_calls'), 'repeated_actions': efficiency.get('repeated_actions'),
-                        'neuralese_exchanges': row.get('neuralese_exchanges', 0)})
+                        'neuralese_exchanges': row.get('neuralese_exchanges', 0),
+                        'infra_lost': infra_loss(queue[key], finish),
+                        'lost_attempts': lost_attempts(queue[key])})
     elapsed = round(time.time() - started, 1)
     result = {'schema': RESULT_SCHEMA, 'policy_id': spec['policy_id'], 'round': spec.get('round'),
               'manifest_sha256': spec['manifest_sha256'], 'series': spec['series'], 'code': spec['code'],
@@ -759,10 +850,26 @@ def record_result(directory, spec):
         print(json.dumps({'event': 'data registry error', 'error': repr(error)[:300]}), flush=True)
 
 
+def sample_infra_lost(sample):
+    """Whether a result sample was lost to infrastructure: its ``infra_lost`` reason, or (a result written before the
+    field) an ``infrastructure_error`` outcome. ``relabel`` recomputes the field of an older result from its episodes."""
+    if 'infra_lost' in sample:
+        return bool(sample['infra_lost'])
+    return sample.get('outcome') == 'infrastructure_error'
+
+
+def counted(sample):
+    """Whether a sample measured the policy: it ran and was not lost to infrastructure."""
+    return bool(sample['ran']) and not sample_infra_lost(sample)
+
+
 def aggregate(samples, *, complete, elapsed):
-    """The result fields computed from its samples (``finalize``, ``merge``)."""
+    """The result fields computed from its samples (``finalize``, ``merge``). ``success_rate`` is successes over the
+    ``counted`` episodes (an unscored one that was not lost to infrastructure is a failure); ``infra_lost`` counts the
+    episodes left out, ``scored`` those with a reward."""
     ran = [s for s in samples if s['ran']]
     scored = [s for s in ran if s['reward'] is not None]
+    measured = [s for s in ran if counted(s)]
     counts = {}
     for s in ran:
         counts[s['outcome']] = counts.get(s['outcome'], 0) + 1
@@ -771,7 +878,8 @@ def aggregate(samples, *, complete, elapsed):
     timeouts = sum(s['timed_out'] for s in ran)
     tokens = sum(s['completion_tokens'] or 0 for s in ran)
     return {'complete': bool(complete and len(ran) == len(samples)), 'ran': len(ran), 'scored': len(scored),
-            'successes': successes, 'success_rate': round(successes / len(scored), 4) if scored else None,
+            'counted': len(measured), 'infra_lost': len(ran) - len(measured),
+            'successes': successes, 'success_rate': round(successes / len(measured), 4) if measured else None,
             # Secondary: the training reward with partial file-effect credit (held is judged on acceptance).
             'mean_graded_reward': (round(sum(s['graded_reward'] for s in scored) / len(scored), 4)
                                    if scored and all(s.get('graded_reward') is not None for s in scored) else None),
@@ -784,6 +892,30 @@ def aggregate(samples, *, complete, elapsed):
             'neuralese_use_rate': (sum(s['neuralese_exchanges'] > 0 for s in scored) / len(scored)) if scored else None,
             'completion_tokens': tokens, 'tokens_per_second': round(tokens / elapsed, 1) if elapsed else None,
             'samples': samples}
+
+
+def relabel(directory):
+    """The ``result.json`` of a measured ``directory`` with every sample's ``infra_lost`` and ``lost_attempts``
+    recomputed from its episodes (worker journals, outputs, collector evidence) and the aggregate fields with them, for
+    results written before the field or by an older classifier. Nothing in ``directory`` changes."""
+    directory = Path(directory)
+    result = json.loads((directory / 'result.json').read_text())
+    entries = {(e['task_id'], e['sample']): e for e in read_jsonl(directory / 'sealed-queue.jsonl')}
+    samples = []
+    for sample in result['samples']:
+        entry = entries[(sample['task_id'], sample['sample'])]
+        finish = _finish_of(directory / 'workers' / f"{entry['key']}.journal.jsonl")
+        samples.append({**sample, 'infra_lost': infra_loss(entry, finish), 'lost_attempts': lost_attempts(entry)})
+    return {**result, **aggregate(samples, complete=result.get('complete'), elapsed=result.get('elapsed_seconds')),
+            'relabeled': {'at': round(time.time(), 1), 'code': _code_commit()}}
+
+
+def _code_commit():
+    try:
+        from ..common.code_provenance import code_provenance
+        return code_provenance().get('git_commit')
+    except Exception:
+        return None
 
 
 def merge(parts):
@@ -844,12 +976,12 @@ def binomial_two_sided(a, b):
 
 
 def paired(first, second):
-    """``second`` against ``first`` over the matched (task, sample) episodes both scored: McNemar's exact test on the
-    discordant samples, and the exact sign test over tasks whose mean success differs (samples of a task are not independent,
-    so the task-level p is the conservative one)."""
+    """``second`` against ``first`` over the matched (task, sample) episodes both ``counted`` (an episode lost to
+    infrastructure on either side leaves the pair out; another unscored one is a failure): McNemar's exact test on the
+    discordant samples, and the exact sign test over tasks whose mean success differs (samples of a task are not
+    independent, so the task-level p is the conservative one)."""
     def table(result):
-        return {(s['task_id'], s['sample']): s['reward'] == 1.0 for s in result['samples']
-                if s['ran'] and s['reward'] is not None}
+        return {(s['task_id'], s['sample']): s['reward'] == 1.0 for s in result['samples'] if counted(s)}
     a, b = table(first), table(second)
     common = sorted(set(a) & set(b))
     only_first = sum(a[k] and not b[k] for k in common)
@@ -872,15 +1004,18 @@ LEGACY_CONTEXT_TOKENS = 32768
 LEGACY_SAMPLING = {'temperature': 1., 'top_p': 1.}
 
 
-def task_counts(result, *, timeouts='failure'):
-    """{task: [successes, counted]} over the episodes that ran. ``timeouts='failure'`` counts a wall-clock stop as a
-    failure (it falls on hard tasks, so dropping it biases the rate up for the side that times out more); ``'drop'``
-    leaves it out. Other unscored episodes (infrastructure) are left out either way."""
-    counts = {}
+def task_counts(result, *, timeouts='failure', leave_out=()):
+    """{task: [successes, counted]} over the ``counted`` episodes (ran, not lost to infrastructure) whose (task, sample)
+    is not in ``leave_out`` (``compare``: the pairs lost to infrastructure on the other side, so a loss drops the pair
+    from both sides). ``timeouts='failure'`` counts a wall-clock stop as a failure (it falls on hard tasks, so dropping
+    it biases the rate up for the side that times out more); ``'drop'`` leaves it out. Any other unscored episode that
+    was not lost to infrastructure is the policy's (an unresolved run) and counts as a failure either way: leaving it
+    out would raise the rate of the side whose failures end unscored (aei1 round 1, 2026-11-24)."""
+    counts, leave_out = {}, set(leave_out)
     for s in result['samples']:
-        if not s['ran']:
+        if not counted(s) or (s['task_id'], s['sample']) in leave_out:
             continue
-        if s['reward'] is None and not (timeouts == 'failure' and sample_timed_out(s)):
+        if s['reward'] is None and timeouts == 'drop' and sample_timed_out(s):
             continue
         entry = counts.setdefault(s['task_id'], [0, 0])
         entry[0] += s['reward'] == 1.0
@@ -984,7 +1119,10 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
 
     Primary: the mean per-task pass-rate change over the tasks both measured, with a within-task permutation test (valid
     for unequal sample counts, no arbitrary pairing of independent samples) and a task-bootstrap 95% interval; a
-    wall-clock timeout counts as a failure. ``sensitivity_drop_timeouts`` is the same with timeouts left out. Subsets:
+    wall-clock timeout and any other unscored episode that was not lost to infrastructure count as failures, and an
+    episode lost to infrastructure (``sample_infra_lost``) leaves its (task, sample) out of both sides (measurements
+    re-run such episodes, so leftovers are rare; ``pairs_lost_to_infrastructure`` and a warning report them).
+    ``sensitivity_drop_timeouts`` is the same with timeouts left out. Subsets:
     ``without_ignored`` drops ``ignore_ids`` (structurally-zero or wrong-oracle tasks), and with ``trained_families``
     (families the second policy trained on) ``trained_families``/``untrained_families`` split the tasks. Secondary:
     McNemar and the task sign test on matched scored (task, sample) episodes (``paired``), timeouts, loop and ran-out
@@ -1038,18 +1176,29 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
     def table(result):
         return {(s['task_id'], s['sample']): s for s in result['samples'] if s['ran']}
     a, b = table(first), table(second)
-    common = set(a) & set(b)
+    lost_a = {k for k, s in a.items() if sample_infra_lost(s)}
+    lost_b = {k for k, s in b.items() if sample_infra_lost(s)}
+    common = (set(a) & set(b)) - lost_a - lost_b
+    if lost_a or lost_b:
+        warnings.append(f'episodes lost to infrastructure (left out of both sides): first {len(lost_a)}, '
+                        f'second {len(lost_b)}')
 
     def side(result):
+        measured = [s for s in result['samples'] if counted(s)]
+        successes = sum(s['reward'] == 1.0 for s in measured)
         return {'policy': result['policy_id'], 'code': (result.get('code') or {}).get('git_commit'),
                 'series': result['series']['key'], 'seed_base': result.get('seed_base', SEED_BASE), 'ran': result['ran'],
-                'scored': result['scored'], 'successes': result['successes'],
-                'success_rate': round(result['successes'] / result['scored'], 4) if result['scored'] else None,
+                'scored': result['scored'], 'counted': len(measured),
+                'infra_lost': sum(1 for s in result['samples'] if s['ran'] and sample_infra_lost(s)),
+                'unscored_counted_as_failure': sum(s['reward'] is None for s in measured),
+                'successes': successes,
+                'success_rate': round(successes / len(measured), 4) if measured else None,
                 'mean_graded_reward': result.get('mean_graded_reward'),
                 'timeouts': sum(timed_out(s) for s in result['samples'] if s['ran']),
                 'loop_rate': result['loop_rate'], 'ran_out_rate': ran_out_rate(result),
                 'repeated_action_rate': result.get('repeated_action_rate'), 'elapsed_seconds': result.get('elapsed_seconds'), 'complete': result.get('complete')}
-    counts = {mode: (task_counts(first, timeouts=mode), task_counts(second, timeouts=mode)) for mode in ('failure', 'drop')}
+    counts = {mode: (task_counts(first, timeouts=mode, leave_out=lost_b), task_counts(second, timeouts=mode, leave_out=lost_a))
+              for mode in ('failure', 'drop')}
     every = sorted(set(counts['failure'][0]) | set(counts['failure'][1]))
     ignored = set(ignore_ids)
     family = {s['task_id']: s.get('family') for result in (first, second) for s in result['samples']}
@@ -1072,11 +1221,13 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
             'same_series': side(first)['series'] == side(second)['series'],
             'same_manifest': first.get('manifest_sha256') == second.get('manifest_sha256'),
             'series_differences': series_differences, 'engine_differences': engine_differences, 'warnings': warnings,
-            'primary': {**change(every), 'statistic': 'mean per-task pass-rate change', 'timeouts': 'failure'},
+            'primary': {**change(every), 'statistic': 'mean per-task pass-rate change', 'timeouts': 'failure',
+                        'other_unscored': 'failure', 'infrastructure_losses': 'left out of both sides'},
             'sensitivity_drop_timeouts': {**change(every, 'drop'), 'timeouts': 'dropped'},
             'subsets': subsets,
             'matched_pairs': len(common), 'pairs_lost_to_timeout': sum(
                 1 for k in common if timed_out(a[k]) or timed_out(b[k])),
+            'pairs_lost_to_infrastructure': len((set(a) & set(b)) & (lost_a | lost_b)),
             'paired': paired(first, second),
             'loop_rate_delta': (round(second['loop_rate'] - first['loop_rate'], 4)
                                 if first['loop_rate'] is not None and second['loop_rate'] is not None else None),
@@ -1108,6 +1259,7 @@ def trend(out):
         key = result['series']['key']
         row = {'policy': result['policy_id'], 'round': result.get('round'), 'series': key,
                'complete': result['complete'], 'ran': result['ran'], 'scored': result['scored'],
+               'infra_lost': sum(1 for s in result['samples'] if s['ran'] and sample_infra_lost(s)),
                'successes': result['successes'], 'loop_rate': result['loop_rate'],
                'repeated_action_rate': result['repeated_action_rate'], 'outcome_counts': result['outcome_counts'],
                'vs_previous': paired(previous[key], result) if key in previous else None,
@@ -1398,6 +1550,10 @@ def main(argv=None):
     c.add_argument('--strict-series', action='store_true',
                    help='pair only results of one scoring series and one attested engine (fork commit, running cap '
                         'included); by default other series pair with a warning and the differences recorded')
+    q = sub.add_parser('relabel', help="a measured policy directory's result.json with the episodes lost to "
+                                       'infrastructure labelled again from its episodes (written to --out only)')
+    q.add_argument('dir', type=Path)
+    q.add_argument('--out', type=Path, required=True)
     g = sub.add_parser('merge', help='one result.json from complete runs of one policy with continuing seeds '
                                      '(e.g. samples 0-1 and, with --seed-base +2, samples 2-3)')
     g.add_argument('out', type=Path, help='result.json to write')
@@ -1415,6 +1571,13 @@ def main(argv=None):
         if args.out:
             args.out.write_text(text + '\n')
         print(text)
+    elif args.command == 'relabel':
+        if args.out.resolve() == (args.dir / 'result.json').resolve():
+            raise SystemExit('relabel writes a copy: --out must not be the directory\'s result.json')
+        result = relabel(args.dir)
+        write_json_durable(args.out, result)
+        print(json.dumps({k: result[k] for k in ('policy_id', 'ran', 'scored', 'counted', 'infra_lost', 'successes',
+                                                 'success_rate')}))
     elif args.command == 'merge':
         result = merge([json.loads(path.read_text()) for path in args.parts])
         write_json_durable(args.out, result)

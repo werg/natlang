@@ -871,21 +871,23 @@ test('partial resume keeps the execution namespace while logical program identit
   assert.notEqual(fresh.execution_identity.execution_attempt_id, partial.execution_attempt_id);
 });
 
-test('request budget counts each provider resend', async () => {
+for (const eachResend of [false, true]) test(`request budget ${eachResend ? 'counts each provider resend (opt-out)' : 'counts a resent request once'}`, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-request-retry-budget-'));
   let calls = 0;
   const server = createServer((_request, response) => {
     calls++;
-    if (calls === 1) {
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [{ id: 'first', type: 'function',
-        function: { name: 'eval', arguments: JSON.stringify({ code: 'firstAction()' }) } }] } }] }));
-    } else {
+    if (calls === 2) {   // the actor restarts under the second request: its resend is answered
       response.writeHead(503, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ error: { code: 'provider_retry' } }));
+      return;
     }
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [{ id: `call-${calls}`,
+      type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code: 'action()' }) } }] } }] }));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const saved = process.env.NATLANG_BUDGET_EACH_RESEND;
+  if (eachResend) process.env.NATLANG_BUDGET_EACH_RESEND = '1'; else delete process.env.NATLANG_BUDGET_EACH_RESEND;
   try {
     const item = { index: 0, record: record('retry-budget') };
     const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
@@ -894,15 +896,23 @@ test('request budget counts each provider resend', async () => {
       execution: { identity: 'request-retry-budget-fixture/1', run: async (_record, driver) => {
         const request = content => ({ messages: [{ role: 'user', content }],
           tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object' } } }], max_tokens: 64 });
-        await driver(request('first')); await driver(request('budgeted retry'));
+        await driver(request('first')); await driver(request('second, resent once'));
         return { outcome: { accepted: true }, trace: [] };
       } } };
     const result = await collectBatch([item], options, nativeJobRunner(options));
-    assert.deepEqual(result.missing, [0]);
-    assert.equal(calls, 2, 'the retry consumes a budget slot and is rejected before another send');
-    const failure = JSON.parse(await readFile(join(options.jobs, '000000.error.json'), 'utf8'));
-    assert.match(failure.error, /request budget exceeded/);
-  } finally { await new Promise(resolve => server.close(resolve)); }
+    if (eachResend) {
+      assert.deepEqual(result.missing, [0]);
+      assert.equal(calls, 2, 'the resend consumes a budget slot and is rejected before another send');
+      const failure = JSON.parse(await readFile(join(options.jobs, '000000.error.json'), 'utf8'));
+      assert.match(failure.error, /request budget exceeded/);
+    } else {
+      assert.deepEqual(result.missing, [], 'two model calls fit a budget of two although one was resent');
+      assert.equal(calls, 3);
+    }
+  } finally {
+    if (saved === undefined) delete process.env.NATLANG_BUDGET_EACH_RESEND; else process.env.NATLANG_BUDGET_EACH_RESEND = saved;
+    await new Promise(resolve => server.close(resolve));
+  }
 });
 
 test('explicit provider non-retryability blocks both request and whole-case resend', async () => {

@@ -22,7 +22,7 @@ WATCHDOG_STATE = os.path.expanduser(CONFIG.get('watchdog_state', '~/.local/state
 TUNE = os.path.expanduser(CONFIG.get('program_tune_dir', '~/data/program-tune-20261117'))
 PROBE_EVERY_S = 600
 LOG_EVENTS_KEEP = 300
-STATE_VERSION = 2
+STATE_VERSION = 3
 
 
 # ---------- small helpers ----------
@@ -671,10 +671,18 @@ def held_record(path):
     d = read_json(path, None)
     if not d or 'success_rate' not in d:
         return None
-    rates = {}
+    # held_eval.compare's rule: an episode lost to infrastructure (``infra_lost``; a result written before the field:
+    # an infrastructure_error) is left out, and of both sides of a pair (``paired``); any other unscored one fails
+    # (outcomes and lost are keyed '<task>#<sample>': the record is cached in the JSON exporter state)
+    rates, outcomes, lost = {}, {}, []
     for s in d.get('samples', []):
-        if not s.get('ran', True) or s.get('outcome') in ('infrastructure_error', 'unresolved') and s.get('reward') is None:
+        if not s.get('ran', True):
             continue
+        key = f"{s['task_id']}#{s.get('sample')}"
+        if (bool(s['infra_lost']) if 'infra_lost' in s else s.get('outcome') == 'infrastructure_error'):
+            lost.append(key)
+            continue
+        outcomes[key] = s.get('outcome') == 'task_success'
         t = rates.setdefault(s['task_id'], [0, 0])
         t[1] += 1
         t[0] += 1 if s.get('outcome') == 'task_success' else 0
@@ -686,18 +694,35 @@ def held_record(path):
     return {'sha': d.get('policy_id'), 'series': (d.get('series') or {}).get('key'), 'rate': d.get('success_rate'), 'successes': d.get('successes'),
             'scored': d.get('scored'), 'ran': d.get('ran'), 'tasks': d.get('tasks'), 'spt': d.get('samples_per_task'), 'finished': ms(d['finished_at']) if d.get('finished_at') else None,
             'ran_out_rate': d.get('ran_out_rate'), 'loop_rate': d.get('loop_rate'), 'neuralese_use': d.get('neuralese_use_rate'),
-            'graded': d.get('mean_graded_reward'), 'infra': oc.get('infrastructure_error', 0) + oc.get('unresolved', 0), 'timeouts': d.get('timeouts'),
+            'graded': d.get('mean_graded_reward'), 'infra': len(lost), 'counted': len(outcomes), 'timeouts': d.get('timeouts'),
             'engine': ((d.get('engine') or {}).get('dtype'), (d.get('engine') or {}).get('kv_cache_dtype')),
             'task_mean': round(mean, 4) if mean is not None else None, 'task_se': round(se, 4) if se is not None else None, 'task_n': n,
-            'rates': {k: v for k, v in rates.items()}}
+            'rates': {k: v for k, v in rates.items()}, 'outcomes': outcomes, 'lost': lost}
+
+
+def _pair_rates(rec, drop):
+    rates = {}
+    for key, ok in rec['outcomes'].items():
+        if key in drop:
+            continue
+        t = rates.setdefault(key.rpartition('#')[0], [0, 0])
+        t[1] += 1
+        t[0] += ok
+    return rates
 
 
 def paired(a, b):
-    """Task-level paired difference b - a over the tasks both scored (normal approximation; the driver's verdict uses the permutation test)."""
-    common = [k for k in a['rates'] if k in b['rates'] and a['rates'][k][1] and b['rates'][k][1]]
+    """Task-level paired difference b - a over the tasks both measured, an episode lost to infrastructure on either side
+    left out of both (normal approximation; the driver's verdict uses held_eval compare's permutation test)."""
+    if 'outcomes' in a and 'outcomes' in b:
+        drop = set(a['lost']) | set(b['lost'])
+        ra, rb = _pair_rates(a, drop), _pair_rates(b, drop)
+    else:
+        ra, rb = a['rates'], b['rates']
+    common = [k for k in ra if k in rb and ra[k][1] and rb[k][1]]
     if len(common) < 8:
         return None
-    d = [b['rates'][k][0] / b['rates'][k][1] - a['rates'][k][0] / a['rates'][k][1] for k in common]
+    d = [rb[k][0] / rb[k][1] - ra[k][0] / ra[k][1] for k in common]
     m = sum(d) / len(d)
     se = (sum((x - m) ** 2 for x in d) / (len(d) - 1)) ** 0.5 / len(d) ** 0.5
     return {'delta_pts': round(100 * m, 2), 'ci_pts': [round(100 * (m - 1.96 * se), 2), round(100 * (m + 1.96 * se), 2)], 'tasks': len(d),
@@ -785,14 +810,14 @@ def held_section(st, run, lin, log_st, phase, now):
         c = latest(cand.get('sha256'))
         r_same = latest(ref.get('sha256'), c['series'] if c else None)
         gate = {'candidate': lin.label(cand.get('sha256')), 'candidate_version': cand.get('version'), 'reference': lin.label(ref.get('sha256')),
-                'candidate_result': {k: c[k] for k in ('rate', 'scored', 'ran', 'series', 'infra', 'finished')} if c else None,
+                'candidate_result': {k: c.get(k) for k in ('rate', 'scored', 'counted', 'ran', 'series', 'infra', 'finished')} if c else None,
                 'reference_same_series': bool(r_same), 'pair': paired(r_same, c) if c and r_same else None,
                 'failing': log_st.get('gate_fail'), 'every': phase.get('held_every'), 'since_held': phase.get('since_held'),
                 'neutral': phase.get('consecutive_neutral')}
     q = read_json(run + '/held-v4/queue.json', {}) or {}
     queue = [{'label': lin.label(e.get('sha256')), 'state': e.get('state'), 'reasons': e.get('reasons'), 'queued_at': ms(e['queued_at']) if e.get('queued_at') else None}
              for e in q.get('entries', [])]
-    out = [{k: v for k, v in r.items() if k != 'rates'} for r in results]
+    out = [{k: v for k, v in r.items() if k not in ('rates', 'outcomes', 'lost')} for r in results]
     return {'results': out[-16:], 'pairs': pairs[-8:], 'in_progress': inprog, 'gate': gate, 'queue': queue}
 
 

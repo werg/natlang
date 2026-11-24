@@ -11284,3 +11284,103 @@ Inventory: `scripts/memory_ledger.py` owns `fixed_claim`, `outstanding`, `adopt`
 Actual native single-context work was stopped at 11:33:53 for a medium-priority Android-tail quick check, not OOM (5 GiB peak below 6 GiB; physical available 11.5 GiB). A 90-second grace was ineffective: shared `memory_ledger.terminate` used `systemctl kill --signal=SIGTERM UNIT`, whose default scope includes every child. The owner lost its CLI/server/workerd before it could export completed in-memory results. Existing 98 completed packets remain intact.
 
 Inventory: `terminate` is the shared guard stop path for pressure and priority preemption (one caller in `guard`); container TERM already targets the container main process. Final `kill`/survivor sweep intentionally target all remaining processes. Other scripts' `Popen.terminate` target their owned child PID, not a systemd cgroup. Make graceful systemd TERM explicitly `--kill-whom=main` (supported on Tick and DGX); preserve final hard cleanup. `guard --terminate-cgroup` opts back into all-process TERM for diagnosis. Native controller checkpoint/export also needs to respect its declared grace. Code checks use low priority so they do not preempt useful work. Serving engines, learner and collectors all consume this shared allocator stop mechanism rather than implementing a second one.
+
+
+## 2026-11-24 Held episodes lost to infrastructure are re-run, or left out of both sides; other unscored ones fail (aei1 round 1 re-judged: success holds)
+
+Observation: aei1's held-v3 measurement of round 1 (policy 8e634a0f, Pop, 2 samples) ran 512, scored 460; its
+`success_rate` 0.637 was 293/460 and the adopted verdict (+4.47 pts, p 0.05) came from `compare`, which left each
+side's unscored episodes out of that side only, so the reference (sft-v9, 512/512 scored) kept its outcomes on the
+52 tasks-samples the candidate lost.
+
+Cause (from the journals, worker error files and Pop's user journal): all 52 are infrastructure losses, in three
+clusters where every in-flight episode failed within seconds. 01:56:37 the Pop actor unit was stopped under a running
+measurement (a second held start re-served it, the double start 1afe6e8aa fixed): 20 episodes, 0 model calls.
+02:52:33 and 05:47:57 the SGLang engine exited with code 70 (`ENGINE_DIED_EXIT`) and `pop_actor_driver` relaunched it
+within a minute: 17 and 15 in-flight episodes failed with `ProviderRequestRetriesExhaustedError ... ECONNREFUSED`.
+Four more were scored as budget failures because ts-host counted the resends of failed requests against the 40-call
+budget (episodes at 37-39 calls; s7-task-092-01, 119-00, 161-01, 211-01). Defects: (1) `collect` skipped every
+finished episode on resume, so lost ones were never re-run; (2) `classify_case` read a result-less episode whose
+provider request exhausted its resends as `unresolved`, not `infrastructure_error`; (3) `compare`/`paired`/
+`task_counts`, `result.json`'s `success_rate` and the dashboard dropped all unscored episodes per side; (4) the
+collector's resends consumed model-call budget.
+
+Mechanism inventory: episode outcome (`eval/task_packet.classify_case`, used by training rewards and held alike);
+request budget (`ts-host/src/teacher/collector.ts`, the one collector behind every engine); held measurement
+(`rl/held_eval.py` collect/finalize/aggregate/merge, used by `grpo.py` held, `expert_iteration` DGX and Pop held,
+`pop-held.sh`); verdict (`held_eval.compare`, `expert_iteration.judge_measurement`/`verdict_stage`); views
+(`ops_dashboard/ei_export.held_record`/`paired`, `views.mjs`). Left out: training pass rates for selection
+(`expert_iteration.group_outcomes`, `grpo.py` 745/1024) exclude every unscored episode; they are frontier weights,
+not verdicts, and their rows carry no loss classification (the classifier fix applies to them).
+
+Changes (default on, opt-outs named): `held_eval.infra_loss` labels a loss (scorer `infrastructure_error`, or a
+call-budget stop whose evidence shows a provider resend); `collect` re-runs lost episodes from scratch in passes after
+the main one and on resume, at most `INFRA_ATTEMPTS` = 3 attempts (files set aside to `sample-NN.lost-K`;
+`rerun_lost=False` opts out); samples carry `infra_lost`/`lost_attempts`; `success_rate` is over `counted` (ran, not
+lost) episodes with `infra_lost`/`counted` fields; `compare` leaves a lost (task, sample) out of both sides and counts
+every other unscored episode as a failure (timeouts too in the primary), reports `pairs_lost_to_infrastructure` and
+warns; `held_eval relabel DIR --out FILE` labels an older result again without touching DIR. `classify_case` labels a
+result-less transport failure `infrastructure_error`. The collector counts a resent request once
+(`NATLANG_BUDGET_EACH_RESEND=1` restores counting each resend). The verdict records carry
+`pairs_lost_to_infrastructure`; the dashboard pairs by the same rule. New scoring series (task_packet, ts-host tree).
+
+Re-judgement (relabel of both results, fixed compare, 2000 and 20000 resamples): 56 candidate pairs left out of both
+sides; reference 266/456 vs candidate 293/456; mean per-task change +5.49 pts (246 tasks, 57.9% -> 63.4%), CI
+[+0.8, +10.4], permutation p 0.025; McNemar 38:65 p 0.010, tasks 48 up / 29 down (sign p 0.040); ran-out -4.3 pts.
+The success verdict (>= +2 pts, ran-out <= +2) holds. For reference: counting the 56 as failures gives -0.2 pts
+(p 1.0); pairing only the 211 tasks with no loss gives +6.2 pts (p 0.008). The lost episodes were not re-run
+(aei1 units and its held directory left to the coordinator); a resume of that measurement on the new code re-runs them.
+- **Closed collections are trimmed, episodes kept (coordinator, 2026-11-24 13:20).** Once a collection's policy leaves
+  the last two lineage entries (moved ones included, through their links), `ei_round_tier.py` deletes only
+  reproducible or diagnostic files.
+  - **Breakdown of v0002 (14.2 GB):**
+    - kept: `actor/blocks` 3.3, the episodes (`results.jsonl` 1.67, `rollouts.jsonl` 1.97, budget-stopped partials
+      with evidence 3.9), memetic evaluations 1.2;
+    - deleted: byte-identical `jobs/*.result.json` copies 1.67, traces 0.08, logs 0.07.
+  - **Deleted kinds:**
+    - `jobs/*.result.json` byte-equal to the sample's `results.jsonl`. The scorer's job accounting is the journal's
+      `finish` record; `exp1_collect` already drops this copy.
+    - `jobs/*.trace.jsonl`, used by audit scripts only.
+    - Worker, collector and actor logs.
+    - Atomic-write leftovers.
+    - `actor/blocks` native-state cache. SFT trains imports as pass-through from the recorded write; the GRPO learner
+      reads only its own run's store, and `grpo.collect_blocks` already drops trained blocks.
+  - **Readers checked:** the round build (`sft_sources`), selection and `task_rates` (lineage collections only),
+    prefer-unseen and trained-units (builds), `collection_health` and its cache (`rewards`, `results.jsonl`,
+    `error.json`, `collect.log`), held (its own evidence), the dashboard exporter (`collect.log`, held results), and
+    the teacher queue rates.
+  - **Kept:** `results.jsonl`, `rollouts.jsonl`, `rewards`, journals, partial episodes and their evidence, error
+    records, memetic evaluations, task and rate files, `collect.log`.
+  - **Compression:** none. The episode readers open plain files (`read_bytes`, globs on `rollouts.jsonl`).
+  - **Guards:** the list goes to `COLLECTION/trimmed.json` before any unlink. A live reference, a `.keep-on-nvme`
+    marker or a `collect.log` written within the hour keeps the whole collection, and any error keeps it too.
+    `--trim PATH` covers the sft-v7..v9 cycle collections. Tests added.
+  - **First dry run:** 40.1 GB across aei1 v0000..v0002, 27.4 GB of it v0000's native-state cache.
+
+
+## 2026-11-24 Training pass rates follow the held loss rule; Pop held episodes ride out an engine relaunch
+
+Follow-ups to "Held episodes lost to infrastructure are re-run ..." (coordinator, fix-what-turns-up rule).
+
+Pass rates for frontier weights and selection (`expert_iteration.group_outcomes`, `grpo.Collector._record_outcome`,
+`exp1_pass_rates.py` -> base-pass-rates.json) now use one helper, `task_rollouts.pass_rate_counts`: a row lost to
+infrastructure (`infrastructure_error`, or a held sample's `infra_lost`) is left out, every other unscored row (wall
+clock, unresolved) counts as a failure; training targets are unchanged (unscored rows still never train). Left as is:
+`grpo._teachers` (JOLT+ trigger; its scored rows are the trajectories handed to the teacher, not a rate). Rows written
+before the classifier fix label a transport loss `unresolved`, so old groups count such losses as failures.
+
+Pop engine deaths (exit 70 at 02:52 and 05:47 under the aei1 round-1 measurement): the actor's log went with its work
+directory, Pop's kernel/system journal shows no host OOM, NVRM or Xid. The earlier Pop deaths in the surviving
+rl-actor log (11-12..11-16) were all CUDA OOMs of prefill transients (input-logprob chunks; `natlang_conv_prefill`),
+fixed on 11-13 (`SGLANG_LOGPROB_CHUNK_SIZE` 256), 11-16 (fork dbc51ddb7 bounded conv rows) and 11-16 (mem fraction
+0.77); none after 11-16 in 5 days of that log. Today's engine (fork 17e3458c2) keeps 1.00 GB after CUDA graphs and the
+device shows ~0.6 GB free beside it. A low-priority model-free Vibe native-oracle chain ran on Pop across both deaths
+(02:18-04:12, 04:25 on); whether it touched the GPU (Xorg is on it) is not established. Cause therefore not proven; a
+CUDA OOM is the likeliest. Changes: (1) `pop_actor_driver.keep_crash_tail` copies the dead engine's last 400 log lines
+to `pop-behavior-eval/actor-crashes/` and puts the path and last error line in the driver's journal, so the next death
+is diagnosable; (2) collector queue entries (`task_rollouts.build_queue`: held and training collection) resend a
+failed actor request 6 times (about 2.5 min at the 15 s delay and 30 s cap) instead of once, so in-flight episodes wait
+out the ~1 min relaunch; resends never spend call budget (ts-host fix); `NATLANG_ACTOR_REQUEST_RETRIES` overrides;
+(3) held measurement re-runs whatever is still lost (previous entry). Running measurements are untouched: their sealed
+queues keep their entries, and the driver change applies to actors started on the new code. Not checked: whether a
+relaunch keeps Neuralese states that in-flight episodes still reference (the front restarts with the engine).

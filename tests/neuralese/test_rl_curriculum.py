@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from natlang_neuralese.rl import curriculum
@@ -434,10 +435,15 @@ def test_held_paired_comparison_is_exact_on_matched_scored_samples():
     tasks=[(f't{i}',s) for i in range(10) for s in (0,1)]
     a={k:1.0 if i<6 else 0.0 for i,k in enumerate(tasks)}
     b={k:1.0 if (i<6 or 10<=i<18) else 0.0 for i,k in enumerate(tasks)}
-    b[tasks[0]]=None                      # unscored in one arm: not a pair
-    result=held_eval.paired(held_result('a',1,a),held_result('b',2,b))
+    b[tasks[0]]=None                      # lost to infrastructure in one arm: not a pair
+    second=held_result('b',2,b)
+    second['samples'][0]['outcome']='infrastructure_error'
+    result=held_eval.paired(held_result('a',1,a),second)
     assert result['pairs']==19 and result['only_first']==0 and result['only_second']==8
     assert result['mcnemar_exact_p']==round(2*0.5**8,4) and result['tasks_up']==4 and result['tasks_down']==0
+    second['samples'][0]['outcome']='unresolved'    # unscored but not an infrastructure loss: the policy's failure
+    result=held_eval.paired(held_result('a',1,a),second)
+    assert result['pairs']==20 and result['only_first']==1 and result['only_second']==8
     assert held_eval.binomial_two_sided(0,0)==1.0 and held_eval.binomial_two_sided(5,5)==1.0
 
 
@@ -450,7 +456,7 @@ def test_held_standalone_comparison_counts_timeouts_apart_and_bounds_the_change(
     second['samples'][0]['timed_out']=True
     report=held_eval.compare(first,second)
     assert report['pairs_lost_to_timeout']==1 and report['second']['timeouts']==1 and report['first']['timeouts']==0
-    assert report['paired']['pairs']==19 and report['loop_rate_delta']==0
+    assert report['paired']['pairs']==20 and report['paired']['only_first']==1 and report['loop_rate_delta']==0
     # primary: the timed-out success of t0 counts as a failure (t0 2/2 -> 1/2), t5..t8 0/2 -> 2/2
     primary,dropped=report['primary'],report['sensitivity_drop_timeouts']
     assert primary['timeouts']=='failure' and primary['tasks']==10 and primary['delta']==round((-.5+4*1.0)/10,4)
@@ -472,6 +478,104 @@ def test_held_standalone_comparison_counts_timeouts_apart_and_bounds_the_change(
         held_eval.compare({**first,'context_tokens':131072},second)
     assert held_eval.compare({**first,'context_tokens':131072},{**second,'context_tokens':131072})['paired']
 
+
+
+def test_held_compare_leaves_infrastructure_losses_out_of_both_sides_and_fails_other_unscored():
+    """aei1 round 1 (2026-11-24): 52 candidate episodes killed by actor restarts were left out of the candidate only, so
+    the reference kept its outcomes on those tasks; the losses must leave both sides, other unscored ones fail."""
+    tasks=[(f't{i}',s) for i in range(10) for s in (0,1)]
+    a={k:(1.0 if i%2==0 else 0.0) for i,k in enumerate(tasks)}      # reference: 10/20
+    b=dict(a)
+    lost=[tasks[1],tasks[3],tasks[5]]                                  # the reference failed these: losing them flatters b
+    for k in lost:
+        b[k]=None
+    first,second=held_result('a',1,a),held_result('b',2,b)
+    for sample in second['samples']:
+        if (sample['task_id'],sample['sample']) in lost:
+            sample['outcome']='unresolved'
+            sample['infra_lost']='infrastructure_error'
+    report=held_eval.compare(first,second)
+    assert report['primary']['delta']==0 and report['primary']['infrastructure_losses']=='left out of both sides'
+    assert report['pairs_lost_to_infrastructure']==3 and report['matched_pairs']==17 and report['paired']['pairs']==17
+    assert report['second']['infra_lost']==3 and report['second']['counted']==17
+    assert report['first']['success_rate']==.5 and report['second']['success_rate']==round(10/17,4)
+    assert any('lost to infrastructure' in w for w in report['warnings'])
+    # the same episodes ended unscored by the policy (no infrastructure loss): failures, never left out
+    for sample in second['samples']:
+        sample['infra_lost']=None
+    model=held_eval.compare(first,second)
+    assert model['pairs_lost_to_infrastructure']==0 and model['paired']['pairs']==20
+    assert model['primary']['delta']==0 and model['second']['unscored_counted_as_failure']==3
+    # a loss of a reference success fails the candidate when it is not infrastructure
+    flip={**a}
+    for k in lost:
+        flip[k]=1.0
+    worse=held_eval.compare(held_result('a',1,flip),second)
+    assert worse['primary']['delta']<0
+    # aggregate: the rate is over the counted episodes, infrastructure losses apart
+    samples=[{'task_id':t,'sample':s,'reward':r,'ran':True,'outcome':'task_success' if r==1.0 else 'unresolved',
+              'timed_out':False,'model_calls':1,'repeated_actions':0,'completion_tokens':1,'neuralese_exchanges':0,
+              'infra_lost':'infrastructure_error' if (t,s) in lost[:2] else None} for (t,s),r in b.items()]
+    agg=held_eval.aggregate(samples,complete=True,elapsed=1.)
+    assert agg['infra_lost']==2 and agg['counted']==18 and agg['success_rate']==round(10/18,4) and agg['scored']==17
+
+
+def test_held_infra_loss_reads_transport_failures_and_resends_that_spent_the_budget(tmp_path):
+    def entry(name):
+        d=tmp_path/name
+        (d/'jobs').mkdir(parents=True)
+        (d/'results.jsonl').write_text('')
+        return {'key':name,'output':str(d/'results.jsonl'),'jobs':str(d/'jobs'),'task_id':name,'sample':0}
+    def finish(error,reason=None,state='failed'):
+        return {'event':'finish','status':'incomplete','resource_limit_reason':reason,'output_accounting':{
+            'job_states':[{'state':state,'terminal_error':{'error':error}}]}}
+    refused=('ProviderRequestRetriesExhaustedError: provider request retry exhausted after 1 retry attempt: model request '
+             'to http://pop:18531/v1/chat/completions failed: Error: connect ECONNREFUSED pop:18531')
+    assert held_eval.infra_loss(entry('a'),finish(refused))=='infrastructure_error'
+    assert held_eval.infra_loss(entry('b'),finish('TypeError: terminated',state='transport_failed'))=='infrastructure_error'
+    budget=finish('Error: whole-case model request budget exceeded (40)','model_request_budget')
+    clean=entry('c')
+    (Path(clean['jobs'])/'000000-x.partial.json.evidence-1.jsonl').write_text('{"payload":{"kind":"provider_exchange"}}\n')
+    assert held_eval.infra_loss(clean,budget) is None                  # the policy spent its 40 calls
+    resent=entry('d')
+    (Path(resent['jobs'])/'000000-x.partial.json.evidence-1.jsonl').write_text(
+        '{"payload":{"kind":"collector_provider_request_retry_scheduled"}}\n')
+    assert held_eval.infra_loss(resent,budget)=='request_budget_spent_on_resends'
+    wall={'event':'finish','status':'timeout','resource_limit_reason':'case_wall_budget','output_accounting':{}}
+    assert held_eval.infra_loss(entry('e'),wall) is None               # a wall-clock stop is the policy's failure
+    assert held_eval.infra_loss(entry('f'),None) is None
+
+
+def test_held_collect_reruns_episodes_lost_to_infrastructure_up_to_the_attempt_cap(tmp_path):
+    work=tmp_path/'workers'
+    work.mkdir()
+    entries=[]
+    for name in ('lost','fine','unfinished'):
+        d=tmp_path/f'row-{name}'/'sample-00'
+        (d/'jobs').mkdir(parents=True)
+        (d/'results.jsonl').write_text('')
+        entries.append({'key':name,'output':str(d/'results.jsonl'),'jobs':str(d/'jobs'),'task_id':name,'sample':0})
+    refused={'event':'finish','status':'incomplete','elapsed_seconds':30.,'output_accounting':{'job_states':[
+        {'state':'failed','terminal_error':{'error':'ProviderRequestRetriesExhaustedError: connect ECONNREFUSED'}}]}}
+    semantic={'event':'finish','status':'complete','elapsed_seconds':50.,
+              'resource_limit_reason':'model_request_budget','output_accounting':{'job_states':[]}}
+    def finished(key,row):
+        (work/f'{key}.journal.jsonl').write_text(json.dumps(row)+'\n')
+    finished('lost',refused)
+    finished('fine',semantic)
+    logged=[]
+    todo,observed=held_eval._pending(tmp_path,entries,log=logged.append)
+    assert [e['key'] for e in todo]==['lost','unfinished'] and observed=={'fine':[50.]}
+    assert (tmp_path/'row-lost'/'sample-00.lost-1'/'worker.journal.jsonl').exists()
+    assert not (work/'lost.journal.jsonl').exists() and not (tmp_path/'row-lost'/'sample-00').exists()
+    assert held_eval.lost_attempts(entries[0])==1 and 'held eval rerun' in logged[0]
+    for attempt in (2,3):                    # lost again: set aside until the cap, then it stays (and compare drops it)
+        (tmp_path/'row-lost'/'sample-00'/'jobs').mkdir(parents=True)
+        finished('lost',refused)
+        todo,_=held_eval._pending(tmp_path,entries)
+        assert ('lost' in [e['key'] for e in todo])==(attempt<held_eval.INFRA_ATTEMPTS)
+    assert held_eval.lost_attempts(entries[0])==held_eval.INFRA_ATTEMPTS-1
+    assert [e['key'] for e in held_eval._pending(tmp_path,entries,rerun_lost=False)[0]]==['unfinished']
 
 
 def test_held_rate_change_permutes_within_tasks_with_unequal_samples_and_reports_subsets():

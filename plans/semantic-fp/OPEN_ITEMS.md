@@ -191,8 +191,9 @@ Brief E covered only the Neuralese-free capabilities. Open:
   Pack each closed run's group directories into one zst per group, which `rl_rollout_files` already reads as
   `g*.rollouts.jsonl.zst`, or move the trees to the HDD/Drive after checking their readers. Owner: coordinator.
 - **`bgkit-data` (591 GB) drains to Drive (owner approved 2026-11-24).** The hourly tier takes it after the round
-  inflow; `multi_news_v1`, `arxiv_v1` and `pubmed_v1` (about 90 GB, view-sources-v3 inputs) stay. At about 5 MB/s
-  shared with the inflow, the bulk takes about 3-4 weeks. Watch: `~/data/drive-tier/manifest.jsonl`. Closes when
+  inflow; `multi_news_v1`, `arxiv_v1` and `pubmed_v1` (about 90 GB, view-sources-v3 inputs) stay. A clean pass
+  drains 12 GB per hourly slot (about 290 GB/day), roughly the round inflow, so `bgkit-data` drains only from the
+  surplus. Its ETA depends on shrinking the inflow (deleting rather than moving reproducible collection bulk). Watch: `~/data/drive-tier/manifest.jsonl`. Closes when
   `bgkit-data` minus the kept inputs is on Drive. `bgkit-checkpoints` and hindsight still await the owner.
   Owner: coordinator.
 - **`vibe-native-v9-reader-pin*` units failed at 08:15 on 2026-11-23:** `.venv-decider-systempython conflicts with the intended shared root link` in `archive-code-00ab72d28dbc`. The Vibestudio session later reached v9 through other units (`vibe-student-fill-keeper-v9`, `vsingest-semantic-poll-v9`), so this is superseded; the owner is the Vibestudio session.

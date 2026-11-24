@@ -154,7 +154,9 @@ def episode_success(row):
 
 def group_outcomes(group_dirs):
     """task id -> [successes, scored] over the student samples of GRPO-format group directories (rewards.jsonl; JOLT+
-    teacher attempts and unscored samples left out)."""
+    teacher attempts left out). ``scored`` counts every sample that measured the policy (``task_rollouts.pass_rate_counts``):
+    a sample lost to infrastructure is left out, any other unscored one is a failure."""
+    from natlang_neuralese.rl.task_rollouts import pass_rate_counts
     rates = collections.defaultdict(lambda: [0, 0])
     for directory in group_dirs:
         path = Path(directory) / 'rewards.jsonl'
@@ -164,11 +166,12 @@ def group_outcomes(group_dirs):
             if not line.strip():
                 continue
             row = json.loads(line)
-            if row.get('reward') is None or row.get('jolt_role', 'student') != 'student':
+            if row.get('jolt_role', 'student') != 'student':
                 continue
-            rates[row['task_id']][0] += episode_success(row)
-            rates[row['task_id']][1] += 1
-    return dict(rates)
+            successes, counted = pass_rate_counts([row])
+            rates[row['task_id']][0] += successes
+            rates[row['task_id']][1] += counted
+    return {task: rate for task, rate in rates.items() if rate[1]}
 
 
 def tier(successes, scored, solved=0.75, min_scored=2):
@@ -2028,7 +2031,9 @@ class Cycle:
         d, p = vs_start['primary']['delta'], vs_start['primary']['permutation_p']
         ran_out = vs_start.get('ran_out_rate_delta') or 0
         verdict, adopt = judge(vs_start, self.a.success_pts, self.a.fail_pts)
-        result = {'verdict': verdict, 'adopt': adopt, 'vs_start': {'delta': d, 'p': p, 'ran_out_delta': ran_out},
+        result = {'verdict': verdict, 'adopt': adopt, 'vs_start': {'delta': d, 'p': p, 'ran_out_delta': ran_out,
+                                                                  'pairs_lost_to_infrastructure':
+                                                                      vs_start.get('pairs_lost_to_infrastructure')},
                   'vs_base': vs_base and {'delta': vs_base['primary']['delta'], 'p': vs_base['primary']['permutation_p'],
                                           'series': base_series, 'from': str(base)},
                   'next_start': candidate_ckpt if adopt else str(train_start),
@@ -4098,7 +4103,10 @@ class AsyncRoundDriver:
         verdict, adopt = judge(vs, self.a.success_pts, self.a.fail_pts)
         record = {'verdict': verdict, 'adopt': adopt, 'sha256': cand['sha256'], 'checkpoint': cand['checkpoint'],
                   'reference': ref, 'vs_start': {'delta': vs['primary']['delta'], 'p': vs['primary']['permutation_p'],
-                                                 'ran_out_delta': vs.get('ran_out_rate_delta') or 0}}
+                                                 'ran_out_delta': vs.get('ran_out_rate_delta') or 0,
+                                                 # held_eval re-runs episodes lost to infrastructure and leaves the
+                                                 # rest out of both sides of the pair (aei1 round 1, 2026-11-24)
+                                                 'pairs_lost_to_infrastructure': vs.get('pairs_lost_to_infrastructure')}}
         from natlang_neuralese.common.jsonio import write_json_durable
         write_json_durable(self.root / 'verdicts' / f'{cand["sha256"][:12]}.json', record)
         return record
