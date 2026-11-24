@@ -10371,3 +10371,28 @@ mix: `max_target_tokens` 20.98M, `max_forward_tokens` 221.8M, teacher budget 314
 - So they enter every round mix at **share 0.01, task_tokens 2000** (`FALLOW22_AUX`; `--no-fallow22-aux` opts out).
   That is ~1% of the loss and ~10% of a round's forward work. Unit-level prefer-unseen rotates them across rounds.
 - Not checked: no held measurement of their effect, and no Neuralese-declaring variants of these programs.
+
+## 2026-11-24 04:35 Pop yield: a held measurement is found by its unit, not only by the shell that started it
+
+Round 1's held-v3 on Pop (`popheld-policy-8e634a0f46ce-1795481950`, started by the driver about 01:58 through
+`pop-held.sh`) failed at 04:15:24, incomplete at 279 episodes (242 scored). The driver restarts at 01:56 and 04:17
+killed the driver's process tree, and with it `pop-held.sh`, but not its DGX measure unit. `pop_busy` looked only for
+`pop-held.sh` / `held-eval` processes, so at 04:14:59 the Pop loop saw Pop free and served it for collection
+(`aei1-collect-v0001-pop`) under the running measurement.
+
+Fix (`pop_rl_actor.pop_busy`): Pop is busy while any of these holds; each check fails closed:
+- a DGX `*popheld*` unit is active or activating (pop-held.sh's measure unit and its ledger waiter, grpo's
+  `<prefix>-popheld-*` held-eval jobs);
+- a `pop-held.sh base|ckpt` or `pop_rl_actor held-eval` process runs;
+- a DGX `held_eval measure` process names Pop's address;
+- a `held_eval` / `pop-held.sh` process runs on Pop, or Pop does not answer;
+- another serve holds the Pop serve lock.
+
+Pop-side `popheld-*` units are not a signal: they are the actors themselves, collection included.
+
+The same restart also let a retried held start a second measure unit on the same episodes beside the surviving one
+(`pop-held.sh` reuses a Pop engine that serves the policy). `pop_held_measure` and `Cycle.pop_held` now join a live
+`popheld-<OUT>-*` unit first (`join_pop_held`; a preemption stops it) and resume afterwards. Test:
+`test_async_train.py::test_a_held_measure_unit_left_by_a_restarted_driver_keeps_pop_busy_and_is_joined_not_duplicated`.
+Effective at the next driver restart; until then the running held keeps its `pop-held.sh` alive, so the running
+driver leaves it alone unless it is restarted on old code.

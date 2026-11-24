@@ -453,6 +453,7 @@ def test_held_pin_measures_on_its_harness_and_is_carried_to_the_next_cycle(tmp_p
     import pop_rl_actor
     stopped = []
     monkeypatch.setattr(pop_rl_actor, 'stop_pop_fills', lambda: stopped.append(1))
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': [])   # no unit left to join
     cycle.pop_held('candidate', tmp_path / 'c.pt')
     assert stopped                     # a measurement first stops any Pop fill
     assert calls[-1][0][2] == '/pin-held' and calls[-1][1] is None

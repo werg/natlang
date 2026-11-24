@@ -1188,6 +1188,9 @@ class Cycle:
         if self.reuse_held(out, checkpoint):
             return out
         import pop_rl_actor
+        join_pop_held(out)                  # a measure unit a restarted driver left running: never a second one
+        if _result_complete(out):
+            return out
         pop_rl_actor.stop_pop_fills()       # the held pin's pop_rl_actor may predate the stop in its serves
         mode = ['base', str(out), str(self.a.held_samples)] if checkpoint == BASE_CKPT else \
             ['ckpt', str(out), str(self.a.held_samples), str(checkpoint)]
@@ -2232,6 +2235,10 @@ def pop_held_measure(out, checkpoint, *, pin, samples, manifest, preempt=None, p
     if _result_complete(out):
         return 'complete'
     out.mkdir(parents=True, exist_ok=True)
+    if join_pop_held(out, preempt=preempt, poll=poll) == 'preempted':
+        return 'preempted'
+    if _result_complete(out):
+        return 'complete'
     pop_rl_actor.stop_pop_fills()
     mode = ['base', str(out), str(samples)] if str(checkpoint) == BASE_CKPT else \
         ['ckpt', str(out), str(samples), str(checkpoint)]
@@ -2243,13 +2250,29 @@ def pop_held_measure(out, checkpoint, *, pin, samples, manifest, preempt=None, p
         if preempt is not None and preempt():
             os.killpg(process.pid, signal.SIGTERM)
             process.wait()
-            units = subprocess.run(['systemctl', '--user', 'list-units', '--plain', '--no-legend',
-                                    f'popheld-{out.name}-*'], capture_output=True, text=True).stdout.split()
-            for unit in [u for u in units if u.startswith(f'popheld-{out.name}-') and u.endswith('.service')]:
-                subprocess.run(['systemctl', '--user', 'stop', unit], check=False)
+            stop_pop_held_units(out)
             return 'preempted'
         time.sleep(poll)
     return 'complete' if _result_complete(out) else 'incomplete'
+
+
+def stop_pop_held_units(out):
+    import pop_rl_actor
+    for unit in pop_rl_actor.pop_held_units(f'popheld-{Path(out).name}-*'):
+        subprocess.run(['systemctl', '--user', 'stop', f'{unit}.service'], check=False)
+
+
+def join_pop_held(out, *, preempt=None, poll=30):
+    """Wait for a measure unit of ``out`` that is still running (``popheld-<OUT name>-*``: a driver restart killed the
+    ``pop-held.sh`` that started it, not the unit) instead of starting a second measurement on the same episodes.
+    Returns 'preempted' when ``preempt`` stopped it, else None."""
+    import pop_rl_actor
+    while pop_rl_actor.pop_held_units(f'popheld-{Path(out).name}-*'):
+        if preempt is not None and preempt():
+            stop_pop_held_units(out)
+            return 'preempted'
+        time.sleep(poll)
+    return None
 
 
 # ---- async round driver & phase switching (async-train §2, §4, §5, §7.4) ---------------------------------------------
