@@ -319,7 +319,25 @@ DEFAULT_ROOTS = (
 # policies the builds no longer read and rounds older than the previous one there (their live readers, mix rows and
 # trained-units.json, stay on the NVMe). A file behind such a link may go to Drive (its stub says how to restore it),
 # after this many days on the HDD: an aei driver adds about 20 GB a round, faster than the default age would drain.
-LINK_TOLERANT = {'dgx-moved-ei': 0.5}
+LINK_TOLERANT = {'dgx-moved-ei': 0.5, 'dgx-moved-2026112*': 0.5}
+# Where the round inflow lands: drained before the older run archives (top-level names, fnmatch patterns).
+PRIORITY_ROOTS = ('dgx-moved-ei', 'dgx-moved-2026112*')
+# Path fragments never moved, whatever the root: the lineage's base checkpoints (keep-list: active lineage and parents).
+NEVER_FRAGMENTS = ('/native-pins/',)
+
+
+def default_roots() -> list[str]:
+    """PRIORITY_ROOTS (expanded against the HDD, oldest name first) then DEFAULT_ROOTS, each once."""
+    try:
+        names = sorted(p.name for p in HDD.iterdir() if p.is_dir() and not p.is_symlink())
+    except OSError:
+        names = []
+    ordered = [n for pattern in PRIORITY_ROOTS for n in names if fnmatch.fnmatch(n, pattern)]
+    return list(dict.fromkeys([*ordered, *DEFAULT_ROOTS]))
+
+
+def _tolerance(name: str):
+    return next((days for pattern, days in LINK_TOLERANT.items() if fnmatch.fnmatch(name, pattern)), None)
 NEVER = ('bgkit*', '*hindsight*', 'megatoken*', 'ComfyUI*', '*vibestudio*', 'claude-scratch*', 'lost+found',
          'natlang-test-tmp', 'natlang-development-data')
 
@@ -401,13 +419,15 @@ def candidates(roots, *, min_mb, min_age_days, exclude, links, held):
         top = HDD / name
         if not top.is_dir() or top.is_symlink() or any(fnmatch.fnmatch(name, n) for n in NEVER):
             continue
-        tolerant = name in LINK_TOLERANT
-        age_days = LINK_TOLERANT.get(name, min_age_days)
+        tolerance = _tolerance(name)
+        tolerant = tolerance is not None
+        age_days = min_age_days if tolerance is None else tolerance
         for directory, children, files in os.walk(top):
             children[:] = sorted(c for c in children if not os.path.islink(os.path.join(directory, c)))
             for file in sorted(files):
                 path = os.path.join(directory, file)
-                if file.endswith((STUB_SUFFIX, '.part', '.partial', '.archiving')) or os.path.islink(path):
+                if file.endswith((STUB_SUFFIX, '.part', '.partial', '.archiving')) or os.path.islink(path) \
+                        or any(fragment in path for fragment in NEVER_FRAGMENTS):
                     continue
                 try:
                     st = os.stat(path)
@@ -440,7 +460,7 @@ def archive(args, drive=None) -> int:
     budget, moved, n, skipped_registry = args.budget_gb * GIB, 0, 0, 0
     deadline = time.time() + args.max_minutes * 60
     latest = manifest_latest()
-    for path, st in candidates(args.root or DEFAULT_ROOTS, min_mb=args.min_mb, min_age_days=args.min_age_days,
+    for path, st in candidates(args.root or default_roots(), min_mb=args.min_mb, min_age_days=args.min_age_days,
                                exclude=exclude, links=links, held=held):
         if moved + st.st_size > budget or time.time() > deadline:
             break

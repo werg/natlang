@@ -10904,3 +10904,10 @@ and 08:18. The rule now runs in `storage_sweep.sh` every 30 min (`SWEEP_EI=0` op
   manifest records. The Drive cap of 3 MiB/s (about 260 GB/day) is close to that inflow. If the HDD floor stops the
   EI tier (`HDD floor: move refused` in its log), raise `--rate-mb` in `natlang-drive-tier.service`: the uplink allows
   5.5 MB/s when no Colab transfer runs.
+- **Drive drain raised (coordinator, 2026-11-24 09:20).** `natlang-drive-tier` now runs at 5 MiB/s (about the whole
+  5.5 MB/s uplink) with a 15 GB pass budget, still pausing while an rsync/scp to a Colab host runs.
+  - It drains `dgx-moved-ei` and `dgx-moved-2026112*` first (`PRIORITY_ROOTS`, the round inflow). Files behind NVMe
+    symlinks there are eligible after half a day.
+  - `/native-pins/` is never moved: `dgx-moved-20261123/native-pins` holds the lineage's fresh-init base 5ff07638.
+  - Before the change: 39.8 GB in 195 files had gone to Drive since 11-23 18:42, at 5-8 GB per hourly pass (3 MiB/s
+    nominal).
