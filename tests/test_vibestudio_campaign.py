@@ -8,6 +8,61 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts' / 'neural
 import vibestudio_campaign
 
 
+def test_new_release_fresh_coverage_precedes_historical_genuine_failures():
+    cases = {'old': {'workspace': 'system', 'family': 'old'},
+             'new-a': {'workspace': 'system', 'family': 'fresh-a'},
+             'new-b': {'workspace': 'system', 'family': 'fresh-b'}}
+    rows = {'old': {'status': 'pending', 'attempts': 0, 'cumulative_teacher_attempts': 2},
+            'new-a': {'status': 'pending', 'attempts': 0, 'cumulative_teacher_attempts': 0},
+            'new-b': {'status': 'pending', 'attempts': 0, 'cumulative_teacher_attempts': 0}}
+    assert vibestudio_campaign.next_wave(cases, rows, 64) == ['new-a', 'new-b']
+    assert vibestudio_campaign.next_wave(cases, rows, 64, epoch_first_retries=True) == ['old', 'new-a', 'new-b']
+
+
+def test_partial_and_interrupted_training_do_not_complete_or_consume_cancelled_goal(tmp_path):
+    cases = {'goal': {'workspace': 'system', 'family': 'draft'}}
+    receipt = {'goal': {'status': 'partial', 'manifest': 'verified/manifest.json', 'interrupted': True}}
+    rows = vibestudio_campaign.publish_status(tmp_path, cases, {}, [receipt], None, 2, {},
+        attempt_epoch='release', receipt_epochs=['release'])
+    assert rows['goal']['status'] == 'pending'
+    assert rows['goal']['attempts'] == rows['goal']['cumulative_teacher_attempts'] == 0
+    assert rows['goal']['interruptions'] == 1
+    assert vibestudio_campaign.wave_infrastructure_hold(receipt, cases, 1) is None
+    assert vibestudio_campaign.has_training_manifest(receipt['goal'])
+
+
+def test_partial_manifest_is_preserved_as_training_without_completing_goal(tmp_path, monkeypatch):
+    manifest = tmp_path/'verified/manifest.json'
+    manifest.parent.mkdir()
+    manifest.write_text('{}')
+    monkeypatch.setattr(vibestudio_campaign, 'verified_episode', lambda *_: {
+        'task_id': 'goal-id', 'turns': [1], 'trajectory_ir': {'outcome': {'status': 'partial', 'task_completed': False}}})
+    result = vibestudio_campaign.outcomes(tmp_path, ['goal'], None, {}, {'goal': {'taskId': 'goal-id'}})
+    assert result['goal']['status'] == 'partial'
+    assert result['goal']['manifest'] == 'verified/manifest.json'
+    assert vibestudio_campaign.has_training_manifest(result['goal'])
+
+
+def test_completion_reassessment_does_not_rewrite_immutable_original_receipt(tmp_path):
+    import hashlib
+    waves = tmp_path/'waves'
+    jobs = waves/'jobs'
+    jobs.mkdir(parents=True)
+    receipt = waves/'0001-result.json'
+    vibestudio_campaign.publish_immutable(receipt, {'goal': {'status': 'verified', 'manifest': 'verified/manifest.json'}})
+    original = receipt.read_bytes()
+    vibestudio_campaign.publish(tmp_path/'completion-reassessment.json', {
+        'schema': 'natlang.campaign-completion-reassessment/1', 'errors': [], 'summary': {'unresolved': 0},
+        'receipts': {receipt.name: {'receipt_sha256': hashlib.sha256(original).hexdigest(),
+                                  'cases': {'goal': {'task_completed': False}}}}})
+    receipts, _ = vibestudio_campaign.receipt_history(waves, jobs)
+    assert receipts[0]['goal']['status'] == 'partial'
+    assert receipt.read_bytes() == original
+    receipt.write_text('{}')
+    with pytest.raises(ValueError, match='original receipt changed'):
+        vibestudio_campaign.receipt_history(waves, jobs)
+
+
 def test_collection_lifetime_and_nested_hub_budget_are_independent_of_wave_size():
     from types import SimpleNamespace
     args = SimpleNamespace(concurrency=8, wave_size=64)
@@ -177,16 +232,17 @@ def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, 
     monkeypatch.setattr(vibestudio_campaign, 'remote_archive', lambda *args, **kwargs: archived.append(kwargs['wave']))
     monkeypatch.setattr(vibestudio_campaign, 'outcomes', lambda _capture, names, *_:
         {name: {'status': 'test-failed', 'reason': 'genuine unsuccessful goal'} for name in names})
-    def collect(command, **kwargs):
-        assert command[:4] == ['pnpm', '--silent', 'natlang:teacher', '--model']
+    def collect(_owner, command, **kwargs):
+        assert command[:4] == ['node', '--import', 'tsx', 'scripts/collect-live-workflow-teacher.mjs']
         assert kwargs['env'] == {'PINNED': 'yes'}
+        assert command[command.index('--checkpoint-request') + 1] == str(kwargs['request_file'])
         assert command.count('--case') == 1 and command[-1] == 'retry'
         assert command[command.index('--test-timeout-ms') + 1] == str(teacher_timeout)
         assert command[command.index('--cases-per-instance') + 1] == '12'
         assert command[command.index('--concurrency') + 1] == '3'
         Path(command[command.index('--out') + 1]).mkdir()
         return SimpleNamespace(returncode=0)
-    monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', collect)
+    monkeypatch.setattr(vibestudio_campaign.CollectorCheckpoint, 'run', collect)
     args = SimpleNamespace(root=tmp_path, held=tmp_path / 'held', seed=[], host=tmp_path, archive=tmp_path / 'archive',
         review_model=None, attempts=2, max_waves=1, wave_size=6, concurrency=3, reserve_disk_gib=8,
         teacher_timeout_ms=teacher_timeout)
@@ -321,10 +377,12 @@ def test_raw_capture_records_teacher_start_evidence_without_rewriting_it(tmp_pat
         assert raw.read_bytes() == original
 
 
-def test_export_counts_separate_completed_goals_partial_decisions_and_evidence_only(monkeypatch, tmp_path):
+@pytest.mark.parametrize('partial_receipt_status', ['verified', 'partial'])
+@pytest.mark.parametrize('verification_status', ['passed', 'partial'])
+def test_export_counts_separate_completed_goals_partial_decisions_and_evidence_only(monkeypatch, tmp_path, partial_receipt_status, verification_status):
     episodes = [
         {'trajectory_ir': {'outcome': {'status': 'passed', 'task_completed': True}}, 'turns': [1, 2]},
-        {'trajectory_ir': {'outcome': {'status': 'partial', 'task_completed': False}}, 'turns': [1]},
+        {'trajectory_ir': {'outcome': {'status': verification_status, 'task_completed': False}}, 'turns': [1]},
         {'trajectory_ir': {'outcome': {'status': 'passed', 'task_completed': True}}, 'turns': []},
     ]
     def episode(path, *args):
@@ -334,10 +392,12 @@ def test_export_counts_separate_completed_goals_partial_decisions_and_evidence_o
     monkeypatch.setattr(vibestudio_campaign.data_registry, 'record_dataset',
                         lambda *args, **kwargs: registered.append(kwargs) or {'id': 'mixed'})
     receipt = {str(index): {'status': 'verified', 'manifest': f'{index}/manifest.json'} for index in range(3)}
+    receipt['1']['status'] = partial_receipt_status
     vibestudio_campaign.export_trajectories(tmp_path, receipt, set(), set())
     result = vibestudio_campaign.read(tmp_path / 'exported.json')
     assert result == {'verified': 3, 'dataset': 'mixed', 'completed_goals': 2, 'partial_trajectories': 1,
                       'supervised_decisions': 3, 'evidence_only': 1}
+    assert vibestudio_campaign.read(tmp_path / 'graph-metrics.json')['categories']['partial']['captures'] == 1
     assert registered[0]['rows'] == 3
     assert registered[0]['extra']['trajectory_counts'] == {key: result[key] for key in
         ('completed_goals', 'partial_trajectories', 'supervised_decisions', 'evidence_only')}

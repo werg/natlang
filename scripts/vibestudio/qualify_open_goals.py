@@ -3,6 +3,7 @@
 import argparse
 import fcntl
 import json
+import os
 import re
 import signal
 import subprocess
@@ -12,6 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from audit_open_goal_references import audit, managed_prerequisites, read_catalog
+from managed_checkpoint import CheckpointRequested, cancel_and_join, checkpoint_managed_run
 
 
 def terminal_startup_failure(log):
@@ -36,16 +38,24 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
     output.mkdir()
     results = output / 'results'
     instance = f'vibe-open-reference-{uuid.uuid4().hex[:12]}'
-    command = ['pnpm', '--silent', 'system-test', '--instance', instance, '--workspace', workspace]
+    command = ['node', '--import', 'tsx', 'src/dev/runSystemTest.ts', '--instance', instance, '--workspace', workspace]
     if baseline:
         command += ['--workspace-baseline', baseline]
     for device in devices:
         command += ['--device', device]
 
-    def invoke(args, log, *, check=False):
+    child = None
+    interrupted = False
+
+    def invoke(args, log, *, check=False, timeout=None):
+        nonlocal child
         with (output / log).open('wb') as stream:
-            return subprocess.run([*command, *args], cwd=host, stdout=stream, stderr=subprocess.STDOUT,
-                                  check=check).returncode
+            child = subprocess.Popen([*command, *args], cwd=host, stdout=stream, stderr=subprocess.STDOUT)
+            code = child.wait(timeout=timeout)
+            child = None
+            if check and code:
+                raise subprocess.CalledProcessError(code, [*command, *args])
+            return code
 
     print(f'{group} running {len(cases)} references in {instance}', flush=True)
     failures = 0
@@ -74,11 +84,19 @@ def qualify_group(host, workspace, baseline, cases, model, destination, test_tim
             status = invoke(['trajectory', run_id, case, '--full', '--json', '--out-dir', str(results)],
                             f'{case}.log')
             failures += bool(status) or not archive.is_file()
+    except (CheckpointRequested, KeyboardInterrupt):
+        interrupted = True
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        if child is not None:
+            cancel_and_join(child, command, results, cwd=host, env=os.environ)
+        else:
+            checkpoint_managed_run(command, results, cwd=host, env=os.environ)
+        raise
     except (subprocess.CalledProcessError, ValueError) as error:
         print(f'{group} {error}. Evidence is in {output}', file=sys.stderr, flush=True)
         failures += 1
     finally:
-        failures += bool(invoke(['stop'], 'stop.log'))
+        failures += bool(invoke(['stop'], 'stop.log', timeout=10 if interrupted else None))
 
     print(f'{group} evidence in {output} ({failures} failed commands or missing artifacts)', flush=True)
     return failures == 0, unavailable
@@ -200,7 +218,10 @@ def main():
 
 if __name__ == '__main__':
     def terminate(_signal, _frame):
-        raise SystemExit(143)
+        raise CheckpointRequested('Owner requested a resumable reference checkpoint')
 
     signal.signal(signal.SIGTERM, terminate)
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except (CheckpointRequested, KeyboardInterrupt):
+        raise SystemExit(130)

@@ -15,6 +15,17 @@ import live_campaign_ingest as ing  # noqa: E402
 import sft_sources  # noqa: E402
 
 
+def test_committed_partial_manifests_are_ingested_without_claiming_completed_goals(tmp_path):
+    (tmp_path/'receipt.json').write_text(json.dumps({
+        'full': {'status': 'verified', 'manifest': 'full/manifest.json'},
+        'partial': {'status': 'partial', 'manifest': 'partial/manifest.json'},
+        'interrupted': {'status': 'interrupted', 'raw': 'unfinished.json.gz'}}))
+    (tmp_path/'exported.json').write_text(json.dumps({'verified': 2, 'completed_goals': 1, 'partial_trajectories': 1, 'dataset': 'accepted'}))
+    manifests, dataset = ing.verified_manifests(tmp_path)
+    assert manifests == [tmp_path/'capture/full/manifest.json', tmp_path/'capture/partial/manifest.json']
+    assert dataset == 'accepted'
+
+
 def wave(root, name, cases, exported=True):
     d = root / name
     (d / 'capture').mkdir(parents=True)

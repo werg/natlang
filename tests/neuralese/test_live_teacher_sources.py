@@ -93,6 +93,82 @@ def open_goal(detail, spec, verification):
     return interaction
 
 
+@pytest.mark.parametrize('root_outcome', ['done', 'failed'])
+@pytest.mark.parametrize('required_return_passed', [True, False])
+def test_semantic_goal_completion_is_independent_of_root_exit(tmp_path, root_outcome, required_return_passed):
+    path, spec, detail, verification = fixture(tmp_path)
+    interaction = open_goal(detail, spec, verification)
+    detail['record']['outcome'] = root_outcome
+    detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    verification['world'].update(context_id='owned-context', case_id='owned-case')
+    spec['world'] = copy.deepcopy(verification['world'])
+    proof = {'goal': interaction['goal'], 'passed': True, 'contextId': 'owned-context', 'caseId': 'owned-case',
+             'checks': {'actualEffect': True},
+             'outcomeDimensions': {'workspaceEffect': {'required': True, 'passed': True},
+                                   'returnedValue': {'required': True, 'passed': required_return_passed},
+                                   'incidentalValues': {'required': False, 'passed': False, 'incorrectReturns': []}}}
+    verification['evidence'] = [{**artifact(tmp_path, 'semantic-goal.json', {'proof': proof}), 'kind': 'workspace'}]
+    rewrite(tmp_path, spec, detail, verification)
+    assert live.semantic_goal_completed(interaction, [proof], verification) is required_return_passed
+    if root_outcome == 'failed' and not required_return_passed:
+        with pytest.raises(ValueError, match='coverage incomplete'):
+            live.load_episode(path)
+        return
+    episode = live.load_episode(path)
+    outcome = episode['trajectory_ir']['outcome']
+    assert outcome['task_completed'] is required_return_passed
+    assert outcome['status'] == 'passed'  # Whole verification; original execution exit remains per-call.
+    # Optional later failures do not alter the requested effects/return verdict.
+    assert episode['turns']
+
+
+@pytest.mark.parametrize('mutation', ['partial', 'aggregate-failed', 'child-pass', 'wrong-context',
+    'wrong-entry', 'missing-proof', 'missing-checks', 'empty-dimensions', 'required-return', 'missing-required-dimension', 'review-pending', 'review-rejected'])
+def test_goal_completion_requires_exact_whole_semantic_authority(mutation):
+    interaction = {'goal': 'Update the actual owned note', 'entry': {'program': 'apply.nl', 'callable': 'apply', 'arguments': {'note': 'owned'}}}
+    verification = {'task_id': 'task', 'status': 'passed', 'checks': {'nativeGoal': True},
+                    'world': {'context_id': 'owned-context', 'case_id': 'owned-case'}, 'root_call_ids': ['actual-root']}
+    proof = {'goal': interaction['goal'], 'entry': copy.deepcopy(interaction['entry']),
+             'contextId': 'owned-context', 'caseId': 'owned-case', 'passed': True, 'checks': {'actualEffect': True},
+             'outcomeDimensions': {'effects': {'passed': True}, 'returnedValue': {'required': True, 'passed': True}}}
+    proofs, evidence = [proof], []
+    if mutation == 'partial': verification['status'] = 'partial'
+    if mutation == 'aggregate-failed': proof['passed'] = False
+    if mutation == 'child-pass':
+        child = {**copy.deepcopy(proof), 'contextId': 'different-child-context'}
+        proof['passed'] = False
+        proofs.append(child)
+    if mutation == 'wrong-context': proof['contextId'] = 'another-context'
+    if mutation == 'wrong-entry': proof['entry']['callable'] = 'child'
+    if mutation == 'missing-proof': proofs = [{}]
+    if mutation == 'missing-checks': proof['checks'] = {}
+    if mutation == 'empty-dimensions': proof['outcomeDimensions'] = {}
+    if mutation == 'required-return': proof['outcomeDimensions']['returnedValue']['passed'] = False
+    if mutation == 'missing-required-dimension':
+        proof['outcomeContract'] = {'returnedValue': {'required': True}}
+        del proof['outcomeDimensions']['returnedValue']
+    if mutation in ('review-pending', 'review-rejected'):
+        verification['requirements'] = {'semantic_review': True}
+        if mutation == 'review-rejected': evidence.append({'semanticReview': {'verdict': {'accepted': False}}})
+    assert live.semantic_goal_completed(interaction, proofs, verification, workspace_evidence=evidence) is False
+
+
+def test_legacy_whole_proof_keeps_canonical_task_context_binding_without_new_fields():
+    interaction = {'goal': 'Correct the actual note'}
+    verification = {'task_id': 'workspace:open-goal-correct-note', 'status': 'passed',
+                    'checks': {'ownedReadback': True}, 'world': {'context_id': 'owned'}, 'root_call_ids': ['root']}
+    proof = {'goal': interaction['goal'], 'contextId': 'owned', 'caseId': 'correct-note',
+             'passed': True, 'checks': {'actualDocumentReadback': True}}
+    assert live.semantic_goal_completed(interaction, [proof], verification) is True
+    assert live.semantic_goal_completed(interaction, [{**proof, 'checks': {}}], verification) is False
+    assert live.semantic_goal_completed(interaction, [{**proof, 'caseId': 'another-task'}], verification) is False
+    optional = {**verification, 'requirements': {'semantic_review': False}}
+    assert live.semantic_goal_completed(interaction, [proof], optional,
+        workspace_evidence=[{'semanticReview': {'verdict': {'accepted': False}}}]) is True
+
+
+
+
 @pytest.mark.parametrize('mutation', [None, 'goal', 'extra-input', 'unattested'])
 def test_open_goal_has_to_match_the_original_goal_only_call(tmp_path, mutation):
     path, spec, detail, verification = fixture(tmp_path)
@@ -615,7 +691,11 @@ def test_entry_rejects_boolean_number_alias_and_missing_exact_json():
 ])
 def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp_path, terminal_tool, terminal_args, retain_prior_action, monkeypatch, return_kind):
     path, spec, detail, verification = fixture(tmp_path)
-    open_goal(detail, spec, verification)
+    interaction = open_goal(detail, spec, verification)
+    verification['world'].update(context_id='actual-context', case_id='actual-case')
+    spec['world'] = copy.deepcopy(verification['world'])
+    proof_identity = {'goal': interaction['goal'], 'contextId': 'actual-context', 'caseId': 'actual-case',
+                      'passed': True, 'checks': {'retainedEffects': True}}
     detail['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
     terminal = copy.deepcopy(detail['record']['model_turns'][0])
     terminal['reply']['raw_calls'] = [{'id': 'terminal-id', 'type': 'function',
@@ -626,7 +706,7 @@ def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp
     detail['record']['model_turns'] = ([detail['record']['model_turns'][0]] if retain_prior_action else []) + [terminal]
     detail['events'].append({'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'terminal-id'})
     verification['evidence'] = [{**artifact(tmp_path, 'outcome-readback.json', {'proof': {
-        'passed': True, 'outcomeDimensions': {'effects': {'passed': True},
+        **proof_identity, 'outcomeDimensions': {'effects': {'passed': True},
             'returnedValue': {'required': False, 'passed': False, 'checks': {'receiptMatches': False}}}}}),
         'kind': 'workspace'}]
     if return_kind == 'incidental':
@@ -635,7 +715,7 @@ def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp
         detail['record']['output'] = {'complete': True, 'hash': hashlib.sha256(text.encode()).hexdigest(), 'bytes': len(text)}
         selector = {'definition': detail['record']['definition'], 'valueJson': text, 'sha256': detail['record']['output']['hash']}
         verification['evidence'] = [{**artifact(tmp_path, 'incidental-readback.json', {'proof': {
-            'actualResult': {'incorrectReceipt': True}, 'outcomeDimensions': {'incidentalValues': {
+            **proof_identity, 'actualResult': {'incorrectReceipt': True}, 'outcomeDimensions': {'effects': {'passed': True}, 'incidentalValues': {
                 'passed': False, 'incorrectReturns': [selector]}}}}), 'kind': 'workspace'}]
     rewrite(tmp_path, spec, detail, verification)
     episode = live.load_episode(path)
@@ -868,6 +948,53 @@ def test_void_application_return_requires_exact_completed_typed_contract():
             verify_application_return(binding, {'root': {**record, field: value}}, ['root'], entry)
     with pytest.raises(ValueError):
         verify_application_return({key: value for key, value in binding.items() if key != 'selectedResult'}, {'root': record}, ['root'], entry)
+
+
+def test_void_entry_can_complete_effects_before_root_error_without_inventing_a_return(tmp_path):
+    path, spec, root, verification = fixture(tmp_path)
+    interaction = open_goal(root, spec, verification)
+    child = copy.deepcopy(root)
+    child['callId'] = child['record']['call_id'] = child['summary']['call_id'] = 'child'
+    child['record']['parent_call_id'] = child['summary']['parent_call_id'] = 'call-one'
+    child['record']['definition'] = {'id': 'child-definition', 'name': 'writeOwnedNote', 'source': 'write.nl'}
+    child['summary']['definition_id'] = 'child-definition'
+    child['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    for turn in child['record']['model_turns']:
+        turn['request']['invocation_id'] = 'child'
+    root['record'].update(outcome='failed', executor={'kind': 'crisp'}, model_turns=[], program_root='skills/reference')
+    root['record']['definition'] = {'id': 'ts:review.ts#default', 'name': 'review', 'source': 'review.ts', 'returns': 'void'}
+    root['summary']['definition_id'] = 'ts:review.ts#default'
+    entry = {'program': 'skills/reference/review.ts', 'callable': 'review', 'resultType': 'void',
+             'arguments': {'goal': interaction['goal']}, 'argumentJson': {'goal': json.dumps(interaction['goal'])}}
+    interaction.update(program=entry['program'], entry=entry)
+    spec['interaction'] = copy.deepcopy(interaction)
+    verification['interaction'] = copy.deepcopy(interaction)
+    verification['calls'] = [root['summary'], child['summary']]
+    verification['world'].update(context_id='owned-context', case_id='void-case')
+    spec['world'] = copy.deepcopy(verification['world'])
+    proof = {'goal': interaction['goal'], 'entry': entry, 'passed': True, 'contextId': 'owned-context', 'caseId': 'void-case',
+             'checks': {'ownedNoteReadback': True}, 'outcomeDimensions': {
+                 'effects': {'passed': True}, 'returnedValue': {'required': False, 'passed': True}}}
+    payload = {'proof': proof}
+    def persist():
+        verification['evidence'] = [{**artifact(tmp_path, 'void-goal.json', payload), 'kind': 'workspace'}]
+        spec['calls'] = [artifact(tmp_path, 'root.json', root), artifact(tmp_path, 'child.json', child)]
+        spec['verification'] = artifact(tmp_path, 'verification.json', verification)
+        path.write_text(json.dumps(spec))
+    persist()
+    episode = live.load_episode(path)
+    assert episode['trajectory_ir']['outcome']['task_completed'] is True
+    assert episode['trajectory_ir']['outcome']['status'] == 'passed'
+    assert len(episode['turns']) == 1 and episode['turns'][0]['invocation_id'] == 'child'
+    payload['applicationReturn'] = {'kind': 'void', 'root_call_id': 'call-one', 'valueJson': 'null', 'selectedResult': None}
+    persist()
+    with pytest.raises(ValueError, match='original root output'):
+        live.load_episode(path)
+    payload.pop('applicationReturn')
+    root['record']['definition']['returns'] = 'string'
+    persist()
+    with pytest.raises(ValueError, match='declared return contract'):
+        live.load_episode(path)
 
 
 def test_ts_application_entry_binds_actual_default_export():

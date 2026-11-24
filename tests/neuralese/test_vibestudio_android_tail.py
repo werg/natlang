@@ -70,5 +70,35 @@ class ApprovalTests(unittest.TestCase):
         self.assertEqual(record['deviceBootId'], 'owned-boot')
 
 
+class ResumeTests(unittest.TestCase):
+    def test_admitted_wave_is_reused_with_its_matching_fixture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jobs = root/'waves/jobs'
+            jobs.mkdir(parents=True)
+            admitted = jobs/'0007.json'
+            original = json.dumps({'cases': ['second'], 'attempt_epoch': 'epoch', 'provenance': {'pin': 'exact'}})
+            admitted.write_text(original)
+            unfinished = lambda *args: admitted
+            goals = [{'case': {'scenario': name}} for name in ['first', 'second']]
+            ordered = tail.ordered_tail_goals(goals, root, 'epoch', {'pin': 'exact'}, {}, unfinished)
+            self.assertEqual(ordered[0]['case']['scenario'], 'second')
+            self.assertEqual(tail.reserve_tail_wave(root, 'second', 'epoch', {'pin': 'exact'}, {}, unfinished), '0007')
+            self.assertEqual(admitted.read_text(), original)
+            self.assertEqual(len(list(jobs.iterdir())), 1)
+            with self.assertRaises(AssertionError):
+                tail.reserve_tail_wave(root, 'first', 'epoch', {'pin': 'exact'}, {}, unfinished)
+
+    def test_foreign_pending_fixture_is_not_silently_launched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jobs = root/'waves/jobs'
+            jobs.mkdir(parents=True)
+            admitted = jobs/'0007.json'
+            admitted.write_text(json.dumps({'cases': ['ordinary']}))
+            with self.assertRaises(AssertionError):
+                tail.ordered_tail_goals([{'case': {'scenario': 'android'}}], root, 'epoch', {}, {}, lambda *args: admitted)
+
+
 if __name__ == '__main__':
     unittest.main()

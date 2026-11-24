@@ -62,7 +62,8 @@ def verified_manifests(directory):
     count its ``exported.json`` committed."""
     exported = json.loads((directory / 'exported.json').read_text())
     receipt = json.loads((directory / 'receipt.json').read_text())
-    manifests = [directory / 'capture' / r['manifest'] for _, r in sorted(receipt.items()) if r.get('status') == 'verified']
+    from live_teacher_sources import has_training_manifest
+    manifests = [directory / 'capture' / r['manifest'] for _, r in sorted(receipt.items()) if has_training_manifest(r)]
     if len(manifests) != exported.get('verified'):
         raise ValueError(f'{directory}: receipt lists {len(manifests)} verified, exported.json {exported.get("verified")}')
     return manifests, exported.get('dataset')

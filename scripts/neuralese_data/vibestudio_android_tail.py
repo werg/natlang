@@ -20,6 +20,7 @@ import time
 import xml.etree.ElementTree as ET
 
 from natlang_neuralese.common.hashing import sha256_file_hex as sha
+from scripts.vibestudio.managed_checkpoint import CollectorCheckpoint
 
 def read(path):
     return json.loads(Path(path).read_text())
@@ -40,10 +41,13 @@ def active(unit):
     return subprocess.run(['systemctl', '--user', 'is-active', '--quiet', unit]).returncode == 0
 
 
-def wait_unit(unit):
+def wait_unit(unit, checkpoint=None):
     while active(unit) or active(unit.removesuffix('.service') + '-waiter.service'):
+        if checkpoint is not None and checkpoint.requested:
+            return False
         time.sleep(15)
     assert output(['systemctl', '--user', 'show', unit, '-p', 'Result', '--value']) == 'success', unit
+    return True
 
 
 def selected_goals(cases, fixtures):
@@ -56,6 +60,35 @@ def selected_goals(cases, fixtures):
     # Installed-copy fixtures use the real immutable APK built by the product;
     # bootstrap success is not invented or required as teacher evidence.
     return sorted(selected, key=lambda x: x['world']['id'] != 'android-delivery-visual-first-launch')
+
+
+
+def reserve_tail_wave(root, name, epoch, provenance, rows, unfinished_wave):
+    """Reuse the canonical admitted wave rather than orphaning an unstarted job."""
+    waves = root / 'waves'
+    jobs = waves / 'jobs'
+    with (root / '.controller.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        plans = sorted(jobs.glob('[0-9]*.json'))
+        unfinished = unfinished_wave(plans, waves, epoch, provenance, rows)
+        if unfinished is not None:
+            plan = read(unfinished)
+            assert plan['cases'] == [name], 'Restore the admitted Android fixture before resuming its wave'
+            return unfinished.stem
+        wave = f'{int(plans[-1].stem) + 1 if plans else 0:04d}'
+        with (jobs / (wave + '.json')).open('x') as target:
+            target.write(json.dumps({'cases': [name], 'attempt_epoch': epoch, 'provenance': provenance}) + '\n')
+        return wave
+
+
+def ordered_tail_goals(goals, root, epoch, provenance, rows, unfinished_wave):
+    waves = root / 'waves'
+    unfinished = unfinished_wave(sorted((waves / 'jobs').glob('[0-9]*.json')), waves, epoch, provenance, rows)
+    if unfinished is None:
+        return goals
+    names = read(unfinished)['cases']
+    assert len(names) == 1 and names[0] in {item['case']['scenario'] for item in goals}, 'Unfinished wave belongs to another fixture owner'
+    return sorted(goals, key=lambda item: item['case']['scenario'] != names[0])
 
 
 def approve_owned_workspace(device, run_json, expected_source, record):
@@ -103,11 +136,18 @@ def approve_owned_workspace(device, run_json, expected_source, record):
 
 
 def main():
+    with CollectorCheckpoint() as checkpoint:
+        return run_tail(checkpoint)
+
+
+def run_tail(checkpoint):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('campaign', type=Path)
     parser.add_argument('--native-support', type=Path, required=True)
     parser.add_argument('--bulk-unit', required=True)
     parser.add_argument('--held', type=Path, required=True)
+    parser.add_argument('--fixture-apk', type=Path,
+                        help='A known compatible internal APK used only for installed-copy fixture prestates')
     parser.add_argument('--prepare-only', action='store_true')
     args = parser.parse_args()
     root = args.campaign.resolve()
@@ -122,13 +162,13 @@ def main():
     driver = Path(pins['driver_checkout'])
     sys.path[:0] = [str(support), str(driver / 'scripts/neuralese_data'), str(driver / 'training/neuralese'), str(driver)]
     fixture_module = importlib.import_module('android_fixtures')
-    from vibestudio_campaign import campaign_scope, attempt_context
+    from vibestudio_campaign import campaign_scope, attempt_context, unfinished_wave
     held = args.held
     _, _, cases = campaign_scope(root / 'catalog.jsonl', held)
     metadata = fixture_module.load_metadata()
     goals = selected_goals(cases, metadata['fixtures'])
     host = Path(config['host']['path'])
-    apk = host / 'hosts/android/app/build/outputs/apk/internal/app-internal.apk'
+    apk = args.fixture_apk or host / 'hosts/android/app/build/outputs/apk/internal/app-internal.apk'
     assert apk.is_file() and apk.stat().st_size > 90_000_000
     assert (host / 'dist/main.cjs').is_file()
     assert output(['git', '-C', driver, 'rev-parse', 'HEAD']) == pins['driver']
@@ -145,7 +185,8 @@ def main():
     if args.prepare_only:
         print(json.dumps(proof))
         return
-    wait_unit(args.bulk_unit)
+    if not wait_unit(args.bulk_unit, checkpoint):
+        return
     if (root / 'stop-after-wave').exists():
         raise SystemExit('Campaign owner hold retained; no Android teacher started')
     assert read(candidate / 'pins.json') == pins, 'Release changed while waiting; prepare a successor recipe'
@@ -168,11 +209,24 @@ def main():
                     str(fixture_module.SDK / 'emulator/emulator'), '-avd', fixture_module.AVD, '-port', '5580', '-no-window', '-no-audio',
                     '-no-boot-anim', '-no-snapshot', '-gpu', 'swiftshader_indirect'], check=True)
     device = None
+    active_wave = None
+    signalled = set()
+    def checkpoint_wave(unit):
+        service = unit + '.service'
+        if not active(service):
+            subprocess.run([*ledger, 'cancel', '--unit', unit], check=True)
+        if active(service) and unit not in signalled:
+            subprocess.run(['systemctl', '--user', 'kill', '--kill-whom=main', '--signal=SIGTERM', service], check=True)
+            signalled.add(unit)
     try:
         while not active(emulator_unit):
+            if checkpoint.requested:
+                return
             assert active(emulator_unit.removesuffix('.service') + '-waiter.service')
             time.sleep(15)
         for _ in range(240):
+            if checkpoint.requested:
+                return
             boot = subprocess.run([str(fixture_module.ADB), '-s', fixture_module.SERIAL, 'shell', 'getprop', 'sys.boot_completed'], capture_output=True, text=True)
             if boot.returncode == 0 and boot.stdout.strip() == '1':
                 break
@@ -193,9 +247,11 @@ def main():
         # The real product-built APK is a prerequisite for installed-copy worlds,
         # never a substitute trajectory or an answer injected into a goal.
         for attempt in range(2):
-            for item in goals:
+            epoch, provenance, _ = attempt_context(argparse.Namespace(release_pins=candidate/'pins.json', host=host, attempt_epoch=None), root/'catalog.jsonl')
+            ordered = ordered_tail_goals(goals, root, epoch, provenance, read(root/'status.json')['cases'], unfinished_wave)
+            for item in ordered:
                 name = item['case']['scenario']
-                if (root / 'stop-after-wave').exists():
+                if checkpoint.requested or (root / 'stop-after-wave').exists():
                     return
                 current = read(root / 'status.json')['cases'][name]
                 if current['status'] not in ('pending', 'prerequisite-unavailable'):
@@ -210,43 +266,51 @@ def main():
                 prestate = device.observe()
                 assert prestate['installed'] == (item['prestate'] == 'stopped') and not prestate['process']
                 epoch, provenance, _ = attempt_context(argparse.Namespace(release_pins=candidate/'pins.json', host=host, attempt_epoch=None), root/'catalog.jsonl')
-                with (root / '.controller.lock').open('a') as lock:
-                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    plans = sorted((root / 'waves/jobs').glob('[0-9]*.json'))
-                    assert not any((root/'waves'/f'{p.stem}-capture').exists() and not (root/'waves'/f'{p.stem}-result.json').exists() for p in plans)
-                    wave = f'{int(plans[-1].stem) + 1:04d}'
-                    job = root / 'waves/jobs' / (wave + '.json')
-                    with job.open('x') as target:
-                        target.write(json.dumps({'cases': [name], 'attempt_epoch': epoch, 'provenance': provenance}) + '\n')
+                wave = reserve_tail_wave(root, name, epoch, provenance, read(root/'status.json')['cases'], unfinished_wave)
                 save(state / (wave + '-fixture.json'), {'case': name, 'observedPrestate': prestate, 'lease': str(lease_path), 'recipeSha256': sha(state/'recipe.json')})
                 unit = f'vibe-semantic-luna-v21-android-{wave}'
+                if checkpoint.requested:
+                    return
+                active_wave = unit
                 subprocess.run(['bash', str(candidate/'launch-collection.sh'), unit, '1', '10.5', '1', '--max-waves', '1'],
                                env={**os.environ, 'VIBESTUDIO_OWNED_ANDROID_SERIAL': fixture_module.SERIAL}, check=True)
                 service = unit + '.service'
                 approval = state / (wave + '-fixture-owner-approval.json')
                 while active(service) or active(unit + '-waiter.service'):
-                    if item['world'].get('route') == 'pair' and item['world'].get('mode') == 'pair' and not approval.exists():
+                    if checkpoint.requested:
+                        checkpoint_wave(unit)
+                    elif item['world'].get('route') == 'pair' and item['world'].get('mode') == 'pair' and not approval.exists():
                         for run_json in (root/'waves'/f'{wave}-capture').glob('st_*/run.json'):
                             approve_owned_workspace(device, run_json, Path(config['selection'])/'system/clients/mobile-browser', approval)
                     time.sleep(3)
                 assert (root/'waves'/f'{wave}-result.json').is_file(), 'Canonical archive/receipt incomplete; do not continue'
+                active_wave = None
                 device._absent()
+                if checkpoint.requested:
+                    return
         final_status = read(root / 'status.json')['cases']
         unfinished = {name: row for name, row in final_status.items()
                       if row['status'] in ('pending', 'prerequisite-unavailable', 'reviewer-required')}
         assert not unfinished, f'Actual unresolved goals remain; preserve evidence instead of claiming exhaustion: {unfinished}'
-        if (root / 'stop-after-wave').exists():
+        if checkpoint.requested or (root / 'stop-after-wave').exists():
             return
         # With no pending goal this performs status/archive finalization only.
         # Keep the device alive until prerequisite accounting is published.
         finalize = f'vibe-semantic-luna-v21-android-finalize-{stamp}'
+        active_wave = finalize
         subprocess.run(['bash', str(candidate/'launch-collection.sh'), finalize, '1', '10.5', '1', '--max-waves', '1'],
                        env={**os.environ, 'VIBESTUDIO_OWNED_ANDROID_SERIAL': fixture_module.SERIAL}, check=True)
-        wait_unit(finalize + '.service')
+        if not wait_unit(finalize + '.service', checkpoint):
+            return
+        active_wave = None
         assert (root / 'finished.json').is_file()
         save(state / 'completed.json', {'at': time.time(), 'recipeSha256': sha(state/'recipe.json'),
                                         'canonicalFinished': read(root/'finished.json')})
     finally:
+        if active_wave is not None:
+            checkpoint_wave(active_wave)
+            while active(active_wave+'.service') or active(active_wave+'-waiter.service'):
+                time.sleep(3)
         if device is not None:
             device.close()
             assert sha(fixture_apk) == proof['fixtureApkSha256']
@@ -254,6 +318,14 @@ def main():
         else:
             # Exact unit was created here; joining it is safe even if boot failed.
             subprocess.run(['systemctl', '--user', 'stop', emulator_unit, emulator_unit.removesuffix('.service')+'-waiter.service'], check=False)
+            assert output(['systemctl', '--user', 'show', emulator_unit, '-p', 'MainPID', '--value']) == '0'
+            if fixture_module.AVD_HOME.exists():
+                owner = read(fixture_module.AVD_HOME/'native-owner.json')
+                assert owner == {'avdName': fixture_module.AVD, 'serial': fixture_module.SERIAL, 'root': str(fixture_module.AVD_HOME)}
+                shutil.rmtree(fixture_module.AVD_HOME)
+            if fixture_apk.exists():
+                assert sha(fixture_apk) == proof['fixtureApkSha256']
+                fixture_apk.unlink()
 
 
 if __name__ == '__main__':

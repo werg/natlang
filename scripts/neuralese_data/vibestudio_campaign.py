@@ -16,9 +16,10 @@ import time
 from natlang_neuralese.common import data_registry
 from natlang_neuralese.common.code_provenance import code_provenance
 
-from live_teacher_sources import load_episode
+from live_teacher_sources import load_episode, has_training_manifest
 from observed_graph_metrics import graph_metrics, aggregate_graph_metrics
 from retained_state_archive import prepare_retained_state_packs
+from scripts.vibestudio.managed_checkpoint import CollectorCheckpoint
 from sft_sources import ZstdWriter, held_closure, held_hit, live_holdout_registry, require_registered_open_goal
 
 
@@ -90,6 +91,8 @@ def capture_integrity_errors(errors):
 
 def outcomes(capture, names, held, training, cases):
     results = {}
+    interruption = capture / 'collection-interruption.json'
+    interrupted = set(read(interruption).get('interruptedCases', [])) if interruption.is_file() else set()
     for name in names:
         directory = capture if len(names) == 1 else capture / 'cases' / name
         manifest = directory / 'verified/manifest.json'
@@ -106,20 +109,33 @@ def outcomes(capture, names, held, training, cases):
             episode = verified_episode(manifest, held, training)
             if episode['task_id'] != cases[name]['taskId']:
                 raise ValueError(f'verified capture identifies another task: {manifest}')
-            results[name] = {'status': 'verified', 'teacher_started': True, 'manifest': str(manifest.relative_to(capture)),
-                             'decisions': len(episode['turns'])}
+            completed = episode['trajectory_ir']['outcome'].get('task_completed') is True
+            results[name] = {'status': 'verified' if completed else 'partial', 'teacher_started': True, 'manifest': str(manifest.relative_to(capture)),
+                             'teacher_model_sampled': True, 'decisions': len(episode['turns'])}
         elif raw:
             test = packet.get('result') or {}
             entry = packet.get('execution') or {}
             teacher = (entry.get('diagnostics') or {}).get('natlangTeacher') or {}
             transport = (teacher.get('executionError') or {}).get('message')
             reason = transport or entry.get('error') or test.get('reason')
+            records = [call.get('record') or {} for call in teacher.get('calls') or []]
+            def sampled_record(record):
+                requests = (record.get('cost') or {}).get('model_requests')
+                return (isinstance(requests, (int, float)) and requests > 0 or
+                        any(turn.get('kind') == 'generation' and turn.get('reply') for turn in record.get('model_turns') or []))
+            sampled = any(map(sampled_record, records))
+            model_sampled = True if sampled else False if records else None
             results[name] = {'status': 'export-rejected' if test.get('passed') else 'test-failed',
                              'raw': str(raw.relative_to(capture)), 'reason': reason,
                              'teacher_started': True if (teacher.get('rootCallIds') or teacher.get('calls'))
-                             and not capture_integrity_errors(teacher.get('captureErrors')) else None}
+                             and not capture_integrity_errors(teacher.get('captureErrors')) else None,
+                             'teacher_model_sampled': model_sampled}
         else:
             results[name] = {'status': 'no-capture', 'teacher_started': None}
+        if name in interrupted and results[name]['status'] != 'verified':
+            results[name]['interrupted'] = True
+            if not has_training_manifest(results[name]):
+                results[name]['status'] = 'interrupted'
         if capture_errors:
             results[name]['capture_errors'] = capture_errors
     return results
@@ -151,7 +167,7 @@ def infrastructure_failure(outcome, case):
 def wave_infrastructure_hold(receipt, cases, threshold=2):
     if threshold < 0:
         raise ValueError('infrastructure hold threshold must be nonnegative')
-    failures = [name for name, outcome in receipt.items() if infrastructure_failure(outcome, cases.get(name, {}))]
+    failures = [name for name, outcome in receipt.items() if not outcome.get('interrupted') and infrastructure_failure(outcome, cases.get(name, {}))]
     if not threshold or len(failures) < threshold:
         return None
     return {'infrastructure_failures': failures, 'infrastructure_hold_threshold': threshold,
@@ -259,7 +275,8 @@ def write_graph_telemetry(archive, receipt, admitted=None):
     captures = []
     for name, result in receipt.items():
         outcome = (admitted or {}).get(name) or {}
-        category = ('partial' if outcome.get('status') == 'partial' else 'completed') if result['status'] == 'verified' else 'preserved_failure'
+        completed = outcome.get('task_completed', outcome.get('status') == 'passed') if outcome else result['status'] == 'verified'
+        category = ('completed' if completed else 'partial') if has_training_manifest(result) else 'interrupted' if result.get('interrupted') else 'preserved_failure'
         metrics = outcome.get('graph_metrics')
         source, error = None, None
         if result.get('manifest'):
@@ -313,7 +330,7 @@ def _export_trajectories(archive, receipt, held, training):
     counts = {'completed_goals': 0, 'partial_trajectories': 0, 'supervised_decisions': 0, 'evidence_only': 0}
     try:
         for name, result in receipt.items():
-            if result['status'] == 'verified':
+            if has_training_manifest(result):
                 with observed_artifacts() as artifacts:
                     episode = verified_episode(archive / 'capture' / result['manifest'], held, training)
                 capture_root = (archive / 'capture').resolve()
@@ -325,7 +342,7 @@ def _export_trajectories(archive, receipt, held, training):
                 outcome = episode['trajectory_ir']['outcome']
                 admitted[name] = outcome
                 counts['completed_goals'] += outcome.get('task_completed', outcome['status'] == 'passed') is True
-                counts['partial_trajectories'] += outcome['status'] == 'partial'
+                counts['partial_trajectories'] += outcome.get('task_completed', outcome['status'] == 'passed') is not True
                 counts['supervised_decisions'] += len(episode['turns'])
                 counts['evidence_only'] += not episode['turns']
                 output.write(episode['trajectory_ir'])
@@ -349,8 +366,10 @@ def _export_trajectories(archive, receipt, held, training):
 def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, *,
                    attempt_epoch=None, receipt_epochs=None):
     verified, counts, cumulative = set(seeds), Counter(), Counter()
+    teacher_exposure, epoch_teacher_exposure = Counter(), Counter()
     states, epoch_states = {}, {}
     infrastructure, epoch_infrastructure = Counter(), Counter()
+    interruptions, epoch_interruptions = Counter(), Counter()
     epochs = [None] * len(receipts) if receipt_epochs is None else receipt_epochs
     if len(epochs) != len(receipts):
         raise ValueError('each immutable receipt must have its original wave epoch')
@@ -362,12 +381,25 @@ def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, 
             current = epoch == attempt_epoch
             if current:
                 epoch_states[name] = outcome['status']
+            if outcome.get('teacher_model_sampled') is True:
+                teacher_exposure[name] += 1
+                if current:
+                    epoch_teacher_exposure[name] += 1
+            if outcome.get('interrupted') or outcome['status'] == 'interrupted':
+                interruptions[name] += 1
+                if current:
+                    epoch_interruptions[name] += 1
+                continue
             if infrastructure_failure(outcome, cases[name]):
                 infrastructure[name] += 1
                 if current:
                     epoch_infrastructure[name] += 1
                 continue
             cumulative[name] += 1
+            if outcome.get('teacher_model_sampled') is None:
+                teacher_exposure[name] += 1
+                if current:
+                    epoch_teacher_exposure[name] += 1
             if current:
                 counts[name] += 1
             if outcome['status'] == 'verified':
@@ -385,41 +417,49 @@ def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, 
         else:
             status = epoch_states[name]
         rows[name] = {'status': status, 'attempts': counts[name], 'attempt_epoch': attempt_epoch,
-                      'cumulative_attempts': cumulative[name] + infrastructure[name],
-                      'cumulative_teacher_attempts': cumulative[name],
+                      'cumulative_attempts': cumulative[name] + infrastructure[name] + interruptions[name],
+                      'cumulative_teacher_attempts': teacher_exposure[name],
                       'last_outcome': states.get(name), 'epoch_last_outcome': epoch_states.get(name)}
         if name in holds and status == 'prerequisite-unavailable':
             rows[name]['hold_reason'] = holds[name]
         if infrastructure[name]:
             rows[name]['infrastructure_failures'] = infrastructure[name]
         rows[name]['epoch_infrastructure_failures'] = epoch_infrastructure[name]
-    summary = {'total': len(cases), 'attempted_goals': sum(cumulative[name] + infrastructure[name] > 0 for name in cases),
-               'attempts': sum(cumulative.values()) + sum(infrastructure.values()),
+        if interruptions[name]:
+            rows[name]['interruptions'] = interruptions[name]
+        rows[name]['epoch_interruptions'] = epoch_interruptions[name]
+    summary = {'total': len(cases), 'attempted_goals': sum(cumulative[name] + infrastructure[name] + interruptions[name] > 0 for name in cases),
+               'attempts': sum(cumulative.values()) + sum(infrastructure.values()) + sum(interruptions.values()),
                'attempt_epoch': attempt_epoch,
                'epoch_attempted_goals': len(set(epoch_states)),
                'epoch_attempts': sum(counts.values()) + sum(epoch_infrastructure.values()),
-               'epoch_teacher_attempts': sum(counts.values()),
+               'epoch_teacher_attempts': sum(epoch_teacher_exposure.values()),
                'infrastructure_failures': sum(infrastructure.values()),
+               'interruptions': sum(interruptions.values()),
                'counts': dict(Counter(row['status'] for row in rows.values()))}
     publish(root / 'status.json', {'model': LUNA, **summary, 'cases': rows})
     print(json.dumps(summary), flush=True)
     return rows
 
 
-def next_wave(cases, rows, size):
+def next_wave(cases, rows, size, *, epoch_first_retries=False):
     pending = [name for name, row in rows.items() if row['status'] == 'pending']
     if not pending:
         return []
     attempts = Counter()
+    def priority(name):
+        row = rows[name]
+        cumulative = row.get('cumulative_teacher_attempts', row['attempts'])
+        return (row['attempts'],) if epoch_first_retries else (cumulative, row['attempts'])
     for name, row in rows.items():
-        attempts[cases[name]['workspace']] += row['attempts']
-    first = min(pending, key=lambda name: (rows[name]['attempts'], attempts[cases[name]['workspace']]))
+        attempts[cases[name]['workspace']] += row['attempts'] if epoch_first_retries else row.get('cumulative_teacher_attempts', row['attempts'])
+    first = min(pending, key=lambda name: (*priority(name), attempts[cases[name]['workspace']]))
     scope = cases[first]
     families = {}
     for name in pending:
         case = cases[name]
-        if (rows[name]['attempts'] == rows[first]['attempts'] and case['workspace'] == scope['workspace'] and
-                case.get('requiresReview') == scope.get('requiresReview')):
+        if (priority(name) == priority(first) and case['workspace'] == scope['workspace'] and
+                bool(case.get('requiresReview')) == bool(scope.get('requiresReview'))):
             families.setdefault(case['family'], []).append(name)
     names = []
     for offset in range(size):
@@ -446,8 +486,27 @@ def release_environment(release):
 def receipt_history(waves, jobs):
     """Legacy receipts keep their historical epoch; their content is never decorated."""
     receipts, epochs = [], []
+    overlay_path = waves.parent / 'completion-reassessment.json'
+    overlay = read(overlay_path) if overlay_path.is_file() else None
+    if overlay is not None and overlay.get('schema') != 'natlang.campaign-completion-reassessment/1':
+        raise ValueError('unknown campaign completion reassessment schema')
+    if overlay is not None and (overlay.get('errors') or overlay.get('summary', {}).get('unresolved')):
+        raise ValueError('completion reassessment has unresolved source evidence')
     for path in sorted(waves.glob('*-result.json')):
-        receipts.append(read(path))
+        receipt = read(path)
+        assessment = (overlay or {}).get('receipts', {}).get(path.name)
+        if assessment is not None:
+            if assessment['receipt_sha256'] != hashlib.sha256(path.read_bytes()).hexdigest():
+                raise ValueError(f'completion reassessment original receipt changed: {path}')
+            receipt = {name: dict(row) for name, row in receipt.items()}
+            for name, item in assessment['cases'].items():
+                if name not in receipt or not has_training_manifest(receipt[name]) or type(item.get('task_completed')) is not bool:
+                    raise ValueError(f'reassessment does not identify an original training manifest: {name}')
+                receipt[name]['status'] = 'verified' if item['task_completed'] else 'partial'
+                if item['task_completed']:
+                    receipt[name].pop('interrupted', None)
+                receipt[name]['completion_reassessment'] = item
+        receipts.append(receipt)
         job = jobs / f'{path.name.removesuffix("-result.json")}.json'
         epochs.append(read(job).get('attempt_epoch') if job.exists() else None)
     return receipts, epochs
@@ -483,6 +542,11 @@ def unfinished_wave(plans, waves, attempt_epoch, provenance, rows=None):
 
 
 def drive(args):
+    with CollectorCheckpoint() as checkpoint:
+        return _drive(args, checkpoint)
+
+
+def _drive(args, checkpoint):
     root = args.root.resolve()
     held, training, cases = campaign_scope(root / 'catalog.jsonl', args.held)
     attempt_epoch, provenance, environment = attempt_context(args, root / 'catalog.jsonl')
@@ -516,11 +580,11 @@ def drive(args):
         rows = publish_status(root, cases, seeds, receipts, args.review_model, args.attempts, holds,
                               attempt_epoch=attempt_epoch, receipt_epochs=epochs)
         sync_index(args, [root / 'status.json', root / 'reused.json'])
-        if (root / 'stop-after-wave').exists() or completed_waves == args.max_waves:
+        if checkpoint.requested or (root / 'stop-after-wave').exists() or completed_waves == args.max_waves:
             return
         started = unfinished_wave(plans, waves, attempt_epoch, provenance, rows)
         if not started:
-            names = next_wave(cases, rows, args.wave_size)
+            names = next_wave(cases, rows, args.wave_size, epoch_first_retries=getattr(args, 'epoch_first_retries', False))
             if not names:
                 if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required') for row in rows.values()):
                     return
@@ -547,8 +611,10 @@ def drive(args):
                                           'collection_limits': limits})
             if shutil.disk_usage(root).free < args.reserve_disk_gib * 1024**3:
                 raise RuntimeError('insufficient local disk headroom for another managed collection wave')
-            collect = ['pnpm', '--silent', 'natlang:teacher', '--model', LUNA, '--approve-codex-session',
+            checkpoint_request = waves / f'{started.stem}-checkpoint-request.json'
+            collect = ['node', '--import', 'tsx', 'scripts/collect-live-workflow-teacher.mjs', '--model', LUNA, '--approve-codex-session',
                        '--cases-per-instance', str(limits['cases_per_instance']), '--test-timeout-ms', str(args.teacher_timeout_ms), '--out', str(capture)]
+            collect += ['--checkpoint-request', str(checkpoint_request)]
             if limits['concurrency'] > 1:
                 collect += ['--concurrency', str(limits['concurrency'])]
             if first.get('requiresReview'):
@@ -556,8 +622,12 @@ def drive(args):
             for name in names:
                 collect += ['--case', name]
             with (waves / f'{started.stem}-collector.log').open('ab') as log:
-                completed = subprocess.run(collect, cwd=args.host, env=environment, stdout=log, stderr=subprocess.STDOUT)
+                completed = checkpoint.run(collect, request_file=checkpoint_request, cwd=args.host, env=environment, stdout=log, stderr=subprocess.STDOUT)
             publish(waves / f'{started.stem}-exit.json', {'status': completed.returncode})
+            if checkpoint.requested and not capture.is_dir():
+                # No teacher started and there is no packet to archive. Leave
+                # the exact immutable wave available to resume.
+                return
             if not capture.is_dir():
                 raise RuntimeError(f'collector failed before creating {capture}; see the collector log')
 
@@ -569,6 +639,11 @@ def drive(args):
         completed_waves += 1
         # The remote capture and receipt are durable. Deferred exports read those copies.
         shutil.rmtree(capture)
+        if checkpoint.requested:
+            publish_status(root, cases, seeds, [*receipts, receipt], args.review_model, args.attempts, holds,
+                           attempt_epoch=attempt_epoch, receipt_epochs=[*epochs, plan.get('attempt_epoch')])
+            sync_index(args, [root/'status.json', root/'reused.json'])
+            return
         runtime_hold = wave_infrastructure_hold(receipt, cases, getattr(args, 'infrastructure_hold_threshold', 2))
         if runtime_hold is not None:
             publish(root / 'runtime-hold.json', {'wave': started.stem, **runtime_hold})
@@ -593,6 +668,8 @@ def main():
     run.add_argument('--seed', action='append', type=Path, default=[])
     run.add_argument('--review-model')
     run.add_argument('--attempts', type=int, default=2, help='teacher attempts per goal in the current release epoch')
+    run.add_argument('--epoch-first-retries', action='store_true',
+                     help='use the former epoch-only retry ordering (default: cumulative fresh coverage first)')
     run.add_argument('--attempt-epoch', help='explicit retry epoch; defaults to the pinned release manifest SHA-256')
     run.add_argument('--infrastructure-hold-threshold', type=int, default=2,
                      help='hold after this many infrastructure failures in one wave; 0 disables the hold')

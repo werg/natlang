@@ -335,7 +335,7 @@ def declared_decision_exclusions(proofs, details):
     return excluded
 
 
-def verify_entry(interaction, root, *, partial=False):
+def verify_entry(interaction, root):
     """Bind application inputs to the actual invocation, including historical routers."""
     entry = interaction.get('entry')
     if entry is None:
@@ -356,10 +356,11 @@ def verify_entry(interaction, root, *, partial=False):
             (root.get('executor') or {}).get('kind') != 'crisp' or
             root.get('definition', {}).get('id') != 'ts:' + str(root.get('definition', {}).get('source')) + '#default'):
         raise ValueError('application entry does not bind its actual TS default export')
+    if entry.get('resultType') == 'void' and root.get('definition', {}).get('returns') != 'void':
+        raise ValueError('void application entry differs from its declared return contract')
     inputs = root.get('inputs') or {}
     arguments = entry['arguments']
-    if (root.get('definition', {}).get('name') != entry['callable'] or
-            not partial and root.get('outcome') != 'done' or set(inputs) != set(arguments)):
+    if (root.get('definition', {}).get('name') != entry['callable'] or set(inputs) != set(arguments)):
         raise ValueError('open goal does not match the actual root invocation')
     argument_json = entry.get('argumentJson')
     if interaction.get('entry') is not None and (
@@ -385,6 +386,101 @@ def verify_entry(interaction, root, *, partial=False):
         ref = inputs.get(name) or {}
         if ref.get('complete') is not True or ref.get('bytes') != size or ref.get('hash') != digest:
             raise ValueError('open goal application input differs from the actual root invocation')
+
+
+def semantic_goal_completed(interaction, workspace_proofs, verification, *, workspace_evidence=(), reassessment_verified=False):
+    """A whole, scope-bound semantic verdict, independently of execution exit.
+
+    A partial invocation scope is not a whole-goal verdict. Historical partials
+    need the existing explicit source-hashed completed reassessment, not an
+    existential matching child proof or an inferred optional-review exemption.
+    """
+    if verification.get('status') != 'passed':
+        return False
+    checks = verification.get('checks') or {}
+    if not checks or any(value is not True for value in checks.values()):
+        return False
+    goal = (interaction or {}).get('goal')
+    if verification.get('reassessment') is not None:
+        return (reassessment_verified and len(workspace_proofs) == 1 and
+                workspace_proofs[0].get('schema') == 'natlang.live-outcome-reassessment/1' and
+                workspace_proofs[0].get('task_id') == verification.get('task_id') and
+                workspace_proofs[0].get('goal') == goal and workspace_proofs[0].get('passed') is True and
+                bool(workspace_proofs[0].get('checks')) and
+                all(value is True for value in workspace_proofs[0]['checks'].values()))
+    reviews = [item['semanticReview'] for item in workspace_evidence if item.get('semanticReview') is not None]
+    requirements = verification.get('requirements') or {}
+    if 'semantic_review' in requirements and type(requirements['semantic_review']) is not bool:
+        return False
+    required_review = requirements.get('semantic_review', 'independentSemanticReview' in checks)
+    def accepted_review(review):
+        if not isinstance(review, dict):
+            return False
+        exchanges = [review.get('exchange'), *(review.get('exchanges') or [])]
+        return (review.get('schema') == 'natlang.live-workflow-review/1' and
+                bool(review.get('model')) and isinstance(review.get('input'), dict) and bool(review['input']) and
+                (review.get('verdict') or {}).get('accepted') is True and
+                any(isinstance(exchange, dict) and isinstance(exchange.get('request'), dict) and
+                    isinstance(exchange.get('reply'), dict) for exchange in exchanges))
+    if required_review and (len(reviews) != 1 or not accepted_review(reviews[0])):
+        return False
+    scoped = [proof for proof in workspace_proofs if any(key in proof for key in ('goal', 'caseId', 'contextId'))]
+    if not scoped:
+        # Older conventional workflow verifications carry their complete,
+        # nonempty independent checks directly; they do not provide child goal
+        # proofs to choose from and do not use root exit as their verdict.
+        return not interaction
+    world = verification.get('world') or {}
+    case_id = world.get('case_id')
+    if case_id is None:
+        # The original exporter used namespace:test-name IDs but stored only
+        # context_id in world. This is the canonical task binding, not a
+        # per-case exception or a weaker goal-text-only match.
+        scenario = str(verification.get('task_id', '')).rsplit(':', 1)[-1]
+        case_id = scenario.removeprefix('open-goal-') if scenario.startswith('open-goal-') else None
+    if not goal or not world.get('context_id') or not case_id or len(verification.get('root_call_ids') or []) != 1:
+        return False
+    exact = [proof for proof in scoped if proof.get('goal') == goal and
+             proof.get('contextId') == world['context_id'] and proof.get('caseId') == case_id and
+             (not (interaction or {}).get('entry') or same_json_value(proof.get('entry'), interaction['entry']))]
+    if len(exact) != 1 or exact[0].get('passed') is not True:
+        return False
+    proof = exact[0]
+    required_checks = proof.get('checks') or {}
+    if not required_checks or any(value is not True for value in required_checks.values()):
+        return False
+    dimensions = proof.get('outcomeDimensions')
+    if dimensions is not None:
+        if not isinstance(dimensions, dict) or not dimensions:
+            return False
+        if any(not isinstance(dimension, dict) or type(dimension.get('passed')) is not bool for dimension in dimensions.values()):
+            return False
+        contract = proof.get('outcomeContract') or {}
+        if not isinstance(contract, dict):
+            return False
+        for name, declaration in contract.items():
+            if (not isinstance(declaration, dict) or
+                    'required' in declaration and type(declaration['required']) is not bool or
+                    declaration.get('required', name != 'incidentalValues') and name not in dimensions):
+                return False
+        for name, dimension in dimensions.items():
+            declaration = contract.get(name) or {}
+            if not isinstance(declaration, dict):
+                return False
+            flags = [role['required'] for role in (dimension, declaration) if 'required' in role]
+            if any(type(flag) is not bool for flag in flags) or len(set(flags)) > 1:
+                return False
+            required = flags[0] if flags else name != 'incidentalValues'
+            if required and dimension['passed'] is not True:
+                return False
+    # Legacy proofs without dimensions must still provide their actual complete
+    # nonempty check set; there is no vacuous all() completion path.
+    return True
+
+
+def has_training_manifest(receipt):
+    """A checked partial trajectory is admissible data without completing its goal."""
+    return receipt.get('status') in {'verified', 'partial'} and isinstance(receipt.get('manifest'), str)
 
 
 def verify_application_return(binding, records, roots, entry=None):
@@ -682,12 +778,14 @@ def load_episode(path):
     kinds = set()
     incorrect_optional_return = False
     workspace_proofs = []
+    workspace_evidence = []
     application_returns = []
     for evidence in verification.get('evidence') or []:
         evidence_path = bound_file(evidence, path.parent)
         kinds.add(evidence.get('kind'))
         if evidence.get('kind') == 'workspace':
             payload = json.loads(evidence_path.read_text())
+            workspace_evidence.append(payload)
             if 'applicationReturn' in payload:
                 application_returns.append(payload['applicationReturn'])
             proof = payload.get('proof') or {}
@@ -739,9 +837,6 @@ def load_episode(path):
         raise ValueError('live call roots differ from independently verified roots')
     interaction = spec.get('interaction')
     entry = (interaction or {}).get('entry')
-    if isinstance(entry, dict) and entry.get('resultType') == 'void' and (
-            len(application_returns) != 1 or application_returns[0].get('kind') != 'void'):
-        raise ValueError('void application entry needs its explicit actual return witness')
     for binding in application_returns:
         verify_application_return(binding, records, roots, entry)
     if interaction != verification.get('interaction'):
@@ -752,7 +847,7 @@ def load_episode(path):
                 not isinstance(interaction.get('program'), str) or len(roots) != 1):
             raise ValueError('invalid open user goal attestation')
         root = records[attested_roots[0]]
-        verify_entry(interaction, root, partial=training_scope is not None)
+        verify_entry(interaction, root)
         verify_observed_child_inventory(records)
     ancestry = {}
     for call_id in records:
@@ -773,11 +868,16 @@ def load_episode(path):
                            if exchange.get('kind') == 'generation']
             if generations:
                 incorrect_returns[call_id] = generations[-1]
+    completed_goal = semantic_goal_completed(interaction, workspace_proofs, verification,
+        workspace_evidence=workspace_evidence, reassessment_verified=verification.get('reassessment') is not None)
+    explicit_goal_completion = completed_goal and interaction is not None and any(
+        proof.get('goal') == interaction.get('goal') and proof.get('passed') is True for proof in workspace_proofs)
     exclusions, decisions = {}, []
     for binding, detail in details:
         record = detail['record']
         call_id = record['call_id']
         selected_executor = record['executor']['kind'] != 'crisp' and (record.get('outcome') == 'done' or
+            interaction is not None and completed_goal or
             training_scope is not None and call_id in training_scope and training_scope[call_id] is not None)
         if not selected_executor and interaction is None:
             continue  # exact mechanism and failed attempts remain evidence, never successful demonstration targets
@@ -834,6 +934,8 @@ def load_episode(path):
                           'application return failed independent outcome checks'
                           if incorrect_returns.get(call_id) == index else
                           'executor did not complete' if not selected_executor else
+                          'unfinished executor lacks a completed action in this decision'
+                          if record.get('outcome') != 'done' and training_scope is None and not original_calls else
                           'decision contains a failed action' if index in exclusions[call_id] else
                           'decision contains an action without execution evidence'
                           if any(call['id'] not in successful_actions for call in original_calls) else
@@ -875,8 +977,9 @@ def load_episode(path):
             'provenance': {'collection_role': 'teacher', 'execution_kind': OBSERVED_WORKSPACE,
                            'code': spec['code'], 'model_id': ','.join(sorted(models)),
                            'source_manifest': source, 'verification': spec['verification']},
-            'outcome': {'accepted': True, 'status': verification['status'], 'world': world, 'checks': checks,
-                        'task_completed': verification['status'] == 'passed',
+            'outcome': {'accepted': True, 'status': verification['status'],
+                        'world': world, 'checks': checks,
+                        'task_completed': completed_goal,
                         'root_call_ids': attested_roots,
                         **({'reassessment': verification['reassessment']} if verification.get('reassessment') else {}),
                         **({'excluded_return_decisions': [{'invocation_id': call_id, 'ordinal': ordinal}
@@ -888,7 +991,7 @@ def load_episode(path):
             'trajectory': decisions,
         }
         turns = observed_training_turns(trajectory)
-    if not turns and not (trajectory is not None and (incorrect_optional_return or incorrect_returns or reviewed_decisions)):
+    if not turns and not (trajectory is not None and (explicit_goal_completion or incorrect_optional_return or incorrect_returns or reviewed_decisions)):
         raise ValueError('workflow call coverage incomplete or has no generated executor targets')
     return {'key': episode_key, 'source': 'teacher', 'run': str(path),
             'task_id': spec['id'], 'family': spec['family'], 'task': task, 'turns': turns,

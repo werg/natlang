@@ -84,7 +84,7 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
     interaction_entry={'kind':'open-user-goal','goal':goal,'program':exercise['programPath']}
     if exercise.get('entry'):
         interaction_entry['entry']=exercise['entry']
-    verify_entry(interaction_entry, root, partial=completed is None)
+    verify_entry(interaction_entry, root)
     if any(row.get('dirty') is not False for row in pins['repositories'].values()):
         raise ValueError('reassessment requires recorded clean code provenance')
     source_code = pins['repositories']['natlang']
