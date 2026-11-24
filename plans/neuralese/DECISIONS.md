@@ -11611,3 +11611,44 @@ two cores, both stepping. `progtune-l4-seq-3` only measures: it preempts the fit
 stops its actor after each comparison. Expected: verdict release ~21:10 CET and comparison ~22:15; tally ~23:30; then
 two programs every ~2.7 h (tree, retail, pubmed, iterate, multihop). searchqa stays on the A100 (step 19/60). Open: the
 fit's single-core hot path (the norm adjoint backward) is the real ceiling on fit throughput; not worked on yet.
+
+## 2026-11-24 20:40 Program-tuning fits: the norm adjoint's per-block loop removed (0f16e04fa), exact, ~1.9x per step
+
+**Bottleneck.** Program-tuning fits train adapters only, so every `Lfm3RMSNorm` gain is frozen
+(`requires_grad=False`, BF16). `_RowwiseNormAdjoint.backward` sent frozen gains to its per-128-row Python replay
+(one norm forward plus one `autograd.grad` per 128-row block). The q/k norms have tokens x heads rows, so that is
+thousands of iterations per call. The batched exact adjoint (`_batched/_windowed_lfm3_norm_adjoint`) required a
+trainable gain. A DGX repro (`ext_decisions_tree` plan, fresh fit, 4 steps; ledger units `progtune-prof-ab2`, the
+backward timed per call) put 86.5 s of norm backward in those 4 steps: 47.4 s for q/k norms (width 128, 704 calls)
+and 37.6 s for hidden norms (width 2048, 1,330 calls).
+
+**Fix (0f16e04fa, default on, `NATLANG_NORM_BATCHED_FROZEN=0` opts out).** Frozen gains take the batched and windowed
+adjoint too. It returns dx only and builds no per-block gain parts. Inventory: `_RowwiseNormAdjoint` is installed by
+`configure_norm_execution` (`native_composite.py:329`, `shared_state.py:1008`) on every native LFM3 port. Its
+consumers are every native-graph gradient path: `tune.build`/`JointTrainer` (program tuning, distill, families,
+learned), `serve/native_grad.py` (whole-graph Neuralese gradients, operator soft states) and `tune/rl.py`. The fix
+lives in the one shared function, so it reaches all of them. Not applicable: the GRPO/SFT learner
+(`train/lfm3_fast.py:134` `_rms`, its own compiled norm; it does not use the native port).
+
+**Exactness.** Norm tests (37, CUDA included, under the ledger): the frozen-gain batched adjoint is bit-identical to
+the per-block loop and to the concatenated forward's adjoint at 129-16,401 rows and widths 64/2048. End to end, the
+4-step A/B fits from one seed have identical per-step row losses. Their adapter and optimizer artifacts after step 4
+are byte-identical (content-addressed artifact ids and `state.json` equal). In-flight fits therefore resume on the
+new code without any change in their numbers.
+
+**Speed** (DGX, GPU shared with the aei1 collection, so absolute times are noisy). Steps 2-4: 169.8/115.3/87.8 s
+before and 102.4/61.5/36.1 s after, 373 s -> 200 s (1.86x; 0.48 -> 0.90 steps/min). Norm backward: 86.5 s -> 3.0 s
+over 4 steps. On the L4 (2.5 min/step, 37% of it in this loop by py-spy) the expected step is ~1.6 min. Not measured
+on Colab.
+
+**Switch-over.** The fits run `tune.build` on the VM at `--commit` (`l4-fits2.sh` and `l4-seq.sh`:
+`COMMIT=de2b36add`; `colab-seq*.sh` take it as an argument). A lane picks the fix up when it is relaunched with a
+commit containing 0f16e04fa. The pin for the driver scripts needs no change: the fix is VM-side code. Resuming from
+state.json is exact (above).
+
+**Not checked.** Step timing on the L4/A100 itself. FP32-gain profiles (`fp32-norms-v1`): their gains keep the
+per-block loop, because the fast path still requires BF16 gains and program tuning does not use FP32 gains. The
+trainable-gain path's per-block Python sum of gain parts (`_sum_norm_gain_parts`, kept for exact BF16 fan-in
+order). The small-input forward's per-128-row loop (`rowwise_norm_forward` below 4,096 rows). What dominates the
+remaining ~60 s/step: py-spy is not permitted on the DGX, and a cProfile run (`progtune-prof-cp1`) was queued
+behind the collection.
