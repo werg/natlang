@@ -2303,6 +2303,8 @@ def test_a_held_pair_refused_for_engine_settings_remeasures_the_reference_on_thi
         (out / 'result.json').write_text(json.dumps({'complete': True, 'fresh': not reuse}))
         return out
     monkeypatch.setattr(d.c, 'measure_held', measure)
+    monkeypatch.setattr(d.c, 'held_series_key', lambda: 'k')
+    monkeypatch.setattr(d.c, 'held_measuring', lambda out: False)
     (held / d.held_name(ref)).mkdir(parents=True)
     (held / d.held_name(ref) / 'result.json').write_text(json.dumps({'complete': True, 'reused': True}))
     monkeypatch.setattr(d.c, 'held_result_ok', lambda out: (out / 'result.json').exists())
@@ -2332,3 +2334,71 @@ def test_a_held_pair_refused_for_engine_settings_remeasures_the_reference_on_thi
     monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: subprocess.CompletedProcess(argv, 2, stderr='boom'))
     with pytest.raises(subprocess.CalledProcessError):
         d.c.compare(held / d.held_name(ref), held / d.held_name(cand), tmp_path / 'x.json')
+
+
+def test_set_aside_held_results_are_never_reused_and_running_measurements_are_joined(tmp_path, monkeypatch):
+    """2026-11-24 09:41: a restarted driver reused the reference result the previous driver had set aside as unpaired
+    (held/policy-e15b20a86f1c-unpaired-1795501815), the pair was refused again, and the second set-aside moved the
+    whole directory under the running Pop re-measurement (07:41), which then failed. Now set-aside results (and,
+    into the series that refused them, their reuse source) are never reused; a reused result moves aside alone,
+    leaving a running measurement's files; a restarted driver joins the running Pop unit instead of reusing."""
+    import pop_rl_actor
+    ei, d = _driver(tmp_path, monkeypatch)
+    ops = tmp_path / 'ops'
+    monkeypatch.setattr(ei, 'OPS', ops)
+    pol = 'e' * 64
+    result = lambda **k: json.dumps({'complete': True, 'policy_id': pol, 'samples_per_task': 2, **k})
+    source = ops / 'ei' / 'sft-v9' / 'held' / 'candidate'
+    source.mkdir(parents=True)
+    (source / 'result.json').write_text(result(series={'key': 'other'}))
+    other = ops / 'ei' / 'sft-v8' / 'held' / 'start'
+    other.mkdir(parents=True)
+    (other / 'result.json').write_text(result(series={'key': 'other2'}, v=8))
+    held = d.c.held
+    out = held / 'policy-eeeeeeeeeeee'
+    out.mkdir(parents=True)
+    (out / 'result.json').write_bytes((source / 'result.json').read_bytes())
+    (out / 'reused.json').write_text(json.dumps({'from': str(source / 'result.json')}))
+    for name in ('run.json', 'packet.jsonl'):
+        (out / name).write_text('{}')
+    (out / 'row-000').mkdir()
+    monkeypatch.setattr(d.c, 'held_series_key', lambda: 'mine')
+    measuring = {'on': True}
+    monkeypatch.setattr(d.c, 'held_measuring', lambda o: measuring['on'])
+    d.c.set_held_aside(out, 'unpaired')
+    (aside,) = held.glob('policy-eeeeeeeeeeee-unpaired-*')
+    assert sorted(p.name for p in aside.iterdir()) == ['aside.json', 'result.json', 'reused.json']
+    assert sorted(p.name for p in out.iterdir()) == ['packet.jsonl', 'row-000', 'run.json']     # the measurement's
+    rec = json.loads((aside / 'aside.json').read_text())
+    assert rec['reason'] == 'unpaired' and rec['series_key'] == 'mine' and rec['reused_from'] == str(source / 'result.json')
+    # neither the aside copy nor its source comes back into this series; another cycle's result still may
+    allowed = ei.held_reuse_candidates(sorted(ops.glob('ei/*/held/*/result.json')), held.glob('*/aside.json'),
+                                       'pop', 'mine')
+    assert allowed == [other / 'result.json']
+    legacy = held / 'policy-eeeeeeeeeeee-unpaired-1795501815'     # set aside before aside.json existed
+    legacy.mkdir()
+    (legacy / 'result.json').write_text(result(series={'key': 'x'}))
+    assert legacy / 'result.json' not in ei.held_reuse_candidates([legacy / 'result.json'], [], 'pop', 'mine')
+    assert ei.held_reuse_candidates([source / 'result.json'], held.glob('*/aside.json'), 'pop', 'theirs') \
+        == [source / 'result.json']                                    # another series did not refuse it
+    # a restarted driver: the Pop unit measuring into out runs on; pop_held joins it and never reuses around it
+    polls = []
+
+    def units(pattern):
+        polls.append(pattern)
+        if len(polls) < 3:
+            return ['popheld-policy-eeeeeeeeeeee-1795502476']
+        (out / 'result.json').write_text(result(series={'key': 'mine'}, fresh=True))
+        return []
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', units)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(d.c, 'reuse_held', lambda *a: (_ for _ in ()).throw(AssertionError('reused around a unit')))
+    assert d.c.pop_held('policy-eeeeeeeeeeee', '/p/e.pt') == out
+    assert json.loads((out / 'result.json').read_text())['fresh'] and polls[0] == 'popheld-policy-eeeeeeeeeeee-*'
+    # with nothing measuring, a reused result moves aside with its directory as before
+    measuring['on'] = False
+    out2 = held / 'policy-ffffffffffff'
+    out2.mkdir()
+    (out2 / 'result.json').write_text(result())
+    d.c.set_held_aside(out2, 'pop')
+    assert not out2.exists() and len(list(held.glob('policy-ffffffffffff-pop-*/aside.json'))) == 1

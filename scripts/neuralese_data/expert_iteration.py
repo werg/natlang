@@ -699,6 +699,43 @@ def result_host(result):
     return engine_host_of(result) or 'pop'
 
 
+HELD_ASIDE_NAME = re.compile(r'-[A-Za-z_]+-\d{9,}(-\d+)?$')     # <name>-<host or reason>-<epoch>[-n]
+
+
+def held_reuse_candidates(results, asides, host, series_key):
+    """The held results ``reuse_held`` may copy: never one in a set-aside directory (``aside.json``, or named
+    ``<name>-<reason>-<epoch>`` by ``set_held_aside``), and never, into a series, a result set aside there as unpaired
+    (by its bytes' sha256) or the source it was reused from (2026-11-24 09:41: a restarted driver reused the
+    reference result the previous one had set aside as unpaired, and the pair was refused again)."""
+    import hashlib
+    refused_sha, refused_paths = set(), set()
+    for path in asides:
+        try:
+            rec = json.loads(Path(path).read_text())
+        except (OSError, ValueError):
+            continue
+        if rec.get('reason') == 'unpaired' and rec.get('series_host') == host and \
+                rec.get('series_key') in (series_key, None):
+            if rec.get('result_sha256'):
+                refused_sha.add(rec['result_sha256'])
+            if rec.get('reused_from'):
+                refused_paths.add(str(Path(rec['reused_from']).resolve()))
+    out = []
+    for path in map(Path, results):
+        parent = path.parent
+        if (parent / 'aside.json').exists() or HELD_ASIDE_NAME.search(parent.name):
+            continue
+        if str(path.resolve()) in refused_paths:
+            continue
+        try:
+            if refused_sha and hashlib.sha256(path.read_bytes()).hexdigest() in refused_sha:
+                continue
+        except OSError:
+            continue
+        out.append(path)
+    return out
+
+
 def reusable_held(results, policy, samples, series_key, host='pop', *, any_series=False):
     """The first complete held result of ``policy`` at ``samples`` per task in one scoring series measured on ``host``
     (a measurement an earlier cycle made on the same series: pairing rules unchanged, the eval spared 3 h). The host
@@ -1159,14 +1196,50 @@ class Cycle:
             return False
         return bool(r.get('complete'))
 
+    def held_measuring(self, out):
+        """Whether a measurement unit writes into ``out`` now: Pop's ``popheld-<OUT>-*`` or this driver's DGX held unit
+        (a restarted driver joins it; nothing reuses into, or moves, its directory)."""
+        import pop_rl_actor
+        return bool(pop_rl_actor.pop_held_units(f'popheld-{Path(out).name}-*')) or \
+            self.present(f'{self.a.name}-held-{Path(out).name}')
+
+    def held_series_key(self):
+        """This driver's held scoring series key (the held pin's ``held_eval.series()``), or None."""
+        try:
+            return subprocess.check_output([PY, '-c', 'from natlang_neuralese.rl.held_eval import series; '
+                                            "print(series()['key'])"], env=self.held_env, text=True,
+                                           cwd=self.held_pin).strip()
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
     def set_held_aside(self, out, host='other'):
+        """Move ``out``'s result aside to ``<name>-<host>-<time>`` with ``aside.json`` (why, this series, the result's
+        sha256 and where a reused copy came from): ``reuse_held`` never takes it, nor (``host`` 'unpaired') the same
+        result into this series again. A reused result, or one in a directory a measurement unit still writes into,
+        moves alone (result.json, reused.json): the measurement's own files stay where it writes them (2026-11-24
+        09:41: the whole directory moved under a running Pop measurement, which then failed after 2 h of episodes)."""
+        import hashlib
         aside = out.with_name(f'{out.name}-{host}-{int(time.time())}')
         n = 0
         while aside.exists():        # set aside twice within a second
             n += 1
             aside = out.with_name(f'{out.name}-{host}-{int(time.time())}-{n}')
-        os.replace(out, aside)
-        self.note(stage='held', moved_aside=str(aside), reason=f'measured on {host}, the series is {self.held_host}')
+        result, reused = out / 'result.json', out / 'reused.json'
+        record = {'set_aside_from': str(out), 'reason': host, 'series_host': self.held_host,
+                  'series_key': self.held_series_key(), 'at': round(time.time(), 1),
+                  'result_sha256': hashlib.sha256(result.read_bytes()).hexdigest() if result.exists() else None,
+                  'reused_from': json.loads(reused.read_text()).get('from') if reused.exists() else None}
+        whole = not reused.exists() and not self.held_measuring(out)
+        if whole:
+            os.replace(out, aside)
+        else:
+            aside.mkdir(parents=True)
+            for f in (result, reused):
+                if f.exists():
+                    os.replace(f, aside / f.name)
+        (aside / 'aside.json').write_text(json.dumps(record) + '\n')
+        self.note(stage='held', moved_aside=str(aside), whole_directory=whole,
+                  reason=f'{host}: not used in the {self.held_host} series')
 
     def dgx_held(self, name, checkpoint, reuse=True):
         """One held-v3 measurement on the DGX held series (async-train §1): ``dgx-held`` as a ledger unit (the pinned
@@ -1174,7 +1247,8 @@ class Cycle:
         engine.json; ``held_eval measure`` with ``--held-samples`` per task), resumable. Preempted (the SFT outranks
         it), it is relaunched and resumes its episodes."""
         out = self.held / name
-        if self.held_result_ok(out) or (reuse and self.reuse_held(out, checkpoint)):
+        measuring = self.held_measuring(out)          # a restarted driver joins its running unit (no reuse around it)
+        if (not measuring and self.held_result_ok(out)) or (reuse and not measuring and self.reuse_held(out, checkpoint)):
             return out
         from natlang_neuralese.common.hashing import sha256_file_hex_cached
         sha = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
@@ -1203,10 +1277,12 @@ class Cycle:
         result = out / 'result.json'
         if result.exists() and json.loads(result.read_text()).get('complete'):
             return out
+        import pop_rl_actor
+        join_pop_held(out)                  # a measure unit a restarted driver left running: joined, never reused around
+        if _result_complete(out):
+            return out
         if reuse and self.reuse_held(out, checkpoint):
             return out
-        import pop_rl_actor
-        join_pop_held(out)                  # a measure unit a restarted driver left running: never a second one
         if _result_complete(out):
             return out
         pop_rl_actor.stop_pop_fills()       # the held pin's pop_rl_actor may predate the stop in its serves
@@ -1224,14 +1300,13 @@ class Cycle:
             return False
         from natlang_neuralese.common.hashing import sha256_file_hex_cached
         policy = BASE_SHA if str(checkpoint) == BASE_CKPT else sha256_file_hex_cached(Path(checkpoint))
-        try:
-            key = subprocess.check_output([PY, '-c', 'from natlang_neuralese.rl.held_eval import series; '
-                                           "print(series()['key'])"], env=self.held_env, text=True,
-                                          cwd=self.held_pin).strip()
-        except subprocess.CalledProcessError:
+        key = self.held_series_key()
+        if key is None:
             return False
         mine = (out / 'result.json').resolve()
-        found = reusable_held([p for p in sorted(OPS.glob('ei/*/held/*/result.json')) if p.resolve() != mine],
+        candidates = [p for p in sorted(OPS.glob('ei/*/held/*/result.json')) if p.resolve() != mine]
+        found = reusable_held(held_reuse_candidates(
+            candidates, [*OPS.glob('ei/*/held/*/aside.json'), *self.held.glob('*/aside.json')], self.held_host, key),
                               policy, self.a.held_samples, key, host=self.held_host,
                               any_series=not getattr(self.a, 'strict_held_reuse', False))
         if not found:

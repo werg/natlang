@@ -10978,3 +10978,27 @@ aei1 student-rare tasks and ERNIE 0/23 overall.
 
 The Codex subscription limit at a sustained Luna+Sol rate is not measured. Gemini's Vertex spend rises from ~3
 episodes per campaign to its 6 slots busy; the owner is deciding that spend (`ops/ei/teachers.json` slots).
+
+## 2026-11-24 10:00 Held reuse never takes a set-aside result; a running measurement is joined, its directory never moved
+
+**What happened at the 09:41 restart (pin 89ebbf2a3).**
+1. `reuse_held` copied the reference result from `held/policy-e15b20a86f1c-unpaired-1795501815`, which the previous
+   driver had set aside as unpaired.
+2. The pair was refused again, and `set_held_aside` moved the whole directory to
+   `policy-e15b20a86f1c-unpaired-1795509710`. A Pop re-measurement had been writing into that directory since 07:41
+   (`popheld-policy-e15b20a86f1c-1795502476`).
+3. The unit failed at 09:42 (`FileNotFoundError: .../packet.jsonl`). Its episodes (row-000..255, run.json) are in
+   the aside directory.
+
+**Fix (e771e3673's re-measure path).**
+- **Never reused:** `held_reuse_candidates` excludes any result in a set-aside directory (`aside.json`, or named
+  `<name>-<reason>-<epoch>`). Into the series that refused a result, it also excludes that result's bytes and the
+  source it was reused from.
+- **What a set-aside records:** `set_held_aside` writes `aside.json` (reason, series host and key, result sha256,
+  `reused_from`).
+- **Only the result moves:** a reused result, or a result in a directory a measurement unit still writes into, moves
+  alone (`result.json`, `reused.json`). The measurement's files stay where it writes them.
+- **Joined:** `pop_held` joins a running `popheld-<OUT>-*` unit before it considers reuse, and `dgx_held` skips the
+  result check and reuse while its unit runs (`held_measuring`).
+
+Test: `tests/neuralese/test_async_train.py` covers this sequence.
