@@ -287,7 +287,8 @@ UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 ENDPOINT_PROVIDERS = {'integrate.api.nvidia.com': 'nvidia-nim', 'openrouter.ai': 'openrouter',
                       'generativelanguage.googleapis.com': 'google-gemini', 'api.z.ai': 'zai',
                       'api.anthropic.com': 'anthropic', 'api.openai.com': 'openai',
-                      'aiplatform.googleapis.com': 'google-vertex', 'api.groq.com': 'groq', 'opencode.ai': 'opencode-zen'}
+                      'aiplatform.googleapis.com': 'google-vertex', 'api.groq.com': 'groq', 'opencode.ai': 'opencode-zen',
+                      'ai-gateway.kilo.ai': 'kilo', 'api.llm7.io': 'llm7'}
 
 # What a teacher's recorded think block is (owner 2026-11-24: teacher reasoning stays in SFT data as zero-weight
 # context; a summary is never presented as a raw trace): `raw` the model's own reasoning tokens (open-weight reasoning
@@ -296,7 +297,8 @@ ENDPOINT_PROVIDERS = {'integrate.api.nvidia.com': 'nvidia-nim', 'openrouter.ai':
 # summaries under x_natlang_include_thoughts), `hidden` none returned (Gemini without it). A spec's "reasoning" overrides the provider's default.
 REASONING_KINDS = ('raw', 'summary', 'hidden')
 PROVIDER_REASONING = {'openai-codex': 'summary', 'anthropic': 'summary', 'nvidia-nim': 'raw', 'openrouter': 'raw',
-                      'groq': 'raw', 'zai': 'raw', 'google-gemini': 'summary', 'google-vertex': 'summary'}
+                      'groq': 'raw', 'zai': 'raw', 'kilo': 'raw', 'llm7': 'raw', 'google-gemini': 'summary',
+                      'google-vertex': 'summary'}
 
 
 def reasoning_kind(teacher):

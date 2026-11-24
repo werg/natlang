@@ -791,8 +791,7 @@ VERTEX_TOKEN = [str(Path.home() / 'google-cloud-sdk/bin/gcloud'), 'auth', 'appli
 # overrides at each launch): Haiku retires itself while the Anthropic account has no credit; Luna at medium effort; GPT-6.1
 # Sol, the stronger model on the same Codex subscription, only on tasks another teacher failed (min_failed); the free
 # raw-reasoning models: Nemotron 3.5 Super and 3 Ultra on NIM (one account-wide rate limit: few slots), ERNIE 5.5 Flash
-# on OpenRouter's free tier (1,000 requests a day, ~26 episodes); Gemini 3.1 Pro and Gemini 4 Argon (Vertex credits,
-# reasoning hidden) on tasks another teacher failed; family routing and --attempts in teacher_gen
+# on OpenRouter's free tier (1,000 requests a day, ~26 episodes); family routing and --attempts in teacher_gen
 TEACHERS = [
     {'model_id': 'claude-haiku-5-5', 'provider': 'anthropic', 'reasoning_effort': 'medium', 'slots': 4},
     {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 6},
@@ -800,9 +799,11 @@ TEACHERS = [
     {'model_id': 'nvidia/nemotron-3.5-super-vl-120b-a12b', 'endpoint': NIM, 'api_key_env': 'NVIDIA_API_KEY', 'slots': 2},
     {'model_id': 'nvidia/nemotron-3-ultra-550b-a55b', 'endpoint': NIM, 'api_key_env': 'NVIDIA_API_KEY', 'slots': 1},
     {'model_id': 'baidu/ernie-5.5-flash-preview:free', 'endpoint': 'https://openrouter.ai/api/v1',
-     'api_key_env': 'OPENROUTER_API_KEY', 'slots': 1},
-    *[{'model_id': model, 'endpoint': VERTEX, 'api_key_env': 'VERTEX_ACCESS_TOKEN', 'api_key_command': VERTEX_TOKEN,
-       'slots': slots, 'min_failed': 1} for model, slots in (('google/gemini-4-argon', 4), ('google/gemini-3.1-pro-preview', 2))]]
+     'api_key_env': 'OPENROUTER_API_KEY', 'slots': 1}]
+# paid Vertex teachers (owner 2026-11-24 10:00: paused until the credits are refilled; they enter only by a deliberate
+# edit of ops/ei/teachers.json, never by default)
+VERTEX_TEACHERS = [{'model_id': model, 'endpoint': VERTEX, 'api_key_env': 'VERTEX_ACCESS_TOKEN', 'api_key_command': VERTEX_TOKEN,
+                    'slots': slots, 'min_failed': 1} for model, slots in (('google/gemini-4-argon', 4), ('google/gemini-3.1-pro-preview', 2))]
 
 
 def frontier_rare(frontier_path, rate=0.25):

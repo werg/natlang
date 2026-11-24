@@ -186,3 +186,10 @@ def test_gemma_on_ai_studio_records_raw_reasoning():
                                       'endpoint': 'https://generativelanguage.googleapis.com/v1beta/openai'})
     assert gemma.chat_config['x_natlang_include_thoughts'] is True
     assert teacher_gen.teacher_identity(gemma)['reasoning'] == 'raw'
+
+
+def test_keyless_kilo_gateway_teacher_is_named_and_raw():
+    kilo = teacher_gen.make_teacher({'model_id': 'reflection/beam-free', 'endpoint': 'https://ai-gateway.kilo.ai/api/v1'})
+    assert kilo.chat_completions_url == 'https://ai-gateway.kilo.ai/api/v1/chat/completions' and kilo.api_key_env is None
+    identity = teacher_gen.teacher_identity(kilo)
+    assert (identity['provider'], identity['reasoning']) == ('kilo', 'raw')
