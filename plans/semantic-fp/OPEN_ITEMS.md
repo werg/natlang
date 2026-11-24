@@ -75,17 +75,22 @@ authoring rule (a prose `Output contract:` paragraph is an error), the migrated 
   file). Owner: same follow-up, with the crisp-checker registry.
 - **Declarations derived from instructions can miss a conditionally written input file** that its step names only as
   read (`ledger.csv` in `verified-folder-edits` w437-p4a: the reference installs nothing, so the declaration reveals
-  it). verify.mjs dropped that row through its keyword baseline; rows without a baseline are not caught. Owner: next
-  authoring round writes `writes:` by hand (AUTHOR_BRIEF_ROUND23.md); the migrated rows stay until then.
+  it). verify.mjs dropped that row through its keyword baseline; rows without a baseline are not caught. The migrated
+  rows stay; no authoring round follows (task authoring removed 2026-11-24, DECISIONS "No invented task worlds"). Owner:
+  typed-contracts follow-up.
 - **32 rows that already failed qualification in their original form** (17 reference replays: `selected-drafts` w438
   wrong_return, `settings-merges` w432 unanswered child `intentOf`; 15 with negative controls that error on the missing
   Neuralese writer of the replay) were left out of the typed sources with the others. They are in the old datasets and
-  in no current role. Owner: task-author batch that fixes the w432/w438 references.
+  in no current role. No author batch will fix them (task authoring removed 2026-11-24); they stay out.
 
 ## Held and data
 
 - **held-v4:** no `branch_and_select` task; B1's 104 rows keep `invented:` groups; the 100 rubric workflows and 2 reserved apps are outside the set. Owner: next held-v4 extension; due before the first held-v4 cadence measurement after round 3.
-- **Flagship held splits** are 2–5 fixtures per app, too few for p < 0.05. Owner: task-author tool batches, next semantic-FP batch.
+- **Flagship held splits** are 2–5 fixtures per app, too few for p < 0.05. Task-author batches no longer exist (DECISIONS 2026-11-24 "No invented task worlds"); larger splits need dataset-derived fixtures. Owner: unassigned.
+- **Procedural rows already in `grpo-pool` (2026-11-24, DECISIONS "No invented task worlds").** Generation is removed; the
+  admitted rows still train. Whether to exclude authored-world rows (4,984 of 37,826 pool rows) and template/procedural
+  rows is the owner's call; the shares are in that DECISIONS entry. The nb24 batch (w460-w480, qualified and partly
+  blind-solved, never admitted) stays unadmitted. Owner: owner decision, relayed by the coordinator.
 - **`compatible.nl`** judges additive edits incompatible. This is a training target through the sfp3 rows, which are in the pool; watch its family in the health report.
 
 ## Held failure taxonomy (2026-11-23, `plans/neuralese/HELD_FAILURES_20261123.md`)
@@ -145,14 +150,10 @@ Brief E covered only the Neuralese-free capabilities. Open:
   `auth_depot_folder_dispatch` … `auth_multi_round_state_games`).
 - **Declare the hfb folder tasks' files in `writes:`** (A, and the folder programs of B, D and E). They are verifier
   tasks, which rule 6 exempts, and their file formats sit in the numbered steps. Do it once collection pins read
-  `writes:`; the migration must declare conditional files too. Owner: typed-contract agent or the next author batch.
-- **Brief E with Neuralese:** the capabilities above with Neuralese variants, now that read-back is fixed (d16437be8).
-  Owner: next task-author batch.
-- **`register_authored_held.py` and `build_supply.py` write under the running checkout's `runs/`.** From a worktree, the
-  packets land in the worktree, and custody loses them when it is removed. Resolve `runs` to the canonical data root, or
-  refuse a worktree. Owner: next task-author batch.
-- **The static verifier controls lack `read_code`**, which the collector replay has. Keyword baselines that explore code
-  must inline the sources. Owner: next task-author batch.
+  `writes:`; the migration must declare conditional files too. Owner: typed-contract agent.
+- **Brief E with Neuralese:** dropped (2026-11-24): task authoring was removed (DECISIONS "No invented task worlds").
+- **`register_authored_held.py`, `build_supply.py` and the static verifier controls:** closed 2026-11-24, the scripts were
+  removed with task authoring (DECISIONS "No invented task worlds").
 
 ## Operations
 

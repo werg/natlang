@@ -11823,3 +11823,67 @@ existing related regressions passed, and all eight final scope/value tests
 passed on Node+Workerd (including actual allowed method calls and lexical
 shadowing). No model/inference or native full-scope claim. This correctness fix
 enters the next source pin; collection does not wait on a full reference sweep.
+
+## 2026-11-24 20:45 No invented task worlds: procedural task generation removed (owner)
+
+Owner, verbatim: "I want to rip out task worlds from our generation process. That's not helpful. No procedural
+generation."
+
+**Removed (git history is the archive).** The subagent task-authoring pipeline, whose authors invented worlds ("mode
+B", or dataset-inspired worlds in "mode A") and wrote 10-40 seeded rows per family, often from per-batch `gen_*.py`
+generators: the kits `RL_TASK_AUTHORING_KIT.md` and `_V2.md`; `scripts/rl_tasks/` `authoring_rotation.py`,
+`authored_novelty.py`, `authored_checks.py`, `qualify_authored.py`, `blind_solve.py`, `admit_authored.py`,
+`authored_child_notes.py`, `authored_family_report.py`, `register_authored_held.py`, `build_supply.py`, `sfp_batch.py`,
+`verifier_controls.mjs` and the converter `sources/authored.py`; the natlang app `applications/task-author` (it drafted
+a task world per seed) and its tier0 test. The reasoning-gym generators (`sources/puzzles.py` `reasoning_gym`,
+`rg_multi_solution`; SOURCES `reasoning-gym`, `rg-multi-solution`). `collection_health.py` keeps its own copy of the
+semantic-FP construct set it imported from the converter. The surviving tests of shared code (the migration helper,
+verify.mjs's final-return finder) moved to `test_migrate_output_contracts.py` and `test_rl_task_verifier_cache.py`.
+AGENTS.md "Task supply" no longer directs authoring. On `/mnt/external/natlang-rl-authoring` the round briefs,
+`nb24/` (runner scripts, the w460-w480 batch: qualified, never admitted), the rotation state, `novelty-index/` and the
+kit examples moved to `retired-20261124-no-task-worlds/`; `admitted/`, `batches/` and the `round*/` folders stay, as
+registry entries cite them. No timer, cron or unit authors tasks; the user stopped `nb24-qrunner2-{1,2,3}` at 19:55.
+
+**Kept.** Dataset sources that take items one by one with exact checkers (`sources/*` other than the removed
+generators), the pool tools (`measure_repetition`, `simulate_selection`, `assemble_selection_pool`), verify.mjs and the
+trusted verifiers that score admitted rows, `migrate_output_contracts.py` (typed contracts for admitted rows), every
+admitted row in `grpo-pool`, and all held data.
+
+**Not removed: the owner decides.** Two kinds of generation are still in the code, and rows from all of them still train:
+- The inline curriculum generator (`ts-host/scripts/inline-curriculum`, `natlang.inline_curriculum_generator/1`):
+  seeded scripted worlds (`inline-curriculum:s72:workbench_applicants`, `claims_desk`, `edit_stream`, ...). The SFT
+  builders and the October teacher seed work are entangled with it, and nothing new is generated from it today.
+- Template programs that our scripts wrap around real items (composed, bgkit readers, decisions, codebase-py and
+  natlang questions, codebase-ops and natlang-codebase planted faults, git history, design-brief gates). Every gold
+  comes from the item, but programs come from a fixed set of templates. `neuralese_variants.py` also rewrites the
+  return types of existing tasks; aei1 collection uses it.
+
+**How much of today's data is procedural.** Classes: A = authored worlds; B = procedural or scripted generators
+(reasoning-gym, inline curriculum); C = template programs over real items; D = one dataset item with one wrapper
+program.
+- **grpo-pool** (22 sources, 37,523 unique train rows):
+
+  | Class | Rows | Share | Detail |
+  |---|---:|---:|---|
+  | A | 4,984 | 13.3% | 214 families; Haiku 4,466, Opus (hfb/sfp) 518 |
+  | B | 3,415 | 9.1% | reasoning-gym 1,961 (5.2%); inline curriculum 1,454 (3.9%) |
+  | C | 23,990 | 63.9% | bgkit 7,263; composed 6,493; codebase-py 2,822; natlang-codebase 2,683; decisions 2,524; codebase-natlang 988; git-history 736; codebase-ops 301; design-brief-gates 180 |
+  | D | 5,134 | 13.7% | |
+
+  GRPO selection drops the `ext_codebase-*` families; EI collection draws from the role.
+- **aei1 round mixes** (weighted target tokens of every chain in `r000N/mix/chains.pkl`):
+
+  | Round | A | B | C | D |
+  |---|---:|---:|---:|---:|
+  | r0001 | 23.4% | 26.1% | 38.1% | 8.8% |
+  | r0007 | 30.6% | 28.6% | 28.1% | 9.5% |
+
+  Most of B's 28.6% in r0007 is seeded inline-curriculum worlds in the filled October teacher episodes (15.5%). The
+  rest: inline-curriculum pool tasks 7.5% and reasoning-gym 5.6%.
+  - A grows each round because the policy's own successes (rl-own: 16.9 of the 35.7 points) and teacher episodes
+    concentrate on authored tasks.
+  - The remainder (about 1%) is unmapped ids and live goals.
+  - Script: `/tmp/claude-1000/-home-werg-natlang/4c9bd489-afe4-4847-b74c-378caa27432c/scratchpad/noproc/mixshare.py`.
+
+Whether to stop training on A and B rows (a pool-errata or role change, plus a mix filter) is put to the owner. aei1
+keeps running as it is.

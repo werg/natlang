@@ -13,8 +13,8 @@ REPO = Path(__file__).resolve().parents[1]
 # Scripts that write training data: each records its output in the registry (data_registry.record_dataset /
 # declare_dataset / record_files). A new producer joins this list.
 PRODUCERS = ['scripts/neuralese_data/grpo.py', 'scripts/neuralese_data/sft_sources.py', 'scripts/neuralese_data/teacher_gen.py',
-             'scripts/neuralese_data/operator_rows.py', 'scripts/rl_tasks/admit_authored.py', 'scripts/rl_tasks/assemble.py',
-             'scripts/rl_tasks/assemble_selection_pool.py', 'scripts/rl_tasks/build_supply.py',
+             'scripts/neuralese_data/operator_rows.py', 'scripts/rl_tasks/assemble.py',
+             'scripts/rl_tasks/assemble_selection_pool.py',
              'scripts/rl_tasks/neuralese_variants.py', 'training/neuralese/natlang_neuralese/rl/memetic_tasks.py',
              'training/neuralese/natlang_neuralese/rl/hindsight.py', 'training/neuralese/natlang_neuralese/rl/held_eval.py',
              'scripts/neuralese_data/lower_rollout_turns.py']

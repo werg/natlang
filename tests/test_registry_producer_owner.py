@@ -16,7 +16,6 @@ def script(relative):
 
 
 @pytest.mark.parametrize('relative,args', [
-    ('scripts/rl_tasks/register_authored_held.py', ('missing', 'stamp', False)),
     ('scripts/rl_tasks/register_source_held.py', ('missing', 'prefix', 'stamp', 'label', False)),
 ])
 def test_explicit_held_packet_pin_refused_before_any_output(relative, args, tmp_path, monkeypatch):
