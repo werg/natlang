@@ -10452,3 +10452,73 @@ the FP32 rows.
   to fail the same way. A driver on a pin with this fix then retries through `ensure_remote_checkpoint`: the merge with
   the checkout mismatches, so it ships the checkpoint (Drive) and rebinds. Rounds after that carry `code` and merge
   on the VM.
+
+## 2026-11-24 05:30 Split tokenization and sampled reasoning ids (B10 agent)
+
+Context: B10 (structured `readout: decision`, records and unions on four engines; 1160a4a36, natlang-b12088) left two
+scoring defects open, both in what every engine and the learner score:
+- Options scored only under the canonical BPE (`"sp`,`am"`), though generation also writes `"`,`spam`,`"` (8b34839ab).
+- Reasoned readouts scored after the reasoning text re-encoded, which left the sampled ids mid-reasoning in 4 of 16
+  aei1 r0000 readouts (DECISIONS 2026-11-23 16:40).
+
+Decision (default on, one protocol change, one fork release):
+- Score item `split_tokenization` (the client sends it for >= 2 options): an option's log-probability is the logsumexp
+  of its canonical tokens and its split form. The split form tokenizes the options' longest common character prefix
+  and suffix apart, both cut back to word boundaries (a word byte is ASCII `[A-Za-z0-9_]` or >= 0x80, so spam/ham keep
+  `am"` inside the word). A split equal to the canonical form counts once.
+  - Results echo `tokenizations` per option; captures record `continuation_alternatives`.
+  - Opt-out: `NATLANG_DECISION_TOKENIZATIONS=canonical`.
+- Score item `reasoning_ids` (from the reasoning generation's RL capture, `x_natlang_rl_capture.samples[].token_id`):
+  the sampled ids replace the re-encoded reasoning, kept up to the first token the template writes after it (LFM3
+  `</think>`).
+  - Results echo `reasoning_ids: true`; captures record `reasoning_ids_kept`.
+  - Opt-out: `NATLANG_DECISION_REASONING_IDS=rendered`.
+- Engines:
+  - llama-server and wllama: fork b4a202717, e528eb5a3 and 89026ef24 (reasoning_ids), release dispatched as run
+    45324416069.
+  - Python native and SGLang: `serve/native_learning.decision_items`, `_score_item` and `SCORE_ITEM_FIELDS`.
+- Learner: scores the same sequences, with option score = logsumexp over the option's sequences.
+  - grpo per-call `decision_tensors`.
+  - exp0_sft decision objective (`common/decision_objective.option_sequence_scores`).
+  - Graph decision supervision.
+  - Whole-graph replay: tune RL, JOLT twins (`rl/native_replay` alternative branch nodes, `rl/decision_policy`
+    `remap_decision`). A split-tokenized readout used to be dropped to context there.
+
+Measured:
+- Fork split test ("spam" vs "billing"): spam rises from -3.98 (canonical alone) to -1.03 summed; billing and ham are
+  not double counted.
+- Fork reasoning_ids test (5ff07638 Q8_0, local build of 89026ef24):
+  - Canonical ids reproduce the text scores to the last digit (-14.978, -23.123).
+  - A different split of the same text (`Hel`+`lo`) moves them to -15.21, -23.93.
+  - Ids past `</think>` are cut.
+  - Ids without reasoning are a per-item error.
+- Record-decision parity at b12088 (66422fcf, 20 decisions / 44 scored steps, Python native as the reference):
+
+  | Engine | Steps agreeing | Decisions agreeing | Max gap (nats) |
+  |---|---|---|---|
+  | SGLang (Colab A100, FP8 KV) | 41/44 | 17/20 | 3.9 field, 0.75 joint |
+  | llama-server | 42/44 | 18/20 | 1.06 |
+  | page (wllama) | 41/44 | 17/20 | 1.40 |
+
+  - Token counts are identical on all 44 steps (llama-server, page).
+  - Every disagreement is a near-tie (native margin <= 0.34), except SGLang's classifyPullRequest (margin 0.91, gap
+    0.67, FP8 KV).
+  - The helper's Python-vs-SGLang run: 19/20 decisions, max gap 3.74.
+- The tuple agent's b12081 "item 3" mismatch is explained:
+  - b12081 scored 14 tokens per option where Python scores 9. The shared reply opening and the closed render's
+    trailing `\n` were scored per option before 550cb0313 and af0f93100, about -30 nats each.
+  - That changed the option gaps (Python 1.04/1.92/3.05, b12081 1.34/1.34/2.59) and left options 1 and 2 tied to
+    0.01 nats, so the order was decided by a tie.
+  - At b12088 the server, the page and Python rank item 3 identically (9 tokens each, gap 0.30, margin 1.05), and item
+    4 is scored open with its echo.
+
+Not checked:
+- Split and reasoning_ids parity across engines on real readouts; only unit tests and the fork's local tests have run.
+- vLLM prompt_logprobs endpoints (no open, split or reasoning_ids).
+- reasoning_ids on a template with nothing between the reasoning and the reply: the fork cuts the ids at the first
+  token of that text tokenized alone (none: keeps all ids), Python at the first rendered id after the reasoning (the
+  reply's first token). They agree on LFM3, where `</think>` follows the reasoning.
+- Python split alternatives are derived only when the canonical content tokens equal the content tokenized alone and a
+  closed reply ends in `<|im_end|>`; otherwise the option gets no alternative (e.g. the tiny test templates).
+- A live Colab natlang run end to end. The Colab actor still runs code from before open_reply; it serves the 18.5-nat
+  shared-`</think>` scores until it moves to current main.

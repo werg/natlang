@@ -3389,3 +3389,16 @@ No opt-out: both change only the text of an error that already occurred, never w
   scoring series: re-measure the base on it). Opt-out: `NATLANG_BUDGET_EACH_DECISION_REQUEST=1`. Left as is: the
   runtime's own `limits.maxModelRequests` (`native/model-budget.ts`), a user-declared limit on actual requests.
   Test: `test/teacher-collector.test.mjs`.
+- **A decision option scores as every tokenization that writes it; a reasoned readout scores after the sampled
+  reasoning ids** (DECISIONS 2026-11-24 "Split tokenization and sampled reasoning ids"). Before, every engine scored
+  each option under its canonical BPE only (`"sp`,`am"`), though the model writes `"`,`spam`,`"` when it generates, and
+  scored a reasoned readout's options after the reasoning *text* re-encoded, which left the sampled ids mid-reasoning
+  in 4 of 16 aei1 r0000 readouts. Now each score item carries `split_tokenization` (the client's default for two or
+  more options): an option's log-probability is the logsumexp over its canonical tokens and its split form (the
+  options' common prefix and suffix tokenized apart, cut at word boundaries; a split equal to the canonical form counts
+  once), and `reasoning_ids` (the reasoning generation's sampled ids from its RL capture) replace the re-encoded
+  reasoning up to the first `</think>`. The learners score the same sequences (grpo per-call, exp0_sft decision
+  objective, graph decision supervision, whole-graph replay for tune RL and JOLT twins). Changes served decision
+  probabilities and their training targets. Opt-outs: `NATLANG_DECISION_TOKENIZATIONS=canonical`,
+  `NATLANG_DECISION_REASONING_IDS=rendered` (SFT rows). Tests: `tests/neuralese/test_decision_split_tokenization.py`,
+  `ts-host/test/decision-records.test.mjs`.
