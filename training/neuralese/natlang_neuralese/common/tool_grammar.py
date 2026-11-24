@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from functools import lru_cache
 
 import numpy as np
@@ -298,6 +299,12 @@ def replay_masks(law, tokens, info, *, prefix=()):
     return (table if table else np.zeros((0, width), np.int32)), index
 
 
+# One computation per key: lru_cache alone lets every concurrent first caller compute it. The SGLang front's request
+# threads all asked at once after a start (128 collection streams, each loading the tokenizer for ~3 s of GIL-held
+# Python: minutes before the first request reached SGLang; bench of pin a034dbf9c, 2026-11-24).
+INFO_LOCK = threading.RLock()
+
+
 @lru_cache(maxsize=8)
 def _info_of(path: str, vocab_size: int, stops: tuple):
     from transformers import AutoTokenizer
@@ -313,8 +320,9 @@ def info_from_export(export_dir):
     config = json.loads((export_dir / 'config.json').read_text())
     generation = export_dir / 'generation_config.json'
     stops = eos_ids(config, json.loads(generation.read_text()) if generation.exists() else None)
-    info = _info_of(str(export_dir), int(config['vocab_size']), tuple(sorted(stops)))
-    return info, tokenizer_info_sha256(info)
+    with INFO_LOCK:
+        info = _info_of(str(export_dir), int(config['vocab_size']), tuple(sorted(stops)))
+        return info, tokenizer_info_sha256(info)
 
 
 @lru_cache(maxsize=4)
@@ -335,7 +343,8 @@ def info_from_base(base):
     """The learner's (TokenizerInfo, sha256): the HF base snapshot's tokenizer with the four Neuralese role markers
     provisioned, which is the served export's tokenizer (`export.native_hf` saves it so), its config vocabulary width and
     EOS ids. A law recorded over another tokenizer is refused where it is replayed."""
-    return _base_info(str(base))
+    with INFO_LOCK:
+        return _base_info(str(base))
 
 
 def row_masks(row, info, info_sha256, vocab_size):

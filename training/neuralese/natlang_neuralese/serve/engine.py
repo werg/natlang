@@ -971,10 +971,14 @@ class Engine:
         cached = getattr(self, '_tool_grammar_cache', None)
         if cached is None:
             from ..common import tool_grammar
-            config = getattr(getattr(self.backbone, 'hf', None), 'config', None) or self.backbone.config
-            generation = getattr(getattr(self.backbone, 'hf', None), 'generation_config', None)
-            info = tool_grammar.tokenizer_info(self.tokenizer, config.vocab_size, tool_grammar.eos_ids(config, generation))
-            cached = self._tool_grammar_cache = (info, tool_grammar.tokenizer_info_sha256(info))
+            with tool_grammar.INFO_LOCK:   # once, not once per concurrent first request
+                cached = getattr(self, '_tool_grammar_cache', None)
+                if cached is None:
+                    config = getattr(getattr(self.backbone, 'hf', None), 'config', None) or self.backbone.config
+                    generation = getattr(getattr(self.backbone, 'hf', None), 'generation_config', None)
+                    info = tool_grammar.tokenizer_info(self.tokenizer, config.vocab_size,
+                                                       tool_grammar.eos_ids(config, generation))
+                    cached = self._tool_grammar_cache = (info, tool_grammar.tokenizer_info_sha256(info))
         return cached
 
     def _tool_grammar_law(self, request):

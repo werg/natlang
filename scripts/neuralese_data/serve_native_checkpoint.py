@@ -647,6 +647,8 @@ def launch_sglang(engine, args, checkpoint, release=None):
                        weight_dtype=weight_dtype,
                        max_running=args.sglang_max_running, track_input_end=bool(source.get('track_input_end')),
                        speculative=speculative, tool_grammar=bool(source.get('grammar_prefix')), export_dir=export_dir)
+    if engine.sglang_tool_grammar:
+        engine._tool_grammar_info()   # before serving: the tokenizer identity every chat call's grammar is compiled over
     return process
 
 

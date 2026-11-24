@@ -434,8 +434,11 @@ class SglangEngine(Engine):
         cached = getattr(self, '_tool_grammar_export_cache', None)
         if cached is None or cached[0] != self.sglang_export_dir:
             from ..common import tool_grammar
-            cached = self._tool_grammar_export_cache = (
-                self.sglang_export_dir, tool_grammar.info_from_export(self.sglang_export_dir))
+            with tool_grammar.INFO_LOCK:   # once, not once per concurrent first request
+                cached = getattr(self, '_tool_grammar_export_cache', None)
+                if cached is None or cached[0] != self.sglang_export_dir:
+                    cached = self._tool_grammar_export_cache = (
+                        self.sglang_export_dir, tool_grammar.info_from_export(self.sglang_export_dir))
         return cached[1]
 
     def rebind_in_place(self, policy_id, weights_sha256=None, version=None, *, export_dir=None, weights_path=None,
