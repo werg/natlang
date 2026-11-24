@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -151,6 +152,12 @@ def main():
     status = read(root / 'status.json')['cases']
     assert not any(row['status'] == 'pending' and not cases[name].get('requiresAndroidEmulator') for name, row in status.items())
     assert sha(apk) == proof['fixtureApkSha256']
+    # A teacher may rebuild the product APK in its normal output directory.
+    # Retain these exact prerequisite bytes independently of that mutable path.
+    fixture_apk = state / ('fixture-' + proof['fixtureApkSha256'] + '.apk')
+    if not fixture_apk.exists():
+        shutil.copyfile(apk, fixture_apk)
+    assert sha(fixture_apk) == proof['fixtureApkSha256']
     fixture_module.prepare()  # New config only, no ancestor userdata.
     stamp = str(time.time_ns())
     emulator_unit = f'vibe-v21-native-android-owned-teacher-tail-{stamp}.service'
@@ -195,8 +202,8 @@ def main():
                     continue
                 device._absent()
                 if item['prestate'] != 'absent':
-                    assert sha(apk) == proof['fixtureApkSha256']
-                    assert 'Success' in device.adb('install', str(apk)).stdout
+                    assert sha(fixture_apk) == proof['fixtureApkSha256']
+                    assert 'Success' in device.adb('install', str(fixture_apk)).stdout
                     assert 'Success' in device.adb('shell', 'pm', 'clear', fixture_module.PACKAGE).stdout
                     device.adb('shell', 'am', 'force-stop', fixture_module.PACKAGE)
                     assert item['prestate'] == 'stopped', 'V21 training has no running-app Android fixture'
@@ -242,6 +249,8 @@ def main():
     finally:
         if device is not None:
             device.close()
+            assert sha(fixture_apk) == proof['fixtureApkSha256']
+            fixture_apk.unlink()
         else:
             # Exact unit was created here; joining it is safe even if boot failed.
             subprocess.run(['systemctl', '--user', 'stop', emulator_unit, emulator_unit.removesuffix('.service')+'-waiter.service'], check=False)
