@@ -10258,3 +10258,22 @@ than /metrics broken pipes was logged; the 23:23 burst to 116 running preceded i
 statically (no request timeouts: `headersTimeout`/`bodyTimeout` 0). The remaining per-token Python cost of the front
 (`_sglang_token`, stream decode/emit) at 128 streams is a capacity ceiling, not addressed here; moving the per-token work
 off the GIL (or one front process per ~64 streams) is the next lever if the front stays the bottleneck.
+
+## 2026-11-24: keep declaration documents out of runtime products
+
+Merged Core87e5848c3/fedc95043 into main. Runtime module factories now retain executable
+outputs/source/specifiers rather than the whole BuildResult. The public compiler keeps declaration
+output by default; internal workspace loaders request `declarations:false`. Type checking still
+uses its generated virtual declaration inputs. This removes unused declaration documents from
+runtime transport and caches without sharing mutable module or authority state.
+
+Actual native Base userentry transport produced18,739,424bytes versus64,817,420 previously;
+this is a byte-size comparison, not a paired CPU or resident-memory result. Core24tests,
+declaration-write checks, five Base SDK tests, and all five SDK reproductions passed. Base/System
+successors preserve public declaration access. The installed-workspace optional-feature assembly
+bug is separate and remains under repair; teacher retries are held before model invocation.
+
+Storage actions: removed about10.1GB of redundant diagnostic/runtime copies on DGX and about31GB
+of local npm/pip download caches and obsolete generated projections. Original trajectories, source,
+active dependencies and recovery inputs remain. Lean capture registration/packing is deployed at67b;
+old immutable registered packs were not silently modified.
