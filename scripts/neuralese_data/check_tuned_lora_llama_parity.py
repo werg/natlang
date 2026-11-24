@@ -44,6 +44,11 @@ parser.add_argument('--ngl', default='0', help='llama-server GPU layers (0: CPU)
 parser.add_argument('--threads', default='8')
 parser.add_argument('--top', type=int, default=5, help='top logprobs requested per position')
 parser.add_argument('--skip-llama', action='store_true', help='reuse candidates/llama-*.json')
+parser.add_argument('--parallel', type=int, default=1,
+                    help='N > 1: N server slots (-np N) with every (prompt, adapter off/on) request in flight at once, '
+                         'so adapted and base sequences share batches; candidates/llama-<outtype>-np<N>.json is compared '
+                         'token by token with the serial candidates/llama-<outtype>.json (report-np<N>.json) and the '
+                         'script ends there (the serial run is the one scored against the native engine)')
 parser.add_argument('--page', type=Path, action='append', default=[], help='wllama-lora-smoke.mjs --parity output')
 parser.add_argument('--device', default='cuda')
 parser.add_argument('--native-greedy', action=argparse.BooleanOptionalAction, default=True,
@@ -107,11 +112,11 @@ def logprob_items(reply):
     return rows
 
 
-def llama_candidates(prompts, outtype):
+def llama_candidates(prompts, outtype, parallel=1):
     port = 18977
-    args = [cli.server, '-m', str(out / 'base' / f'model-{outtype}.gguf'), '--port', str(port), '-c', str(max(
-        len(p['ids']) for p in prompts) + cli.tokens + 64), '-ngl', cli.ngl, '-t', cli.threads, '--no-warmup', '-np', '1',
-            '--lora-init-without-apply', '--lora-per-sequence', '--lora', str(out / 'lora.gguf')]
+    args = [cli.server, '-m', str(out / 'base' / f'model-{outtype}.gguf'), '--port', str(port), '-c', str(parallel * (max(
+        len(p['ids']) for p in prompts) + cli.tokens + 64)), '-ngl', cli.ngl, '-t', cli.threads, '--no-warmup', '-np',
+            str(parallel), '--lora-init-without-apply', '--lora-per-sequence', '--lora', str(out / 'lora.gguf')]
     log = open(out / f'llama-{outtype}.log', 'w')
     process = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
     try:
@@ -123,20 +128,22 @@ def llama_candidates(prompts, outtype):
                 if process.poll() is not None:
                     raise SystemExit(f'llama-server exited {process.returncode}; see {log.name}')
                 time.sleep(0.5)
-        runs = []
-        for prompt in prompts:
-            for scale in (0., 1.):
+        def one(job):
+                prompt, scale = job
                 body = json.dumps({'prompt': prompt['ids'], 'max_tokens': cli.tokens, 'temperature': 0, 'logprobs': cli.top,
                                    'cache_prompt': False, 'lora': [{'id': 0, 'scale': scale}]}).encode()
                 started = time.time()
                 reply = json.load(urllib.request.urlopen(urllib.request.Request(
                     f'http://127.0.0.1:{port}/v1/completions', body, {'content-type': 'application/json'}), timeout=1800))
                 items = logprob_items(reply)
-                runs.append({'prompt': prompt['index'], 'adapted': bool(scale), 'tokens': [t for t, _, _ in items],
-                             'logprobs': [lp for _, lp, _ in items], 'top': [{str(k): v for k, v in top.items()} for *_, top in items],
-                             'seconds': time.time() - started})
                 print(json.dumps({'engine': f'llama-{outtype}', 'prompt': prompt['index'], 'adapted': bool(scale),
                                   'tokens': len(items), 'seconds': round(time.time() - started, 1)}), flush=True)
+                return {'prompt': prompt['index'], 'adapted': bool(scale), 'tokens': [t for t, _, _ in items],
+                        'logprobs': [lp for _, lp, _ in items], 'top': [{str(k): v for k, v in top.items()} for *_, top in items],
+                        'seconds': time.time() - started}
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(parallel) as pool:
+            runs = list(pool.map(one, [(prompt, scale) for prompt in prompts for scale in (0., 1.)]))
         return {'engine': f'llama-server {outtype}', 'server': cli.server, 'base_gguf': f'model-{outtype}.gguf', 'runs': runs}
     finally:
         process.terminate()
@@ -211,6 +218,31 @@ def text_tokens():
         process.wait(30)
     path.write_text(json.dumps(found))
     return found
+
+if cli.parallel > 1:
+    # Adapted and base sequences in shared batches (`--lora-per-sequence`) against the serial run, which matched the
+    # native engine: the per-sequence adapter must not leak across the slots of one batch.
+    if engine is not None:
+        del engine
+        torch.cuda.empty_cache()
+    for outtype in outtypes:
+        target = out / 'candidates' / f'llama-{outtype}-np{cli.parallel}.json'
+        if not target.exists():
+            target.write_text(json.dumps(llama_candidates(prompts, outtype, cli.parallel)))
+        serial = {(r['prompt'], r['adapted']): r for r in json.loads((out / 'candidates' / f'llama-{outtype}.json').read_text())['runs']}
+        rows = []
+        for run in json.loads(target.read_text())['runs']:
+            ref = serial[(run['prompt'], run['adapted'])]
+            same = next((j for j, (a, b) in enumerate(zip(run['tokens'], ref['tokens'])) if a != b), min(len(run['tokens']), len(ref['tokens'])))
+            gaps = [abs(a - b) for a, b in zip(run['logprobs'][:same], ref['logprobs'][:same])]
+            rows.append({'prompt': run['prompt'], 'adapted': run['adapted'], 'agree': same, 'tokens': len(ref['tokens']),
+                         'max_abs_logprob': max(gaps, default=0.)})
+        report = {'outtype': outtype, 'parallel': cli.parallel, 'runs': rows,
+                  'agreement': sum(r['agree'] for r in rows) / max(sum(r['tokens'] for r in rows), 1),
+                  'max_abs_logprob': max((r['max_abs_logprob'] for r in rows), default=0.)}
+        (out / f'report-np{cli.parallel}-{outtype}.json').write_text(json.dumps(report, indent=1))
+        print(json.dumps({k: v for k, v in report.items() if k != 'runs'}), flush=True)
+    raise SystemExit(0)
 
 if not cli.skip_llama:
     if engine is not None:  # free the model while llama-server runs

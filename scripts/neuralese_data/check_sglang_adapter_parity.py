@@ -42,6 +42,13 @@ cli.add_argument('--tokens', type=int, default=48)
 cli.add_argument('--adapter-rank', type=int, help="slot rank (default: serve_native_checkpoint.py's, from the release)")
 cli.add_argument('--kv-gb', type=float, default=2.0)
 cli.add_argument('--max-running', type=int, default=8)
+cli.add_argument('--concurrency', type=int, default=8, help='requests in flight at once (the front threads)')
+cli.add_argument('--merged', type=Path,
+                 help='with --phase reference: score the adapted captures against this checkpoint unadapted (the release '
+                      'merged into the weights, `program_tune.py merge`) instead of the native stack; report-merged.json')
+cli.add_argument('--adapted-only', action='store_true', help='no unadapted requests (as an adapter arm serves)')
+cli.add_argument('--server-arg', action='append', default=[],
+                 help="extra serve_native_checkpoint.py argument (repeat; e.g. --server-arg=--sglang-kv-cache-dtype=fp8_e4m3)")
 cli.add_argument('--sglang-python', help="the fork's Python (default: training/neuralese/sglang-fork.json's)")
 cli.add_argument('--phase', choices=('both', 'collect', 'reference'), default='both',
                  help='with --release: collect runs SGLang alone (the front releases its native model once exported, as '
@@ -55,10 +62,12 @@ if opts.phase != 'both' and not opts.release:
 if opts.phase == 'reference':
     saved = json.loads((work / 'captures.json').read_text())
     from natlang_neuralese.tune.build import import_archive
-    front = load_native_engine(str(ck), base=base, device='cuda', dtype=torch.bfloat16, store=TensorStore(work / 'reference-store'))
+    front = load_native_engine(str(opts.merged or ck), base=base, device='cuda', dtype=torch.bfloat16,
+                               store=TensorStore(work / 'reference-store'))
     import_archive(front, [opts.release / 'artifacts'], [])
-    jobs = [(j['index'], j['stack'], j['temperature']) for j in saved['jobs']]
-    captures = [j['capture'] for j in saved['jobs']]
+    kept = [j for j in saved['jobs'] if j['stack'] or not opts.merged]   # merged: the adapted captures only
+    jobs = [(j['index'], j['stack'], j['temperature']) for j in kept]
+    captures = [j['capture'] for j in kept]
 else:
     # collect: the front loads on the CPU only to export (as Pop's actor does) and releases the model
     front = load_native_engine(str(ck), base=base, device='cpu' if opts.phase == 'collect' else 'cuda', dtype=torch.bfloat16,
@@ -69,7 +78,7 @@ if opts.phase != 'reference':
                    '--sglang-max-running', str(opts.max_running), '--sglang-context', '16384', '--sglang-adapter-slots', '2',
                    *(['--adapter-release', str(opts.release)] if opts.release else []),  # sizes the slot rank as served
                    *(['--sglang-python', opts.sglang_python] if opts.sglang_python else []),
-                   *(['--sglang-adapter-rank', str(opts.adapter_rank)] if opts.adapter_rank else [])]
+                   *(['--sglang-adapter-rank', str(opts.adapter_rank)] if opts.adapter_rank else []), *opts.server_arg]
     args = build_parser().parse_args(server_argv)
     # collect: the front releases its native model once exported (serve_native_checkpoint.py's serving); a turn SGLang
     # cannot serve reloads it
@@ -103,7 +112,8 @@ if opts.phase != 'reference':
         prompts = [messages_of(text) for text in (
             'Explain in two sentences why greenhouses need ventilation.', 'List three prime numbers and add them.',
             'Write a TypeScript function that returns the largest element of an array.', 'What does a conv layer do?')]
-    jobs = [(i, s, t) for i in range(len(prompts)) for s in (*stacks, None) for t in (1.0, 0.0)]
+    jobs = [(i, s, t) for i in range(len(prompts)) for s in (*stacks, *(() if opts.adapted_only else (None,)))
+            for t in (1.0, 0.0)]
 
 
     def run(job):
@@ -114,7 +124,7 @@ if opts.phase != 'reference':
         return front.generate(request)['x_natlang_rl_capture']
 
 
-    with ThreadPoolExecutor(8) as pool:
+    with ThreadPoolExecutor(opts.concurrency) as pool:
         captures = list(pool.map(run, jobs))
     if opts.phase == 'collect':
         (work / 'captures.json').write_text(json.dumps({
@@ -129,6 +139,8 @@ if opts.phase != 'reference':
 
 
 def full(ids, stack, first=1):
+    if opts.merged:
+        stack = None   # the merged weights carry the release
     """log-softmax rows predicting ids[first:] and the token after ids, under the stack (the native engine's exact
     application); only those rows go through the head (a long prompt's full logits are GBs at LFM3's vocabulary)."""
     with torch.no_grad():
@@ -191,7 +203,7 @@ report['metrics'] = {k: v for k, v in metrics.items() if 'sglang' in k or 'fallb
 report['failures'] = ([] if report['adapted']['mean_abs_logprob'] <= 1.5 * report['unadapted']['mean_abs_logprob'] + 0.005 else ['adapted'])
 report['failures'] += [] if report['control']['mean_abs_logprob'] > 4 * report['adapted']['mean_abs_logprob'] else ['control_not_separated']
 report['failures'] += [] if metrics.get('natlang_native_fallback_requests_total', 0) == 0 else ['fallbacks']
-(work / 'report.json').write_text(json.dumps(report, indent=1))
+(work / ('report-merged.json' if opts.merged else 'report.json')).write_text(json.dumps(report, indent=1))
 print(json.dumps(report, indent=1), flush=True)
 if opts.phase == 'both':
     front.stop()
