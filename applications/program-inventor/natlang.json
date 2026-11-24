@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/program-inventor",
+  "version": "0.1.0",
+  "description": "Invent completely new natlang programs for training: an atlas of every existing idea, a new idea judged new by another model family, a program with literal instances and an exact checker built by a frontier coding agent, crisp qualification (reference replay, wrong answers, judgment ablations, keyword baselines) and a live teacher run.",
+  "include": [
+    "BUILD_BRIEF.md",
+    "DECOMPOSITION.md",
+    "adjudicate.nl",
+    "invent.ts",
+    "inventIdea.nl",
+    "isNew.nl",
+    "main.ts",
+    "meetsBar.nl",
+    "package.json",
+    "requirements.json",
+    "types.ts"
+  ],
+  "targets": {
+    "program-inventor": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "Run one invention round from a CONFIG.json: { out, count, builder, builderModel, teacher }.",
+      "arguments": [
+        {
+          "name": "config",
+          "type": "string",
+          "path": "file",
+          "description": "Path to the round's CONFIG.json."
+        }
+      ]
+    }
+  }
+}
