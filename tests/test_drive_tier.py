@@ -166,3 +166,20 @@ def test_bgkit_data_released_except_live_reader_trees(tmp_path, monkeypatch):
     found = [str(p) for p, _ in m.candidates(['bgkit-data', 'bgkit-checkpoints'], min_mb=0, min_age_days=-1,
                                               exclude=[], links=set(), held=set())]
     assert sorted(found) == sorted([str(repo), str(traj)]) and str(news) not in found and str(ckpt) not in found
+
+
+def test_no_file_starts_that_cannot_finish_before_the_hard_stop(tmp_path, monkeypatch):
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    monkeypatch.setattr(m, 'MANIFEST', tmp_path / 'state' / 'manifest.jsonl')
+    monkeypatch.setattr(m, 'registered', lambda path: False)
+    monkeypatch.setattr(m, 'held_paths', lambda: set())
+    monkeypatch.setattr(m, 'mirror_manifest', lambda drive: None)
+    monkeypatch.setattr(m, 'EXPECT_RATE', 1000)  # bytes/s: 60 s of hard window fits 60,000 bytes
+    big = old_file(hdd / 'natlang-grpo-v1' / 'a' / 'big.bin', b'b' * 120_000)
+    small = old_file(hdd / 'natlang-grpo-v1' / 'b' / 'small.bin', b's' * 4096)
+    args = SimpleNamespace(apply=True, root=['natlang-grpo-v1'], budget_gb=1, max_minutes=0.5, hard_minutes=1,
+                           rate_mb=0, min_mb=0, min_age_days=-1, links=[])
+    assert m.archive(args, FakeDrive()) == 0
+    assert big.exists() and not small.exists()

@@ -8,7 +8,8 @@ Nice=19
 IOSchedulingClass=idle
 # A pass still in flight skips this start; each pass is bounded (timeout) and moves at most --budget-gb at the
 # --rate-mb cap (5 MiB/s, about the whole 5.5 MB/s uplink: about 15 GB per 50 min), pausing while an rsync/scp to a
-# Colab host shares the uplink. dgx-moved-ei and dgx-moved-2026112* (the expert-iteration round inflow) drain first.
+# Colab host shares the uplink. Not preemptible: it holds under 1 GB, and each ledger preemption threw away a
+# multi-GB upload in flight (24 in 17 h on 2026-11-23/24). dgx-moved-ei and dgx-moved-2026112* (the expert-iteration round inflow) drain first.
 ExecCondition=/bin/sh -c '! systemctl --user -q is-active natlang-drive-tier-run.service'
-ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-drive-tier-run --budget-gb 1 --priority low --class service --resumable --wait 1500 -- /usr/bin/timeout -k 60 3300 /usr/bin/python3 -I /home/werg/natlang/scripts/drive_tier.py archive --apply --budget-gb 15 --max-minutes 50 --rate-mb 5
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-drive-tier-run --budget-gb 1 --priority medium --class service --no-resumable --wait 1500 -- /usr/bin/timeout -k 60 3300 /usr/bin/python3 -I /home/werg/natlang/scripts/drive_tier.py archive --apply --budget-gb 15 --max-minutes 50 --hard-minutes 54 --rate-mb 5
 TimeoutStartSec=1h

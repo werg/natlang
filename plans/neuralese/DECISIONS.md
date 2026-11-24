@@ -11180,3 +11180,12 @@ Four defects seen between 09:50 and 10:35:
 
    **The memory guard (`natlang-memory-guard`) runs from `/home/werg/natlang` and picks this up only after a pull and
    a restart.**
+- **Drive tier lost most of its uplink to preemption (2026-11-24 11:20).** Over 3 h at the 5 MiB/s setting, Drive gained
+  only 5.8 GB, although uploads in flight ran at 5.3 MiB/s.
+  - The cause: the ledger preempted the low-priority resumable unit 24 times in 17 h, for medium jobs, while it held
+    0.0-0.4 GB. Each preemption discarded a multi-GB upload in flight.
+  - Second cause: the pass deadline gated only the start of a file, so a 4 GB upload begun late was killed by the
+    unit timeout.
+  - Fix: the unit now runs at medium priority and is not preemptible (1 GB budget). A file starts only if it can
+    finish at 3 MiB/s before `--hard-minutes` (54, under the 55-minute timeout); otherwise smaller files fill the
+    pass. Test added.

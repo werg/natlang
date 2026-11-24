@@ -321,6 +321,7 @@ DEFAULT_ROOTS = (
 # after this many days on the HDD: an aei driver adds about 20 GB a round, faster than the default age would drain.
 LINK_TOLERANT = {'dgx-moved-ei': 0.5, 'dgx-moved-2026112*': 0.5}
 # Where the round inflow lands: drained before the older run archives (top-level names, fnmatch patterns).
+EXPECT_RATE = 3 * 2**20  # bytes/s a pass plans with (the shared uplink measured 3.8-5.5 MB/s)
 PRIORITY_ROOTS = ('dgx-moved-ei', 'dgx-moved-2026112*')
 # Other projects' data the owner released to Drive (2026-11-24: bgkit-data), drained after the round inflow and
 # before the older run archives.
@@ -468,12 +469,19 @@ def archive(args, drive=None) -> int:
     links, held = set(symlink_targets() if args.links is None else args.links), held_paths()
     rate = args.rate_mb * 2**20 if args.rate_mb else None
     budget, moved, n, skipped_registry = args.budget_gb * GIB, 0, 0, 0
-    deadline = time.time() + args.max_minutes * 60
+    began = time.time()
+    deadline = began + args.max_minutes * 60
+    # The unit's timeout kills a pass at the hard stop; a file starts only when it can finish by then at a
+    # conservative rate, else smaller ones fill the pass (a killed upload is wasted uplink).
+    hard = began + (getattr(args, 'hard_minutes', None) or args.max_minutes + 4) * 60
     latest = manifest_latest()
     for path, st in candidates(args.root or default_roots(), min_mb=args.min_mb, min_age_days=args.min_age_days,
                                exclude=exclude, links=links, held=held):
-        if moved + st.st_size > budget or time.time() > deadline:
+        now = time.time()
+        if now > deadline:
             break
+        if moved + st.st_size > budget or now + st.st_size / EXPECT_RATE > hard:
+            continue
         if registered(path):
             skipped_registry += 1
             continue
@@ -685,6 +693,8 @@ def main(argv=None):
     a.add_argument('--budget-gb', type=float, default=9.0)
     a.add_argument('--max-minutes', type=float, default=50.0)
     a.add_argument('--rate-mb', type=float, default=3.0, help='MiB/s cap (0: none)')
+    a.add_argument('--hard-minutes', type=float, default=None,
+                   help='the unit timeout: no file starts that could not finish by then (default max-minutes + 4)')
     a.add_argument('--min-mb', type=float, default=64.0)
     a.add_argument('--min-age-days', type=float, default=5.0)
     a.set_defaults(links=None)
