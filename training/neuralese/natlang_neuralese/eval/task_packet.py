@@ -250,8 +250,9 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
         return 'model_incomplete'
     if result is None:
         accounting = (finish or {}).get('output_accounting') or {}
-        states = accounting.get('job_states') or []
-        if any(isinstance(state, dict) and state.get('state') == 'transport_failed' for state in states):
+        # A transport-failed job or one whose provider request exhausted its resends against an unreachable actor
+        # (ECONNREFUSED while it restarts) never reached a model verdict (aei1 round 1: 34 such episodes read 'unresolved').
+        if _host_transport_failure({}, finish):
             return 'infrastructure_error'
         if finish and (finish.get("resource_limit_reason") == "case_wall_budget"
                        or finish.get("status") in {"timeout", "no_observation_limit"}):

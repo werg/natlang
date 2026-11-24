@@ -2028,7 +2028,9 @@ class Cycle:
         d, p = vs_start['primary']['delta'], vs_start['primary']['permutation_p']
         ran_out = vs_start.get('ran_out_rate_delta') or 0
         verdict, adopt = judge(vs_start, self.a.success_pts, self.a.fail_pts)
-        result = {'verdict': verdict, 'adopt': adopt, 'vs_start': {'delta': d, 'p': p, 'ran_out_delta': ran_out},
+        result = {'verdict': verdict, 'adopt': adopt, 'vs_start': {'delta': d, 'p': p, 'ran_out_delta': ran_out,
+                                                                  'pairs_lost_to_infrastructure':
+                                                                      vs_start.get('pairs_lost_to_infrastructure')},
                   'vs_base': vs_base and {'delta': vs_base['primary']['delta'], 'p': vs_base['primary']['permutation_p'],
                                           'series': base_series, 'from': str(base)},
                   'next_start': candidate_ckpt if adopt else str(train_start),
@@ -4098,7 +4100,10 @@ class AsyncRoundDriver:
         verdict, adopt = judge(vs, self.a.success_pts, self.a.fail_pts)
         record = {'verdict': verdict, 'adopt': adopt, 'sha256': cand['sha256'], 'checkpoint': cand['checkpoint'],
                   'reference': ref, 'vs_start': {'delta': vs['primary']['delta'], 'p': vs['primary']['permutation_p'],
-                                                 'ran_out_delta': vs.get('ran_out_rate_delta') or 0}}
+                                                 'ran_out_delta': vs.get('ran_out_rate_delta') or 0,
+                                                 # held_eval re-runs episodes lost to infrastructure and leaves the
+                                                 # rest out of both sides of the pair (aei1 round 1, 2026-11-24)
+                                                 'pairs_lost_to_infrastructure': vs.get('pairs_lost_to_infrastructure')}}
         from natlang_neuralese.common.jsonio import write_json_durable
         write_json_durable(self.root / 'verdicts' / f'{cand["sha256"][:12]}.json', record)
         return record

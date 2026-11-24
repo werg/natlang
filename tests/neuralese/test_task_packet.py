@@ -69,6 +69,20 @@ def test_transport_and_explicit_limits_take_precedence_over_native_termination()
     assert classify_case(None, finish) == "budget_exhaustion"
 
 
+def test_a_provider_request_that_exhausted_its_resends_against_a_dead_actor_is_infrastructure():
+    """aei1 round 1 (2026-11-24): the held actor restarted under 34 episodes; they read 'unresolved'."""
+    finish = {"status": "incomplete", "resource_limit_reason": None, "output_accounting": {"job_states": [
+        {"state": "failed", "terminal_error": {"error": (
+            "ProviderRequestRetriesExhaustedError: provider request retry exhausted after 1 retry attempt: model "
+            "request to http://pop:18531/v1/chat/completions failed: Error: connect ECONNREFUSED pop:18531")}}]}}
+    assert classify_case(None, finish) == "infrastructure_error"
+    budget = copy.deepcopy(finish)
+    budget["resource_limit_reason"] = "model_request_budget"
+    budget["output_accounting"]["job_states"][0]["terminal_error"]["error"] = (
+        "Error: whole-case model request budget exceeded (40)")
+    assert classify_case(None, budget) == "budget_exhaustion"
+
+
 def test_accounted_native_failure_does_not_fabricate_an_exported_result():
     score = score_rows([{"id": "case"}], [], {"key": native_open_finish("stopped")}, {0: "key"})
     assert accounted(score)

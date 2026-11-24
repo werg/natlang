@@ -11284,3 +11284,49 @@ Inventory: `scripts/memory_ledger.py` owns `fixed_claim`, `outstanding`, `adopt`
 Actual native single-context work was stopped at 11:33:53 for a medium-priority Android-tail quick check, not OOM (5 GiB peak below 6 GiB; physical available 11.5 GiB). A 90-second grace was ineffective: shared `memory_ledger.terminate` used `systemctl kill --signal=SIGTERM UNIT`, whose default scope includes every child. The owner lost its CLI/server/workerd before it could export completed in-memory results. Existing 98 completed packets remain intact.
 
 Inventory: `terminate` is the shared guard stop path for pressure and priority preemption (one caller in `guard`); container TERM already targets the container main process. Final `kill`/survivor sweep intentionally target all remaining processes. Other scripts' `Popen.terminate` target their owned child PID, not a systemd cgroup. Make graceful systemd TERM explicitly `--kill-whom=main` (supported on Tick and DGX); preserve final hard cleanup. `guard --terminate-cgroup` opts back into all-process TERM for diagnosis. Native controller checkpoint/export also needs to respect its declared grace. Code checks use low priority so they do not preempt useful work. Serving engines, learner and collectors all consume this shared allocator stop mechanism rather than implementing a second one.
+
+
+## 2026-11-24 Held episodes lost to infrastructure are re-run, or left out of both sides; other unscored ones fail (aei1 round 1 re-judged: success holds)
+
+Observation: aei1's held-v3 measurement of round 1 (policy 8e634a0f, Pop, 2 samples) ran 512, scored 460; its
+`success_rate` 0.637 was 293/460 and the adopted verdict (+4.47 pts, p 0.05) came from `compare`, which left each
+side's unscored episodes out of that side only, so the reference (sft-v9, 512/512 scored) kept its outcomes on the
+52 tasks-samples the candidate lost.
+
+Cause (from the journals, worker error files and Pop's user journal): all 52 are infrastructure losses, in three
+clusters where every in-flight episode failed within seconds. 01:56:37 the Pop actor unit was stopped under a running
+measurement (a second held start re-served it, the double start 1afe6e8aa fixed): 20 episodes, 0 model calls.
+02:52:33 and 05:47:57 the SGLang engine exited with code 70 (`ENGINE_DIED_EXIT`) and `pop_actor_driver` relaunched it
+within a minute: 17 and 15 in-flight episodes failed with `ProviderRequestRetriesExhaustedError ... ECONNREFUSED`.
+Four more were scored as budget failures because ts-host counted the resends of failed requests against the 40-call
+budget (episodes at 37-39 calls; s7-task-092-01, 119-00, 161-01, 211-01). Defects: (1) `collect` skipped every
+finished episode on resume, so lost ones were never re-run; (2) `classify_case` read a result-less episode whose
+provider request exhausted its resends as `unresolved`, not `infrastructure_error`; (3) `compare`/`paired`/
+`task_counts`, `result.json`'s `success_rate` and the dashboard dropped all unscored episodes per side; (4) the
+collector's resends consumed model-call budget.
+
+Mechanism inventory: episode outcome (`eval/task_packet.classify_case`, used by training rewards and held alike);
+request budget (`ts-host/src/teacher/collector.ts`, the one collector behind every engine); held measurement
+(`rl/held_eval.py` collect/finalize/aggregate/merge, used by `grpo.py` held, `expert_iteration` DGX and Pop held,
+`pop-held.sh`); verdict (`held_eval.compare`, `expert_iteration.judge_measurement`/`verdict_stage`); views
+(`ops_dashboard/ei_export.held_record`/`paired`, `views.mjs`). Left out: training pass rates for selection
+(`expert_iteration.group_outcomes`, `grpo.py` 745/1024) exclude every unscored episode; they are frontier weights,
+not verdicts, and their rows carry no loss classification (the classifier fix applies to them).
+
+Changes (default on, opt-outs named): `held_eval.infra_loss` labels a loss (scorer `infrastructure_error`, or a
+call-budget stop whose evidence shows a provider resend); `collect` re-runs lost episodes from scratch in passes after
+the main one and on resume, at most `INFRA_ATTEMPTS` = 3 attempts (files set aside to `sample-NN.lost-K`;
+`rerun_lost=False` opts out); samples carry `infra_lost`/`lost_attempts`; `success_rate` is over `counted` (ran, not
+lost) episodes with `infra_lost`/`counted` fields; `compare` leaves a lost (task, sample) out of both sides and counts
+every other unscored episode as a failure (timeouts too in the primary), reports `pairs_lost_to_infrastructure` and
+warns; `held_eval relabel DIR --out FILE` labels an older result again without touching DIR. `classify_case` labels a
+result-less transport failure `infrastructure_error`. The collector counts a resent request once
+(`NATLANG_BUDGET_EACH_RESEND=1` restores counting each resend). The verdict records carry
+`pairs_lost_to_infrastructure`; the dashboard pairs by the same rule. New scoring series (task_packet, ts-host tree).
+
+Re-judgement (relabel of both results, fixed compare, 2000 and 20000 resamples): 56 candidate pairs left out of both
+sides; reference 266/456 vs candidate 293/456; mean per-task change +5.49 pts (246 tasks, 57.9% -> 63.4%), CI
+[+0.8, +10.4], permutation p 0.025; McNemar 38:65 p 0.010, tasks 48 up / 29 down (sign p 0.040); ran-out -4.3 pts.
+The success verdict (>= +2 pts, ran-out <= +2) holds. For reference: counting the 56 as failures gives -0.2 pts
+(p 1.0); pairing only the 211 tasks with no loss gives +6.2 pts (p 0.008). The lost episodes were not re-run
+(aei1 units and its held directory left to the coordinator); a resume of that measurement on the new code re-runs them.

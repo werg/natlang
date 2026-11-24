@@ -20,7 +20,7 @@ export function makeViews(ctx) {
   const card = (title, right, ...kids) => h('div', { class: 'card' }, h('header', {}, h('h2', {}, title), right || null), ...kids);
   const more = (label, route) => h('button', { class: 'btn sm', type: 'button', onclick: () => go(route) }, label);
   const latestRound = state => (ei()?.rounds || []).filter(r => r.state === state).at(-1);
-  const heldLine = (g) => g ? `${g.candidate} measured ${g.candidate_result ? `${rate(g.candidate_result.rate)} (${g.candidate_result.scored}/${g.candidate_result.ran} scored)` : 'not yet'}` : '';
+  const heldLine = (g) => g ? `${g.candidate} measured ${g.candidate_result ? `${rate(g.candidate_result.rate)} (${g.candidate_result.counted ?? g.candidate_result.scored}/${g.candidate_result.ran} counted)` : 'not yet'}` : '';
 
   /* ---------- round pipeline strip ---------- */
   function stepsStrip(r) {
@@ -252,7 +252,7 @@ export function makeViews(ctx) {
   function resultRow(r) {
     const ci = r.task_se != null ? ` ±${(196 * r.task_se).toFixed(1)}` : '';
     return h('div', { class: 'mrow' }, h('div', { class: 'row between' }, h('b', {}, r.label), h('span', { class: 'big2' }, `${(100 * r.rate).toFixed(1)}%`, h('span', { class: 'muted small' }, ci))),
-      h('div', { class: 'row small muted' }, `${r.successes}/${r.scored} scored of ${r.ran}`, ' · ', chip(`series ${String(r.series).slice(0, 4)}`), r.infra ? chip(`${r.infra} lost to infrastructure`, 'warn') : null, r.ran_out_rate != null ? chip(`ran out ${rate(r.ran_out_rate)}`) : null, r.neuralese_use != null ? chip(`Neuralese ${rate(r.neuralese_use)}`) : null, r.unpaired ? chip('unpaired copy') : null, ' ', ago(r.finished, now())));
+      h('div', { class: 'row small muted' }, `${r.successes}/${r.counted ?? r.scored} counted of ${r.ran}`, ' · ', chip(`series ${String(r.series).slice(0, 4)}`), r.infra ? chip(`${r.infra} lost to infrastructure`, 'warn') : null, r.ran_out_rate != null ? chip(`ran out ${rate(r.ran_out_rate)}`) : null, r.neuralese_use != null ? chip(`Neuralese ${rate(r.neuralese_use)}`) : null, r.unpaired ? chip('unpaired copy') : null, ' ', ago(r.finished, now())));
   }
   function held() {
     const e = ei(), v = h('div', {});
@@ -269,7 +269,7 @@ export function makeViews(ctx) {
       v.append(card('Pass rate by policy', null, pts.length ? ladder(pts, { height: 220 }) : h('div', { class: 'muted' }, 'No result yet.')));
       if ((hd.pairs || []).length) v.append(card('Paired comparisons (same series)', null, h('div', { class: 'scroll', style: 'max-height:none' }, h('table', {}, h('thead', {}, h('tr', {}, ['pair', 'change', '95% interval'].map((c, i) => h('th', { class: i ? 'n' : '' }, c)))),
         h('tbody', {}, [...hd.pairs].reverse().map(p => h('tr', { class: p.ci_pts[0] > 0 ? 'sig-good' : p.ci_pts[1] < 0 ? 'sig-bad' : '' }, h('td', {}, p.a, h('span', { class: 'muted' }, ' → '), p.b, h('div', { class: 'small muted' }, `${p.up} tasks up, ${p.down} down`)), h('td', { class: 'n' }, h('b', {}, signed(p.delta_pts, 1)), ' pts'), h('td', { class: 'n nowrap' }, `[${signed(p.ci_pts[0], 1)}, ${signed(p.ci_pts[1], 1)}]`)))))),
-        h('div', { class: 'panel-note' }, 'Task-level normal approximation of the per-task pass-rate change. The driver\'s verdict uses the permutation test of held_eval.')));
+        h('div', { class: 'panel-note' }, 'Task-level normal approximation of the per-task pass-rate change; an episode lost to infrastructure leaves its pair out of both sides, any other unscored episode counts as a failure. The driver\'s verdict uses the permutation test of held_eval.')));
       v.append(section('Every measurement'), h('div', { class: 'card mlist' }, [...hd.results].reverse().map(resultRow)));
       if ((hd.queue || []).length) v.append(card('held-v4 queue', null, h('ul', { class: 'plain small' }, hd.queue.map(q => h('li', {}, `${q.label} · ${q.state} · ${(q.reasons || []).join(', ')} · queued ${ago(q.queued_at, now())}`)))));
     }

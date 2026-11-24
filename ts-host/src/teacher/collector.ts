@@ -1020,6 +1020,10 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     // counting every request.
     let budgeted = 0;
     const decisionIsOneRequest = process.env.NATLANG_BUDGET_EACH_DECISION_REQUEST !== '1';
+    // A resend of a failed request (the actor restarting under the episode, ECONNREFUSED) is the same model call: only
+    // its first send counts, so an outage cannot turn an episode near the budget into a budget failure (aei1 round 1,
+    // 2026-11-24: four held episodes). NATLANG_BUDGET_EACH_RESEND=1 restores counting every resend.
+    const resendIsSameRequest = process.env.NATLANG_BUDGET_EACH_RESEND !== '1';
     const outsideBudget = new WeakSet<ModelTurnRequest>();
     const evidenceAttemptId = randomUUID();
     // Counts collector sender invocations after every local admission gate. It cannot see
@@ -1127,9 +1131,10 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           while (true) {
             throwIfCollectionFatal();
             if (actionSignal?.aborted) throw interrupted(actionSignal);
-            // Every admitted resend consumes budget and gets its own immutable ordinal/evidence row.
-            const counted = !decisionIsOneRequest ||
-              !(outsideBudget.has(request) || (request.decision_reasoning?.index ?? 0) > 0);
+            // Every admitted resend gets its own immutable ordinal/evidence row; it consumes budget only with
+            // NATLANG_BUDGET_EACH_RESEND=1.
+            const counted = (!resendIsSameRequest || retryIndex === 0) && (!decisionIsOneRequest ||
+              !(outsideBudget.has(request) || (request.decision_reasoning?.index ?? 0) > 0));
             if (config.maxModelRequests && counted && budgeted >= config.maxModelRequests) {
               throw requestBudgetExceeded();
             }

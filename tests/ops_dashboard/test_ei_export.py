@@ -126,6 +126,29 @@ def test_held_gate_pairs_only_one_series(tmp_path, monkeypatch):
     assert out['gate']['reference_same_series'] is True and pair['tasks'] == 12 and pair['delta_pts'] > 0 and pair['up'] > pair['down']
 
 
+def test_held_record_leaves_infrastructure_losses_out_of_both_sides(tmp_path):
+    """compare's rule in the held view: a lost episode drops its pair on both sides, another unscored one fails."""
+    def result(path, lost, unresolved=()):
+        samples = []
+        for i in range(10):
+            for s in range(2):
+                ok = s == 0
+                sample = {'task_id': f't{i}', 'sample': s, 'ran': True, 'outcome': 'task_success' if ok else 'semantic_mismatch',
+                          'reward': 1.0 if ok else 0.0, 'infra_lost': None}
+                if (i, s) in lost or (i, s) in unresolved:
+                    sample.update(outcome='unresolved', reward=None, infra_lost='infrastructure_error' if (i, s) in lost else None)
+                samples.append(sample)
+        lines(path, [json.dumps({'policy_id': 'x', 'series': {'key': 'S'}, 'success_rate': 0.5, 'samples': samples})])
+        return ei.held_record(str(path))
+    ref = result(tmp_path / 'a.json', ())
+    cand = result(tmp_path / 'b.json', {(i, 1) for i in range(10)})      # every failure of the candidate lost: 10/10
+    assert cand['infra'] == 10 and cand['counted'] == 10
+    json.dumps(cand)                                                           # cached in the JSON exporter state
+    assert ei.paired(ref, cand)['delta_pts'] == 0
+    model = result(tmp_path / 'c.json', (), {(i, 0) for i in range(10)})    # unscored, not lost: failures
+    assert model['infra'] == 0 and ei.paired(ref, model)['delta_pts'] == -50.0
+
+
 def test_held_in_progress_reads_pop_log(tmp_path, monkeypatch):
     run = tmp_path / 'ei' / 'aei1'
     monkeypatch.setattr(ei, 'EI_ROOT', str(tmp_path / 'ei'))
