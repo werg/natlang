@@ -308,6 +308,37 @@ def test_re_adoption_preserves_the_exact_managed_restart_and_requeues_with_new_c
         assert spec['budget'] == 16 * GIB
 
 
+@pytest.mark.parametrize('fixed_key', ['hold_budget', 'fixed_claim'])
+def test_re_adoption_releases_fixed_reservation_only_explicitly(monkeypatch, tmp_path, fixed_key):
+    from types import SimpleNamespace
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    procs = tmp_path / 'cg'
+    procs.mkdir()
+    (procs / 'cgroup.procs').write_text('')
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('active', '/../../..' + str(procs)))
+    spec = {'unit': 'teacher.service', 'budget': 13 * GIB, 'cls': 'experiment', 'priority': 'medium',
+            'command': ['teacher'], 'resumable': False, 'workdir': '/exact/pin', 'env': ['PIN=exact'],
+            'containers': [], 'host_max_gb': 13, 'reserve': 7.5 * GIB, 'reserve_explicit': True,
+            'hold_budget': True}
+    with ledger.ledger() as state:
+        state['claims']['teacher.service'] = ledger.claim_for(spec, now=123.0)
+        state['claims']['teacher.service'].pop('hold_budget')
+        state['claims']['teacher.service'][fixed_key] = True
+    args = SimpleNamespace(unit='teacher', budget_gb=13, cls='experiment', hold_budget=False, priority=None)
+    ledger.adopt(args)
+    with ledger.ledger() as state:
+        assert ledger.fixed_claim(state['claims']['teacher.service'])
+    args.release_fixed_claim = True
+    ledger.adopt(args)
+    with ledger.ledger() as state:
+        current = state['claims']['teacher.service']
+        assert not ledger.fixed_claim(current)
+        assert current['host_max'] == 13 and current['budget'] == 13 * GIB
+        assert current['admitted'] == 123.0 and not current['resumable']
+        assert current['spec'] == {**spec, 'hold_budget': False}
+        assert state['events'][-1]['fixed_claim_released'] is True
+
+
 def test_container_names_come_from_attached_and_named_runs():
     assert ledger.container_name(['docker', 'start', '-a', 'natlang-x']) == 'natlang-x'
     assert ledger.container_name('/usr/bin/docker run --rm --name pi-executor --gpus all img') == 'pi-executor'

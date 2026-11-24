@@ -11272,3 +11272,8 @@ Four defects seen between 09:50 and 10:35:
   - Actual DGX snapshot: root 63 GiB free, external 132 GiB free; ledger available 39.6 GiB and headroom 21.7 GiB.
     Live Vibe ingestion, keeper and queued student-fill launch specs all explicitly reserve 15 GiB, including
     the older 67b reader. No policy, optimizer, RNG, source pin or experiment was reset.
+
+
+## 2026-11-24 Live CPU collection can release a fixed reservation without changing its cap
+
+Inventory: `scripts/memory_ledger.py` owns `fixed_claim`, `outstanding`, `adopt`, managed restart specs and the admission/pressure guard; all engines and collectors use that same allocator. `run --hold-budget` pins unspent allowance even after startup; `adopt` preserved it unconditionally, so a ready CPU collection could not switch to the standard measured-headroom policy without a restart. The V21 teacher's fixed 13 GiB plus a 6 GiB native claim and 7.5 GiB reserve exceeds actual available memory slightly, despite actual steady use fitting. Do not lower caps or the reserve. Add explicit `adopt --release-fixed-claim` to resume ordinary CPU headroom accounting, preserve MemoryMax/restart/ownership, and record the transition. Default re-adoption still preserves the fixed claim. The active Tick guard (7.5 GiB floor, 4 GiB emergency floor, 2-second interval) protects the host and can retire the resumable low-priority native work if real pressure develops; the teacher remains at 13 GiB and native at 6 GiB. No engine-specific allocator implementation is left out.

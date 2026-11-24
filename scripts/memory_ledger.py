@@ -1055,14 +1055,15 @@ def adopt(args):
                 current[key] = previous[key]
         if args.priority is None and 'priority' in previous:
             current['priority'] = previous['priority']
-        if previous.get('hold_budget'):
+        if fixed_claim(previous) and not getattr(args, 'release_fixed_claim', False):
             current['hold_budget'] = True
         if current.get('spec'):
             current['spec'] = {**current['spec'], 'budget': current['budget'], 'cls': args.cls,
                                'priority': PRIORITY_NAMES[priority_of(current)],
                                'hold_budget': current.get('hold_budget', False)}
         state['events'].append({'time': time.time(), 'event': 'adopted', 'unit': unit,
-                                **({'hold_budget': True} if args.hold_budget else {})})
+                                **({'hold_budget': True} if args.hold_budget else {}),
+                                **({'fixed_claim_released': True} if getattr(args, 'release_fixed_claim', False) else {})})
 
 
 def status(args):
@@ -1588,7 +1589,10 @@ def main():
     a.add_argument('--budget-gb', type=float, required=True)
     a.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
     a.add_argument('--priority', choices=sorted(PRIORITIES, key=PRIORITIES.get))
-    a.add_argument('--hold-budget', '--fixed-claim', action='store_true', help='always count the whole unspent budget')
+    adoption_claim = a.add_mutually_exclusive_group()
+    adoption_claim.add_argument('--hold-budget', '--fixed-claim', action='store_true', help='always count the whole unspent budget')
+    adoption_claim.add_argument('--release-fixed-claim', action='store_true',
+                               help='switch to normal measured-headroom accounting; does not change MemoryMax')
     sub.add_parser('status')
     c = sub.add_parser('cancel', help='drop a waiting or requeued entry from the queue')
     c.add_argument('--unit', required=True)
