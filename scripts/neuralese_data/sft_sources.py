@@ -3621,6 +3621,17 @@ def extract_rl_specs(work):
     return specs
 
 
+def import_gate(calls, require_import=False):
+    """The funnel entry of a lowered Neuralese episode: 'imports' (a spliced read), 'in_context_reads' (every read was
+    the state's tokens inline, ``engine.reads_in_context``, the engines' default since 2026-11-23: the capture holds the
+    tokens and no import, and the episode lowers to plain rows), or with ``require_import`` 'no_lowered_import' for the
+    latter (dropped). Before 2026-11-24 such episodes were always dropped, and ``build`` skips them for their
+    native_state messages, so they trained nowhere (aei1 r0008's own graph: 30 lowered episodes, 0 admitted)."""
+    if any(c['imports'] for c in calls):
+        return 'imports'
+    return 'no_lowered_import' if require_import else 'in_context_reads'
+
+
 def neuralese_graph(args):
     """Whole Neuralese episodes as whole-graph SFT rows: the verified successes `build` skips for their imported state
     (`has_native_state`), every call as the actor ran it (the exact prompt and sampled ids of its capture, read again
@@ -3711,8 +3722,9 @@ def neuralese_graph(args):
         if lowered['skip_native_state_prompt'] or lowered['skip_native_state_missing']:
             funnel['import_without_recorded_write'] += 1
             continue
-        if not any(c['imports'] for c in calls):
-            funnel['no_lowered_import'] += 1
+        gate = import_gate(calls, getattr(args, 'require_import', False))
+        funnel[gate] += 1
+        if gate == 'no_lowered_import':
             continue
         episode = {'task_id': e['task_id'], 'round': f"rl-neuralese-graph:{e['key']}", 'rows': calls}
         chains = chains_of([episode])
@@ -3942,6 +3954,8 @@ def main():
     g.add_argument('--max-per-task', type=int, default=2)
     g.add_argument('--current-surface-run', action='append', default=[], metavar='REGEX',
                    help='own runs on the current runtime (episode run label): their calls count as on a current surface')
+    g.add_argument('--require-import', action='store_true',
+                   help='drop episodes whose Neuralese reads were all in context (no lowered import; the gate before 2026-11-24)')
     g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
                    help='own runs left out (as build --exclude-run), matched against the episode run label')
     g.add_argument('--seed', type=int, default=20261117)

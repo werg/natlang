@@ -1042,3 +1042,12 @@ def test_replay_answers_a_field_mode_readout_with_its_whole_record_and_declines_
     assert episode.served == [True, True]
     declined = episode.answer({'items': [{'messages': [SYSTEM, USER, request], 'continuations': ['{"a":1,"']}]})
     assert declined['results'][0]['error'].startswith('decision-unsupported')
+
+
+def test_neuralese_graph_admits_episodes_whose_reads_were_in_context():
+    """A Neuralese episode whose reads the engine fed inline (no lowered import) is admitted as plain rows by default;
+    ``require_import`` restores the old drop; an episode with an import is admitted either way."""
+    plain, spliced = [{'imports': []}, {'imports': []}], [{'imports': []}, {'imports': [(3, 'nzs1_x')]}]
+    assert s.import_gate(plain) == 'in_context_reads'
+    assert s.import_gate(plain, require_import=True) == 'no_lowered_import'
+    assert s.import_gate(spliced) == s.import_gate(spliced, require_import=True) == 'imports'
