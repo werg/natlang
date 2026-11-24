@@ -226,6 +226,26 @@ class Keeper:
         self.run([colab_python(), '-c', code, old, new], timeout=60, check=True)
 
     # ssh / tunnel
+    def install_tunnel_supervisor(self) -> None:
+        """Cover manually provisioned transient units and subsequent keeper redeployments.
+
+        Reloading changes the next start only; never kill a master carrying an active learner.
+        """
+        command = [sys.executable, str(Path(__file__).with_name('tunnel.py')), '--alias', self.a.alias]
+        for forward in self.a.forward:
+            command += ['--forward', forward]
+        if getattr(self.a, 'no_reuse_master', False):
+            command += ['--no-reuse-master']
+        directory = Path.home() / '.config/systemd/user' / (self.a.tunnel_unit.removesuffix('.service') + '.service.d')
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / 'reuse-master.conf'
+        text = '[Service]\nExecStart=\nExecStart=' + shlex.join(command).replace('%', '%%') + '\n'
+        if not path.exists() or path.read_text() != text:
+            tmp = path.with_suffix('.partial')
+            tmp.write_text(text)
+            os.replace(tmp, path)
+            self.run(['systemctl', '--user', 'daemon-reload'], timeout=30, check=True)
+
     def ssh_ok(self) -> bool:
         return self.run(['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=20', self.a.alias, 'true'],
                         timeout=40)[0] == 0
@@ -252,6 +272,7 @@ class Keeper:
                 log('re-forward', local=local, remote=remote, rc=rc)
 
     def restart_tunnel(self) -> None:
+        self.install_tunnel_supervisor()
         self.run(['ssh-keygen', '-f', str(Path.home() / '.ssh/known_hosts.colab'), '-R', self.a.alias], timeout=30)
         self.run(['systemctl', '--user', 'restart', self.a.tunnel_unit], timeout=60)
 
@@ -486,6 +507,7 @@ def main(argv=None) -> int:
     p.add_argument('--session', default='g4a', help='colab session name (the SSH alias ProxyCommand names it)')
     p.add_argument('--alias', default='colab-g4', help='SSH alias of the session')
     p.add_argument('--tunnel-unit', default='colab-g4a-tunnel')
+    p.add_argument('--no-reuse-master', action='store_true', help='diagnostic opt-out for tunnel master reuse')
     p.add_argument('--forward', action='append', default=None, help='LOCAL:REMOTE forwards of the tunnel unit')
     p.add_argument('--order', default='A100:hm,G4,L4', help='preference order, best first (:hm = --high-mem)')
     p.add_argument('--check-seconds', type=float, default=60)
@@ -508,6 +530,7 @@ def main(argv=None) -> int:
     if a.command == 'status':
         print(json.dumps({'state': k.load(), 'sessions': k.sessions(), 'ssh_ok': k.ssh_ok()}, indent=1))
         return 0
+    k.install_tunnel_supervisor()
     while True:
         try:
             k.step()

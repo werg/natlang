@@ -30,6 +30,20 @@ def test_parse_sessions_reads_the_cli_lines_and_ranks_hardware():
     assert sk.parse_order('A100:hm,G4,L4') == sk.DEFAULT_ORDER
 
 
+def test_tunnel_override_survives_redeployment_without_restarting_live_master(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    calls = []
+    a = types.SimpleNamespace(alias='colab-g4b', tunnel_unit='colab-g4b-tunnel', forward=['19732:8571'])
+    k = sk.Keeper(types.SimpleNamespace(**vars(a), order='L4', state=str(tmp_path / 'state')),
+                  runner=lambda command, **kw: calls.append(command))
+    k.install_tunnel_supervisor()
+    path = tmp_path / '.config/systemd/user/colab-g4b-tunnel.service.d/reuse-master.conf'
+    assert '--alias colab-g4b --forward 19732:8571' in path.read_text()
+    assert 'tunnel.py' in path.read_text()
+    k.install_tunnel_supervisor()
+    assert calls == [['systemctl', '--user', 'daemon-reload']]
+
+
 @pytest.mark.parametrize('lines,why', [((), 'missing'), ((CPU,), 'runs on CPU')])
 def test_a_missing_or_cpu_session_is_replaced_in_preference_order(lines, why):
     d = sk.decide(obs(*lines), {}, session='g4a')
@@ -222,6 +236,7 @@ def test_a_sibling_session_is_not_a_stray_and_an_unnamed_gpu_is_never_unassigned
     k, _ = keeper(tmp_path, fake, monkeypatch)
     k.a.order, k.order = 'L4', sk.parse_order('L4')
     monkeypatch.undo()          # the real unassign_orphans
+    monkeypatch.setattr(sk, 'colab_python', lambda: sys.executable)
     k.run = lambda cmd, timeout=None, env=None, check=False: fake.calls.append(('unassign', tuple(cmd[3:]))) or (0, '')
     k.unassign_orphans([{'name': '?', 'endpoint': 'a100-ep', 'hardware': 'A100'},
                         {'name': '?', 'endpoint': 'cpu-ep', 'hardware': 'CPU'}])

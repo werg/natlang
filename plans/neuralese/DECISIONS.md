@@ -11246,3 +11246,29 @@ Four defects seen between 09:50 and 10:35:
   Java25 cannot run the existing Gradle), and the existing canonical node_modules Metro watch root. Shell syntax
   checked; Android native qualification above exercised these actual prerequisites. No additional teacher run
   was started by the native qualification worker.
+
+
+- **Colab tunnel reuses an existing master (2026-11-24 11:22 CET).** The g4a tunnel unit forced `ssh -M`
+  while a healthy detached master (PID 2427383, shpool cgroup) already owned the session and both forwarded ports.
+  Colab rejected each second connection with HTTP 429; the tunnel accumulated over 1,000 restarts. The learner
+  remained productive: a forced-multiplexed read (ProxyCommand disabled) showed round r0005 at step 198/560,
+  zero OOM retries. Only the duplicate tunnel service was restarted at 11:18; its replacement monitored the live
+  master, and the master's PID, ports and learner were preserved. Subsequent restart count stayed zero.
+  - Mechanism inventory before editing: `session_keeper.py` owns both keepers' restart and forward recovery;
+    no tracked source previously created the manually provisioned Colab transient units. `bootstrap.py:220`
+    configures the VM-side transport, not a DGX master. `pop_rl_actor.py:227` adds forwards with `ssh -O forward`
+    over the existing master, so it already reuses the connection. `expert_iteration.py`'s Pop-fill tunnel uses
+    Tailscale to Pop and does not use Colab's single-session transport. Serving engines and learner protocols
+    are unchanged; this defect was in the DGX SSH service lifecycle.
+  - New shared `scripts/colab/tunnel.py` checks the master with `ssh -O check` (no ProxyCommand), repairs missing
+    forwards through that master, and acquires a new master only after the existing one disappears. The keeper
+    installs a persistent per-unit override on startup and before restart, for either alias. Installation is
+    idempotent and only reloads systemd: redeploying the keeper never kills a productive master. The explicit
+    `--no-reuse-master` diagnostic option restores direct acquisition.
+  - Tests: 21 tunnel/keeper tests passed, including no second login while a master exists, recovery after its
+    disappearance, missing-forward repair without a login, opt-out, and idempotent override installation without
+    restart. An existing test's unassign mock now also mocks the Colab Python lookup rather than requiring an
+    installed Colab CLI on a test host.
+  - Actual DGX snapshot: root 63 GiB free, external 132 GiB free; ledger available 39.6 GiB and headroom 21.7 GiB.
+    Live Vibe ingestion, keeper and queued student-fill launch specs all explicitly reserve 15 GiB, including
+    the older 67b reader. No policy, optimizer, RNG, source pin or experiment was reset.
