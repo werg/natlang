@@ -10215,3 +10215,46 @@ Actual focused unit `vibe-ledger-lockless-status-tests-a` passed104/104 in0.53s,
 - The state was seeded with `pending_serve` from the lost record (policy e15b20a8; commit bdf4c872, the session
   checkout's own commit, so the serve does not move the round's checkout). aei1's driver rebinds the actor to the
   newest publication.
+
+## 2026-11-24 01:30 aei1 DGX collection stall (23:32 -> 00:51): the SGLang front's GIL, per-call vocabulary hashing and a traceback storm; fixed, collection on a hotfix pin
+
+**Observed.** `aei1-collect-v0000` (pin bdf4c87, 128 slots) ran ~64 SGLang requests at ~1,800 tok/s from 23:07, then at
+23:32:47 dozens of streams were aborted at once and the actor sat at 1-17 running, ~0 tok/s; 3 groups in 70 min against
+~40-60/h on the pre-grammar pin 96a02bd4. The front (port 8470) answered /health but held ~128 in-flight streams with no
+connection to SGLang, 416 threads in futex waits, 227% CPU.
+
+**Cause (measured).** The SGLang front is one Python process whose GIL every stream shares, and three things on it scale
+with the number of streams:
+1. `SglangEngine._tool_grammar_info` (tool grammar, 9ab63c622) called `tool_grammar.info_from_export` on every chat call,
+   twice, and that re-hashed the 65k-token vocabulary each time (`tokenizer_info_sha256`, pure Python). One call ~0.9 s;
+   128 concurrent first calls of a wave take 122 s wall, the first finishing after 92 s (processor sharing; bench on the
+   DGX, pin bdf4c87). After the fix: 0.5 s for all 128.
+2. Every collection worker polls the front's /metrics every 30 s with a 2 s timeout (`run_bonsai_queue.local_decode_progress`);
+   a late answer is a dropped poll, and each dropped poll printed two tracebacks (`_guarded` and socketserver's
+   `handle_error`). py-spy of the live front (hotfix pin, before fix 2): ~190 of ~420 threads per sample formatting or
+   writing those tracebacks, /metrics at 12-30 s, SGLang running falling 125 -> 57. This is the feedback loop: a slow front
+   drops polls, dropped polls make it slower.
+3. Per streamed token the front feeds the grammar matcher with two xgrammar FFI calls (`is_terminated`, `accept_token`),
+   each releasing and retaking the GIL: half of the busy py-spy samples.
+The poll also read only `natlang_native_decode_tokens_total`, which stays 0 on the SGLang front: it carried no signal.
+
+**Fixes** (default on, tests fail on the pinned code): f29b9cd43 tokenizer identity memoized per TokenizerInfo
+(`NATLANG_TOOL_GRAMMAR_INFO_MEMO=0` opts out) and cached per export dir in the SGLang front; 1c151a548: a client
+that hangs up closes the connection without a traceback or an error write (other failures still print),
+`Matcher.accept` makes one FFI call per token, and the worker poll sums the decode counters including
+`natlang_sglang_generated_tokens_total`. Inventory: `tool_grammar` is used by the Python native engine
+(`Engine._tool_grammar_info` already cached, engine.py ~970), the SGLang front (fixed), the learner (`info_from_base`,
+lru-cached, and `row_masks` take the info passed in); llama-server and wllama constrain calls in llama.cpp's own grammar
+(C++), not this module. The HTTP change is in the one front all Python engines share (serve/http.py).
+
+**Restore.** Collection restarted (agent decision, recorded in collect.log) on hotfix pins built from bdf4c87 plus the fixes
+(branch `hotfix/aei1-grammar-info-bdf4c87`; pin-b1e660838750, then pin-596883d9d4a0), at ledger priority high (the medium
+relaunch sat 15 min behind other agents' units while the GPU idled). 01:00-01:30 on pin-b1e660838750: 22 groups (~44/h),
+SGLang 60-125 running, 1,300-2,200 tok/s, under a load average of 70-85 from other units (a 550% Chromium renderer, a CPU
+llama-server parity run at 300%, fallow22 replay workers): the front's one GIL core competes with them.
+
+**Not determined / not checked.** What exactly aborted ~60 streams at 23:32:47 (load was ~8 then; no front error other
+than /metrics broken pipes was logged; the 23:23 burst to 116 running preceded it). The node collector side was read only
+statically (no request timeouts: `headersTimeout`/`bodyTimeout` 0). The remaining per-token Python cost of the front
+(`_sglang_token`, stream decode/emit) at 128 streams is a capacity ceiling, not addressed here; moving the per-token work
+off the GIL (or one front process per ~64 streams) is the next lever if the front stays the bottleneck.
