@@ -65,7 +65,7 @@ export type HostCellResult = {
   usesNl: boolean;
 };
 
-// Not under /__natlang__/: the host caches those files as shared, parsed without the program's module detection.
+// Keep cell diagnostics in their own virtual directory; cell declarations and ASTs are owned by their program.
 const CELL_DIRECTORY = '/host-cell';
 const AMBIENT_FILE = `${CELL_DIRECTORY}/ambient.d.ts`;
 // Every cell is a module (top-level `await`, imports and exports are legal in one); JSX is parsed, not emitted.
