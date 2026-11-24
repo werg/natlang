@@ -11330,3 +11330,29 @@ sides; reference 266/456 vs candidate 293/456; mean per-task change +5.49 pts (2
 The success verdict (>= +2 pts, ran-out <= +2) holds. For reference: counting the 56 as failures gives -0.2 pts
 (p 1.0); pairing only the 211 tasks with no loss gives +6.2 pts (p 0.008). The lost episodes were not re-run
 (aei1 units and its held directory left to the coordinator); a resume of that measurement on the new code re-runs them.
+- **Closed collections are trimmed, episodes kept (coordinator, 2026-11-24 13:20).** Once a collection's policy leaves
+  the last two lineage entries (moved ones included, through their links), `ei_round_tier.py` deletes only
+  reproducible or diagnostic files.
+  - **Breakdown of v0002 (14.2 GB):**
+    - kept: `actor/blocks` 3.3, the episodes (`results.jsonl` 1.67, `rollouts.jsonl` 1.97, budget-stopped partials
+      with evidence 3.9), memetic evaluations 1.2;
+    - deleted: byte-identical `jobs/*.result.json` copies 1.67, traces 0.08, logs 0.07.
+  - **Deleted kinds:**
+    - `jobs/*.result.json` byte-equal to the sample's `results.jsonl`. The scorer's job accounting is the journal's
+      `finish` record; `exp1_collect` already drops this copy.
+    - `jobs/*.trace.jsonl`, used by audit scripts only.
+    - Worker, collector and actor logs.
+    - Atomic-write leftovers.
+    - `actor/blocks` native-state cache. SFT trains imports as pass-through from the recorded write; the GRPO learner
+      reads only its own run's store, and `grpo.collect_blocks` already drops trained blocks.
+  - **Readers checked:** the round build (`sft_sources`), selection and `task_rates` (lineage collections only),
+    prefer-unseen and trained-units (builds), `collection_health` and its cache (`rewards`, `results.jsonl`,
+    `error.json`, `collect.log`), held (its own evidence), the dashboard exporter (`collect.log`, held results), and
+    the teacher queue rates.
+  - **Kept:** `results.jsonl`, `rollouts.jsonl`, `rewards`, journals, partial episodes and their evidence, error
+    records, memetic evaluations, task and rate files, `collect.log`.
+  - **Compression:** none. The episode readers open plain files (`read_bytes`, globs on `rollouts.jsonl`).
+  - **Guards:** the list goes to `COLLECTION/trimmed.json` before any unlink. A live reference, a `.keep-on-nvme`
+    marker or a `collect.log` written within the hour keeps the whole collection, and any error keeps it too.
+    `--trim PATH` covers the sft-v7..v9 cycle collections. Tests added.
+  - **First dry run:** 40.1 GB across aei1 v0000..v0002, 27.4 GB of it v0000's native-state cache.
