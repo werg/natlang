@@ -11207,3 +11207,42 @@ Four defects seen between 09:50 and 10:35:
     - it syncs and drops each 64 MB written;
     - a file that fails verification is removed.
   - The sweep unit is now medium, not preemptible, at 3 GB. Tests added.
+
+
+## 2026-11-24 — V21 native Android complete; reference sweep yields to Luna
+
+- The immutable V21 runtime is Host `53e9af53370ee8f6bd8b56dcd3abe8609d152f87`, Core
+  `fedc9504310679b7513b6a5840c2688e386509a7`, Base `eeef52fc2fd88eef6c93751494897640abdac805`,
+  System `3932a9d4728b0a6a7f1597714a1b124799f9cd28`, System-testing
+  `f229d4e38caff74446094948a3e5974d4f9576c1`; complete remaining source identities are in
+  `/home/werg/vibe-native-oracles-v21/inputs.json`. Release manifest SHA256
+  `bcb07d7c3ffc0d4e2c63b8916e088d7a8f144fd9e05dd94f2c001dd7c0cd45e8` has 387 bindings.
+  Full ordinary development desktop build passed (38 artifact, 4 import, 1 executable, 3 runtime contracts),
+  including actual Electron main executable; no frozen source was edited.
+- All **13/13 actual Android native references passed**, including real source APK build/install/launch,
+  device prestate checks and Electron-to-Android pairing, against a new exclusively owned emulator. This
+  denominator includes held/native cases; the training split has eight Android tasks. Owner-only installation
+  approval used the real app UI with exact source/release/device lease attestation, rather than disabling trust.
+  Evidence: `/home/werg/vibe-native-oracles-v21/runs/android-r5/` (44 total passes: 31 imported ordinary + 13 Android).
+  Emulator and Android phase units are joined; APK/device private fixtures are cleaned after joining.
+- The full model-free plan remains **2,327 cases / 116 families**, without goal, split or source-group edits.
+  V21 full state `/home/werg/vibe-native-oracles-v21/runs/full-final-r5/` started with 82 exact-identity deduplicated
+  native passes, including all eight deployment-package cases. Its first additional 16-case Spectrolite batch
+  was inspected live: 15 passed, zero failed/errors, last case active. Aggregate files update at batch completion;
+  lack of new exported packets mid-batch is not lack of execution. Original native packets remain separate from
+  teacher/training data. These runs have no model calls, and make no claim of completing the full corpus yet.
+- To avoid holding useful Luna collection behind the full reference sweep, the four-context native process
+  gracefully checkpoints after its current batch. Durable continuation
+  `vibe-v21-native-single-continuation-20261124a.service` then resumes the exact state at **one context, 6 GiB,
+  7.5 GiB reserve, low priority, resumable**, bounded to 16 cases per runtime generation, with detached admission.
+  Productive Pop/DGX actors are untouched. Actual admission determines co-residency with Luna; unseen cases are
+  not asserted to fit before they run. The underlying workerd V8 lifetime/OOM investigation remains open.
+- A concrete remaining efficiency defect was found: the official prepared release contains the RN build provider
+  but deliberately excludes actual mobile client application builds, and the consumer likewise skips prepared
+  RN client results. The first successful pairing cold-built the client during a 259-second owner approval;
+  this is not evidence of a trust deadlock. Successor work now extends the existing exact prepared-build mechanism
+  across producer and consumers, with shared-mechanism inventory first. It does not mutate V21 or delay collection.
+- Actual mobile launch environment is now available to collection: Android SDK root, compatible Java21 (default
+  Java25 cannot run the existing Gradle), and the existing canonical node_modules Metro watch root. Shell syntax
+  checked; Android native qualification above exercised these actual prerequisites. No additional teacher run
+  was started by the native qualification worker.
