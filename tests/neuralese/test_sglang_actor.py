@@ -131,6 +131,40 @@ def test_streamed_reply_matches_whole_reply(tmp_path):
     assert front.sglang_requests == 2 and front.native_fallbacks == 0
 
 
+@pytest.mark.parametrize('incremental', ['1', '0'])
+def test_streamed_text_decodes_only_the_newest_tokens_and_matches_the_whole_reply(tmp_path, monkeypatch, incremental):
+    """A streamed reply's deltas concatenate to the whole decode while the front decodes each token a bounded number of
+    times: decoding the whole reply at every 8-token chunk was 57-79% of the front's GIL time at 32-128 collection
+    streams (2026-11-24). NATLANG_SGLANG_INCREMENTAL_DETOKENIZE=0 restores the whole-reply decode."""
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.serve import load_native_engine
+    monkeypatch.setenv('NATLANG_SGLANG_INCREMENTAL_DETOKENIZE', incremental)
+    native = engine_fixture(tmp_path, 'lfm')
+    front = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', dtype=native.backbone.embedding_weight.dtype,
+                               engine_class=SglangEngine)
+    words = front.tokenizer(' '.join(f't{4 + i % 5}' for i in range(400)), add_special_tokens=False)['input_ids']
+    decoded = []
+    real = front.tokenizer.decode
+    monkeypatch.setattr(front.tokenizer, 'decode', lambda ids, **kw: decoded.append(len(ids)) or real(ids, **kw))
+
+    class Request:
+        deltas = []
+        on_delta = deltas.append
+
+    class Seq:
+        items, request = [], Request()
+    seq, state = Seq(), {'run': 0, 'text': ''}
+    for at in range(0, len(words), 8):
+        seq.items.extend(words[at:at + 8])
+        front._sglang_emit(seq, state)
+    front._sglang_emit(seq, state, final=True)
+    assert ''.join(d['text'] for d in Request.deltas) == real(words, skip_special_tokens=False)
+    if incremental == '1':
+        assert sum(decoded) <= 5 * len(words) and len(Request.deltas) > len(words) // 16
+    else:
+        assert sum(decoded) > 20 * len(words)
+
+
 def _span_fixture(tmp_path):
     import threading
     from test_native_serving_adapters import engine_fixture

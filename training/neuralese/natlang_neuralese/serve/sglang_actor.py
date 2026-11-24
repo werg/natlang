@@ -1741,13 +1741,45 @@ class SglangEngine(Engine):
         return path
 
     def _sglang_emit(self, seq, state, final=False):
-        """Send the reply text decoded so far, holding back an incomplete UTF-8 tail until it completes."""
-        text = self.tokenizer.decode(seq.items[state['run']:], skip_special_tokens=False)
+        """Send the reply text decoded so far, holding back an incomplete UTF-8 tail until it completes.
+
+        Between chunks only the newest tokens are decoded, after one earlier chunk of context, as streaming
+        detokenizers do (vLLM's prefix and read offsets): the new text is what the decode of the context plus the new
+        tokens adds to the context's own decode, which also keeps the spacing a tokenizer puts between tokens. Decoding
+        the whole reply at every chunk (every 8 tokens) was quadratic in the reply length and 57-79% of the front's
+        GIL time at 32-128 streams (bench of the a034dbf9c front, 2026-11-24). The run's last emission (``final``)
+        decodes it whole, the exact text the response carries, and sends what is still missing.
+        ``NATLANG_SGLANG_INCREMENTAL_DETOKENIZE=0`` opts out."""
+        items, run, sent = seq.items, state['run'], state['text']
+        incremental = not final and os.environ.get('NATLANG_SGLANG_INCREMENTAL_DETOKENIZE', '1') != '0'
+        mark = state.get('offsets') if incremental else None    # (run, prefix offset, read offset)
+        if mark is not None and mark[0] == run and mark[2] <= len(items):
+            prefix, read = mark[1], mark[2]
+        else:
+            prefix = read = run if incremental and not sent else None
+        if prefix is not None:
+            if read == len(items):
+                return
+            context = self.tokenizer.decode(items[prefix:read], skip_special_tokens=False) if read > prefix else ''
+            text = self.tokenizer.decode(items[prefix:], skip_special_tokens=False)
+            if text.startswith(context):
+                if len(text) <= len(context) or text.endswith('\ufffd'):
+                    return                  # nothing complete yet: the next chunk (or the final decode) sends it
+                state['offsets'] = (run, read, len(items))
+                seq.request.on_delta({'text': text[len(context):]})
+                state['text'] = sent + text[len(context):]
+                return
+        # the whole reply: at the end of a run, without offsets, or when the context's text was not a prefix
+        text = self.tokenizer.decode(items[run:], skip_special_tokens=False)
+        complete = not text.endswith('\ufffd')
         if not final:
             text = text.rstrip('\ufffd')
-        if len(text) > len(state['text']) and text.startswith(state['text']):
-            seq.request.on_delta({'text': text[len(state['text']):]})
+        if len(text) > len(sent) and text.startswith(sent):
+            seq.request.on_delta({'text': text[len(sent):]})
             state['text'] = text
+        state.pop('offsets', None)
+        if incremental and complete and state['text'] == text and items[run:]:
+            state['offsets'] = (run, max(run, len(items) - 8), len(items))   # all of it sent: continue from here
 
     def _sglang_stream(self, body):
         """SGLang /generate as a stream of incremental chunks."""
