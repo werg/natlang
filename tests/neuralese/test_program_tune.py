@@ -170,7 +170,8 @@ def test_bank_from_program_fits_adapts_a_held_program_into_a_servable_release(tm
     args = argparse.Namespace(programs=[str(p) for p in programs], held=[str(held)], out=str(tmp_path / 'bank'),
                               checkpoint=str(tmp_path / 'native.pt'), checkpoint_sha256=None, base=None, device=engine.device,
                               dtype=None, store_scratch=None, steps=1, rows_per_world=8, seed=0, recipe=json.dumps(recipe),
-                              target_pattern=r'self_attn\.(q_proj|k_proj|v_proj|out_proj)|conv\.(in_proj|out_proj)')
+                              target_pattern=r'self_attn\.(q_proj|k_proj|v_proj|out_proj)|conv\.(in_proj|out_proj)',
+                              max_worlds=6, held_support_rows=4)
     P.bank(args)
     bank = tmp_path / 'bank'
     pool = json.loads((bank / 'pool' / 'pool.json').read_text())
@@ -178,6 +179,7 @@ def test_bank_from_program_fits_adapts_a_held_program_into_a_servable_release(tm
                                                                          'fam2': 'meta-train', 'held': 'held'}
     assert json.loads((bank / 'learner' / 'state.json').read_text())['step'] == 1
     assert (bank / 'bank-manifest.json').exists()
+    assert json.loads((bank / 'adapt' / 'held' / 'result.json').read_text())['receipt']['support_rows'] == 4
     served = load_native_engine(str(tmp_path / 'native.pt'), device=engine.device)
     entries = bind_adapter_release(served, bank / 'adapt' / 'held')
     assert served.rl_policy_binding['adapters']['stack'] == entries
@@ -249,3 +251,91 @@ def test_fit_engines_do_not_keep_the_checkpoint_training_state(tmp_path):
     dropped = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', training_state=False)
     assert dropped.native_training_state == {}
     assert kept.native_identity == dropped.native_identity
+
+
+def test_plan_keeps_symlinked_paths_as_written(tmp_path):
+    """2026-11-20: plans resolved rows.jsonl through an archive symlink; when the directory moved back, every fit of
+    the chain failed on the vanished archive path. The plan binds to the path as written."""
+    real, link = tmp_path / 'archive' / 'prog', tmp_path / 'data' / 'prog'
+    real.mkdir(parents=True)
+    link.parent.mkdir()
+    link.symlink_to(real, target_is_directory=True)
+    (real / 'split.json').write_text(json.dumps({'family': 'fam'}))
+    (real / 'rows.jsonl').write_text('{}\n')
+    ckpt = tmp_path / 'ckpt-link.pt'
+    ckpt.symlink_to(real / 'rows.jsonl')
+    P.main(['plan', '--dir', str(link), '--checkpoint', str(ckpt), '--checkpoint-sha256', 'a' * 64, '--base', 'b'])
+    body = json.loads((real / 'fit' / 'plan.json').read_text())
+    assert body['rows'] == str(link / 'rows.jsonl')
+    assert body['engine']['checkpoint'] == body['student']['checkpoint'] == str(ckpt)
+
+
+def test_colab_fit_runs_as_a_preemptible_tenant_and_brings_the_release_home(tmp_path, monkeypatch):
+    """DECISIONS 2026-11-24 "program tuning on the A100": the fit's paths move to the VM, it runs under a preemptible claim beside the
+    actor at the tenant commit, an eviction returns non-zero (rerun resumes), and only a whole release lands in DIR."""
+    import pop_rl_actor as A
+    prog = tmp_path / 'prog'
+    (prog / 'fit').mkdir(parents=True)
+    (prog / 'split.json').write_text(json.dumps({'family': 'ext_fam'}))
+    (prog / 'rows.jsonl').write_text('{"r": 1}\n')
+    P.main(['plan', '--dir', str(prog), '--checkpoint', str(prog / 'rows.jsonl'), '--checkpoint-sha256', 'c' * 64,
+            '--base', '/hf', '--steps', '3'])
+    calls, plans, rcs = [], {}, [75, 0]
+    monkeypatch.setattr(A, 'colab_tenant_checkout', lambda h, cfg, c: {**cfg, 'repo': '/t', 'admission': '/t/adm.py', 'commit': c})
+    monkeypatch.setattr(A, 'ensure_remote_checkpoint', lambda *a: calls.append(('ckpt', a[3])) or 'present')
+    monkeypatch.setattr(A, 'ship_file', lambda local, remote, *a: calls.append(('ship', remote)) or 'drive')
+    monkeypatch.setattr(A, 'colab_hardware', lambda h: {'gpu_name': 'NVIDIA A100-SXM4-80GB', 'vram_total_gib': 80.0,
+                                                        'host_ram_total_gib': 167.0})
+    monkeypatch.setattr(A, 'log', lambda **e: None)
+
+    def ssh_host(host, command, *, input=None, timeout=600, check=True):
+        if input is not None and 'plan.json' in command:
+            plans['plan'] = json.loads(input)
+        if command.startswith('ls '):
+            return 'nnt1_abc.nnt\n'
+        return ''
+    monkeypatch.setattr(A, 'ssh_host', ssh_host)
+    monkeypatch.setattr(A, 'run_detached', lambda host, cfg, remote, command: calls.append(('run', command)) or rcs.pop(0))
+
+    def pull(remote, local, host, attempts=5):
+        Path(local).parent.mkdir(parents=True, exist_ok=True)
+        Path(local).write_text(json.dumps({'artifacts': []}) if remote.endswith('.json') else 'x')
+        return 'sha'
+    monkeypatch.setattr(A, 'pull_verified', pull)
+    args = ['colab-fit', '--dir', str(prog), '--host', 'colab-g4', '--commit', 'f' * 40]
+    assert P.main(args) == 75 and not (prog / 'fit' / 'release').exists()      # evicted: nothing lands
+    assert (prog / 'fit' / 'colab-claim.json').exists()                         # the DGX chain skips it
+    assert P.main(args) == 0 and (prog / 'fit' / 'release' / 'artifacts' / 'nnt1_abc.nnt').exists()
+    body = plans['plan']
+    remote = '/content/natlang-work/runs/tenant-fit-ext_fam'
+    assert body['rows'] == f'{remote}/rows.jsonl' and body['engine']['checkpoint'].endswith('/checkpoints/' + 'c' * 64 + '.pt')
+    assert body['engine']['base'].endswith('/base-lfm3') and body['recipe']['steps'] == 3
+    command = [c for c in calls if c[0] == 'run'][-1][1]
+    assert command[1] == '/t/adm.py' and '--preemptible' in command and command[command.index('--beside-label') + 1] == 'actor-'
+    assert 'CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=50' in command and command[-4:] == ['--plan', f'{remote}/fit/plan.json',
+                                                                                  '--out', f'{remote}/fit/build']
+    assert json.loads((prog / 'fit' / 'colab.json').read_text())['tenant_commit'] == 'f' * 40
+    assert P.main(args) == 0                                                    # present: nothing runs again
+    (prog / 'fit' / 'release' / 'result.json').unlink()
+    try:
+        P.main(args)
+        raise AssertionError('a local fit state must not be taken over silently')
+    except SystemExit as stop:
+        assert 'local fit' in str(stop)
+
+
+def test_a_subset_is_a_stable_pinned_manifest_of_the_split(tmp_path):
+    from natlang_neuralese.rl.held_eval import write_manifest, MANIFEST_SCHEMA
+    prog = tmp_path / 'prog'
+    rows = [{'id': f't{i}', 'family': 'fam'} for i in range(10)]
+    write_manifest(prog / 'dev', {'schema': MANIFEST_SCHEMA, 'program': {'family': 'fam', 'split': 'dev'},
+                                  'tasks': [{'id': r['id']} for r in rows], 'excluded_split_groups': ['g']}, rows)
+    (prog / 'dev' / 'engine.json').write_text('{"e": 1}')
+    P.main(['subset', '--dir', str(prog), '--tasks', '4'])
+    sub = json.loads((prog / 'dev4' / 'manifest.json').read_text())
+    cases = [json.loads(line) for line in (prog / 'dev4' / 'cases.jsonl').read_text().splitlines()]
+    assert len(sub['tasks']) == len(cases) == 4 and {t['id'] for t in sub['tasks']} == {c['id'] for c in cases}
+    assert sub['subset_of']['tasks'] == 4 and (prog / 'dev4' / 'engine.json').read_text() == '{"e": 1}'
+    P.main(['subset', '--dir', str(prog), '--tasks', '6', '--name', 'dev6'])
+    six = {t['id'] for t in json.loads((prog / 'dev6' / 'manifest.json').read_text())['tasks']}
+    assert {t['id'] for t in sub['tasks']} < six                                # stable order: a larger subset extends it

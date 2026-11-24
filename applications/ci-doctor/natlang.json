@@ -11,10 +11,28 @@
     "doctor.ts",
     "examples.json",
     "fixtures",
+    "main.ts",
     "package.json",
     "proposeFix.nl",
     "types.ts"
   ],
+  "targets": {
+    "ci-doctor": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "Diagnose CI failure traces from a JSON file or stdin and output the CiReport as JSON.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "Path to a JSON file containing { traces, failingCommits?, options? }."
+        }
+      ]
+    }
+  },
   "engines": {
     "natlang": ">=0.1.0",
     "node": ">=22.13.0"

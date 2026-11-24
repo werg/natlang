@@ -166,3 +166,135 @@ def test_a_top_level_types_file_gives_the_root_its_aliases(repo):
     assert authored.convert(row)['semantics']['files']['types.ts'].startswith('export type Note')
     with pytest.raises(ValueError, match='root callable folder'):
         authored.convert(task(files={'sort_parcels.nl': ROOT, 'sort_parcels/read_state.nl': HELPER, 'other.ts': ''}))
+
+
+def test_verifier_controls_binds_read_code_for_keyword_baselines(repo):
+    row = task(
+        files={
+            'sort_parcels.nl': ROOT,
+            'sort_parcels/read_state.nl': HELPER,
+            'sort_parcels/skills/desk/SKILL.md': '---\nname: desk\n---\nrule text\n',
+        },
+        keyword_baseline={
+            'code': (
+                'const helperSrc = read_code("read_state");\n'
+                'const skillSrc = read_code("skills.desk");\n'
+                'if (!helperSrc.includes("ready") || !skillSrc.includes("rule text")) throw new Error("missing");\n'
+                + BASELINE
+            )
+        },
+    )
+    assert errors(row) == []
+
+
+def test_declared_types_writes_patterns_and_cli_arg_order(tmp_path):
+    types_ts = (
+        'export type OutFiles = {\n'
+        '  // comment inside\n'
+        '  "out/report.md": string;\n'
+        '  summary?: string;\n'
+        '};\n'
+        '// top-level comment\n'
+        'interface Extra { x: number; }\n'
+        'const VERSION = 1;\n'
+        'export type Other = string;\n'
+    )
+    root_nl = '---\nkind: directory-reducer\nwrites: OutFiles\nreturns: string\n---\nWrite files.\n'
+    t = exact_task(root='main.nl', files={'main.nl': root_nl, 'types.ts': types_ts})
+    decls = authored_checks.declared_types(t)
+    assert 'OutFiles' in decls and 'interface Extra' not in decls['OutFiles']
+    assert decls['Other'] == 'string'
+    assert authored_checks.writes_patterns(t) == ['out/report.md', 'summary']
+
+    tasks_file = tmp_path / 'tasks.jsonl'
+    tasks_file.write_text(json.dumps(exact_task()) + '\n')
+    assert authored_checks.main(['--runtime', str(REPO / 'ts-host'), str(tasks_file)]) == 0
+
+
+def test_build_supply_resolves_runs_under_owner_and_refuses_worktree_and_pin(tmp_path, monkeypatch):
+    import build_supply
+    owner = tmp_path / 'owner'
+    (owner / '.git').mkdir(parents=True)
+    monkeypatch.setattr(build_supply, 'registry_owner_repo', lambda: owner)
+    assert build_supply.resolve_output_dir('runs/supply-1') == (owner / 'runs' / 'supply-1').resolve()
+
+    worktree = tmp_path / 'wt'
+    worktree.mkdir()
+    (worktree / '.git').write_text('gitdir: ../owner/.git/worktrees/wt\n')
+    with pytest.raises(ValueError, match='non-primary git worktree'):
+        build_supply.resolve_output_dir(str(worktree / 'runs' / 'supply-1'))
+
+    pin = tmp_path / 'pin'
+    pin.mkdir()
+    (pin / '.natlang-pin.json').write_text('{}')
+    with pytest.raises(ValueError, match='immutable code pin'):
+        build_supply.resolve_output_dir(str(pin / 'runs' / 'supply-1'))
+
+
+def test_migrate_output_contracts_read_step_and_path_boundaries():
+    import migrate_output_contracts as moc
+    semantics = {
+        'folder_files': {'ledger.csv': 'id\n1\n', 'rules.md': 'rule\n'},
+        'expected_files': {'ledger.csv': 'id\n1\n2\n', 'rules.md': 'rule\n', 'summary.md': 'ok\n'},
+    }
+    body = (
+        '1. Read ledger.csv and inspect every open refund. Append one line for each approved refund.\n'
+        '2. Read rules.md and write summary.md.\n'
+    )
+    fields, _ = moc.output_fields(semantics, body, '')
+    assert 'ledger.csv' in fields and 'summary.md' in fields and 'rules.md' not in fields
+
+    general, per_field, returned = moc.attribute(
+        'Write a/b.md with details. Write b.md. Put replies in out/item.md.',
+        {'a/b.md': ['a/b.md'], 'b.md': ['b.md'], 'out/*.md': []},
+        True,
+    )
+    assert per_field['a/b.md'] == ['Write a/b.md with details.']
+    assert per_field['b.md'] == ['Write b.md.']
+    assert per_field['out/*.md'] == ['Put replies in out/item.md.']
+
+
+def test_verify_mjs_multiline_return_and_eval_guard():
+    import subprocess
+    verify_src = (REPO / 'scripts' / 'rl_tasks' / 'verify.mjs').read_text()
+    assert "last?.[0] !== 'eval'" in verify_src
+    # Test findFinalTopLevelReturn logic directly by extracting it from verify.mjs
+    start = verify_src.index('function findFinalTopLevelReturn')
+    end = verify_src.index('// The terminal answering action')
+    fn_code = verify_src[start:end]
+    script = (
+        fn_code + '\n'
+        'const code = "await moveFile();\\nfunction helper() { return 1; }\\nreturn {\\n  a: 1,\\n  b: 2,\\n};\\n";\n'
+        'const idx = findFinalTopLevelReturn(code);\n'
+        'const replaced = code.slice(0, idx) + "return 42;";\n'
+        'console.log(JSON.stringify({ idx, replaced }));\n'
+    )
+    proc = subprocess.run([authored_checks.node(), '--input-type=module', '-e', script],
+                          capture_output=True, text=True, check=True)
+    out = json.loads(proc.stdout)
+    assert out['idx'] > 0
+    assert 'await moveFile();' in out['replaced']
+    assert 'function helper() { return 1; }' in out['replaced']
+    assert out['replaced'].endswith('return 42;')
+
+
+def test_sfp_batch_cleans_up_temp_files_on_failure(tmp_path, monkeypatch):
+    import sfp_batch
+    import measure_repetition
+    batch = tmp_path / 'batch'
+    (batch / 'qualified-1' / 'verified').mkdir(parents=True)
+    (batch / 'tasks.jsonl').write_text('')
+    (batch / 'qualified-1' / 'verified' / 'cases.jsonl').write_text(json.dumps({'id': 't1', 'split': 'train'}) + '\n')
+    v4_dir = tmp_path / 'v4' / 'fam' / 'qualified-1'
+    v4_dir.mkdir(parents=True)
+    (v4_dir / 'cases.jsonl').write_text(json.dumps({'id': 'h1', 'split': 'train'}) + '\n')
+    monkeypatch.setattr(sfp_batch, 'HELD_V4_AUTHORING', tmp_path / 'v4')
+    monkeypatch.setattr(sfp_batch, 'grpo_pools', lambda: [])
+    monkeypatch.setattr(sfp_batch, 'run', lambda args, log: 0)
+    from natlang_neuralese.rl import held_eval
+    monkeypatch.setattr(held_eval, 'training_exclusion_ids', lambda rows: frozenset())
+    monkeypatch.setattr(measure_repetition, 'overlap_with_pool', lambda *a: (_ for _ in ()).throw(RuntimeError('boom')))
+    with pytest.raises(RuntimeError, match='boom'):
+        sfp_batch.qualify(batch, str(REPO / 'ts-host'), 1, 1)
+    assert not (batch / '.held-v4-batch-1.jsonl').exists()
+    assert not (batch / '.held-v4-pool-1.jsonl').exists()

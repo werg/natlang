@@ -35,12 +35,58 @@ async function judge(task, value, files) {
     return { accepted: verdict.accepted, score: verdict.score ?? null, issues: verdict.verdict ?? '' };
   } catch (error) { return { accepted: null, error: String(error?.message ?? error).slice(0, 300) }; }
 }
-// The baseline sees exactly the root's inputs as variables, as a root eval does; any helper, nl or decide call is a
-// ReferenceError, so a baseline that is secretly semantic cannot pass as a keyword rule.
-async function runBaseline(code, inputs) {
+// Read-only lookup over `task.files` matching the runtime's `read_code(name)` contract for static keyword baselines.
+function makeReadCode(task) {
+  const files = task.files ?? {};
+  const rootPath = typeof task.root === 'string' ? task.root : '';
+  const rootDir = rootPath.endsWith('.nl') ? rootPath.slice(0, -3) : rootPath.replace(/\.[^/.]+$/, '');
+  return function read_code(input) {
+    const raw = typeof input === 'string' ? input
+      : (input && typeof input === 'object' && !Array.isArray(input) && typeof input.name === 'string' ? input.name : null);
+    if (raw === null) throw new Error('read_code expects a name string or { name: string }');
+    const clean = raw.replace(/^\.\//, '');
+    if (Object.hasOwn(files, clean)) return files[clean];
+    const candidates = [];
+    if (clean.startsWith('skills.') || clean.startsWith('skills/')) {
+      const skill = clean.slice('skills.'.length);
+      if (rootDir) candidates.push(`${rootDir}/skills/${skill}/SKILL.md`, `${rootDir}/skills/${skill}`);
+      candidates.push(`skills/${skill}/SKILL.md`, `skills/${skill}`);
+    }
+    const slashed = clean.includes('/') ? clean : clean.replace(/\./g, '/');
+    const exts = ['', '.nl', '.ts', '.js', '.mjs', '.md'];
+    for (const base of new Set([clean, slashed])) {
+      if (rootDir) {
+        for (const ext of exts) candidates.push(`${rootDir}/${base}${ext}`);
+        candidates.push(`${rootDir}/skills/${base}/SKILL.md`);
+      }
+      for (const ext of exts) candidates.push(`${base}${ext}`);
+      candidates.push(`skills/${base}/SKILL.md`);
+    }
+    for (const candidate of candidates) {
+      if (Object.hasOwn(files, candidate)) return files[candidate];
+    }
+    // Unique suffix/stem match over .nl/.ts/skill files in task.files.
+    const matches = Object.keys(files).filter(filePath => {
+      if (filePath.endsWith(`/skills/${clean}/SKILL.md`) || filePath === `skills/${clean}/SKILL.md`) return true;
+      const base = filePath.split('/').pop() ?? '';
+      return base === clean || base.replace(/\.(?:nl|ts|js|mjs)$/, '') === clean;
+    });
+    if (matches.length === 1) return files[matches[0]];
+    throw new Error(`read_code: no such function or file: ${raw}`);
+  };
+}
+
+// The baseline sees the root's inputs and a read-only `read_code` over `task.files`, as a root eval does; any helper,
+// nl or decide call is a ReferenceError, so a baseline that is secretly semantic cannot pass as a keyword rule.
+async function runBaseline(code, inputs, task) {
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
   const names = Object.keys(inputs);
-  return await new AsyncFunction(...names, code)(...names.map(name => structuredClone(inputs[name])));
+  const args = names.map(name => structuredClone(inputs[name]));
+  if (!names.includes('read_code')) {
+    names.push('read_code');
+    args.push(makeReadCode(task));
+  }
+  return await new AsyncFunction(...names, code)(...args);
 }
 
 const out = {};
@@ -87,7 +133,7 @@ for (const task of tasks) {
   else if (/\bfolder\b/.test(code) || task.folders) verdicts.keyword_baseline = { skipped: 'reads the world folder; judged by verify.mjs replay' };
   else {
     let value;
-    try { value = await runBaseline(code, task.inputs ?? {}); }
+    try { value = await runBaseline(code, task.inputs ?? {}, task); }
     catch (error) {
       errors.push(`keyword baseline does not run on the inputs alone: ${String(error?.message ?? error).slice(0, 200)}`);
     }

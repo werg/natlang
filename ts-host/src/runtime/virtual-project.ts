@@ -88,6 +88,8 @@ export type VirtualProjectOptions = { inlineRecords?: boolean; platform: Platfor
   target?: 'node' | 'browser'; modules?: Record<string, unknown>;
   /** Validate source and produce declarations without emitting JavaScript. */
   emit?: boolean;
+  /** Return generated declaration documents (default true); type checking is unchanged. */
+  declarations?: boolean;
   /** Collect the program descriptor for adaptation. Defaults to true. */
   adaptation?: boolean };
 
@@ -121,22 +123,30 @@ export function compileVirtualProjectProduct(project: VirtualProject, options: V
   const specifiers = [...(options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'])];
   const build = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
     guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
-    inlineRecords:options.inlineRecords,target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
+    inlineRecords:options.inlineRecords,target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, declarations: options.declarations, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
   return { schema: 'natlang.virtual-project-product/1', project: snapshot, runtimeSpecifiers: specifiers, build };
 }
 
 /** Bind a reusable frontend product to this owner's runtime and fresh module/realm state. */
 export function instantiateVirtualProjectProduct(product: VirtualProjectProduct, runtime: Record<string, unknown>, options: Pick<VirtualProjectOptions, 'platform' | 'modules'>): CompiledProject {
-  // Each consumer owns its data too: mutating diagnostics/outputs cannot poison the shared product.
-  const { project, build: result, runtimeSpecifiers: specifiers } = structuredClone(product);
   if (product.schema !== 'natlang.virtual-project-product/1') throw new Error('unsupported virtual project product');
+  // Public build metadata stays caller-owned; executable closures only own the
+  // source and emitted modules they can use after that metadata is released.
+  const { project, build: result, runtimeSpecifiers: specifiers } = structuredClone(product);
+  return { ...result, require: createVirtualProjectRequire(project, result.outputs, specifiers, runtime, options) };
+}
+
+function createVirtualProjectRequire(
+  project: VirtualProject, outputs: Record<string, string>, specifiers: readonly string[],
+  runtime: Record<string, unknown>, options: Pick<VirtualProjectOptions, 'platform' | 'modules'>
+): CompiledProject['require'] {
   const { platform } = options;
   const root = project.root ?? '/project';
   const cache = new Map<string, { exports: Record<string, unknown> }>();
   const load = (path: string): Record<string, unknown> => {
     const found = cache.get(path);
     if (found) return found.exports;
-    const text = result.outputs[path];
+    const text = outputs[path];
     if (text === undefined) throw new Error(`module ${path} was not emitted by the project build`);
     const module = { exports: {} as Record<string, unknown> };
     cache.set(path, module);
@@ -148,7 +158,7 @@ export function instantiateVirtualProjectProduct(product: VirtualProjectProduct,
       if (!specifier.startsWith('.')) throw new Error(`module ${specifier} is not available in this virtual project`);
       const base = path.slice(0, path.lastIndexOf('/'));
       const joined = joinSourcePath(base || '/', specifier);
-      const candidate = ['', '.js', '/index.js'].map(suffix => `${joined.replace(/\.ts$/, '.js')}${suffix}`).find(item => item in result.outputs);
+      const candidate = ['', '.js', '/index.js'].map(suffix => `${joined.replace(/\.ts$/, '.js')}${suffix}`).find(item => item in outputs);
       if (!candidate) throw new Error(`cannot resolve ${specifier} from ${path}`);
       return load(candidate);
     };
@@ -156,7 +166,7 @@ export function instantiateVirtualProjectProduct(product: VirtualProjectProduct,
     return module.exports;
   };
   const exported = new Map<string,Record<string,unknown>>();
-  return { ...result, require: (path: string) => {
+  return (path: string) => {
     const absolute = path.startsWith('/') ? path : `${root}/${path}`;
     const emitted = `${root}/.natlang/build/${absolute.slice(root.length + 1)}`.replace(/\.m?ts$/, '.js');
     const prior=exported.get(absolute);if(prior)return prior;
@@ -179,7 +189,7 @@ export function instantiateVirtualProjectProduct(product: VirtualProjectProduct,
       Object.defineProperty(bound,key,descriptor);
     }
     exported.set(absolute,bound);return bound;
-  } };
+  };
 }
 
 /** Default local composition; hosts can offload only the pure first stage. */

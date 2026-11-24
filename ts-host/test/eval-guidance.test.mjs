@@ -130,7 +130,7 @@ test('unsupported TypeScript utility annotations get plain-JavaScript guidance w
 
 test('reaching for what the scope lacks is answered with what it has', async () => {
   const { results } = await script([['eval', { code: 'const fs = require("fs");\nfs' }], ['eval', { code: 'missingThing + 1' }]]);
-  for (const text of results) assert.match(text, /This call's eval scope has name, the built-ins nl, read, iterateOn, transcript and NatlangContext/);
+  for (const text of results) assert.match(text, /This call's eval scope has name, the built-ins nl, read, iterateOn, decide, refine, assume, transcript and NatlangContext/);
 });
 
 test('scope feedback names declared captures separately from properties of the input record', async () => {

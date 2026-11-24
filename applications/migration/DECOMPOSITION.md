@@ -160,8 +160,8 @@ are crisp. Like `migrate`, its driver is code: the order of its stages is fixed,
 | Find the sites to migrate | crisp | `host.ts` `checkProgram` (`natlang check --json`, idiom codes) | Exact: the floor is the definition of the old style's markers. |
 | Floor: no passing original case | crisp | `host.ts` `keepOf` | 07 §3: deleted, not migrated; no judgment needed. |
 | Keep or delete | fn, decision | `worthKeeping.nl` | Policy over the brief, its baseline and its findings. |
-| Split a body into steps | crisp | `host.ts` `stepsOf` | Numbered items or paragraphs: plumbing. |
-| Kind of each step | fn, decision, per step in parallel | `stepKind.nl` | Semantic judgment over prose; finite result, scored in one pass. |
+| Split a body into steps | crisp | `@natlang/std` `instructionsOf` / `stepsOf` | Numbered items or paragraphs: plumbing shared with `idiom-reviewer`. |
+| Kind of each step | fn, decision, per step in parallel | `@natlang/std` `stepKind` | Semantic judgment over prose; finite result, scored in one pass, shared with `idiom-reviewer`. |
 | Role of a flagged file | crisp | `host.ts` `roleOf` | A decision-readout finding is a leaf by the floor's definition; a code-in-prose finding in a file with a callable folder is a driver. |
 | Rewrite a leaf judgment | fn, repaired | `rewriteLeaf.nl` in `semanticRepair` | Generation with an exact check; the problems of the check are the next attempt's input. |
 | Rewrite a driver | fn, repaired | `rewriteDriver.nl` in `semanticRepair` | Same; the helper is TypeScript, its caller one sentence. |
@@ -192,5 +192,5 @@ codemod no longer has its own (`transformFile.nl` inside `proposeAndVerify` was 
 | Mine a reusable rule from verified pairs | fn | `codemod/mineCrispRule.nl` | A judgment over examples. |
 | Admit a mined rule | crisp | `verifyMinedRule` | Replays the rule on verified pairs and clean files through `verify`; any regression refuses it. |
 
-Not built: a site excerpt or an edited revision of an untrusted codemod file is new text and is not marked
-`Untrusted` (the original texts keep their fence, which is keyed by text).
+Codemod file texts, derived site excerpts (`repository.search`/`lines`), and edited revisions (`repository.apply`,
+`semanticPairs`) are fenced as `Untrusted<string>` before crossing model boundaries.

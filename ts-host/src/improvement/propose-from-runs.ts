@@ -13,7 +13,7 @@
  */
 import { builtin } from '../runtime/builtin.js';
 import { gatherRunEvidence, hasActionableEvidence, type FunctionEvidence, type RunEvidenceStore } from './run-evidence.js';
-import type { DirectoryImprovementCase, DirectoryProposal, DirectorySplitResult } from './program.js';
+import { DIRECTORY_GUIDANCE_FILE, parseDirectoryGuidance, type DirectoryGuidance, type DirectoryImprovementCase, type DirectoryProposal, type DirectorySplitResult } from './program.js';
 
 export type ExampleMiss = { inputs: unknown; expected: unknown; received?: unknown; error?: string };
 export type ImproverEvidence = Omit<FunctionEvidence, 'function'> & { wrong: ExampleMiss[] };
@@ -27,6 +27,12 @@ export type ProposeFromRunsOptions = {
   protectedPaths?: ReadonlySet<string>;
   /** At most this many functions are revised in one change set (default 3), the most troubled first. */
   maxFunctions?: number;
+  /**
+   * What kind of improvement to propose: `'instructions'` (default: revise `.nl` instructions, falling back to
+   * `guidance.json` for protected functions when `allowGuidanceFallback` is set), `'guidance'` (propose persisted
+   * memetic guidance in `guidance.json` without editing `.nl` files), or `'both'`.
+   */
+  mode?: 'instructions' | 'guidance' | 'both';
   /** Replacements for the built-in stages (tests, or another improver program). */
   stages?: Partial<ImproverStages>;
 };
@@ -36,10 +42,11 @@ export type ImproverStages = {
   diagnose(target: FunctionUnderReview, evidence: ImproverEvidence): Promise<string>;
   shouldRevise(target: FunctionUnderReview, evidence: ImproverEvidence, diagnosis: string): Promise<boolean>;
   revise(target: FunctionUnderReview, evidence: ImproverEvidence, diagnosis: string): Promise<string>;
+  reviseGuidance?(target: FunctionUnderReview, evidence: ImproverEvidence, diagnosis: string, existing?: string): Promise<string>;
 };
 
 /** What the improver decided about one function, for the report. */
-export type FunctionDecision = { path: string; diagnosis: string; revise: boolean; changed: boolean; problem?: string };
+export type FunctionDecision = { path: string; diagnosis: string; revise: boolean; changed: boolean; problem?: string; guidance?: boolean };
 export type RunsProposal = DirectoryProposal & { decisions: FunctionDecision[]; evidence: Record<string, ImproverEvidence> };
 
 const FRONT = /^(---\r?\n[\s\S]*?\r?\n---\r?\n?)([\s\S]*)$/;
@@ -54,6 +61,12 @@ const shippedStages = (): ImproverStages => ({
 const weight = (evidence: ImproverEvidence) => 3 * (evidence.wrong.length + evidence.feedback.length +
   evidence.escalations.filter(item => !item.agreed).length) + 2 * evidence.repairs.length + evidence.failures.length;
 
+function existingGuidanceFrom(files: Readonly<Record<string, string>>): DirectoryGuidance {
+  const raw = files[DIRECTORY_GUIDANCE_FILE];
+  if (!raw) return {};
+  try { return parseDirectoryGuidance(raw); } catch { return {}; }
+}
+
 /**
  * Propose a change set for the program in `files` from its recorded runs and its support examples. Returns null when
  * nothing in the evidence calls for a change. Must run inside a natlang task (the stages are natural-language calls).
@@ -61,6 +74,7 @@ const weight = (evidence: ImproverEvidence) => 3 * (evidence.wrong.length + evid
 export async function proposeFromRuns(context: { directory: string; files: Record<string, string>; support: readonly DirectoryImprovementCase[] },
     options: ProposeFromRunsOptions = {}): Promise<RunsProposal | null> {
   const stages = { ...shippedStages(), ...options.stages };
+  const mode = options.mode ?? 'instructions';
   const evidence: Record<string, ImproverEvidence> = {};
   const entry = (path: string) => evidence[path] ??= { calls: 0, failures: [], escalations: [], repairs: [], feedback: [], wrong: [] };
   if (options.store) for (const [path, found] of Object.entries(gatherRunEvidence(options.store, context.directory))) {
@@ -80,28 +94,57 @@ export async function proposeFromRuns(context: { directory: string; files: Recor
     }
   }
   const candidates = Object.entries(evidence)
-    .filter(([path, found]) => Object.hasOwn(context.files, path) && FRONT.test(context.files[path]!) && !options.protectedPaths?.has(path) &&
+    .filter(([path, found]) => Object.hasOwn(context.files, path) && FRONT.test(context.files[path]!) &&
+      (mode !== 'instructions' || !options.protectedPaths?.has(path)) &&
       (found.wrong.length > 0 || hasActionableEvidence({ function: path, ...found })))
     .sort(([a, x], [b, y]) => weight(y) - weight(x) || a.localeCompare(b))
     .slice(0, options.maxFunctions ?? 3);
   const files: Record<string, string> = {};
   const decisions: FunctionDecision[] = [];
+  const nextGuidance: DirectoryGuidance = existingGuidanceFrom(context.files);
+  let guidanceChanged = false;
   for (const [path, found] of candidates) {
     const [, front, body] = FRONT.exec(context.files[path]!)!;
     const target: FunctionUnderReview = { path, declaration: front!.replace(/^---\r?\n|\r?\n---\r?\n?$/g, ''), instructions: body!.trim() };
     const diagnosis = String(await stages.diagnose(target, found)).trim();
     const revise = await stages.shouldRevise(target, found, diagnosis) === true;
     if (!revise) { decisions.push({ path, diagnosis, revise, changed: false }); continue; }
-    const revised = String(await stages.revise(target, found, diagnosis)).trim();
-    // Exact checks on what the stage returned: some text, a change, and no front matter of its own (the declaration
-    // stays the author's, so a revision cannot change the signature or what is protected).
-    const problem = !revised ? 'the revision is empty' : revised === target.instructions ? 'the revision repeats the instructions' :
-      /^---\r?\n/.test(revised) ? 'the revision carries its own front matter' : undefined;
-    if (problem) { decisions.push({ path, diagnosis, revise, changed: false, problem }); continue; }
-    files[path] = `${front}${revised}\n`;
-    decisions.push({ path, diagnosis, revise, changed: true });
+    const canEditSource = !options.protectedPaths?.has(path) && (mode === 'instructions' || mode === 'both');
+    const shouldWriteGuidance = mode === 'guidance' || mode === 'both' || !canEditSource;
+    let editedSource = false;
+    let editedGuidance = false;
+    let problem: string | undefined;
+    if (canEditSource) {
+      const revised = String(await stages.revise(target, found, diagnosis)).trim();
+      // Exact checks on what the stage returned: some text, a change, and no front matter of its own (the declaration
+      // stays the author's, so a revision cannot change the signature or what is protected).
+      problem = !revised ? 'the revision is empty' : revised === target.instructions ? 'the revision repeats the instructions' :
+        /^---\r?\n/.test(revised) ? 'the revision carries its own front matter' : undefined;
+      if (!problem) {
+        files[path] = `${front}${revised}\n`;
+        editedSource = true;
+      }
+    }
+    if (shouldWriteGuidance) {
+      const prev = nextGuidance.functions?.[path];
+      const proposedNote = stages.reviseGuidance
+        ? String(await stages.reviseGuidance(target, found, diagnosis, prev)).trim()
+        : diagnosis;
+      if (!proposedNote) {
+        if (!editedSource) problem ??= 'the guidance note is empty';
+      } else if (proposedNote === prev) {
+        if (!editedSource) problem ??= 'the guidance repeats existing guidance';
+      } else {
+        nextGuidance.functions = { ...(nextGuidance.functions ?? {}), [path]: proposedNote };
+        guidanceChanged = true;
+        editedGuidance = true;
+      }
+    }
+    const changed = editedSource || editedGuidance;
+    decisions.push({ path, diagnosis, revise, changed, ...(editedGuidance ? { guidance: true } : {}), ...(!changed && problem ? { problem } : {}) });
   }
+  if (guidanceChanged) files[DIRECTORY_GUIDANCE_FILE] = `${JSON.stringify(nextGuidance, null, 2)}\n`;
   if (!Object.keys(files).length) return candidates.length ? { files: {}, decisions, evidence, summary: 'no revision proposed' } : null;
   return { files, decisions, evidence,
-    summary: decisions.filter(item => item.changed).map(item => `${item.path}: ${item.diagnosis}`).join('\n') };
+    summary: decisions.filter(item => item.changed).map(item => `${item.path}${item.guidance ? ' (guidance)' : ''}: ${item.diagnosis}`).join('\n') };
 }

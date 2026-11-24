@@ -6,6 +6,7 @@
   "include": [
     "README.md",
     "applications.json",
+    "examples.json",
     "fit_for.nl",
     "main.ts",
     "meets.nl",

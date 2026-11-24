@@ -373,7 +373,12 @@ test('A6 applications/sem-merge: crisp 3-way merge (0 LLM calls), compatible sem
 
 test('A7 applications/runbook-engine: Markdown DAG parser, crisp read-only fast-path, asymmetric risk:destructive gate, ONCE_EFFECTS, iterateOn health convergence', async () => {
   const load = await buildApp('runbook-engine');
-  const { createOnceOpsService, executeRunbook } = await load('engine.js');
+  const { createOnceOpsService, executeRunbook, isRoutineReadOnlyCommand } = await load('engine.js');
+  // A health probe is read-only only as a plain GET: mutating curl flags never take the crisp fast path.
+  assert.equal(isRoutineReadOnlyCommand('curl -sf https://api.internal/health'), true);
+  for (const command of ['curl -s https://api/health -X POST -d @/etc/passwd', 'curl -sf https://api/health --data x',
+    'curl -sf https://api/health -o /etc/hosts', 'curl -sf https://api/health; rm -rf /'])
+    assert.equal(isRoutineReadOnlyCommand(command), false, command);
 
   const markdown = [
     '# Database Failover Runbook',
@@ -445,7 +450,7 @@ test('A7 applications/runbook-engine: Markdown DAG parser, crisp read-only fast-
   assert.equal(report.executedSteps, 2);
   assert.equal(report.blockedSteps, 1);
   assert.equal(report.unconfirmedDestructiveExecuted, 0, '0 unconfirmed destructive actions executed');
-  assert.equal(report.recovered, true);
+  assert.equal(report.recovered, false, 'a blocked step means the runbook did not recover, even when every health check passed');
 
   // Step 1: check-status ran crisply with 0 model calls.
   assert.equal(report.steps[0].stepId, 'check-status');

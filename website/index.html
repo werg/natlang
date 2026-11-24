@@ -651,6 +651,7 @@ Pick the label from rubric that fits ticket.</pre>
   <div class="cols full" style="margin-top: 48px">
     <div class="read">
       <p>You get this without writing Neuralese yourself. If one stage's result goes only into the next stage, as in <code>analyze(parse(source))</code>, the runtime may pass it as model state. Any other reader, such as a log line or a field access, keeps it as text.</p>
+      <p>For multi-document folds and maps, <code>@natlang/node/std</code> combinators accept <code>{ carry: 'neuralese' }</code>: <code>semanticReduce(sections, init, step, { mode: 'tree', combine, carry: 'neuralese' })</code> compacts each intermediate state through the builtin <code>view(value, instructions?)</code> operator and reads back once at the boundary.</p>
       <p>Passing state between different models needs a learned translation: a shared space that turns one model's per-token codes into another model's state. That is the next stage of the research and has no results yet.</p>
     </div>
     <div class="ex">
@@ -700,12 +701,12 @@ const choose = pluggable(
     </div>
   </div>
   <div class="apps">
-    <div class="app"><h3>nldb</h3><p>A database that takes requests in plain language: defining tables, making transactional changes and answering questions. One engine is written in natural language from end to end, over a documented folder format.</p><div class="files">database.nl · sqlite/ · FORMAT.md</div></div>
-    <div class="app"><h3>games</h3><p>Simulations whose rules are natural language: a market that settles in a seeded order, a duel resolved simultaneously, and characters that act from memory. TypeScript checks what each stage produces.</p><div class="files">games.nl · economy.nl · combat.nl · npc.nl</div></div>
-    <div class="app"><h3>wiki</h3><p>A collaborative wiki whose edit pipeline is written in natural language: change summaries, conflict detection, merge planning, verification against each edit's intent, and repair with iterateOn.</p><div class="files">merge.nl · maintain.nl · cells.nl · index.ts</div></div>
-    <div class="app"><h3>specializer</h3><p>Compiles recorded calls into guarded TypeScript cases, as described in chapter VII. Its own decisions are natural-language functions.</p><div class="files">worthLooking.nl · chooseCondition.nl · promote.nl</div></div>
-    <div class="app"><h3>evidence</h3><p>A question-answering console that checks citations: it plans a search, selects sources, extracts claims, finds gaps and writes an answer.</p><div class="files">plan_search.nl · claims.nl · gaps.nl</div></div>
-    <div class="app"><h3>More in examples/ &amp; applications/</h3><p>PR review with grounded quotes and risk escalation, multi-shop refunds with <code>.in(context)</code>, release publishing with <code>@natlang/node/std</code>, higher-order screening, recursive document outlines, notebook, helpdesk, logs, terminal, and program improver.</p><div class="files">git clone, then natlang run examples/pr-review</div></div>
+    <div class="app"><h3>pr-shepherd</h3><p>Automated pull-request review: crisp routine-hunk skipping, calibrated finite-record decisions, verbatim quote verification, debiased <code>semanticRank</code>, asymmetric risk <code>escalate</code>, and verified doc-fix transactions.</p><div class="files">applications/pr-shepherd · review.ts · check_hunk.nl</div></div>
+    <div class="app"><h3>semantic-etl</h3><p>Maps drifting vendor feeds into strict target schemas by synthesizing a verified crisp transform once per drift, running bulk rows in TypeScript with leaf <code>.nl</code> anomaly fallbacks and <code>semanticMatch</code> entity linking.</p><div class="files">applications/semantic-etl · synthesize.nl · match.ts</div></div>
+    <div class="app"><h3>sem-sheet</h3><p>Browser-compatible reactive spreadsheet mixing crisp formulas with concurrent semantic columns, calibrated decision columns, tree summaries, <code>pluggable</code> column promotion, and <code>semanticMerge</code>.</p><div class="files">applications/sem-sheet · sheet.ts · DECOMPOSITION.md</div></div>
+    <div class="app"><h3>inbox-pilot &amp; ci-doctor</h3><p>Zero-token <code>pluggable</code> fast-paths paired with <code>Untrusted&lt;string&gt;</code> boundaries, confidence-gated <code>semanticPartition</code>, root-cause clustering via <code>semanticMatch</code>, and verified fixes.</p><div class="files">applications/inbox-pilot · applications/ci-doctor</div></div>
+    <div class="app"><h3>sem-merge &amp; runbook-engine</h3><p>Intent-preserving three-way merges (crisp hunks + key-by-key <code>semanticMerge</code>) and Markdown operational runbooks with exact DAG execution and asymmetric <code>escalate</code> safety gates.</p><div class="files">applications/sem-merge · applications/runbook-engine</div></div>
+    <div class="app"><h3>nldb, migration &amp; diligence</h3><p>Natural-language database and semantic grep over a folder format, verified repository codemods, and recursive vendor diligence with verbatim citation postconditions — plus <code>examples/</code> (hello, triage, pr-review, refunds, release, screening, outline).</p><div class="files">applications/nldb · migration · diligence · examples/</div></div>
   </div>
 </section>
 

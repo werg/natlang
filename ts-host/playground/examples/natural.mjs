@@ -279,4 +279,252 @@ export async function main(input: { request: string }): Promise<Comparison> {
     },
     inputs: { request: 'I opened the backpack 20 days ago and would like a refund.' },
     expected: { strict: 'deny', generous: 'allow' } }),
+  semanticProgram({ id: 'inbox-planner', name: 'Inbox planner', category: 'Semantic FP',
+    level: 'Beginner', description: 'The natlang init default: route every message with a calibrated decision and draft replies only where needed.',
+    concepts: ['readout: decision', 'decide', 'inline nl', 'Untrusted', 'Is<T, P>'], root: 'inbox/main.ts',
+    files: {
+      'inbox/types.ts': `export type Message = { from: string; subject: string; body: Untrusted<string> };
+export type Route = 'reply' | 'fyi' | 'ignore';
+export type Reply = Is<string, 'a polite reply of at most three sentences that makes no commitment the message does not ask for'>;
+export type Plan = { from: string; subject: string; route: Route; confidence: number; reply?: Reply };
+`,
+      'inbox/route.nl': `---
+description: Decide what a message needs from its reader.
+args:
+  message: Message
+returns: Route
+readout: decision
+---
+reply when the sender asks the reader a question or asks them to do something; fyi when a person or team tells the
+reader something worth knowing and asks nothing; ignore when it is advertising, a newsletter or an automated message
+the reader does not need.
+`,
+      'inbox/main.ts': `import { decide, nl, untrusted } from '@natlang/browser';
+import route from './route.nl';
+import type { Message, Plan, Reply } from './types.js';
+
+export async function main(input: { messages: { from: string; subject: string; body: string }[] }): Promise<Plan[]> {
+  const messages: Message[] = input.messages.map(m => ({ ...m, body: untrusted(m.body, \`message from \${m.from}\`) }));
+  const decisions = await Promise.all(messages.map(message => decide(route, message)));
+  const draft = nl<(message: Message) => Reply>\`Draft a reply to message for its reader.\`;
+  return Promise.all(messages.map(async (message, i) => {
+    const { value, confidence } = decisions[i]!;
+    const planned: Plan = { from: message.from, subject: message.subject, route: value, confidence };
+    if (value === 'reply') planned.reply = await draft(message);
+    return planned;
+  }));
+}
+`,
+    },
+    inputs: { messages: [
+      { from: 'lee@example.com', subject: 'New designer', body: 'Hi team, Maria joins us on Monday as our new designer.' },
+      { from: 'deals@shop.example', subject: '50% off this weekend', body: 'Our biggest sale of the year starts now. Click to shop.' },
+    ] },
+    expected: [
+      { from: 'lee@example.com', subject: 'New designer', route: 'fyi', confidence: 0.9 },
+      { from: 'deals@shop.example', subject: '50% off this weekend', route: 'ignore', confidence: 0.9 },
+    ] }),
+  semanticProgram({ id: 'calibrated-gate', name: 'Calibrated gate (escalate)', category: 'Semantic FP',
+    level: 'Intermediate', description: 'Gate a local decision with @natlang/browser/std escalate using both a confidence floor and an asymmetric risk floor.',
+    concepts: ['@natlang/std', 'escalate', 'readout: decision', 'Untrusted'], root: 'gate/main.ts',
+    files: {
+      'gate/types.ts': `export type Verdict = 'approve' | 'review' | 'block';
+export type GateResult = { verdict: Verdict; confidence: number; escalated: boolean; reason?: string };
+`,
+      'gate/verdict.nl': `---
+description: Decide whether a proposed change can be approved, needs review, or should be blocked.
+args:
+  change: Untrusted<string>
+returns: Verdict
+readout: decision
+---
+Choose "block" for security regressions or data loss, "review" for risky logic edits, and "approve" for safe routine updates.
+`,
+      'gate/main.ts': `import { untrusted } from '@natlang/browser';
+import { escalate } from '@natlang/browser/std';
+import verdict from './verdict.nl';
+import type { GateResult } from './types.js';
+
+export async function main(input: { change: string }): Promise<GateResult> {
+  const safe = untrusted(input.change, 'proposed change');
+  // Escalate when local confidence < 0.85 OR when P(block) >= 0.25.
+  // Without a configured 'teacher' model, escalate keeps the local answer with escalated: false and reason: 'unavailable:...'.
+  const decideChange = escalate(verdict, { to: 'teacher', floor: 0.85, risk: { block: 0.25 } });
+  const result = await decideChange(safe);
+  return {
+    verdict: result.value,
+    confidence: result.confidence,
+    escalated: result.escalated,
+    ...(result.reason ? { reason: result.reason } : {}),
+  };
+}
+`,
+    },
+    inputs: { change: 'Update the README typo in the installation section.' },
+    expected: { verdict: 'approve', confidence: 0.95, escalated: false } }),
+  semanticProgram({ id: 'pluggable-policy', name: 'Rule or judgment (pluggable)', category: 'Semantic FP',
+    level: 'Intermediate', description: 'Put a fast crisp rule and a typed natural-language judgment behind one pluggable switch supporting shadow mode.',
+    concepts: ['pluggable', 'shadow mode', 'readout: decision', 'Untrusted'], root: 'urgent/main.ts',
+    files: {
+      'urgent/types.ts': `export type Mode = 'crisp' | 'nl' | 'shadow';
+export type UrgencyReport = { mode: Mode; urgentIds: string[] };
+`,
+      'urgent/is_urgent.nl': `---
+description: Decide whether an incoming ticket describes an urgent outage or blocking failure.
+args:
+  ticket: Untrusted<string>
+returns: boolean
+readout: decision
+---
+Return true when ticket reports an active outage, security incident, or data loss affecting users now; otherwise false.
+`,
+      'urgent/main.ts': `import { pluggable, untrusted, type PluggableMode } from '@natlang/browser';
+import isUrgentNl from './is_urgent.nl';
+import type { Mode, UrgencyReport } from './types.js';
+
+const isUrgentCrisp = (ticket: Untrusted<string>): boolean => /\\b(outage|down|fire|data loss)\\b/i.test(String(ticket));
+
+export async function main(input: { mode: Mode; tickets: { id: string; text: string }[] }): Promise<UrgencyReport> {
+  const check = pluggable<[Untrusted<string>], boolean>(
+    { crisp: isUrgentCrisp, nl: ticket => isUrgentNl(ticket) },
+    input.mode as PluggableMode,
+    { name: 'urgent.check', default: 'nl', serve: 'crisp' },
+  );
+  const flags = await Promise.all(input.tickets.map(t => check(untrusted(t.text, \`ticket \${t.id}\`))));
+  return { mode: input.mode, urgentIds: input.tickets.filter((_, i) => flags[i]).map(t => t.id) };
+}
+`,
+    },
+    inputs: { mode: 'shadow', tickets: [
+      { id: 't1', text: 'Checkout is down for every customer.' },
+      { id: 't2', text: 'Please update our billing address next week.' },
+    ] },
+    expected: { mode: 'shadow', urgentIds: ['t1'] } }),
+  semanticProgram({ id: 'semantic-join-rank', name: 'Match & rank (std)', category: 'Semantic FP',
+    level: 'Advanced', description: 'Pair records with exact blocking plus semanticMatch, then order matches with debiased pairwise semanticRank.',
+    concepts: ['@natlang/std', 'semanticMatch', 'semanticRank', 'readout: decision'], root: 'match/main.ts',
+    files: {
+      'match/types.ts': `export type Incident = { id: string; service: string; detail: string };
+export type Runbook = { id: string; service: string; title: string };
+export type MatchSummary = { matched: { incidentId: string; runbookId: string }[]; topIncidentIds: string[] };
+`,
+      'match/fits.nl': `---
+description: Decide whether a runbook addresses an incident.
+args:
+  detail: Untrusted<string>
+  runbookTitle: string
+returns: boolean
+readout: decision
+---
+Return true when runbookTitle directly addresses the failure described in detail; otherwise false.
+`,
+      'match/main.ts': `import { untrusted } from '@natlang/browser';
+import { semanticMatch, semanticRank } from '@natlang/browser/std';
+import fits from './fits.nl';
+import type { Incident, MatchSummary, Runbook } from './types.js';
+
+export async function main(input: { incidents: Incident[]; runbooks: Runbook[] }): Promise<MatchSummary> {
+  // Exact blocking restricts semantic comparisons to matching services.
+  const { pairs } = await semanticMatch(input.incidents, input.runbooks, {
+    block: (inc, rb) => inc.service === rb.service,
+    match: (inc, rb) => fits(untrusted(inc.detail, \`incident \${inc.id}\`), rb.title),
+  });
+  const ranked = await semanticRank(input.incidents, 'highest immediate customer impact to investigate first');
+  return {
+    matched: pairs.map(p => ({ incidentId: p.left.id, runbookId: p.right.id })),
+    topIncidentIds: ranked.ranked.map(inc => inc.id),
+  };
+}
+`,
+    },
+    inputs: {
+      incidents: [
+        { id: 'i1', service: 'payments', detail: 'Card charges are timing out across all regions.' },
+        { id: 'i2', service: 'search', detail: 'Autocomplete latency rose by 40ms.' },
+      ],
+      runbooks: [
+        { id: 'r1', service: 'payments', title: 'Recover payment gateway timeouts' },
+        { id: 'r2', service: 'search', title: 'Rebuild search synonym cache' },
+      ],
+    },
+    expected: { matched: [{ incidentId: 'i1', runbookId: 'r1' }], topIncidentIds: ['i1', 'i2'] } }),
+  semanticProgram({ id: 'policy-compiler', name: 'Policy compiler (compileRule)', category: 'Semantic FP',
+    level: 'Advanced', description: 'Synthesize and example-verify a reusable judgment function from a plain-language rule using compileRule.',
+    concepts: ['@natlang/std', 'compileRule', 'higher-order', 'inline nl'], root: 'compiler/main.ts',
+    files: {
+      'compiler/types.ts': `export type PolicyReport = { allowed: string[]; summary: string };
+`,
+      'compiler/main.ts': `import { nl, untrusted, type Untrusted } from '@natlang/browser';
+import { compileRule } from '@natlang/browser/std';
+import type { PolicyReport } from './types.js';
+
+export async function main(input: { rule: string; items: string[] }): Promise<PolicyReport> {
+  const check = await compileRule<Untrusted<string>, boolean>(input.rule, {
+    examples: [
+      { name: 'approved travel', input: untrusted('Economy train ticket for client visit', 'example 1'), expected: true },
+      { name: 'personal purchase', input: untrusted('Personal video game console', 'example 2'), expected: false },
+    ],
+    attempts: 2,
+  });
+  const safe = input.items.map((text, i) => untrusted(text, \`item \${i + 1}\`));
+  const flags = await Promise.all(safe.map(item => check(item)));
+  const allowed = input.items.filter((_, i) => flags[i]);
+  const summary: string = await nl\`Write one brief sentence summarizing which expenses in allowed passed the policy.\`(allowed);
+  return { allowed, summary };
+}
+`,
+    },
+    inputs: {
+      rule: 'Approve reasonable work travel and software expenses; reject personal purchases.',
+      items: ['Hotel room for engineering conference', 'Home espresso machine'],
+    },
+    expected: { allowed: ['Hotel room for engineering conference'], summary: 'Only the conference hotel room passed the expense policy.' } }),
+  semanticProgram({ id: 'soft-summary', name: 'Soft-state reduce (Neuralese)', category: 'Semantic FP',
+    level: 'Advanced', description: 'Tree-reduce sections with semanticReduce({ carry: "neuralese" }) so intermediate views stay compressed until final readout.',
+    concepts: ['@natlang/std', 'semanticReduce', 'carry: neuralese', 'view'], root: 'digest/main.ts',
+    files: {
+      'digest/types.ts': `export type DigestReport = { sectionCount: number; summary: string };
+`,
+      'digest/summarize.nl': `---
+description: Summarize one document section into a brief running note.
+args:
+  prior: string
+  section: Untrusted<string>
+returns: string
+---
+Incorporate the key facts and decisions from section into prior, keeping the note concise.
+`,
+      'digest/combine.nl': `---
+description: Combine two partial section summaries into one concise synthesis.
+args:
+  left: string
+  right: string
+returns: string
+---
+Merge left and right into one coherent, concise summary keeping every concrete decision and risk.
+`,
+      'digest/main.ts': `import { untrusted } from '@natlang/browser';
+import { semanticReduce } from '@natlang/browser/std';
+import summarize from './summarize.nl';
+import combine from './combine.nl';
+import type { DigestReport } from './types.js';
+
+export async function main(input: { sections: string[] }): Promise<DigestReport> {
+  const safe = input.sections.map((text, i) => untrusted(text, \`section \${i + 1}\`));
+  // On a Neuralese-capable runtime, carry: 'neuralese' routes intermediate states through builtin view() and reads once at the end.
+  const summary = await semanticReduce(safe, '', (prior, section) => summarize(prior, section), {
+    mode: 'tree',
+    combine: (left, right) => combine(left, right),
+    carry: 'neuralese',
+    viewInstructions: 'Preserve concrete decisions, dates, and risks.',
+  });
+  return { sectionCount: input.sections.length, summary };
+}
+`,
+    },
+    inputs: { sections: [
+      'Q3 launch moved to October 14 after load testing passed.',
+      'Billing migration requires a 10-minute read-only window on October 12.',
+    ] },
+    expected: { sectionCount: 2, summary: 'The Q3 launch is set for October 14 after load testing passed, following a 10-minute read-only billing migration window on October 12.' } }),
 ];

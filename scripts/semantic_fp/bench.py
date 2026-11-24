@@ -43,10 +43,12 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import datetime
+import hashlib
 import importlib.util
 import json
 import os
 import random
+import re
 import shutil
 import statistics
 import subprocess
@@ -179,17 +181,63 @@ def program_env(work, arm):
     return env
 
 
+def safe_id(ident):
+    """Filesystem-safe, collision-free directory/file key for a unit or example id."""
+    text = str(ident)
+    cleaned = re.sub(r'\.{2,}', '_', re.sub(r'[^A-Za-z0-9._-]+', '_', text)).strip('._')
+    if cleaned == text and cleaned not in ('', '.', '..'):
+        return cleaned
+    digest = hashlib.sha256(text.encode('utf-8')).hexdigest()[:8]
+    return f'{cleaned or "unit"}-{digest}'
+
+
 def app_copy(app, work, arm):
     """The program as an arm runs it, copied under WORK so builds and tune releases stay out of the repository: arm D
     has its own copy (its tune release and train-split examples.json apply to D only), the other arms share one."""
     return work / ('app-D' if arm.startswith('D') else 'app')
 
 
+def _source_hashes(directory):
+    ignored = {'.natlang', 'bench', 'node_modules'}
+    hashes = {}
+    for path in sorted(Path(directory).rglob('*')):
+        rel = path.relative_to(directory)
+        if any(part in ignored for part in rel.parts) or not path.is_file():
+            continue
+        hashes[rel.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashes
+
+
 def prepare_app(app, work, arm):
-    """Copy the program for ``arm`` once and build it, before units run in parallel (one build, no racing copies)."""
+    """Copy or sync the program for ``arm`` and build it, before units run in parallel (one build, no racing copies).
+    Syncs source changes from ``app['dir']`` without clobbering ``prepare-d`` state (``.natlang/``, ``examples.json``)
+    or in-place improvements when ``app['dir']`` has not changed."""
     dest = app_copy(app, work, arm)
+    src = Path(app['dir'])
+    manifest_path = dest / '.natlang' / '.bench-source-manifest.json'
+    current = _source_hashes(src)
     if not dest.exists():
-        shutil.copytree(app['dir'], dest, ignore=shutil.ignore_patterns('.natlang', 'bench', 'node_modules'))
+        shutil.copytree(src, dest, ignore=shutil.ignore_patterns('.natlang', 'bench', 'node_modules'))
+    else:
+        previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
+        for rel, digest in current.items():
+            target = dest / rel
+            source_file = src / rel
+            if previous is None:
+                if rel == 'examples.json' and target.exists():
+                    continue
+                if not target.exists() or hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source_file, target)
+            elif previous.get(rel) != digest or not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_file, target)
+        if previous is not None:
+            for rel in previous:
+                if rel not in current and rel != 'examples.json':
+                    (dest / rel).unlink(missing_ok=True)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(current, sort_keys=True) + '\n')
     env = {**os.environ, 'NATLANG_CONFIG_HOME': str(work / 'config')}
     proc = subprocess.run([*NATLANG, 'build', str(dest)], env=env, capture_output=True, text=True)
     if proc.returncode:
@@ -207,7 +255,7 @@ def target_args(arguments):
 # ---- running ---------------------------------------------------------------------------------------------------------
 
 def run_program_unit(app, work, arm, row, sample, *, timeout):
-    unit = work / 'runs' / arm / row['id'] / f's{sample}'
+    unit = work / 'runs' / arm / safe_id(row['id']) / f's{sample}'
     done = unit / 'result.json'
     if done.exists():
         record = json.loads(done.read_text())
@@ -249,10 +297,37 @@ def run_program_unit(app, work, arm, row, sample, *, timeout):
 def frontier_user(app, row):
     spec = app['spec']['frontier']
     values = {**app['defaults'], **row['arguments']}
-    text = spec['user']
-    for name, kind in spec['arguments'].items():
-        text = text.replace('{' + name + '}', json.dumps(values[name], indent=1) if kind == 'json' else str(values[name]))
-    return text
+    rendered = {
+        name: json.dumps(values[name], indent=1) if kind == 'json' else str(values[name])
+        for name, kind in spec['arguments'].items()
+    }
+    return re.sub(r'\{(\w+)\}', lambda match: rendered[match.group(1)] if match.group(1) in rendered else match.group(0),
+                  spec['user'])
+
+
+def frontier_job(app, todo, *, concurrency):
+    spec = app['spec']['frontier']
+    services = app['spec'].get('services', [])
+    tools = spec['tools'] + [service['tool'] for service in services]
+    services_module = app['spec'].get('services_module') or spec.get('services_module')
+    if services_module and not Path(services_module).is_absolute():
+        services_module = str((app['dir'] / 'bench' / services_module).resolve())
+    has_services = bool(services) or bool(services_module)
+    max_turns = spec.get('max_turns')
+    if max_turns is None:
+        max_turns = app['spec'].get('max_turns')
+    if max_turns is None:
+        max_turns = 16 if has_services else 4
+    job = {**FRONTIER, 'system': spec['system'], 'tools': tools, 'submit': spec['submit'], 'max_turns': max_turns,
+           'concurrency': concurrency,
+           'units': [{'id': f"{row['id']}#{s}", 'unit_id': row['id'], 'sample': s,
+                      'arguments': row['arguments'], 'user': frontier_user(app, row)} for row, s in todo]}
+    if services_module:
+        job['services_module'] = services_module
+    service_responses = app['spec'].get('service_responses') or spec.get('service_responses')
+    if service_responses:
+        job['service_responses'] = service_responses
+    return job
 
 
 def run_frontier(app, work, rows, samples, *, concurrency):
@@ -264,10 +339,7 @@ def run_frontier(app, work, rows, samples, *, concurrency):
         results[(record['id'], record['sample'])] = record
     todo = [(row, s) for row in rows for s in range(samples) if (row['id'], s) not in results]
     if todo:
-        spec = app['spec']['frontier']
-        tools = spec['tools'] + [service['tool'] for service in app['spec'].get('services', [])]
-        job = {**FRONTIER, 'system': spec['system'], 'tools': tools, 'submit': spec['submit'], 'max_turns': 4,
-               'concurrency': concurrency, 'units': [{'id': f"{row['id']}#{s}", 'user': frontier_user(app, row)} for row, s in todo]}
+        job = frontier_job(app, todo, concurrency=concurrency)
         proc = subprocess.run([NODE, str(REPO / 'scripts' / 'semantic_fp' / 'frontier_loop.mjs')], input=json.dumps(job),
                               capture_output=True, text=True)
         if proc.returncode:
@@ -276,9 +348,9 @@ def run_frontier(app, work, rows, samples, *, concurrency):
             record = json.loads(line)
             ident, sample = record['id'].rsplit('#', 1)
             record.update(id=ident, sample=int(sample))
-            if record.get('error', '').startswith('transport'):
+            if (record.get('error') or '').startswith('transport'):
                 continue   # a provider failure is no verdict: rerun it
-            (out_dir / f'{ident}.s{sample}.json').write_text(json.dumps(record) + '\n')
+            (out_dir / f'{safe_id(ident)}.s{sample}.json').write_text(json.dumps(record) + '\n')
             results[(ident, int(sample))] = record
     return [results[(row['id'], s)] for row in rows for s in range(samples) if (row['id'], s) in results]
 
@@ -295,8 +367,10 @@ def trace_accounting(directory):
            'frontier': {'prompt': 0, 'completion': 0, 'cached': 0, 'requests': 0, 'ms': 0}, 'span_ms': None,
            'local_intervals': []}
     first = last = None
+    traces = []
     for path in sorted(Path(directory).glob('*.jsonl')) if Path(directory).exists() else ():
         actors, served_crisp, internal, call = set(), False, False, False
+        call_id = parent_call_id = None
         for line in path.read_text().splitlines():
             try:
                 event = json.loads(line)
@@ -309,7 +383,9 @@ def trace_accounting(directory):
             kind = event.get('kind')
             busy = (t - float(event.get('duration_ms') or 0) / 1000, t) if stamp and event.get('duration_ms') else None
             if kind == 'manifest':
-                internal, call = bool(event.get('parent_call_id')), bool(event.get('definition_id'))
+                call_id = event.get('call_id') or event.get('run_id')
+                parent_call_id = event.get('parent_call_id')
+                internal, call = bool(parent_call_id), bool(event.get('definition_id'))
             elif kind == 'model_request' and event.get('phase') == 'end':
                 side = 'frontier' if is_frontier(event.get('actor')) else 'local'
                 actors.add(side)
@@ -327,6 +403,7 @@ def trace_accounting(directory):
                 if scored:   # a scored readout makes no model_request: its time and tokens are in the readout event
                     side = 'frontier' if is_frontier(event.get('actor')) else 'local'
                     actors.add(side)
+                    acc[side]['requests'] += 1
                     acc[side]['ms'] += float(event.get('duration_ms') or 0)
                     if side == 'local' and busy:
                         acc['local_intervals'].append(busy)
@@ -334,12 +411,28 @@ def trace_accounting(directory):
                     acc[side]['completion'] += int(event.get('completion_tokens') or event.get('reasoning_tokens') or 0)
             elif kind == 'tier_served' and event.get('tier') == 'tier3':
                 served_crisp = True
-        if internal or not call:
+        traces.append({'call_id': call_id, 'parent_call_id': parent_call_id, 'internal': internal,
+                       'call': call, 'actors': actors, 'served_crisp': served_crisp})
+    by_id = {t['call_id']: t for t in traces if t['call_id']}
+    for trace in traces:
+        if not trace['parent_call_id'] or not trace['actors']:
+            continue
+        seen = set()
+        pid = trace['parent_call_id']
+        while pid and pid not in seen:
+            seen.add(pid)
+            parent = by_id.get(pid)
+            if parent is None:
+                break
+            parent['actors'].update(trace['actors'])
+            pid = parent['parent_call_id']
+    for trace in traces:
+        if trace['internal'] or not trace['call']:
             continue   # a call made inside another call is part of its parent's work; iteration traces are no calls
         acc['calls'] += 1
-        acc['crisp_served'] += served_crisp and not actors
-        acc['model_calls'] += bool(actors)
-        acc['frontier_calls'] += 'frontier' in actors
+        acc['crisp_served'] += trace['served_crisp'] and not trace['actors']
+        acc['model_calls'] += bool(trace['actors'])
+        acc['frontier_calls'] += 'frontier' in trace['actors']
     if first is not None:
         acc['span_ms'] = round((last - first) * 1000)
     return acc
@@ -380,13 +473,16 @@ def bootstrap_ci(per_unit, resamples=10000, seed=0):
 
 def usd_frontier(tokens, model=FRONTIER['model']):
     price = LIST_PRICE[model]
+    cache_write = tokens.get('cache_write', 0)
     uncached = max(0, tokens['prompt'] - tokens['cached'])
-    return (uncached * price['input'] + tokens['cached'] * price['cache_read'] + tokens['completion'] * price['output']) / 1e6
+    return (uncached * price['input'] + tokens['cached'] * price['cache_read']
+            + cache_write * price['cache_write'] + tokens['completion'] * price['output']) / 1e6
 
 
 def summarize(app, arm, records, local_rate):
     verdicts, per_unit, latencies, safety = [], {}, [], {}
-    totals = {'frontier': {'prompt': 0, 'completion': 0, 'cached': 0}, 'local': {'prompt': 0, 'completion': 0, 'cached': 0}}
+    totals = {'frontier': {'prompt': 0, 'completion': 0, 'cached': 0, 'cache_write': 0},
+              'local': {'prompt': 0, 'completion': 0, 'cached': 0}}
     gpu_ms, calls, crisp, model_calls, frontier_calls, errors = 0., 0, 0, 0, 0, 0
     intervals = []
     rows = {r['id']: r for r in app['rows']}
@@ -403,8 +499,9 @@ def summarize(app, arm, records, local_rate):
             safety[key] = safety.get(key, 0) + value
         if arm == 'A':
             usage = record['usage']
-            totals['frontier']['prompt'] += usage['input'] + usage['cache_read'] + usage['cache_write']
+            totals['frontier']['prompt'] += usage['input'] + usage['cache_read']
             totals['frontier']['cached'] += usage['cache_read']
+            totals['frontier']['cache_write'] += usage.get('cache_write', 0)
             totals['frontier']['completion'] += usage['output']
             latencies.append(record['latency_ms'])
             calls += 1
@@ -415,6 +512,7 @@ def summarize(app, arm, records, local_rate):
             for side in ('frontier', 'local'):
                 for key in ('prompt', 'completion', 'cached'):
                     totals[side][key] += acc[side][key]
+            totals['frontier']['cache_write'] += acc['frontier'].get('cache_write', 0)
             gpu_ms += acc['local']['ms']
             intervals += acc.get('local_intervals', [])
             latencies.append(acc['span_ms'] if acc['span_ms'] is not None else record['process_wall_s'] * 1000)
@@ -436,9 +534,17 @@ def summarize(app, arm, records, local_rate):
         for key, value in v['checks'].items():
             if isinstance(value, bool):
                 checks.setdefault(key, []).append(value)
+    has_services = bool(app['spec'].get('services'))
+    has_untrusted = bool(app['spec']['untrusted']) if 'untrusted' in app['spec'] else has_services
+    safety_summary = {
+        'schema_violation': 0,
+        'unverified_commits': 'n/a (no commits in this app)' if not has_services else None,
+        'injection_escapes': 'n/a (no untrusted boundary in this app)' if not has_untrusted else None,
+        **safety,
+    }
     return {
         'units': len(per_unit), 'runs': n, 'errors': errors,
-        'pass_rate': round(sum(s for s, _ in per_unit.values()) / sum(c for _, c in per_unit.values()), 4),
+        'pass_rate': round(sum(s / c for s, c in per_unit.values()) / len(per_unit), 4),
         'pass_rate_ci95_unit_bootstrap': bootstrap_ci(per_unit),
         'check_rates': {k: round(sum(v) / len(v), 4) for k, v in checks.items()},
         'latency_ms': {'p50': percentile(latencies, .5), 'p95': percentile(latencies, .95)},
@@ -451,9 +557,7 @@ def summarize(app, arm, records, local_rate):
         'crisp_served_share': round(crisp / calls, 4) if calls else None,
         'local_resolved_share': round((calls - frontier_calls) / calls, 4) if calls else None,
         'escalation_share': (round(frontier_calls / calls, 4) if calls else None) if arm.startswith('D') else None,
-        'safety': {'schema_violation': safety.get('schema_violation', 0), **{k: v for k, v in safety.items() if k != 'schema_violation'},
-                   'unverified_commits': 'n/a (no commits in this app)' if not app['spec'].get('services') else None,
-                   'injection_escapes': 'n/a (no untrusted boundary in this app)' if not app['spec'].get('services') else None},
+        'safety': safety_summary,
         'per_unit': verdicts,
     }, per_unit
 
@@ -520,6 +624,7 @@ def cmd_prepare_d(args):
         'specialize': [*NATLANG, 'specialize', '--profile', 'bench-frontier', '--program', str(copy)],
         'tune': [*NATLANG, 'tune', str(copy)],
     }
+    failed = None
     with log.open('a') as out:
         for step in args.steps.split(','):
             started = time.time()
@@ -527,11 +632,26 @@ def cmd_prepare_d(args):
                 out.write(f'== record: {record_examples(copy, env, args.concurrency)} ({time.time() - started:.0f}s)\n')
                 out.flush()
                 continue
+            if step not in steps:
+                raise SystemExit(f'unknown prepare-d step {step!r}')
             proc = subprocess.run(steps[step], env=env, capture_output=True, text=True)
             out.write(f'== {step} exit {proc.returncode} ({time.time() - started:.0f}s): {" ".join(steps[step][1:])}\n'
                       f'{proc.stdout[-6000:]}\n{proc.stderr[-6000:]}\n')
             out.flush()
+            if proc.returncode:
+                failed = (step, proc.returncode)
+                break
     print(log.read_text()[-6000:])
+    if failed is not None:
+        raise SystemExit(f'prepare-d step {failed[0]} failed with exit {failed[1]}')
+
+
+def _example_key(example):
+    ident = example.get('id') or example.get('name')
+    if ident:
+        return safe_id(ident)
+    digest = hashlib.sha256(json.dumps(example, sort_keys=True).encode('utf-8')).hexdigest()[:12]
+    return f'ex-{digest}'
 
 
 def record_examples(copy, env, concurrency):
@@ -542,9 +662,9 @@ def record_examples(copy, env, concurrency):
     inputs_dir = copy.parent / 'record-inputs'
     inputs_dir.mkdir(exist_ok=True)
 
-    def one(indexed):
-        index, example = indexed
-        path, done = inputs_dir / f'{index}.json', inputs_dir / f'{index}.outcome'
+    def one(example):
+        key = _example_key(example)
+        path, done = inputs_dir / f'{key}.json', inputs_dir / f'{key}.outcome'
         if done.exists():   # resumable: an example recorded by an earlier launch is not called again
             return done.read_text()
         path.write_text(json.dumps(example['inputs']))
@@ -558,7 +678,7 @@ def record_examples(copy, env, concurrency):
             done.write_text(outcome)
         return outcome
     with concurrent.futures.ThreadPoolExecutor(concurrency) as pool:
-        outcomes = list(pool.map(one, enumerate(examples)))
+        outcomes = list(pool.map(one, examples))
     return {'examples': len(examples), **{k: outcomes.count(k) for k in ('right', 'wrong', 'failed')}}
 
 
@@ -603,17 +723,19 @@ def cmd_report(args):
     for arm in arms:   # cost of this arm per unit of arm A's
         if arm != 'A' and 'A' in arms and arms['A']['usd_per_100_units']['total']:
             arms[arm]['cost_ratio_vs_A'] = round(arms[arm]['usd_per_100_units']['total'] / arms['A']['usd_per_100_units']['total'], 3)
-    config = json.loads((work / 'config' / 'config.json').read_text())
+    config_path = work / 'config' / 'config.json'
+    config = json.loads(config_path.read_text()) if config_path.exists() else {'profiles': {}}
+    profiles = config.get('profiles') or {}
     result = {
         'schema': 'natlang.bench-result/1', 'app': app['spec']['app'], 'date': datetime.date.today().isoformat(),
         'code': code_provenance.code_provenance() if hasattr(code_provenance, 'code_provenance') else None,
         'split': 'held', 'held_units': len(rows),
         'arms_config': {
-            'A': {**FRONTIER, 'loop': 'frontier_loop.mjs: system + prose task, tools = app services + submit, <= 4 turns'},
-            'B': {'profile': config['profiles'].get('bench-frontier'), 'specialization': 'off', 'escalate': None,
+            'A': {**FRONTIER, 'loop': 'frontier_loop.mjs: system + prose task, tools = app services + submit'},
+            'B': {'profile': profiles.get('bench-frontier'), 'specialization': 'off', 'escalate': None,
                   'decisions': 'generated (a Pi provider cannot score replies)'},
-            'C': {'profile': redact(config['profiles'].get('bench-base')), 'specialization': 'off', 'escalate': None},
-            'D': {'profile': redact(config['profiles'].get('bench-policy')), 'specialization': 'on (state from prepare-d)',
+            'C': {'profile': redact(profiles.get('bench-base')), 'specialization': 'off', 'escalate': None},
+            'D': {'profile': redact(profiles.get('bench-policy')), 'specialization': 'on (state from prepare-d)',
                   'escalate': 'bench-frontier', 'prepare': (work / 'prepare-d.log').read_text()[-3000:] if (work / 'prepare-d.log').exists() else None},
             'modes': {'reasoned': 'readout: decision reasons first (default decisionSamples)', 'instant': 'NATLANG_DECISION_SAMPLES=0'},
         },
@@ -651,8 +773,70 @@ def cmd_compare(args):
     """Arm ``--arm`` of the second result file (default: the first) against ``--against`` of the first."""
     first = json.loads(Path(args.result).read_text())
     second = json.loads(Path(args.other).read_text()) if args.other else first
-    print(json.dumps(compare_to(per_unit_of(first['arms'][args.against]), per_unit_of(second['arms'][args.arm]),
-                                resamples=args.resamples), indent=1))
+    if first.get('app') != second.get('app'):
+        raise SystemExit(f"cannot compare different apps: {first.get('app')!r} vs {second.get('app')!r}")
+    ref = per_unit_of(first['arms'][args.against])
+    other = per_unit_of(second['arms'][args.arm])
+    if not (set(ref) & set(other)):
+        raise SystemExit(f'no overlapping units between {args.against} and {args.arm}')
+    print(json.dumps(compare_to(ref, other, resamples=args.resamples), indent=1))
+
+
+def _split_delta(baseline, proposed, split_name):
+    b = (baseline or {}).get(split_name) or {}
+    p = (proposed or {}).get(split_name) or {}
+    b_rate, p_rate = b.get('passRate'), p.get('passRate')
+    return {
+        'before': {'passed': b.get('passed'), 'total': b.get('total'), 'pass_rate': b_rate},
+        'after': {'passed': p.get('passed'), 'total': p.get('total'), 'pass_rate': p_rate},
+        'delta': round(p_rate - b_rate, 4) if isinstance(b_rate, (int, float)) and isinstance(p_rate, (int, float)) else None,
+    }
+
+
+def cmd_improve(args):
+    """Invoke ``natlang improve`` on the app copy under ``--work`` and report confirmation-split before/after deltas."""
+    app, work = load_app(args.app), Path(args.work).resolve()
+    arm = args.arm
+    copy = prepare_app(app, work, arm)
+    cmd = [*NATLANG, 'improve', str(copy), '--model', args.model, '--json']
+    if args.proposal:
+        cmd += ['--proposal', str(Path(args.proposal).resolve())]
+    if args.provider:
+        cmd += ['--provider', args.provider]
+    if args.server:
+        cmd += ['--server', args.server]
+    if args.dry_run:
+        cmd += ['--dry-run']
+    store_dir = work / 'calls' / arm.split('-')[0]
+    if store_dir.exists():
+        cmd += ['--store', str(store_dir)]
+    env_arm = 'D-reasoned' if arm == 'D' else arm
+    proc = subprocess.run(cmd, env=program_env(work, env_arm), capture_output=True, text=True)
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as error:
+        raise SystemExit(f'natlang improve failed (exit {proc.returncode}): {proc.stderr[-2000:] or proc.stdout[-2000:]}') from error
+    report = {
+        'schema': 'natlang.bench-improve/1',
+        'app': app['spec']['app'],
+        'directory': str(copy),
+        'status': payload.get('status'),
+        'changed': payload.get('changed', []),
+        'reasons': payload.get('reasons', []),
+        'confirmation': _split_delta(payload.get('baseline'), payload.get('proposed'), 'confirmation'),
+        'dev': _split_delta(payload.get('baseline'), payload.get('proposed'), 'dev'),
+        'record': payload.get('record'),
+        'raw': payload,
+    }
+    text = json.dumps(report, indent=1) + '\n'
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text)
+    print(text, end='')
+    if proc.returncode:
+        raise SystemExit(proc.returncode)
+    return report
 
 
 def redact(profile):
@@ -704,6 +888,16 @@ def main(argv=None):
     compare.add_argument('--arm', required=True)
     compare.add_argument('--against', default='A')
     compare.add_argument('--resamples', type=int, default=10000)
+    imp = sub.add_parser('improve', help='run natlang improve on the app copy and report confirmation-split deltas')
+    imp.add_argument('app')
+    imp.add_argument('--work', required=True)
+    imp.add_argument('--model', required=True)
+    imp.add_argument('--proposal', help='optional proposal JSON file to pass to natlang improve')
+    imp.add_argument('--provider', help='Pi provider id')
+    imp.add_argument('--server', help='OpenAI-compatible server URL')
+    imp.add_argument('--arm', default='D', help='which app copy/call-store to improve (default: D)')
+    imp.add_argument('--dry-run', action='store_true')
+    imp.add_argument('--out', help='write JSON report to this path')
     args = parser.parse_args(argv)
     if args.command == 'split':
         cmd_split(args)
@@ -713,7 +907,7 @@ def main(argv=None):
         setup_config(Path(args.work).resolve(), args.policy_profile, args.base_profile)
         print(Path(args.work).resolve() / 'config' / 'config.json')
     else:
-        {'run': cmd_run, 'prepare-d': cmd_prepare_d, 'report': cmd_report}[args.command](args)
+        {'run': cmd_run, 'prepare-d': cmd_prepare_d, 'report': cmd_report, 'improve': cmd_improve}[args.command](args)
 
 
 if __name__ == '__main__':

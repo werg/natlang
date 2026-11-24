@@ -31,6 +31,8 @@ export type PilotOptions = {
   floor?: number;
   /** Asymmetric risk floor for the `'escalate'` class (default `0.25`). */
   escalateRiskFloor?: number;
+  /** Whether to compile standing rules that include validation examples via `compileRule` (default `true`). */
+  compileRules?: boolean;
   /** Optional custom compiler passed to `compileRule` when compiling standing rules with examples. */
   ruleCompiler?: (rule: string, problems?: string[]) => Promise<(item: IncomingMessage) => Promise<InboxAction | null>>;
   /** Maximum concurrent message triage calls in `processInbox` (default `6`). */
@@ -87,6 +89,9 @@ export function fenceMessage(message: IncomingMessage): IncomingMessage {
  * at most one mutating mail effect across retries or duplicate deliveries.
  */
 export function createOnceMailService(inner: MailService): OnceMailService {
+  if (ONCE_EFFECTS in inner && typeof (inner as Partial<OnceMailService>).executedCount === 'function') {
+    return inner as OnceMailService;
+  }
   // The first effect per messageId is kept as a promise, so concurrent duplicate deliveries share one effect.
   const byMessage = new Map<string, Promise<MailEffectResult>>();
   const counts = new Map<string, number>();
@@ -142,7 +147,7 @@ export async function triageMessage(
   compiledRules: Array<{ rule: StandingRule; evaluate: (msg: IncomingMessage) => Promise<InboxAction | null> }> = [],
 ): Promise<PilotDecision> {
   const message = fenceMessage(rawMessage);
-  const onceService = ONCE_EFFECTS in service ? (service as OnceMailService) : createOnceMailService(service);
+  const onceService = createOnceMailService(service);
   const safeDecide = escalate(decideAction, {
     to: options.escalateTo ?? 'teacher',
     floor: options.floor ?? 0.85,
@@ -256,7 +261,10 @@ export async function processInbox(
   options: PilotOptions = {},
 ): Promise<InboxReport> {
   const onceService = createOnceMailService(service);
-  const compiledRules = options.ruleCompiler ? await compileStandingRules(rules, options.ruleCompiler) : [];
+  const shouldCompile =
+    options.compileRules !== false &&
+    (Boolean(options.ruleCompiler) || rules.some(rule => (rule.examples?.length ?? 0) > 0));
+  const compiledRules = shouldCompile ? await compileStandingRules(rules, options.ruleCompiler) : [];
   const decisions = await semanticMap(
     messages,
     message => triageMessage(message, rules, onceService, options, compiledRules),

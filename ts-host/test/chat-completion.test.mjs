@@ -133,6 +133,25 @@ test('x_natlang_host_call_fields go on the calls the runtime wrote, not on sampl
   } finally { await model.close(); }
 });
 
+test('x_natlang_history_reasoning sends one reasoning alias in history (servers that reject the pair) and stays off the wire', async () => {
+  const model = await server(() => [
+    delta({ tool_calls: [{ index: 0, id: 'x', type: 'function', function: { name: 'eval', arguments: '{}' } }] }, 'tool_calls')]);
+  const history = () => ({ ...request(), messages: [{ role: 'user', content: 'go' },
+    { role: 'assistant', content: '', reasoning_content: 'think', tool_calls: [{ id: 's1', type: 'function', function: { name: 'eval', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 's1', content: '{}' }] });
+  try {
+    for (const [control, keys] of [[undefined, ['reasoning', 'reasoning_content']], ['reasoning_content', ['reasoning_content']],
+                                   ['reasoning', ['reasoning']], ['none', []]]) {
+      await chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }),
+        { request: control ? { x_natlang_history_reasoning: control } : {} })(history());
+      const sent = model.bodies.at(-1);
+      assert.deepEqual(['reasoning', 'reasoning_content'].filter(key => key in sent.messages[1]), keys);
+      for (const key of keys) assert.equal(sent.messages[1][key], 'think');
+      assert.equal('x_natlang_history_reasoning' in sent, false);
+    }
+  } finally { await model.close(); }
+});
+
 test('the HTTP transport streams, strips private schema keys, and decodes tool calls', async () => {
   const model = await server(() => [
     delta({ role: 'assistant', content: '' }),

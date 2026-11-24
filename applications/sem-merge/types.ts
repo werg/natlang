@@ -1,9 +1,9 @@
-/** Three-way file inputs for a merge operation. */
+/** Three-way file inputs for a merge operation. External branch texts are untrusted outside data. */
 export type ThreeWayFile = {
   path: string;
-  base: string;
-  left: string;
-  right: string;
+  base: Untrusted<string>;
+  left: Untrusted<string>;
+  right: Untrusted<string>;
 };
 
 /** One overlapping conflict region extracted from a three-way diff. */
@@ -11,9 +11,9 @@ export type ConflictHunk = {
   path: string;
   startLine: number;
   endLine: number;
-  base: string;
-  left: string;
-  right: string;
+  base: Untrusted<string>;
+  left: Untrusted<string>;
+  right: Untrusted<string>;
 };
 
 /** Resolution record for one overlapping conflict hunk. */

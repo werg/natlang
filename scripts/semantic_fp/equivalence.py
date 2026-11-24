@@ -141,7 +141,13 @@ def program_files(directory):
         rel = path.relative_to(directory).as_posix()
         if not path.is_file() or any(part in ('node_modules', '.natlang') or part.startswith('.') for part in rel.split('/')):
             continue
-        if rel.endswith('.nl') or (rel.endswith('.ts') and not rel.endswith('.d.ts')) or rel == 'natlang.json':
+        is_generated_dts = (
+            rel.endswith('.d.ts')
+            and not rel.endswith('.d.nl.ts')
+            and path.name != 'services.d.ts'
+            and path.with_name(path.name[:-5] + '.ts').is_file()
+        )
+        if rel.endswith('.nl') or (rel.endswith('.ts') and not is_generated_dts) or rel == 'natlang.json':
             files[rel] = path.read_text(encoding='utf-8')
     if not any(name.endswith('.nl') or name.endswith('.ts') for name in files):
         raise ValueError(f'{directory} holds no program sources')
@@ -307,8 +313,12 @@ def measure(cases, out, endpoints, *, samples=4, seed_base=None, case_seconds=36
                 entry['judge_model'] = judge
         queue.write_text(''.join(json.dumps(entry, sort_keys=True) + '\n' for entry in entries))
     (out / 'result.json').unlink(missing_ok=True)
+    original_record_result = held_eval.record_result
     held_eval.record_result = lambda *_: None   # not a held-set measurement: recorded below with its report
-    result = held_eval.run(out)
+    try:
+        result = held_eval.run(out)
+    finally:
+        held_eval.record_result = original_record_result
     rows = report(out)
     (out / 'report.jsonl').write_text(''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows))
     record_equivalence(out, spec)
@@ -409,11 +419,12 @@ def report(run):
             'prompt_tokens_mean': _mean([s.get('prompt_tokens') for s in samples]),
             'completion_tokens_mean': _mean([s.get('completion_tokens') for s in samples]),
             'wall_seconds_mean': _mean([s.get('wall_seconds') for s in samples]),
-            'per_sample': samples, 'run': str(run), 'code': (spec.get('code') or {}).get('commit')})
+            'per_sample': samples, 'run': str(run), 'engine': spec.get('engine'),
+            'code': (spec.get('code') or {}).get('git_commit')})
     return rows
 
 
-def compare(first, second, *, slack_cases=1):
+def compare(first, second, *, slack_cases=1, allow_other_engine=False):
     """Per program, version ``second`` against ``first`` on the same cases and seeds (07 §4.2): accepted when its
     expected passing cases (sum of per-case pass rates over scored samples) is at least the original's minus
     ``slack_cases``, and every case the original passes in all k samples it also passes in all k. Rubric cases without a
@@ -426,6 +437,7 @@ def compare(first, second, *, slack_cases=1):
     out = []
     for program, ids in sorted(programs.items()):
         problems, rate_a, rate_b, cost = [], 0.0, 0.0, collections.defaultdict(list)
+        scored_cases = 0
         for case_id in sorted(ids):
             x, y = a[case_id], b.get(case_id)
             if y is None:
@@ -435,8 +447,16 @@ def compare(first, second, *, slack_cases=1):
                 problems.append(f'{case_id}: seeds differ')
             if x.get('policy_id') != y.get('policy_id'):
                 problems.append(f'{case_id}: measured on another policy ({x.get("policy_id")} vs {y.get("policy_id")})')
+            if not allow_other_engine and x.get('engine') != y.get('engine'):
+                problems.append(f'{case_id}: measured on another engine ({x.get("engine")} vs {y.get("engine")})')
+            partial_x = x['scored'] + x.get('judge_pending', 0) < x['samples']
+            partial_y = y['scored'] + y.get('judge_pending', 0) < y['samples']
+            if partial_x or partial_y:
+                problems.append(f'{case_id}: partial run (scored {x["scored"]}/{x["samples"]} vs {y["scored"]}/{y["samples"]})')
+                continue
             if not (x['scored'] and y['scored']):
                 continue
+            scored_cases += 1
             rate_a += x['passes'] / x['scored']
             rate_b += y['passes'] / y['scored']
             if x['passes'] == x['samples'] and y['passes'] < y['samples']:
@@ -444,12 +464,14 @@ def compare(first, second, *, slack_cases=1):
             for key in ('calls_mean', 'prompt_tokens_mean', 'completion_tokens_mean', 'wall_seconds_mean'):
                 if x.get(key) is not None and y.get(key) is not None:
                     cost[key].append((x[key], y[key]))
-        if rate_b < rate_a - slack_cases:
+        if scored_cases == 0:
+            problems.append('no scored cases to compare')
+        elif rate_b + 1e-9 < rate_a - slack_cases:
             problems.append(f'expected passing cases {rate_b:.2f} < {rate_a:.2f} - {slack_cases}')
         out.append({'program': program, 'cases': len(ids), 'first_version': a[ids[0]]['version'],
                     'second_version': (b.get(ids[0]) or {}).get('version'),
                     'expected_passing_first': round(rate_a, 2), 'expected_passing_second': round(rate_b, 2),
-                    'scored_cases': sum(bool(a[i]['scored'] and (b.get(i) or {}).get('scored')) for i in ids),
+                    'scored_cases': scored_cases,
                     'cost': {key: {'first': _mean([p[0] for p in pairs]), 'second': _mean([p[1] for p in pairs])}
                              for key, pairs in cost.items()},
                     'accepted': not problems, 'problems': problems})
@@ -530,6 +552,7 @@ def main(argv=None):
     q.add_argument('first', type=Path)
     q.add_argument('second', type=Path)
     q.add_argument('--slack-cases', type=float, default=1.0)
+    q.add_argument('--allow-other-engine', action='store_true')
     q.add_argument('--out', type=Path)
     w = sub.add_parser('requeue', help='a stopped run: attempts that wrote no result run again on resume')
     w.add_argument('run', type=Path)
@@ -564,7 +587,8 @@ def main(argv=None):
         append(rows, args.append)
         print(json.dumps(summary(rows)['by_corpus_kind']))
     elif args.command == 'compare':
-        rows = compare(list(read_jsonl(args.first)), list(read_jsonl(args.second)), slack_cases=args.slack_cases)
+        rows = compare(list(read_jsonl(args.first)), list(read_jsonl(args.second)),
+                       slack_cases=args.slack_cases, allow_other_engine=args.allow_other_engine)
         text = ''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows)
         if args.out:
             args.out.write_text(text)

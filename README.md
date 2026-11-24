@@ -50,8 +50,8 @@ export async function triage(tickets: Untrusted<string>[], rubric: string): Prom
 
 `classify.nl` is a natural-language function with `readout: decision`: the model reasons, then scores the three labels,
 and `escalate` (from `@natlang/node/std`) settles high-confidence tickets locally while sending unsure ones to
-`classify.on({ model: 'teacher' })` (`teacher` is the profile that your model profile names as `escalate`; without one
-the call runs on the default model). External ticket text is `Untrusted<string>` (fenced as data). Counting is code.
+`classify.on({ model: 'teacher' })` (`teacher` is the profile that your model profile names as `escalate`; without one,
+`escalate` keeps the local answer with `escalated: false` and `reason: 'unavailable:...'`). External ticket text is `Untrusted<string>` (fenced as data). Counting is code.
 The summary's type is a property the runtime checks on every draft, shortened via `semanticRepair`.
 
 The compiler plans every `nl` call before the model runs — its parameters,
@@ -141,7 +141,15 @@ natlang traces fix CALL_ID --expected '"technical"'     # saves the right answer
 natlang test                                             # now checks that case too
 ```
 
-Then edit the instructions until `natlang test` passes. A unique prefix of a call ID is enough.
+Then edit the instructions until `natlang test` passes. A unique prefix of a call ID is enough. To review `.nl`
+instructions for non-idiomatic patterns, profile call-store latency/uncertainty, or improve a program from its own
+recorded runs:
+
+```sh
+natlang check --idiom                                    # model-backed idiom review (--idiom-strict fails at >= 0.8)
+natlang profile                                          # latency, tokens, confidence, escalation rate, next optimization
+natlang improve . --model MODEL                          # diagnose runs, rewrite instructions, gate on dev/confirm, rollback
+```
 
 ### With a coding agent
 
@@ -168,16 +176,26 @@ Read these programs first; each is the paradigm in working code:
 
 | Program | What it shows |
 |---|---|
+| [`examples/hello`](examples/hello/) | The `natlang init` inbox planner: `readout: decision` with `decide`, `Untrusted<string>`, `Is<string, "...">`, inline `nl<Reply>` |
 | [`examples/pr-review`](examples/pr-review/) | Automated PR review on untrusted diffs: `ensures:` verbatim quote checks, per-rule `withContext`, `semanticMap`, debiased `semanticRank`, asymmetric `escalate` (`risk: { block: 0.25 }`) |
 | [`examples/triage`](examples/triage/) | Scored labels with `escalate` on unsure tickets, exact counts, a refined summary shortened with `semanticRepair` |
 | [`examples/review`](examples/review/) | A named function whose callable folder runs parallel assessments and exact counts in TS while the `.nl` root synthesizes the conclusion |
-| [`examples/refunds`](examples/refunds/) | One verdict function bound per shop with `.in(context)`, a `pluggable` rule, a reply revised until a natural-language check holds, a folder transaction |
+| [`examples/refunds`](examples/refunds/) | One verdict function bound per shop with `.in(context)` and `escalate`, a `pluggable` rule, a reply revised until a natural-language check holds, a folder transaction |
 | [`examples/release`](examples/release/) | `@natlang/node/std` convergence & workspaces: `semanticRepair`, `fixedPoint`, `semanticMerge`, `proposeAndVerify` over CHANGELOG/MIGRATION, and `branchAndSelect` |
 | [`examples/screening`](examples/screening/) | Higher-order semantic functions: `meets.partial(req)` and a `.nl` function that returns a typed judgment function |
 | [`examples/outline`](examples/outline/) | Bottom-up structural recursion (`recursive: structural`) with relational `ensures:` contracts |
+| [`applications/pr-shepherd`](applications/pr-shepherd/) | Flagship PR review: crisp routine-hunk skipping, calibrated finite-record decisions, quote verification, debiased ranking, asymmetric escalation, verified doc-fix transactions |
+| [`applications/semantic-etl`](applications/semantic-etl/) | Drifting vendor feed ETL: synthesizes a verified crisp transform once per drift, bulk TS rows with leaf `.nl` anomaly fallback, conservation invariants, `semanticMatch` entity linking |
+| [`applications/sem-sheet`](applications/sem-sheet/) | Reactive spreadsheet mixing crisp formulas with concurrent semantic columns, calibrated decision columns, tree summaries, `pluggable` promotion, and `semanticMerge` |
+| [`applications/inbox-pilot`](applications/inbox-pilot/) | Email and notification triage: zero-token `pluggable` header fast-path, `Untrusted<string>` boundaries, standing prose rules |
+| [`applications/ci-doctor`](applications/ci-doctor/) | CI failure triage: crisp flake fast-path, confidence-gated `semanticPartition`, `semanticMatch` root-cause clustering, and verified candidate fixes |
+| [`applications/sem-merge`](applications/sem-merge/) | Intent-preserving three-way file merging: deterministic TS merge for clean hunks, key-by-key `semanticMerge` for structured conflicts |
+| [`applications/runbook-engine`](applications/runbook-engine/) | Markdown operational runbooks: exact DAG execution with asymmetric `escalate` safety gates (`risk: { destructive: 0.2 }`) and health-check convergence |
+| [`applications/nldb`](applications/nldb/) | Natural-language database & semantic grep over a documented folder format: schema changes, transactional edits, and queries |
+| [`applications/migration`](applications/migration/) | Repository codemods in natural language: survey, classify, patch, verify, and bounded repair against repository checks |
+| [`applications/diligence`](applications/diligence/) | Technical & vendor diligence: recursive `digestSection.nl` with verbatim citation postconditions, rubric verdicts, and debiased ranking |
 | [`applications/notebook`](applications/notebook/) | A dependency graph run one ready cell per step under a measure, with checked citations |
 | [`applications/helpdesk`](applications/helpdesk/) | Per-ticket event loops whose policies are natural-language functions behind settings |
-| [`applications/nldb`](applications/nldb/) | A relational database whose engine is natural-language stages over a folder format |
 
 The authoring skill's [composition reference](skills/natlang-authoring/references/composition.md) walks through them.
 

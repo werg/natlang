@@ -110,14 +110,18 @@ COLAB_MEM_FRACTION = 0.88
 
 
 def pop_sglang(kv_cache_dtype=POP_KV_CACHE_DTYPE, max_running=POP_MAX_RUNNING, profile='pop',
-               weight_dtype='bfloat16'):
+               weight_dtype='bfloat16', overlap_schedule=False):
     """(job['sglang'] settings, actor export format) of a remote SGLang engine (Pop or Colab G4).
-    ``weight_dtype`` is ``'bfloat16'`` (held and GRPO) or ``'fp8'`` (SFT collection actors, async-train §3)."""
+    ``weight_dtype`` is ``'bfloat16'`` (held and GRPO) or ``'fp8'`` (SFT collection actors, async-train §3).
+    ``overlap_schedule``: SGLang's overlapped scheduler (collection actors, as the DGX collection runs it; held engines
+    are pinned without it, so their settings carry no key)."""
     if weight_dtype not in ('bfloat16', 'fp8'):
         raise ValueError(f'weight_dtype must be bfloat16 or fp8, got {weight_dtype!r}')
     fp8 = kv_cache_dtype != 'auto'
     w_suffix = '-w-fp8' if weight_dtype == 'fp8' else ''
     w_extra = {'weight_dtype': 'fp8'} if weight_dtype == 'fp8' else {}
+    if overlap_schedule:
+        w_extra['overlap_schedule'] = True
     if profile_key(profile) == 'colab':
         cap = max_running if max_running is not None else COLAB_MAX_RUNNING
         settings = {'kv_cache_dtype': kv_cache_dtype, 'max_running': cap, 'mem_fraction': COLAB_MEM_FRACTION,
@@ -919,16 +923,77 @@ def pop_actor_units():
     return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
 
 
+# Pop as a standing collection actor (expert_iteration async-drive ``--rebind-actor POP_HOST@URL=SLOTS``): the driver
+# serves the lineage head on Pop with the collection law (FP8 weights and KV, POP_COLLECT_RUNNING running) and runs a
+# DGX-side collector unit named ``<collection unit>POP_COLLECT_SUFFIX``. Every Pop serve (a held measurement's
+# included) stops those collectors with the fills, and the driver serves Pop again only when no held measurement runs
+# (``pop_busy``). 32 running: twice the held engine's 20 over the FP8-weight pool (DECISIONS 2026-11-24 Pop collection).
+POP_COLLECT_SUFFIX = '-pop'
+POP_COLLECT_RUNNING = 32
+SERVE_LOCK = ROOT / 'pop-serve.lock'
+
+
 def pop_fill_units():
-    """DGX units drawing fills from Pop's server (expert_iteration ``<cycle>-popfill`` and its tunnel)."""
+    """DGX units drawing on Pop's server: expert_iteration fills (``<cycle>-popfill`` and its tunnel) and async-drive's
+    Pop collectors (``<name>-collect-vNNNN-pop``)."""
     out = subprocess.run(['systemctl', '--user', 'list-units', '*-popfill.service', '*-popfill-tunnel.service',
-                          '--state=active,activating', '--plain', '--no-legend'], capture_output=True, text=True).stdout
+                          f'*-collect-*{POP_COLLECT_SUFFIX}.service', '--state=active,activating', '--plain',
+                          '--no-legend'], capture_output=True, text=True).stdout
     return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
+
+
+def pop_held_running(proc=Path('/proc')):
+    """PIDs of DGX processes running a Pop held measurement: ``pop-held.sh PIN base|ckpt ...`` (async-drive's held-v4,
+    ``pop_held``, manual runs) or ``pop_rl_actor.py held-eval`` (grpo ``--held-remote pop``), read from /proc."""
+    found = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            argv = [a.decode(errors='replace') for a in (entry / 'cmdline').read_bytes().split(b'\0') if a]
+        except OSError:
+            continue
+        names = [PurePosixPath(a).name for a in argv]
+        if 'pop-held.sh' in names:
+            i = names.index('pop-held.sh')
+            if len(argv) > i + 2 and argv[i + 2] in ('base', 'ckpt'):
+                found.append(int(entry.name))
+        elif 'pop_rl_actor.py' in names and 'held-eval' in argv[names.index('pop_rl_actor.py'):]:
+            found.append(int(entry.name))
+    return found
+
+
+@contextlib.contextmanager
+def pop_serve_lock(blocking=True):
+    """Serialize Pop serves across processes (a driver's collection serve and a held measurement's serve stopped each
+    other's actors when they overlapped). Yields False when ``blocking`` is off and another process holds it."""
+    SERVE_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with open(SERVE_LOCK, 'a') as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def pop_busy():
+    """Why Pop belongs to something other than the standing collection now (a held measurement runs, or another
+    process is serving on it), else None."""
+    held = pop_held_running()
+    if held:
+        return f'held measurement (pid {held[0]})'
+    with pop_serve_lock(blocking=False) as free:
+        return None if free else 'another serve holds the Pop serve lock'
 
 
 def stop_pop_fills():
     """A cycle's Pop fill runs on until Pop serves something else (DECISIONS 2026-11-22 "Pop fills through build"):
-    every serve stops it first, so no fill draws from a policy it did not start on."""
+    every serve stops it first, so no fill draws from a policy it did not start on. Pop collectors stop the same way
+    (a held measurement takes the GPU; the driver starts them again after it)."""
     for unit in pop_fill_units():
         subprocess.run(['/usr/bin/python3', LEDGER, 'cancel', '--unit', unit], stderr=subprocess.DEVNULL)
         for suffix in ('-waiter', ''):
@@ -1238,6 +1303,127 @@ def serve_colab(args):
         time.sleep(5)
     stop_colab(host)
     raise RuntimeError(f'Colab G4 actor on {host} did not attest {sha[:12]} at {endpoint} within {args.ready_seconds} s')
+
+
+# ---- Colab tenants (program tuning between rounds, DECISIONS 2026-11-24 "program tuning on the A100") -------------------
+# A tenant runs beside the session's actor alone (capped KV, colab_layout 'tenants') under a --preemptible admission
+# claim: it yields to any waiting normal request (a round's learner, an actor served again) and is admitted only beside
+# a live actor claim, so a round never waits on it. Its code is a separate checkout at the tenant's commit (the
+# session's own checkout belongs to the round's commit and a tenant never moves it); the session's venv runs it.
+COLAB_TENANT_MPS_PERCENT = int(os.environ.get('NATLANG_COLAB_TENANT_MPS_PERCENT', '50'))
+COLAB_MEASURE_PORT = 8571
+
+
+def colab_tenant_checkout(host, cfg, commit):
+    """``cfg`` for tenant code: ROOT/natlang-tenant, a detached worktree of the session's clone at ``commit``,
+    verified clean; ``python`` stays the session venv's."""
+    root, repo = f'{cfg["root"]}/natlang-tenant', cfg['repo']
+    q = shlex.quote
+    # one tenant at a time: two tenants' concurrent fetches into the session clone failed on its ref lock (11-24)
+    steps = (f'git -C {q(repo)} fetch -q origin && '
+             f'{{ test -d {q(root)} || git -C {q(repo)} worktree add -q --detach {q(root)} {q(commit)}; }} && '
+             f'git -C {q(root)} checkout -q -f --detach {q(commit)} && git -C {q(root)} rev-parse HEAD && '
+             f'git -C {q(root)} status --porcelain --untracked-files=no | head -5')
+    out = ssh_host(host, f'flock -w 300 {q(cfg["root"] + "/.tenant-checkout.lock")} bash -c {q(steps)}',
+                   timeout=600).split()
+    if out != [commit] and not (len(out) == 1 and out[0].startswith(commit)):
+        raise RuntimeError(f'{host}: the tenant checkout is not clean at {commit}: {" ".join(out)[:300]}')
+    return {**cfg, 'repo': root, 'admission': f'{root}/scripts/colab/admission.py', 'commit': out[0]}
+
+
+def colab_tenant_command(cfg, tcfg, claim, label, command, *, mps_percent=None, wait=86400):
+    """``command`` (run with the tenant checkout on PYTHONPATH and an MPS SM share) under a preemptible admission
+    claim of ``claim`` beside the session's actor."""
+    percent = COLAB_TENANT_MPS_PERCENT if mps_percent is None else mps_percent
+    env = ['/usr/bin/env', f'PYTHONPATH={tcfg["repo"]}/training/neuralese:{tcfg["repo"]}:{tcfg["repo"]}/scripts/neuralese_data',
+           f'NATLANG_REPO={tcfg["repo"]}', f'CUDA_MPS_ACTIVE_THREAD_PERCENTAGE={int(percent)}']
+    return [cfg['python'], tcfg['admission'], 'run', '--preemptible', '--beside-label', 'actor-',
+            '--vram-gib', str(claim['vram_gib']), '--host-ram-gib', str(claim['host_ram_gib']), '--label', label,
+            '--wait', str(int(wait)), '--workdir', tcfg['repo'], '--', *env, *command]
+
+
+def colab_tenant_state_path(host, role):
+    safe = ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in str(host))
+    return ROOT / f'colab-tenant-{safe}-{role}.json'
+
+
+def stop_colab_tenant(host, role):
+    state_file = colab_tenant_state_path(host, role)
+    state = read_json(state_file) or {}
+    if state.get('pid'):
+        ssh_host(host, f'kill -TERM -- -{int(state["pid"])} 2>/dev/null; for i in $(seq 30); do kill -0 {int(state["pid"])} '
+                       f'2>/dev/null || exit 0; sleep 2; done; kill -KILL -- -{int(state["pid"])} 2>/dev/null; true',
+                 check=False, timeout=120)
+    state_file.unlink(missing_ok=True)
+    return state
+
+
+def ship_release(host, cfg, release, remote):
+    """A program-fit release (result.json + its artifact closure, ~66 MB) on the VM at ``remote``."""
+    ssh_host(host, shlex.join(['mkdir', '-p', remote]))
+    copy_resumable(f'{release}/', f'{host}:{remote}/')
+    return remote
+
+
+def serve_colab_tenant_actor(*, host, checkpoint, sha, commit, release=None, port=COLAB_MEASURE_PORT,
+                             kv_cache_dtype=POP_KV_CACHE_DTYPE, ready_seconds=1800, bind_host=None):
+    """A measurement actor as a tenant: ``sha`` (optionally with a program-fit ``release`` served by default on one
+    SGLang adapter slot) beside the session's actor, sized by ``colab_layout(...)['tenants']['measure_actor']``. The
+    front runs the session's own checkout (its ts-host build); admission and the claim are the tenant checkout's.
+    Returns the attested record; raises when it does not attest in ``ready_seconds`` (e.g. no actor to stand beside)."""
+    cfg = host_config('colab', host=host)
+    tcfg = colab_tenant_checkout(host, cfg, commit)
+    layout = colab_layout(colab_hardware(host))
+    sizing = layout['tenants']['measure_actor']
+    adapters = rank = None
+    if release:
+        release, adapters, rank = adapter_release(argparse.Namespace(adapter_release=release))
+    role = 'measure'
+    previous = read_json(colab_tenant_state_path(host, role))
+    endpoint = remote_endpoint(host, port, bind_host)
+    if previous and previous.get('policy_id') == sha and previous.get('adapters') == adapters \
+            and attested(previous['endpoint'], sha, adapters):
+        return previous
+    stop_colab_tenant(host, role)
+    work = f'{cfg["work_root"]}/tenant-measure-{sha[:12]}'
+    ensure_remote_checkpoint(host, cfg, checkpoint, sha)
+    sglang, sglang_format = pop_sglang(kv_cache_dtype, sizing['max_running'], profile='colab')
+    sglang = {**{k: v for k, v in sglang.items() if k != 'mem_fraction'}, 'kv_gb': sizing['kv_gb']}
+    serve = [cfg['python'], f'{cfg["repo"]}/scripts/neuralese_data/serve_native_checkpoint.py',
+             '--store-dir', f'{work}/store-{(adapters or "base")[:12]}', '--checkpoint', f'{cfg["checkpoints"]}/{sha}.pt',
+             '--checkpoint-sha256', sha, '--base', cfg['base'], '--host', '0.0.0.0', '--port', str(port),
+             '--prompt-rendering', 'full', '--engine', 'sglang', '--sglang-python', cfg['sglang_python'],
+             '--sglang-projection', 'vendor', '--sglang-kv-cache-dtype', sglang['kv_cache_dtype'],
+             '--sglang-max-running', str(sglang['max_running']), '--sglang-kv-gb', str(sizing['kv_gb']),
+             '--hf-export-dir', f'{work}/sglang-hf', '--actor-export-format', sglang_format]
+    if release:
+        remote_release = ship_release(host, cfg, release, f'{work}/adapter-{adapters[:16]}')
+        serve += ['--adapter-release', remote_release, '--sglang-adapter-slots', '1', '--sglang-adapter-rank', str(rank)]
+    else:
+        serve += ['--sglang-adapter-slots', '0']
+    # the front's own code is the session checkout's (cfg); only the admission wrapper is the tenant checkout's
+    admitted = colab_tenant_command(cfg, {**tcfg, 'repo': cfg['repo']}, sizing, f'measure-{sha[:12]}', serve)
+    pid = ssh_host(host, f'mkdir -p {shlex.quote(work)} && . {shlex.quote(cfg["env"])} || exit 1; setsid nohup '
+                         f'{shlex.join(admitted)} > {shlex.quote(work + "/actor.log")} 2>&1 < /dev/null & echo $!',
+                   timeout=60).strip()
+    record = {'endpoint': endpoint, 'host': host, 'role': role, 'policy_id': sha, 'adapters': adapters, 'rank': rank,
+              'work': work, 'pid': int(pid.splitlines()[-1]), 'claim': sizing, 'sglang': sglang,
+              'export_format': sglang_format, 'tenant_commit': tcfg['commit'], 'started': time.time()}
+    write_json(colab_tenant_state_path(host, role), record)
+    deadline = time.monotonic() + ready_seconds
+    while time.monotonic() < deadline:
+        if attested(endpoint, sha, adapters):
+            record['ready_seconds'] = round(time.time() - record['started'], 1)
+            write_json(colab_tenant_state_path(host, role), record)
+            log(event='Colab tenant actor ready', **record)
+            return record
+        alive = ssh_host(host, f'kill -0 {record["pid"]} 2>/dev/null && echo yes || true', check=False).strip()
+        if alive != 'yes':
+            break
+        time.sleep(10)
+    tail = ssh_host(host, f'tail -c 1500 {shlex.quote(work + "/actor.log")}', check=False)
+    stop_colab_tenant(host, role)
+    raise RuntimeError(f'Colab tenant actor {sha[:12]}+{(adapters or "")[:12]} did not attest: {tail[-600:]}')
 
 
 def colab_sft_fit(host):
@@ -1746,11 +1932,18 @@ def run_remote_sft(args):
 
 
 def serve_checkpoint(args):
-    """Serve a pruned native checkpoint on Pop or Colab G4 and wait until it attests."""
+    """Serve a pruned native checkpoint on Pop or Colab G4 and wait until it attests (one Pop serve at a time)."""
     if profile_key(getattr(args, 'host_profile', 'pop')) == 'colab':
         return serve_colab(args)
+    with pop_serve_lock():
+        return _serve_pop(args)
+
+
+def _serve_pop(args):
     sha, commit = args.policy_id, args.commit
-    sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running)
+    sglang, sglang_format = pop_sglang(args.kv_cache_dtype, args.max_running,
+                                       weight_dtype=getattr(args, 'weight_dtype', 'bfloat16'),
+                                       overlap_schedule=getattr(args, 'overlap_schedule', False))
     release, adapters, rank = adapter_release(args)   # a program fit served by default (TUNING_RESTORE_20261117.md)
     previous = read_json(STATE)
     if (previous and previous['policy_id'] == sha and previous.get('code') == commit and previous.get('sglang') == sglang
@@ -1905,6 +2098,8 @@ def main(argv=None):
                          help='SGLang linear weight dtype (fp8 for SFT collection actors; bfloat16 for held and GRPO)')
         sub.add_argument('--max-running', type=int, default=POP_MAX_RUNNING, help='Pop running cap (a Colab actor '
                          'runs 128 alone, 64 with --beside-learner)')
+        sub.add_argument('--overlap-schedule', action='store_true',
+                         help="SGLang's overlapped scheduler (collection actors; held engines are pinned without it)")
         sub.add_argument('--beside-learner', action='store_true',
                          help='Colab: cap the actor (KV a quarter of the GPU, its running cap scaled; colab_layout) to share '
                          'the GPU with the SFT learner under MPS')

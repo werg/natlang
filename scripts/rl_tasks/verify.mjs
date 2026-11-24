@@ -90,7 +90,77 @@ const perturb = v => {
   }
   return 'unexpected';
 };
-// The terminal answering action of a reference: a return_result value, or the literal of a final `return <JSON>;` eval.
+// Find the start offset of the final top-level `return ...` statement (supporting multi-line return expressions)
+// without matching returns nested inside functions/blocks or strings/comments.
+function findFinalTopLevelReturn(code) {
+  let brace = 0, paren = 0, bracket = 0;
+  let lastReturn = -1;
+  let hasLaterStmt = false;
+  let afterReturnSemicolon = false;
+  const isIdent = ch => /[A-Za-z0-9_$]/.test(ch);
+  let i = 0;
+  while (i < code.length) {
+    const ch = code[i];
+    if (/\s/.test(ch)) { i++; continue; }
+    if (ch === '/' && code[i + 1] === '/') {
+      const nl = code.indexOf('\n', i + 2);
+      i = nl < 0 ? code.length : nl + 1;
+      continue;
+    }
+    if (ch === '/' && code[i + 1] === '*') {
+      const end = code.indexOf('*/', i + 2);
+      i = end < 0 ? code.length : end + 2;
+      continue;
+    }
+    if (ch === '\'' || ch === '"' || ch === '`') {
+      if (lastReturn >= 0 && brace === 0 && paren === 0 && bracket === 0 && afterReturnSemicolon) hasLaterStmt = true;
+      const quote = ch;
+      i++;
+      while (i < code.length) {
+        if (code[i] === '\\') { i += 2; continue; }
+        if (quote === '`' && code[i] === '$' && code[i + 1] === '{') {
+          i += 2;
+          let tplDepth = 1;
+          while (i < code.length && tplDepth > 0) {
+            if (code[i] === '\\') { i += 2; continue; }
+            if (code[i] === '{') tplDepth++;
+            else if (code[i] === '}') tplDepth--;
+            i++;
+          }
+          continue;
+        }
+        if (code[i] === quote) { i++; break; }
+        i++;
+      }
+      continue;
+    }
+    if (brace === 0 && paren === 0 && bracket === 0) {
+      if (ch === ';') {
+        if (lastReturn >= 0) afterReturnSemicolon = true;
+        i++;
+        continue;
+      }
+      if (code.startsWith('return', i) && !isIdent(code[i - 1] ?? '') && !isIdent(code[i + 6] ?? '')) {
+        lastReturn = i;
+        afterReturnSemicolon = false;
+        hasLaterStmt = false;
+        i += 6;
+        continue;
+      }
+      if (afterReturnSemicolon) hasLaterStmt = true;
+    }
+    if (ch === '{') brace++;
+    else if (ch === '}') brace = Math.max(0, brace - 1);
+    else if (ch === '(') paren++;
+    else if (ch === ')') paren = Math.max(0, paren - 1);
+    else if (ch === '[') bracket++;
+    else if (ch === ']') bracket = Math.max(0, bracket - 1);
+    i++;
+  }
+  return lastReturn >= 0 && !hasLaterStmt ? lastReturn : -1;
+}
+
+// The terminal answering action of a reference: a return_result value, or the final top-level `return ...` of an eval.
 function withAnswer(record, value) {
   const copy = structuredClone(record);
   const root = copy.curriculum.reference.root;
@@ -100,8 +170,9 @@ function withAnswer(record, value) {
   if (last?.[0] === 'eval') {
     // Keep the script's effects (moved files, service calls) and replace only its final return, so an alias or wrong
     // answer of an effect task is judged on its value rather than rejected for the effects it skipped.
-    const code = String(last[1].code ?? ''), tail = /(^|[;\n}])(\s*)return\s+[^;\n]+;?\s*$/.exec(code);
-    last[1] = { ...last[1], code: tail ? code.slice(0, tail.index + tail[1].length) + tail[2] + 'return ' + JSON.stringify(value) + ';'
+    const code = String(last[1].code ?? '');
+    const idx = findFinalTopLevelReturn(code);
+    last[1] = { ...last[1], code: idx >= 0 ? code.slice(0, idx) + 'return ' + JSON.stringify(value) + ';'
       : 'return ' + JSON.stringify(value) + ';' };
     return copy;
   }
@@ -134,6 +205,10 @@ async function qualify(record) {
   for (const code of checks.wrong_code ?? []) {
     const variant = structuredClone(record);
     const last = variant.curriculum.reference.root.at(-1);
+    if (last?.[0] !== 'eval') {
+      result.wrong.push({ value: code.slice(0, 120), accepted: null, error: 'final reference action is not eval' });
+      continue;
+    }
     last[1] = { ...last[1], code };
     try { result.wrong.push({ value: code.slice(0, 120), accepted: await accepted(variant) }); }
     catch (e) { result.wrong.push({ value: code.slice(0, 120), accepted: null, error: String(e).slice(0, 300) }); }
@@ -143,6 +218,10 @@ async function qualify(record) {
   for (const code of checks.alias_code ?? []) {
     const variant = structuredClone(record);
     const last = variant.curriculum.reference.root.at(-1);
+    if (last?.[0] !== 'eval') {
+      result.aliases.push({ value: code.slice(0, 120), accepted: null, error: 'final reference action is not eval' });
+      continue;
+    }
     last[1] = { ...last[1], code };
     try { result.aliases.push({ value: code.slice(0, 120), accepted: await accepted(variant) }); }
     catch (e) { result.aliases.push({ value: code.slice(0, 120), accepted: null, error: String(e).slice(0, 300) }); }

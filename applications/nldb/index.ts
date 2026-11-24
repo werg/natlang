@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { openFolder, saveFolder } from '@natlang/node';
+import { openFolder, saveFolder, untrusted } from '@natlang/node';
 import database from './database.nl';
 import translate from './sqlite/translate.nl';
 import judge from './sqlite/judge.nl';
@@ -174,7 +174,9 @@ export class SqliteDatabase implements Database {
     for (const { criterion, table, column } of semantic) {
       const values = (this.db.prepare(`SELECT DISTINCT ${quote(column)} AS value FROM ${quote(table)} WHERE ${quote(column)} IS NOT NULL`).all() as { value: unknown }[])
         .map(row => String(row.value)).filter(value => !this.judgments.has(`${criterion}\u0000${value}`));
-      const verdicts = await Promise.all(values.map(value => this.run(() => judge(value, criterion))));
+      const verdicts = await Promise.all(
+        values.map(value => this.run(() => judge(untrusted(value, `sqlite:${table}.${column}`), criterion))),
+      );
       const insert = this.db.prepare('INSERT OR REPLACE INTO _nl_semantic (criterion, value, meets) VALUES (?, ?, ?)');
       values.forEach((value, i) => {
         insert.run(criterion, value, verdicts[i] ? 1 : 0);

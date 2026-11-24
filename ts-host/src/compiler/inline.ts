@@ -148,12 +148,49 @@ export function isUntrustedType(checker: ts.TypeChecker, type: ts.Type): boolean
 const isTextType = (type: ts.Type): boolean => type.isUnion() ? type.types.every(isTextType) :
   !!(type.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.TemplateLiteral)) || type.isIntersection() && type.types.some(isTextType);
 
+/** Whether `type` is text or a container (array, tuple, record, union) that can carry derived text. */
+function containsTextType(checker: ts.TypeChecker, type: ts.Type, depth = 0, seen = new Set<ts.Type>()): boolean {
+  if (depth > 4 || seen.has(type)) return false;
+  if (isTextType(type)) return true;
+  if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return true;
+  if (type.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.BigIntLike |
+      ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void | ts.TypeFlags.Never | ts.TypeFlags.ESSymbolLike)) return false;
+  seen.add(type);
+  if (type.isUnion()) return type.types.some(member => containsTextType(checker, member, depth + 1, seen));
+  if (type.isIntersection()) return type.types.some(member => containsTextType(checker, member, depth + 1, seen));
+  if (checker.isArrayType(type) || checker.isTupleType(type)) {
+    const args = checker.getTypeArguments(type as ts.TypeReference);
+    if (args.length) return args.some(arg => containsTextType(checker, arg, depth + 1, seen));
+    const index = type.getNumberIndexType();
+    return !!index && containsTextType(checker, index, depth + 1, seen);
+  }
+  const stringIndex = type.getStringIndexType();
+  if (stringIndex && containsTextType(checker, stringIndex, depth + 1, seen)) return true;
+  const numberIndex = type.getNumberIndexType();
+  if (numberIndex && containsTextType(checker, numberIndex, depth + 1, seen)) return true;
+  if (type.flags & ts.TypeFlags.Object) {
+    const objectFlags = (type as ts.ObjectType).objectFlags;
+    if (objectFlags & (ts.ObjectFlags.Anonymous | ts.ObjectFlags.Interface | ts.ObjectFlags.Reference | ts.ObjectFlags.Mapped)) {
+      const props = checker.getPropertiesOfType(type);
+      if (props.length > 0 && props.length <= 32) {
+        return props.some(prop => {
+          const decl = prop.valueDeclaration ?? prop.declarations?.[0];
+          if (!decl || ts.isMethodSignature(decl) || ts.isMethodDeclaration(decl)) return false;
+          const propType = checker.getTypeOfSymbolAtLocation(prop, decl);
+          return propType.getCallSignatures().length === 0 && containsTextType(checker, propType, depth + 1, seen);
+        });
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * The untrusted part of an interpolated expression, if any. The expression itself being \`Untrusted<T>\` counts. So does a
- * text-valued expression built from one (\`message.slice(0, 20)\`, \`\\\`[\${message}]\\\`\`): text derived from untrusted text is
- * untrusted, also through a local that holds it (\`const part = message.slice(0, 20)\`; TypeScript drops the brand there,
- * so the file's tainted bindings are tracked, untrustedBindings). A number or boolean computed from one
- * (\`message.length\`) is not text and passes.
+ * text-valued (or text-carrying array/record) expression built from one (\`message.slice(0, 20)\`, \`message.split('\\n')\`,
+ * \`\\\`[\${message}]\\\`\`): text derived from untrusted text is untrusted, also through locals, destructuring and \`for..of\`
+ * loops (TypeScript drops the brand there, so the file's tainted bindings are tracked, untrustedBindings). A number or
+ * boolean computed from one (\`message.length\`) is not text and passes.
  */
 function untrustedSplice(checker: ts.TypeChecker, expression: ts.Expression, tainted: ReadonlySet<ts.Symbol> = new Set()): ts.Expression | undefined {
   const isTainted = (node: ts.Node) => ts.isIdentifier(node) && tainted.size > 0 && (() => {
@@ -162,7 +199,7 @@ function untrustedSplice(checker: ts.TypeChecker, expression: ts.Expression, tai
   })();
   const type = checker.getTypeAtLocation(expression);
   if (isUntrustedType(checker, type) || isTainted(expression)) return expression;
-  if (!isTextType(type)) return undefined;
+  if (!containsTextType(checker, type)) return undefined;
   let found: ts.Expression | undefined;
   const visit = (node: ts.Node): void => {
     if (found || ts.isFunctionLike(node)) return;
@@ -175,15 +212,25 @@ function untrustedSplice(checker: ts.TypeChecker, expression: ts.Expression, tai
 
 /**
  * The bindings of `file` that hold untrusted text without an \`Untrusted<T>\` type: locals initialized or assigned from
- * untrusted text (\`const part = message.slice(0, 20)\`), and names destructured from an untrusted value. Propagated to
- * a fixed point, so a chain of locals keeps the taint.
+ * untrusted text or containers thereof (\`const lines = message.split('\\n')\`, \`const [first] = message.split('\\n')\`,
+ * \`for (const line of message.split('\\n'))\`). Propagated to a fixed point, so a chain of locals keeps the taint.
  */
 function untrustedBindings(checker: ts.TypeChecker, file: ts.SourceFile): Set<ts.Symbol> {
   const tainted = new Set<ts.Symbol>();
-  const mark = (name: ts.BindingName): boolean => {
-    if (!ts.isIdentifier(name)) return name.elements.some(element => !ts.isOmittedExpression(element) && mark(element.name));
+  const mark = (name: ts.BindingName, checkTextType = false): boolean => {
+    if (!ts.isIdentifier(name)) {
+      let added = false;
+      for (const element of name.elements) {
+        if (!ts.isOmittedExpression(element) && mark(element.name, true)) added = true;
+      }
+      return added;
+    }
     const symbol = checker.getSymbolAtLocation(name);
     if (!symbol || tainted.has(symbol)) return false;
+    if (checkTextType) {
+      const boundType = checker.getTypeAtLocation(name);
+      if (!isUntrustedType(checker, boundType) && !containsTextType(checker, boundType)) return false;
+    }
     tainted.add(symbol);
     return true;
   };
@@ -191,8 +238,14 @@ function untrustedBindings(checker: ts.TypeChecker, file: ts.SourceFile): Set<ts
     changed = false;
     const visit = (node: ts.Node): void => {
       if (ts.isVariableDeclaration(node) && node.initializer) {
-        if (ts.isIdentifier(node.name) ? !!untrustedSplice(checker, node.initializer, tainted) :
-            isUntrustedType(checker, checker.getTypeAtLocation(node.initializer))) changed = mark(node.name) || changed;
+        if (untrustedSplice(checker, node.initializer, tainted))
+          changed = mark(node.name, !ts.isIdentifier(node.name)) || changed;
+      } else if (ts.isForOfStatement(node) && untrustedSplice(checker, node.expression, tainted)) {
+        if (ts.isVariableDeclarationList(node.initializer)) {
+          for (const decl of node.initializer.declarations) changed = mark(decl.name, true) || changed;
+        } else if (ts.isIdentifier(node.initializer)) {
+          changed = mark(node.initializer, true) || changed;
+        }
       } else if (ts.isBinaryExpression(node) && ts.isIdentifier(node.left) &&
           (node.operatorToken.kind === ts.SyntaxKind.EqualsToken || node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) &&
           untrustedSplice(checker, node.right, tainted)) changed = mark(node.left) || changed;

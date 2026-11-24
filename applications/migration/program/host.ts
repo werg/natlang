@@ -5,9 +5,10 @@
  * measurement, `settle` after it; `scripts/semantic_fp/migrate_corpus.py` batches the measurement between them.
  */
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, delimiter, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { instructionsOf, semanticRepair, stepKind, stepsOf } from '@natlang/node/std';
 import worthKeeping from './worthKeeping.nl';
 import nextAttempt from './nextAttempt.nl';
@@ -99,11 +100,14 @@ export async function problemsOf(root: string, original: CheckResult, files: Rec
   const problems: string[] = [];
   for (const [path, text] of Object.entries(files)) {
     if (text === null || !path.endsWith('.nl')) continue;
-    const before = readFileSync(join(root, path), 'utf8');
     let after;
     try { after = splitSource(text); } catch (error) { problems.push(`${path}: ${(error as Error).message}`); continue; }
-    if (declaration(after.front) !== declaration(splitSource(before).front))
-      problems.push(`${path}: its front matter changed; keep args and returns exactly as they are.`);
+    const existing = join(root, path);
+    if (existsSync(existing)) {
+      const before = readFileSync(existing, 'utf8');
+      if (declaration(after.front) !== declaration(splitSource(before).front))
+        problems.push(`${path}: its front matter changed; keep args and returns exactly as they are.`);
+    }
     if (!after.body.trim()) problems.push(`${path}: the instructions are empty.`);
   }
   const directory = materialize(root, files);
@@ -113,7 +117,7 @@ export async function problemsOf(root: string, original: CheckResult, files: Rec
       if (d.severity === 'error') problems.push(`${d.file}:${d.line}: ${d.message}`);
       else if (FLOOR_CODES.includes(d.code) && Object.hasOwn(files, d.file)) problems.push(`${d.file}:${d.line}: ${d.message}`);
     }
-    const signatures = (c: CheckResult) => c.functions.map(f => `${f.source} ${f.signature}`).sort().join('\n');
+    const signatures = (c: CheckResult) => c.functions.filter(f => f.source.endsWith('.nl')).map(f => `${f.source} ${f.signature}`).sort().join('\n');
     if (signatures(check) !== signatures(original)) problems.push('the functions of the program changed their signatures; keep every signature as it is.');
     const helpers = Object.keys(files).filter(path => path.endsWith('.ts') && files[path] !== null);
     if (helpers.length) problems.push(...await typeProblems(directory, helpers));
@@ -121,12 +125,42 @@ export async function problemsOf(root: string, original: CheckResult, files: Rec
   return problems;
 }
 
-/** The ts-host whose compiler and `@natlang/node` declarations type-check helpers: NATLANG_TS_HOST, else the one beside
- * the natlang CLI (NATLANG_BIN is `<repo>/scripts/natlang`). */
-function tsHost(): string {
+function isTsHostDir(candidate: string): boolean {
+  return existsSync(join(candidate, 'node_modules/typescript/bin/tsc')) || existsSync(join(candidate, 'package.json'));
+}
+
+/** The ts-host whose compiler and `@natlang/node` declarations type-check helpers: NATLANG_TS_HOST, NATLANG_BIN,
+ * relative to this module / NATLANG_REPO, or `natlang` on PATH. */
+export function tsHost(): string {
   if (process.env.NATLANG_TS_HOST) return process.env.NATLANG_TS_HOST;
-  if (process.env.NATLANG_BIN) return join(dirname(dirname(process.env.NATLANG_BIN)), 'ts-host');
-  throw new Error('set NATLANG_TS_HOST or NATLANG_BIN to type-check helpers');
+  if (process.env.NATLANG_BIN) {
+    const resolvedBin = existsSync(process.env.NATLANG_BIN) ? realpathSync(process.env.NATLANG_BIN) : process.env.NATLANG_BIN;
+    const beside = join(dirname(dirname(resolvedBin)), 'ts-host');
+    if (isTsHostDir(beside)) return beside;
+  }
+  if (process.env.NATLANG_REPO) {
+    const fromRepo = join(process.env.NATLANG_REPO, 'ts-host');
+    if (isTsHostDir(fromRepo)) return fromRepo;
+  }
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 8; i++) {
+    const candidate = join(dir, 'ts-host');
+    if (isTsHostDir(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  for (const entry of (process.env.PATH ?? '').split(delimiter)) {
+    if (!entry) continue;
+    const bin = join(entry, 'natlang');
+    if (!existsSync(bin)) continue;
+    try {
+      const real = realpathSync(bin);
+      const candidate = join(dirname(dirname(real)), 'ts-host');
+      if (isTsHostDir(candidate)) return candidate;
+    } catch { /* ignore unreadable PATH entry */ }
+  }
+  throw new Error('could not locate ts-host; set NATLANG_TS_HOST or NATLANG_BIN to type-check helpers');
 }
 
 /**
@@ -139,21 +173,26 @@ export async function typeProblems(directory: string, helpers: string[]): Promis
   const checks: string[] = [];
   for (const helper of helpers) {
     const folder = dirname(helper), parts = folder.split('/');
-    const rootName = parts[0]!;
-    if (folder === '.' || !existsSync(join(directory, `${rootName}.nl`))) continue;
+    if (folder === '.') continue;
+    const rootIndex = parts.findIndex((_, index) => existsSync(join(directory, ...parts.slice(0, index), `${parts[index]}.nl`)));
+    if (rootIndex < 0) continue;
+    const rootName = parts[rootIndex]!;
+    const subParts = parts.slice(rootIndex + 1);
     const up = (depth: number) => '../'.repeat(depth) || './';
-    const path = (name: string) => [...parts.slice(1), name].map(p => `[${JSON.stringify(p)}]`).join('');
+    const rootRel = `${up(parts.length - rootIndex)}${rootName}.nl`;
+    const memberPath = (items: string[]) => items.map(p => `[${JSON.stringify(p)}]`).join('');
     for (const entry of readdirSync(join(directory, folder))) {
       if (!entry.endsWith('.nl') || existsSync(join(directory, folder, `${entry.slice(0, -3)}.d.nl.ts`))) continue;
       writeFileSync(join(directory, folder, `${entry.slice(0, -3)}.d.nl.ts`),
-        `import type root from '${up(parts.length)}${rootName}.nl';\ndeclare const fn: (typeof root)${path(entry.slice(0, -3))};\nexport default fn;\n`);
+        `import type root from '${rootRel}';\ndeclare const fn: (typeof root)${memberPath([...subParts, entry.slice(0, -3)])};\nexport default fn;\n`);
     }
     // The driver calls its helper with its own arguments and returns what it returns.
-    const driver = parts.length === 1 ? rootName : null;
-    if (driver && basename(helper, '.ts') === 'run') {
+    if (existsSync(join(directory, `${folder}.nl`)) && basename(helper, '.ts') === 'run') {
       const check = `${folder}/__signature_check.ts`;
-      writeFileSync(join(directory, check), `import type driver from '../${driver}.nl';\nimport run from './run.js';\n` +
-        `export const sameSignature: (...args: Parameters<typeof driver>) => ReturnType<typeof driver> = run;\n`);
+      const driverType = subParts.length ? `(typeof root)${memberPath(subParts)}` : 'typeof root';
+      writeFileSync(join(directory, check), `import type root from '${rootRel}';\nimport run from './run.js';\n` +
+        `type Driver = ${driverType};\n` +
+        `export const sameSignature: (...args: Parameters<Driver>) => ReturnType<Driver> = run;\n`);
       checks.push(check);
     }
   }

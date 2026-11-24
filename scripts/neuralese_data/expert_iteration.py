@@ -75,6 +75,17 @@ LEDGER = ['/usr/bin/python3', str(REPO / 'scripts/memory_ledger.py')]
 # of the next round, and twice the new data one round interval adds (own successes, fills, teacher). The uncapped
 # build trains every filled chain ever made (share=all) each round: r0001 was 37.4M (1247 steps, ~12.7 h on the DGX).
 ROUND_TARGET_TOKENS = 12_000_000
+# Placement-aware round size (DECISIONS 2026-11-24 "placement-aware round budgets"): a round prepared while a Colab
+# session fit for SFT (colab_sft_fit) answers is sized to --colab-round-hours of that GPU's learner time, in forward
+# (chain) tokens, since the learner's wall time follows them: sft_sources build --max-forward-tokens, with the target
+# cap and the teacher forward budget scaled alike. Throughput: what this loop measured (ROUND_SPEED_FILE, per GPU name,
+# written after every round), else these defaults (aei1 r0001, sum of chain tokens over sum of step seconds: the A100
+# 337-532 at 9.4 s/step, the GB10 1-354 at 48.8 s/step), else the GB10's times sft_speedup.
+COLAB_ROUND_HOURS = 2.0
+ROUND_SPEED_FILE = 'round-speed.json'
+DEFAULT_CHAIN_TOKENS_PER_S = (('A100', 30_800), ('GB10', 5_900))
+DGX_GPU = 'GB10'
+FORWARD_PER_TARGET = 10.7     # forward tokens per weighted target token of a round mix (r0001 10.87, r0002 10.57)
 FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB); 6 kept the Pop fill out beside the SFT
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
@@ -264,6 +275,15 @@ def _pid_alive(pid):
 
 
 # ---- collect ---------------------------------------------------------------------------------------------------------
+def parse_remote_target(target, default_slots):
+    """``--rebind-actor HOST@FRONT_URL[=SLOTS]`` -> (host, front URL, collector slots; ``default_slots`` without one)."""
+    host, _, rest = target.rpartition('@')
+    front, sep, slots = rest.rpartition('=')
+    if sep and slots.isdigit():
+        return host, front, int(slots)
+    return host, rest, default_slots
+
+
 def endpoint_alive(url, sha, timeout=10):
     """Whether the actor front at ``url`` answers and still serves policy ``sha``."""
     try:
@@ -717,15 +737,29 @@ def latest_base(results, samples, host='pop'):
 # ---- cycle -----------------------------------------------------------------------------------------------------------
 TEACHER_POOLS = [OPS / 'teacher-gen-20261115' / p for p in ('pool-v1', 'pool-v2-rich', 'pool-progtune-decisions')] + [
     OPS / 'teacher-gen-20261119' / 'gap-v1']
-# the teacher campaign's teachers (DECISIONS 2026-11-21 teacher yield): Haiku retires itself while the Anthropic account
-# has no credit; Luna at medium effort (low failed most reading families); GPT-6.1 Sol, the stronger model on the same
-# Codex subscription, only on tasks another teacher failed (min_failed); family routing and --attempts in teacher_gen
+# the provider key files the campaign's launch script sources (~/.config/natlang/NAME.env)
+TEACHER_ENV_FILES = ('nvidia', 'gemini', 'anthropic', 'openrouter')
+NIM = 'https://integrate.api.nvidia.com/v1'
+# Gemini on Vertex AI, billed to the GCP project's credits (the AI Studio key is free tier: no Pro models); the ADC
+# user credentials mint an hour-long token per episode (teacher_gen api_key_command)
+VERTEX = 'https://aiplatform.googleapis.com/v1/projects/awareness-481308/locations/global/endpoints/openapi'
+VERTEX_TOKEN = [str(Path.home() / 'google-cloud-sdk/bin/gcloud'), 'auth', 'application-default', 'print-access-token']
+# the teacher campaign's teachers (DECISIONS 2026-11-21 teacher yield, 2026-11-24 teacher providers; ops/ei/teachers.json
+# overrides at each launch): Haiku retires itself while the Anthropic account has no credit; Luna at medium effort; GPT-6.1
+# Sol, the stronger model on the same Codex subscription, only on tasks another teacher failed (min_failed); the free
+# raw-reasoning models: Nemotron 3.5 Super and 3 Ultra on NIM (one account-wide rate limit: few slots), ERNIE 5.5 Flash
+# on OpenRouter's free tier (1,000 requests a day, ~26 episodes); Gemini 3.1 Pro and Gemini 4 Argon (Vertex credits,
+# reasoning hidden) on tasks another teacher failed; family routing and --attempts in teacher_gen
 TEACHERS = [
     {'model_id': 'claude-haiku-5-5', 'provider': 'anthropic', 'reasoning_effort': 'medium', 'slots': 4},
-    {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 4},
-    {'model_id': 'gpt-6.1-sol', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 2, 'min_failed': 1},
-    {'model_id': 'nvidia/nemotron-3-ultra-550b-a55b', 'endpoint': 'https://integrate.api.nvidia.com/v1',
-     'api_key_env': 'NVIDIA_API_KEY', 'slots': 1}]
+    {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 6},
+    {'model_id': 'gpt-6.1-sol', 'provider': 'openai-codex', 'reasoning_effort': 'medium', 'slots': 4, 'min_failed': 1},
+    {'model_id': 'nvidia/nemotron-3.5-super-vl-120b-a12b', 'endpoint': NIM, 'api_key_env': 'NVIDIA_API_KEY', 'slots': 2},
+    {'model_id': 'nvidia/nemotron-3-ultra-550b-a55b', 'endpoint': NIM, 'api_key_env': 'NVIDIA_API_KEY', 'slots': 1},
+    {'model_id': 'baidu/ernie-5.5-flash-preview:free', 'endpoint': 'https://openrouter.ai/api/v1',
+     'api_key_env': 'OPENROUTER_API_KEY', 'slots': 1},
+    *[{'model_id': model, 'endpoint': VERTEX, 'api_key_env': 'VERTEX_ACCESS_TOKEN', 'api_key_command': VERTEX_TOKEN,
+       'slots': slots, 'min_failed': 1} for model, slots in (('google/gemini-4-argon', 4), ('google/gemini-3.1-pro-preview', 2))]]
 
 
 def frontier_rare(frontier_path, rate=0.25):
@@ -743,7 +777,22 @@ def teacher_command(pin, work, covered, student_groups, limit):
             *[x for c in covered if Path(c) != Path(work) and (Path(c) / 'manifest.jsonl').exists()
               for x in ('--covered-by', str(c))],
             *[x for g in student_groups for x in ('--student-groups', str(g))], '--rare-rate', '0.25',
-            '--limit', str(limit), '--attempts', '3', *[x for t in TEACHERS for x in ('--teacher', json.dumps(t))]]
+            '--limit', str(limit), '--attempts', '3', *[x for t in teachers() for x in ('--teacher', json.dumps(t))]]
+
+
+TEACHERS_FILE = OPS / 'ei' / 'teachers.json'
+
+
+def teachers():
+    """The teacher campaign's specs: ``ops/ei/teachers.json`` (a JSON list of teacher_gen --teacher specs) when it
+    exists, read at each campaign launch, so a teacher change reaches the standing campaign's next launch without a
+    driver restart; else TEACHERS."""
+    if TEACHERS_FILE.exists():
+        specs = json.loads(TEACHERS_FILE.read_text())
+        if not isinstance(specs, list) or not specs or not all(isinstance(t, dict) and t.get('model_id') for t in specs):
+            raise SystemExit(f'{TEACHERS_FILE}: a non-empty JSON list of teacher specs')
+        return specs
+    return TEACHERS
 
 
 def launch_teacher(runner, work, frontier_path, student_groups, unit, covered_extra=()):
@@ -758,7 +807,7 @@ def launch_teacher(runner, work, frontier_path, student_groups, unit, covered_ex
     command = teacher_command(runner.pin, work, covered, student_groups, len(rare))
     script = work / 'launch.sh'
     script.write_text('#!/bin/bash\n# expert-iteration teacher frontier (expert_iteration.py launch_teacher)\nset -u\n'
-                      f'set -a; for f in nvidia gemini anthropic; do . {Path.home()}/.config/natlang/$f.env; done; set +a\n'
+                      f'set -a; for f in {" ".join(TEACHER_ENV_FILES)}; do . {Path.home()}/.config/natlang/$f.env; done; set +a\n'
                       f'cd {runner.pin}\nexec ' + ' '.join(map(_quote, command)) + '\n')
     script.chmod(0o755)
     # CPU/API-bound, ~4 GB at 20 slots: medium so medium-priority smokes and evals do not preempt it (each preemption
@@ -799,7 +848,8 @@ def live_holdout_registry(live_works):
 
 
 def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None,
-                      live_registry=None, max_target_tokens=0, registry_repo=None, registry_ref=None):
+                      live_registry=None, max_target_tokens=0, registry_repo=None, registry_ref=None,
+                      max_forward_tokens=0, unfilled_live_teacher=None):
     """The mix build (``sft_sources build``) of a cycle or an async round: Ambient frontier build from WORK's replayed
     successes (own first, then teacher; observed-live teacher episodes against ``live_registry``), the teacher pools,
     aux parts and the lineage's prefer-unseen builds."""
@@ -815,7 +865,56 @@ def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_
             *(['--live-holdout-registry', live_registry] if live_registry else []),
             *(['--registry-repo', registry_repo] if registry_repo is not None else []),
             *(['--registry-ref', registry_ref] if registry_ref is not None else []),
-            *(['--max-target-tokens', max_target_tokens] if max_target_tokens else [])]
+            *(['--max-target-tokens', max_target_tokens] if max_target_tokens else []),
+            *(['--max-forward-tokens', max_forward_tokens] if max_forward_tokens else []),
+            *(['--unfilled-live-teacher', unfilled_live_teacher] if unfilled_live_teacher else [])]
+
+
+def chain_tokens_per_s(train_jsonl, first_step=0):
+    """(chain tokens per second, steps) of a learner log's steps from ``first_step`` on: the sum of their chain tokens
+    over the sum of their step seconds (what a round's wall time follows), or (None, 0)."""
+    path = Path(train_jsonl)
+    if not path.exists():
+        return None, 0
+    tokens = seconds = steps = 0
+    for line in path.read_text(errors='replace').splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(r, dict) and r.get('step_seconds') and r.get('chain_tokens') and int(r.get('step', 0)) >= first_step:
+            tokens, seconds, steps = tokens + float(r['chain_tokens']), seconds + float(r['step_seconds']), steps + 1
+    return (round(tokens / seconds) if seconds else None), steps
+
+
+def learner_throughput(gpu_name, measured, hardware=None, measured_speedup=None):
+    """(chain tokens per second of round SFT on ``gpu_name``, source): this loop's measurement (``measured``: the
+    ROUND_SPEED_FILE table), else the defaults by name, else the GB10's times ``sft_speedup`` (None when unknown)."""
+    name = str(gpu_name or '')
+    if measured.get(name, {}).get('chain_tokens_per_s'):
+        return float(measured[name]['chain_tokens_per_s']), 'measured by this loop'
+    known = next((v for key, v in DEFAULT_CHAIN_TOKENS_PER_S if key in name), None)
+    if known:
+        return float(known), 'default (aei1 r0001)'
+    from natlang_neuralese.common.execution_profile import sft_speedup
+    speedup, source = sft_speedup(hardware or {'gpu_name': name}, measured_speedup or {})
+    if not speedup:
+        return None, source
+    dgx, _ = learner_throughput(DGX_GPU, measured)
+    return dgx * speedup, f'GB10 x {speedup} ({source})'
+
+
+def placement_round_size(*, round_target_tokens, teacher_budget, hours, gpu_name, chain_tokens_per_s,
+                         forward_per_target=FORWARD_PER_TARGET):
+    """A round's budgets for a learner on ``gpu_name`` at ``chain_tokens_per_s``: ``hours`` of learner time in forward
+    tokens (``max_forward_tokens``), the target cap and the teacher forward budget scaled by the same factor against
+    the DGX round (``round_target_tokens`` weighted, about ``forward_per_target`` times that forward), never below it."""
+    forward = int(hours * 3600 * chain_tokens_per_s)
+    scale = max(1.0, forward / (round_target_tokens * forward_per_target)) if round_target_tokens else 1.0
+    return {'placement': 'colab', 'gpu': gpu_name, 'hours': hours, 'chain_tokens_per_s': round(chain_tokens_per_s),
+            'max_forward_tokens': forward, 'max_target_tokens': int(round_target_tokens * scale),
+            'teacher_budget': int(teacher_budget * scale), 'scale': round(scale, 3),
+            'forward_per_target': round(forward_per_target, 3)}
 
 
 def judge(vs_start, success_pts, fail_pts):
@@ -2189,6 +2288,7 @@ def write_round_manifest(round_dir, *, round_id, base_policy_sha, previous_polic
     return manifest
 
 
+TEACHER_RELAUNCH_MINUTES = 60   # an idle campaign of the same frontier resumes at most this often
 SFT_HANDBACK_MAX = 2          # moves of one round from the DGX back to a session (no ping-pong between two hosts)
 
 
@@ -2447,6 +2547,11 @@ ROUND_STAGES = ('prepared', 'trained', 'published')
 
 
 class AsyncRoundDriver:
+    # the DGX and remote collection builders share Cycle.collect_dir (the main loop and the Pop loop both build)
+    COLLECT_LOCK = threading.RLock()
+    # Pop serves one thing at a time: the Pop loop's collection serve or held-v4's measurement (held_v4_step)
+    POP_LOCK = threading.Lock()
+    POP_POLL_SECONDS = 120
     """Continuous expert iteration in rounds (async-train §2-§5, §7.4): standing services on the DGX (a collection of
     the newest published policy, filled reasoning on its actor, the teacher campaign on the frontier's rare tasks),
     back-to-back rounds, and the DGX held series beside them.
@@ -2490,6 +2595,7 @@ class AsyncRoundDriver:
         self.held_done = set()          # held-v3 candidates the held thread finished
         self.held_v4_cadence = parse_held_v4_cadence(getattr(args, 'held_v4_cadence', HELD_V4_CADENCE))
         self.held_v4 = HeldV4Queue(self.root / 'held-v4' / 'queue.json')
+        self.teacher_lock = threading.Lock()   # one campaign launch at a time (main loop, waits, the standing thread)
         self.handback_next = {}         # round -> when its DGX SFT is next checked for a move to a session
         self.handback_blocked = set()   # rounds whose Colab learner failed: they stay on the DGX
         self.handed_back = None         # the round a hand-back just moved (ends the DGX wait)
@@ -2557,8 +2663,9 @@ class AsyncRoundDriver:
         tasks = work / 'tasks.json'
         if not tasks.exists():
             self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
-        self.c.collect_dir = work
-        argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots)
+        with self.COLLECT_LOCK:
+            self.c.collect_dir = work
+            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots)
         argv[argv.index('--tasks') + 1] = str(tasks)
         budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
         self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
@@ -2581,43 +2688,133 @@ class AsyncRoundDriver:
                       repo=self.c.fill_repo())
         self.note(fill_started=f'{unit}-fill', policy=policy['sha256'])
 
+    def remote_targets(self):
+        """The ``--rebind-actor HOST@FRONT_URL[=SLOTS]`` targets: {index, host, front, slots, pop, suffix}. A target on
+        Pop's host (``pop_rl_actor.POP``) is a standing Pop actor (``pop_step``: served, not rebound in place, and
+        yielding to held measurements); its collector unit ends in ``POP_COLLECT_SUFFIX`` (every Pop serve stops it),
+        the others in ``-remote{index}``."""
+        import pop_rl_actor
+        out = []
+        for i, target in enumerate(self.a.rebind_actor):
+            host, front, slots = parse_remote_target(target, self.a.remote_slots)
+            pop = bool(host) and host == pop_rl_actor.POP
+            out.append({'index': i, 'host': host, 'front': front, 'slots': slots, 'pop': pop,
+                        'suffix': pop_rl_actor.POP_COLLECT_SUFFIX if pop else f'-remote{i}'})
+        return out
+
     def remote_units(self, unit):
         """The remote actors' collector units beside DGX collection unit ``unit`` (one per ``--rebind-actor``)."""
-        return [f'{unit}-remote{i}' for i in range(len(self.a.rebind_actor))]
+        return [unit + t['suffix'] for t in self.remote_targets()]
 
-    def remote_actors(self):
-        """[(host, VM-local front URL, DGX-side endpoint)] of ``--rebind-actor HOST@URL`` targets (Colab actors
-        beside the learner; their fronts reach the DGX through the host's forwarded ports)."""
+    @staticmethod
+    def target_endpoint(target):
         import pop_rl_actor
         from urllib.parse import urlparse
-        out = []
-        for target in self.a.rebind_actor:
-            host, _, front = target.rpartition('@')
-            if host:
-                out.append((host, front, pop_rl_actor.remote_endpoint(host, urlparse(front).port)))
-        return out
+        return pop_rl_actor.remote_endpoint(target['host'], urlparse(target['front']).port)
+
+    def remote_actors(self, include_pop=True):
+        """[(host, VM-local front URL, DGX-side endpoint)] of the hosted targets (Colab actors beside the learner reach
+        the DGX through the host's forwarded ports; Pop over Tailscale)."""
+        return [(t['host'], t['front'], self.target_endpoint(t)) for t in self.remote_targets()
+                if t['host'] and (include_pop or not t['pop'])]
 
     def ensure_remote_collection(self, policy):
         """A DGX-side collector per remote actor that serves ``policy`` (``collect --actor``): restarted with the
         policy like the DGX collection (a rebound actor serves the new policy; the old collector drops it). An actor
         not serving ``policy`` is rebound to it first (``ensure_remote_policy``)."""
         self.ensure_remote_policy(policy)
-        for i, (host, _front, endpoint) in enumerate(self.remote_actors()):
-            unit = f'{self.collection_unit(policy)}-remote{i}'
-            if self.c.present(unit) or not endpoint_alive(endpoint, policy['sha256']):
-                continue
-            work = self.collect_dir(policy).with_name(self.collect_dir(policy).name + f'-remote{i}')
-            work.mkdir(parents=True, exist_ok=True)
-            tasks = self.collect_dir(policy) / 'tasks.json'
-            if not tasks.exists():
-                self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
+        for target in self.remote_targets():
+            if target['host'] and not target['pop']:     # Pop's collector: pop_step (it yields to held measurements)
+                self.start_remote_collector(policy, target)
+
+    def remote_collect_argv(self, policy, target, endpoint):
+        """(unit, work dir, argv, ledger GB) of ``target``'s DGX-side collector of ``policy``."""
+        unit = self.collection_unit(policy) + target['suffix']
+        work = self.collect_dir(policy).with_name(self.collect_dir(policy).name + target['suffix'])
+        with self.COLLECT_LOCK:
             self.c.collect_dir = work
-            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.remote_slots,
-                                          endpoints=[f'{endpoint}={self.a.remote_slots}'])
-            argv[argv.index('--tasks') + 1] = str(tasks)
-            self.c.ledger(unit, max(8, round(self.a.remote_slots * COLLECTOR_SLOT_GB) + 4), COLLECTION_PRIORITY, argv,
-                          work / 'collect.log', detach=True)
-            self.note(remote_collection=unit, host=host, endpoint=endpoint)
+            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], target['slots'],
+                                          endpoints=[f'{endpoint}={target["slots"]}'])
+        argv[argv.index('--tasks') + 1] = str(self.collect_dir(policy) / 'tasks.json')
+        return unit, work, argv, max(8, round(target['slots'] * COLLECTOR_SLOT_GB) + 4)
+
+    def start_remote_collector(self, policy, target):
+        """``target``'s collector of ``policy`` (``collect --actor``) once its actor serves ``policy``."""
+        endpoint = self.target_endpoint(target)
+        unit = self.collection_unit(policy) + target['suffix']
+        if self.c.present(unit) or not endpoint_alive(endpoint, policy['sha256']):
+            return
+        unit, work, argv, budget = self.remote_collect_argv(policy, target, endpoint)
+        work.mkdir(parents=True, exist_ok=True)
+        tasks = self.collect_dir(policy) / 'tasks.json'
+        if not tasks.exists():
+            self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
+        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
+        self.note(remote_collection=unit, host=target['host'], endpoint=endpoint, slots=target['slots'])
+
+    # -- Pop: a standing collection actor whenever no held measurement holds it -------------------------------------
+    def pop_target(self):
+        return next((t for t in self.remote_targets() if t['pop']), None)
+
+    def pop_loop(self):
+        while True:
+            try:
+                self.pop_step()
+            except Exception as error:      # Pop is an extra actor: note and retry
+                self.note(pop_collect_failed=repr(error)[:300])
+            time.sleep(self.POP_POLL_SECONDS)
+
+    def pop_collector_units(self):
+        """Present Pop collector units of this driver (any policy)."""
+        import pop_rl_actor
+        root = self.root / 'collect'
+        units = {f'{self.a.name}-collect-{d.name.split("-")[0]}{pop_rl_actor.POP_COLLECT_SUFFIX}'
+                 for d in (root.glob('v*') if root.exists() else ())}
+        return sorted(u for u in units if self.c.present(u))
+
+    def pop_step(self):
+        """Pop collects the lineage head in the SFT phase whenever nothing else holds it. A held measurement (any
+        ``pop-held.sh`` / ``held-eval`` process, another serve in progress, or held-v4 here holding POP_LOCK) stops
+        the Pop collector; afterwards Pop is served again with the collection law and its collector restarts. A new
+        policy is served (the checkpoint copied, not rebound in place: Pop's driver relaunches a dead engine from the
+        checkpoint it was served, so an in-place rebind would revert there)."""
+        import pop_rl_actor
+        target = self.pop_target()
+        if target is None:
+            return
+        with self.lock:
+            cur, phase = dict(self.controller.current), self.controller.phase
+        want = self.collection_unit(cur) + target['suffix']
+        busy = 'phase ' + phase if phase != 'sft' else pop_rl_actor.pop_busy()
+        for unit in self.pop_collector_units():
+            if busy or unit != want:
+                self.c.stop_unit(unit)
+                self.note(pop_collector_stopped=unit, reason=busy or 'another policy')
+        if busy or not self.POP_LOCK.acquire(blocking=False):
+            return
+        try:
+            weight_dtype = getattr(self.a, 'collect_weight_dtype', COLLECT_WEIGHT_DTYPE)
+            settings, _ = pop_rl_actor.pop_sglang(pop_rl_actor.POP_KV_CACHE_DTYPE, self.a.pop_max_running,
+                                                  weight_dtype=weight_dtype, overlap_schedule=True)
+            state = pop_rl_actor.read_json(pop_rl_actor.STATE) or {}
+            if not (state.get('policy_id') == cur['sha256'] and state.get('sglang') == settings
+                    and pop_rl_actor.attested(state['endpoint'], cur['sha256'])):
+                if self.c.present(want):
+                    self.c.stop_unit(want)
+                started = time.time()
+                with (self.root / 'pop-serve.log').open('a') as log:
+                    subprocess.run([PY, str(Path(pop_rl_actor.__file__).resolve()), 'serve-checkpoint',
+                                    '--checkpoint', str(cur['checkpoint']), '--policy-id', cur['sha256'],
+                                    '--commit', self.a.commit, '--kv-cache-dtype', pop_rl_actor.POP_KV_CACHE_DTYPE,
+                                    '--weight-dtype', weight_dtype, '--max-running', str(self.a.pop_max_running),
+                                    '--overlap-schedule'], stdout=log, stderr=subprocess.STDOUT, timeout=3600,
+                                   check=True)
+                self.note(pop_served=cur['sha256'], seconds=round(time.time() - started))
+                if pop_rl_actor.pop_busy():
+                    return
+        finally:
+            self.POP_LOCK.release()
+        self.start_remote_collector(cur, target)
 
     def stop_collections(self, *, remote=True):
         """Stop the DGX collections and their fills (they hold the GPU the DGX learner needs) and, with ``remote``,
@@ -2628,16 +2825,158 @@ class AsyncRoundDriver:
                 if self.c.present(u):          # a requeued one too, or the ledger relaunches it beside the learner
                     self.c.stop_unit(u)
 
-    def ensure_teacher(self, round_dir):
-        """The teacher campaign stands: when its unit is idle, the newest frontier's rare tasks start the next one."""
+    def standing_teacher(self):
+        """``ensure_teacher`` from a wait or the loop: a failure is logged, never the caller's end."""
+        try:
+            self.ensure_teacher()
+        except Exception as error:
+            self.note(teacher_check_failed=repr(error)[:300])
+
+    def build_code(self):
+        """The commit of the build code (``--data-repo``, else the pin): its pin record, else git; what a rebuild is
+        recorded under."""
+        repo = self.c.data_repo()
+        marker = repo / '.natlang-pin.json'
+        if marker.exists():
+            return json.loads(marker.read_text()).get('commit')
+        try:
+            return subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True,
+                                           stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+    def rebuild_requested(self, round_dir):
+        """Why the prepared round's mix is rebuilt before it trains, or None: ``stages/rebuild.request`` (written by
+        hand: picked up at the round's start by a running driver), or ``--rebuild-round RNNNN`` while round.json
+        records no rebuild under the current build code (so a restart with the same argv does not rebuild again)."""
+        if (round_dir / 'stages' / 'rebuild.request').exists():
+            return 'stages/rebuild.request'
+        if round_dir.name in (getattr(self.a, 'rebuild_round', None) or ()):
+            manifest = json.loads((round_dir / 'round.json').read_text())
+            code = self.build_code()
+            if not any(r.get('build_code') == code for r in manifest.get('rebuilds') or ()):
+                return f'--rebuild-round under build code {code}'
+        return None
+
+    def rebuild_round(self, round_dir, policies, reason):
+        """Rerun only a prepared round's mix build, under the current build code, from its recorded inputs: the round's
+        frontier, data outputs (filled, own Neuralese graph, extractions in --sft-work), size, previous policy and
+        prefer-unseen list (round.json), with the lineage it was prepared from (refused when that is no longer the
+        lineage, or once its SFT started). The old mix stays as ``mix.pre-rebuild-<time>``; a failed build puts it
+        back. ``chains.sha256`` and round.json (blob first, every other recorded field kept, a DGX recap dropped:
+        the recap reruns from the new mix when the round starts on the DGX) follow the new mix; round.json
+        ``rebuilds`` records each one. Returns True when it rebuilt."""
+        from natlang_neuralese.common.jsonio import write_json_durable
+        manifest = json.loads((round_dir / 'round.json').read_text())
+        marker = round_dir / 'stages' / 'rebuild.request'
+        run = round_dir / 'sft'
+        started = ((run / 'learner-state' / 'learner_manifest.json').exists() or (run / 'factors').exists()
+                   or dgx_sft_progress(run / 'train.jsonl') is not None
+                   or self.dgx_sft_running(round_dir, f'{self.a.name}-{round_dir.name}-sft'))
+        cur, prev = policies[-1], (policies[-2] if len(policies) > 1 else None)
+        lineage_ok = (manifest.get('base_policy_sha') == cur['sha256']
+                      and manifest.get('previous_policy_sha') == (prev['sha256'] if prev else None))
+        if started or not lineage_ok:
+            why = 'its SFT started' if started else 'it was prepared from another lineage'
+            self.note(round=round_dir.name, rebuild_refused=why, reason=reason)
+            marker.unlink(missing_ok=True)
+            return False
+        size = manifest.get('size') or json.loads((round_dir / 'size.json').read_text())
+        _, _, build = self.prepare_plan(round_dir, policies, size, prefer_unseen=manifest.get('prefer_unseen') or [])
+        mix = round_dir / 'mix'
+        stamp = time.strftime('%Y%m%dT%H%M%S')
+        n = 0
+        while (round_dir / f'mix.pre-rebuild-{stamp}{f"-{n}" if n else ""}').exists():
+            n += 1
+        stamp = f'{stamp}-{n}' if n else stamp
+        old = round_dir / f'mix.pre-rebuild-{stamp}'
+        code = self.build_code()
+        self.note(round=round_dir.name, rebuild=reason, build_code=code, old_mix=str(old))
+        if mix.exists():
+            os.replace(mix, old)
+        t = time.time()
+        try:
+            self.c.ledger(f'{self.a.name}-{round_dir.name}-rebuild-{stamp}', 32, STAGE_PRIORITY, build,
+                          round_dir / 'rebuild.log', repo=self.c.data_repo())
+            report = json.loads((mix / 'build.json').read_text())
+            if not (mix / 'chains.pkl').is_file():
+                raise SystemExit(f'round {round_dir.name}: the rebuild wrote no chains.pkl ({round_dir}/rebuild.log)')
+        except BaseException:
+            if old.exists():
+                shutil.rmtree(mix, ignore_errors=True)
+                os.replace(old, mix)
+            self.note(round=round_dir.name, rebuild_failed=f'{round_dir}/rebuild.log', restored=str(mix))
+            raise
+        core = {'schema', 'round_id', 'base_policy_sha', 'previous_policy_sha', 'chains_path', 'chains_sha256',
+                'chains_bytes', 'episode_ids', 'prefer_unseen', 'profile', 'profile_changes', 'committed_at'}
+        entry = {'at': round(time.time(), 1), 'reason': reason, 'build_code': code, 'seconds': round(time.time() - t, 1),
+                 'old_mix': str(old) if old.exists() else None, 'old_chains_sha256': manifest.get('chains_sha256')}
+        extra = {**{k: v for k, v in manifest.items() if k not in core and k != 'recap'},
+                 'mix_dir': str(mix), 'expected_hours': self.expected_hours(report),
+                 'rebuilds': [*(manifest.get('rebuilds') or []), entry]}
+        new = write_round_manifest(
+            round_dir, round_id=manifest.get('round_id', round_dir.name), base_policy_sha=manifest['base_policy_sha'],
+            previous_policy_sha=manifest.get('previous_policy_sha'), chains_path=mix / 'chains.pkl',
+            episode_ids=report.get('admitted_episode_keys') or [], prefer_unseen=manifest.get('prefer_unseen') or [],
+            profile=manifest.get('profile', self.a.sft_profile), profile_changes=manifest.get('profile_changes') or [],
+            extra=extra)
+        write_json_durable(round_dir / 'stages' / 'build.done', {'time': time.time(), 'rebuild': entry})
+        marker.unlink(missing_ok=True)
+        self.note(round=round_dir.name, rebuilt=new['chains_sha256'], old_chains=entry['old_chains_sha256'],
+                  episodes=len(new['episode_ids']))
+        return True
+
+    def newest_frontier(self):
+        """The newest round's measured frontier (``rNNNN/frontier.json`` of the highest round not discarded), or None."""
+        found = [f for f in sorted(self.root.glob('r[0-9]*/frontier.json'))
+                 if not (f.parent / 'discarded.json').exists()]
+        return found[-1] if found else None
+
+    def ensure_teacher(self, round_dir=None):
+        """The teacher campaign stands: whenever its unit is idle, the newest frontier's campaign runs
+        (``teacher-rNNNN``). Called from the main loop, the end of a round's preparation, the SFT and preparation
+        waits and a standing thread every ``--teacher-check-minutes`` (2026-11-24: called only when a round was
+        prepared, the campaign stayed idle from 01:00 until a hand launch at 02:10 under a restarted driver joining an
+        already-prepared round). A campaign of that frontier which already ran resumes (teacher_gen skips finished
+        tasks) at most once per ``TEACHER_RELAUNCH_MINUTES``, and not after a relaunch that scored nothing new (its
+        tasks are done: the next frontier starts the next one). ``round_dir`` is ignored (the newest frontier
+        decides)."""
         unit = f'{self.a.name}-teacher'
-        if self.a.no_teacher_campaign or self.c.active(unit) or not (round_dir / 'frontier.json').exists():
-            return
-        work = self.root / f'teacher-{round_dir.name}'
-        n = launch_teacher(self.c, work, round_dir / 'frontier.json',
-                           [self.collect_dir(p) / 'groups' / 'g*' for p in self.lineage_policies()], unit,
-                           covered_extra=sorted(self.root.glob('teacher-*')))
-        self.note(teacher=unit, frontier_tasks=n, work=str(work))
+        if self.a.no_teacher_campaign:
+            return None
+        with self.teacher_lock:
+            frontier = self.newest_frontier()
+            if frontier is None or self.c.present(unit):
+                return None
+            work = self.root / f'teacher-{frontier.parent.name}'
+            record_path = work / 'driver-launch.json'
+            scored = sum(1 for line in (work / 'manifest.jsonl').open() if line.strip()) \
+                if (work / 'manifest.jsonl').exists() else 0
+            last = json.loads(record_path.read_text()) if record_path.exists() else None
+            launched = (work / 'launches.jsonl').exists()
+            if launched and last is not None:
+                if scored <= int(last.get('scored_at_launch', -1)):
+                    return None                 # the last relaunch scored nothing: this frontier's campaign is done
+                if time.time() - float(last.get('at', 0)) < 60 * TEACHER_RELAUNCH_MINUTES:
+                    return None
+            n = launch_teacher(self.c, work, frontier,
+                               [self.collect_dir(p) / 'groups' / 'g*' for p in self.lineage_policies()], unit,
+                               covered_extra=sorted(self.root.glob('teacher-*')))
+            if n:
+                from natlang_neuralese.common.jsonio import write_json_durable
+                write_json_durable(record_path, {'at': round(time.time(), 1), 'frontier': str(frontier),
+                                                 'scored_at_launch': scored, 'resume': launched, 'tasks': n})
+            self.note(teacher=unit, frontier=str(frontier), frontier_tasks=n, work=str(work), resume=launched)
+            return work
+
+    def teacher_loop(self):
+        """The standing campaign's check, beside every wait the main loop makes (run-sft, ledger units, held)."""
+        while True:
+            time.sleep(60 * self.a.teacher_check_minutes)
+            try:
+                self.ensure_teacher()
+            except Exception as error:
+                self.note(teacher_check_failed=repr(error)[:300])
 
     def lineage_policies(self):
         """The policies whose collections a round reads: the current and the previous published policy."""
@@ -2649,8 +2988,76 @@ class AsyncRoundDriver:
         return [d for p in policies for d in sorted(self.collect_dir(p).parent.glob(self.collect_dir(p).name + '*'))
                 if (d / 'runs.jsonl').exists()]
 
-    def prepare_plan(self, round_dir, policies):
-        """(frontier argv, data script lines, build argv) of a round's preparation from ``policies``' collections."""
+    def dgx_round_size(self, why='DGX'):
+        return {'placement': 'dgx', 'why': why, 'max_target_tokens': self.a.round_target_tokens, 'max_forward_tokens': 0,
+                'teacher_budget': self.a.teacher_budget, 'scale': 1.0}
+
+    def measured_round_speed(self):
+        path = self.root / ROUND_SPEED_FILE
+        return json.loads(path.read_text()) if path.exists() else {}
+
+    def forward_per_target(self):
+        """Forward per weighted target token of the newest built round mix (FORWARD_PER_TARGET without one)."""
+        for build in sorted(self.root.glob('r[0-9]*/mix/build.json'), reverse=True):
+            try:
+                mix = json.loads(build.read_text())['mix']
+                return mix['forward_tokens'] / mix['weighted_target_tokens']
+            except (OSError, ValueError, KeyError, ZeroDivisionError):
+                continue
+        return FORWARD_PER_TARGET
+
+    def round_size(self):
+        """A round's budgets by where it is expected to train, decided at preparation: a reachable Colab session fit
+        for SFT (``colab_sft_fit``) -> ``--colab-round-hours`` of its learner time (``placement_round_size``); else
+        (no session, an unfit one, ``--colab-round-hours 0``, a DGX-profile driver) the DGX round
+        (``--round-target-tokens``, ``--teacher-budget``)."""
+        hours = getattr(self.a, 'colab_round_hours', COLAB_ROUND_HOURS)
+        if hours <= 0 or self.a.sft_profile != 'colab' or not self.colab_hosts:
+            return self.dgx_round_size('placement sizing off or no Colab hosts')
+        try:
+            import pop_rl_actor
+            host = next((h for h in pop_rl_actor.reachable_hosts('colab', self.colab_hosts)
+                         if pop_rl_actor.colab_sft_fit(h)[0]), None)
+            if host is None:
+                return self.dgx_round_size('no Colab session fit for SFT answers')
+            hardware = pop_rl_actor.colab_hardware(host)
+        except Exception as error:      # sizing never stops a round: the DGX size is always safe
+            return self.dgx_round_size(f'placement check failed: {repr(error)[:200]}')
+        gpu = hardware.get('gpu_name')
+        tps, source = learner_throughput(gpu, self.measured_round_speed(), hardware, self.measured_sft_speed())
+        if not tps:
+            return self.dgx_round_size(f'{gpu}: no throughput estimate ({source})')
+        return {**placement_round_size(round_target_tokens=self.a.round_target_tokens,
+                                       teacher_budget=self.a.teacher_budget, hours=hours, gpu_name=gpu,
+                                       chain_tokens_per_s=tps, forward_per_target=self.forward_per_target()),
+                'host': host, 'throughput_source': source}
+
+    def round_mix(self, round_dir):
+        """The mix a round trains: round.json ``mix_dir`` (a DGX recap, ``recap_for_dgx``), else ``mix/``."""
+        path = Path(round_dir) / 'round.json'
+        if path.exists():
+            mix = json.loads(path.read_text()).get('mix_dir')
+            if mix:
+                return Path(mix)
+        return Path(round_dir) / 'mix'
+
+    def prefer_unseen_for(self, round_dir):
+        """The builds a round's mix prefers unseen over: the lineage's trained rounds (``prefer_unseen``) and the round
+        training now, when this one is prepared ahead of it (its mix is not published yet; without it the next round
+        repeated most of it: aei1 r0002 held 3,166 of r0001's 3,395 filled units and 1,118 of its 1,645 teacher
+        episodes). ``--no-prefer-inflight`` opts out."""
+        builds = list(self.controller.state['prefer_unseen'])
+        active = (self.controller.state.get('active_round') or {}).get('round_id')
+        if active and active != Path(round_dir).name and not getattr(self.a, 'no_prefer_inflight', False):
+            mix = self.round_mix(self.round_dir(active))
+            if (mix / 'rows.jsonl.zst').exists() and str(mix) not in builds:
+                builds.append(str(mix))
+        return builds
+
+    def prepare_plan(self, round_dir, policies, size=None, prefer_unseen=None):
+        """(frontier argv, data script lines, build argv) of a round's preparation from ``policies``' collections,
+        sized by ``size`` (``round_size``; the DGX round without one)."""
+        size = size or self.dgx_round_size()
         cur, prev = policies[-1], (policies[-2] if len(policies) > 1 else None)
         collections_ = self.collections_of(policies)
         frontier = [*self.c.py('expert_iteration.py', 'frontier', '--out', round_dir / 'frontier.json',
@@ -2677,13 +3084,16 @@ class AsyncRoundDriver:
         aux.append(f'own-neuralese-graph={round_dir / "neuralese-graph-own" / "chains.pkl"},'
                    f'share={self.a.own_neuralese_graph_share},task_tokens=40000')
         build = mix_build_command(self.c.data_repo(), work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
-                                  aux=aux, prefer_unseen=self.controller.state['prefer_unseen'],
-                                  teacher_budget=self.a.teacher_budget, own_share=self.a.own_share,
+                                  aux=aux, prefer_unseen=(self.prefer_unseen_for(round_dir) if prefer_unseen is None
+                                                          else prefer_unseen),
+                                  teacher_budget=size['teacher_budget'], own_share=self.a.own_share,
                                   previous_policy=prev['sha256'] if prev else None,
                                   live_registry=live_holdout_registry(self.a.live_work),
                                   registry_repo=self.c.live_data_owner(),
                                   registry_ref=self.c.live_data_ref(),
-                                  max_target_tokens=self.a.round_target_tokens)
+                                  max_target_tokens=size['max_target_tokens'],
+                                  max_forward_tokens=size['max_forward_tokens'],
+                                  unfilled_live_teacher=getattr(self.a, 'unfilled_live_teacher', None))
         return list(map(str, frontier)), [list(map(str, x)) for x in lines], list(map(str, build))
 
     def failed_policies(self):
@@ -2716,13 +3126,23 @@ class AsyncRoundDriver:
                 if runs:
                     break                   # stopped early (a rollback, a phase switch): what it scored is the snapshot
                 raise SystemExit(f'round {round_dir.name}: no collection of {cur["sha256"][:12]} ({self.collect_dir(cur)})')
+            self.standing_teacher()
             time.sleep(60)
         for d in self.collections_of(policies):
             record_collection(d, closed=False)       # the snapshot the extraction reads (the collection grows on)
         # the live WORKs' extractions so far (the ingester keeps adding waves; each round takes what is there)
         if self.a.live_work:
             self.note(live_links=link_live_works(self.c.work, self.a.live_work))
-        frontier, lines, build = self.prepare_plan(round_dir, policies)
+        # the round's size by its expected placement, decided once (a restarted driver keeps it: the build may run)
+        size_path = round_dir / 'size.json'
+        if size_path.exists():
+            size = json.loads(size_path.read_text())
+        else:
+            size = {**self.round_size(), 'decided_at': round(time.time(), 1)}
+            from natlang_neuralese.common.jsonio import write_json_durable
+            write_json_durable(size_path, size)
+        self.note(round=round_dir.name, round_size=size)
+        frontier, lines, build = self.prepare_plan(round_dir, policies, size)
 
         # Each step records stages/<step>.done, so a driver restart resumes after the last finished step instead of
         # rerunning frontier and data (hours) beneath a build that may still be reading their outputs.
@@ -2741,14 +3161,18 @@ class AsyncRoundDriver:
             tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
             os.replace(tmp, script)
         step('data', 12, ['/bin/sh', str(script)], repo=self.c.data_repo())
-        step('build', 24, build, repo=self.c.data_repo())
+        # 32 GB: r0001/r0002 peaked at 21.2/17.1 GB under 24; the aux parts now load before the teacher admission and
+        # --prefer-unseen reads older mixes' chains.pkl for their trained units (DECISIONS 2026-11-24)
+        step('build', 32, build, repo=self.c.data_repo())
         report = json.loads((round_dir / 'mix' / 'build.json').read_text())
         manifest = write_round_manifest(
             round_dir, round_id=round_dir.name, base_policy_sha=cur['sha256'],
             previous_policy_sha=policies[-2]['sha256'] if len(policies) > 1 else None,
             chains_path=round_dir / 'mix' / 'chains.pkl', episode_ids=report.get('admitted_episode_keys') or [],
-            prefer_unseen=self.controller.state['prefer_unseen'], profile=self.a.sft_profile,
-            extra={'frontier_policy': cur['sha256'], 'collections': [str(d) for d in self.collections_of(policies)]})
+            prefer_unseen=self.prefer_unseen_for(round_dir), profile=self.a.sft_profile,
+            extra={'frontier_policy': cur['sha256'], 'collections': [str(d) for d in self.collections_of(policies)],
+                   'size': size, 'mix_dir': str(round_dir / 'mix'),
+                   'expected_hours': self.expected_hours(report)})
         (round_dir / 'stages' / 'prepared.done').write_text(json.dumps({'time': time.time()}) + '\n')
         self.ensure_teacher(round_dir)
         return manifest
@@ -2776,7 +3200,7 @@ class AsyncRoundDriver:
         if vals:
             extra += [*(x for v in vals[1:] for x in ('--val-chains', str(round_dir / 'mix' / v))), '--val-every', '20']
         env = {**{k: v for k, v in os.environ.items() if k not in ('WARMUP', 'BLT', 'VAL', 'EXTRA', 'PREFLIGHT_ONLY')},
-               'CHAINS': str(round_dir / 'mix' / 'chains.pkl'),
+               'CHAINS': str(self.round_mix(round_dir) / 'chains.pkl'),
                'CHAINS_SHA256': (round_dir / 'chains.sha256').read_text().split()[0],
                'CKPT': policy['checkpoint'], 'SHA': policy['sha256'], 'WORK': str(run), 'UNIT': f'{self.a.name}-{round_dir.name}-sft',
                'LR': str(self.a.lr), 'WARMUP': '10', 'BLT': '30000', 'ACT': str(activation_gb),
@@ -2821,6 +3245,7 @@ class AsyncRoundDriver:
             # restarted driver joins a running learner: the round's start just queued the DGX collection again
             self.stop_collections(remote=False)
             if not self.dgx_sft_running(round_dir, unit):
+                self.recap_for_dgx(round_dir)
                 self.launch_sft(round_dir, policy, activation_gb=self.a.sft_activation_gb, preflight_only=False)
             # the remote actors keep collecting the policy the round trains from for the whole SFT; a session the
             # keeper replaced (and served again) gets its collector back, one that was down at the round's start gets
@@ -2839,6 +3264,7 @@ class AsyncRoundDriver:
         if not (factors / 'policy_manifest.json').exists():
             raise SystemExit(f'round {round_dir.name}: no factors after the SFT ({round_dir}/sft/train.log)')
         self.record_sft_speed(round_dir)
+        self.record_round_speed(round_dir)
         return factors
 
     @staticmethod
@@ -2862,6 +3288,7 @@ class AsyncRoundDriver:
         profile = resolve_profile('colab', hosts=self.colab_hosts)
         away_since, failures = None, 0
         while not (factors / 'policy_manifest.json').exists():
+            self.standing_teacher()
             up = pop_rl_actor.reachable_hosts('colab', self.colab_hosts) if self.colab_hosts else []
             fit = {h: pop_rl_actor.colab_sft_fit(h) for h in up}
             if up and not any(ok for ok, _ in fit.values()):
@@ -2888,6 +3315,7 @@ class AsyncRoundDriver:
                 away_since = None
                 failures += 1
                 self.launch_sft(round_dir, policy, activation_gb=profile.activation_gib, preflight_only=True)
+                self.record_colab_placement(round_dir, up[0])
                 self.c.session(up[0], profile, True)
                 try:
                     with (round_dir / 'sft-colab.log').open('a') as handle:
@@ -2910,7 +3338,99 @@ class AsyncRoundDriver:
             self.ensure_remote_collection(policy)
         except Exception as error:
             self.note(stage='wait', unit=unit, between_failed=repr(error)[:300])
+        self.standing_teacher()
         self.sft_handback(round_dir, policy, unit)
+
+    def expected_hours(self, report):
+        """A built mix's learner hours on the DGX and on each GPU with a throughput (measured or default)."""
+        forward = (report.get('mix') or {}).get('forward_tokens') or report.get('forward_tokens') or 0
+        measured = self.measured_round_speed()
+        names = {DGX_GPU, *(k for k, _ in DEFAULT_CHAIN_TOKENS_PER_S), *measured}
+        return {n: round(forward / tps / 3600, 2) for n in sorted(names)
+                for tps in [learner_throughput(n, measured)[0]] if tps}
+
+    def record_colab_placement(self, round_dir, host):
+        """``sft/colab-placement.json``: the session and GPU a round's Colab learner runs on (``record_round_speed``)."""
+        try:
+            import pop_rl_actor
+            gpu = pop_rl_actor.colab_hardware(host).get('gpu_name')
+            from natlang_neuralese.common.jsonio import write_json_durable
+            (round_dir / 'sft').mkdir(parents=True, exist_ok=True)
+            write_json_durable(round_dir / 'sft' / 'colab-placement.json',
+                               {'host': host, 'gpu': gpu, 'at': round(time.time(), 1)})
+        except Exception as error:
+            self.note(round=round_dir.name, colab_placement_failed=repr(error)[:300])
+
+    def record_round_speed(self, round_dir):
+        """After a round: its learner throughput (chain tokens per second) per GPU -> ROUND_SPEED_FILE, the next
+        rounds' placement sizing. The DGX's steps are its logs (``train.dgx-K.jsonl`` before a hand-back, ``train.jsonl``
+        when it finished there); a round that finished on a session gives that session's GPU its ``train.jsonl`` steps
+        from the hand-back's pushed step on. Needs 20 steps."""
+        try:
+            run = round_dir / 'sft'
+            final = json.loads((round_dir / 'round.json').read_text()).get('profile')
+            moves = json.loads((run / 'handback.json').read_text()) if (run / 'handback.json').exists() else []
+            segments = [(DGX_GPU, p, 0) for p in sorted(run.glob('train.dgx-*.jsonl'))]
+            if final == 'dgx':
+                segments.append((DGX_GPU, run / 'train.jsonl', 0))
+            elif (run / 'colab-placement.json').exists():
+                gpu = json.loads((run / 'colab-placement.json').read_text()).get('gpu')
+                if gpu:
+                    segments.append((gpu, run / 'train.jsonl', int(moves[-1]['pushed_step']) if moves else 0))
+            path = self.root / ROUND_SPEED_FILE
+            table = json.loads(path.read_text()) if path.exists() else {}
+            for gpu, log, first in segments:
+                tps, steps = chain_tokens_per_s(log, first)
+                if tps and steps >= 20:
+                    table[gpu] = {'chain_tokens_per_s': tps, 'steps': steps, 'round': round_dir.name,
+                                  'log': str(log), 'at': round(time.time(), 1)}
+                    self.note(round=round_dir.name, round_speed={gpu: table[gpu]})
+            from natlang_neuralese.common.jsonio import write_json_durable
+            write_json_durable(path, table)
+        except (OSError, ValueError, KeyError, IndexError) as error:
+            self.note(round=round_dir.name, round_speed_failed=repr(error)[:300])
+
+    def recap_command(self, round_dir, out):
+        return self.c.data_py('sft_sources.py', 'recap', '--mix', round_dir / 'mix', '--out', out,
+                              '--max-target-tokens', self.a.round_target_tokens,
+                              *[x for b in self.prefer_unseen_for(round_dir) for x in ('--prefer-unseen', b)])
+
+    def recap_for_dgx(self, round_dir):
+        """A round sized for a Colab session that starts on the DGX (the session was lost or turned unfit before
+        its learner began) trains the DGX round size instead: ``sft_sources recap`` bounds its mix to
+        ``--round-target-tokens`` (unseen units first, every part scaled alike) into ``mix-dgx/``, and round.json
+        (``chains_path``, ``chains_sha256``, ``episode_ids``, ``mix_dir``) and ``chains.sha256`` point at it; the units
+        it leaves out stay unseen for the next round. A round whose learner already trained (a learner state or logged
+        steps: a session lost mid-round) keeps its step list and resumes on the DGX (the hand-back moves it back when a
+        fit session answers). ``--no-dgx-recap`` opts out."""
+        path = round_dir / 'round.json'
+        manifest = json.loads(path.read_text()) if path.exists() else {}
+        size = manifest.get('size') or {}
+        if (getattr(self.a, 'no_dgx_recap', False) or size.get('placement') != 'colab'
+                or manifest.get('recap') or self.round_mix(round_dir) != round_dir / 'mix'
+                or (round_dir / 'sft' / 'learner-state' / 'learner_manifest.json').exists()
+                or dgx_sft_progress(round_dir / 'sft' / 'train.jsonl') is not None
+                or chain_tokens_per_s(round_dir / 'sft' / 'train.jsonl')[1] > 0):
+            return False
+        out = round_dir / 'mix-dgx'
+        self.c.ledger(f'{self.a.name}-{round_dir.name}-recap', 16, STAGE_PRIORITY, self.recap_command(round_dir, out),
+                      round_dir / 'recap.log', repo=self.c.data_repo())
+        report = json.loads((out / 'build.json').read_text())
+        from natlang_neuralese.common.hashing import sha256_file_hex
+        sha = sha256_file_hex(out / 'chains.pkl')
+        tmp = round_dir / 'chains.sha256.partial'
+        tmp.write_text(f'{sha}\n')
+        os.replace(tmp, round_dir / 'chains.sha256')
+        cap = report.get('target_cap') or {}
+        update_round_manifest(round_dir, mix_dir=str(out), chains_path=str(out / 'chains.pkl'), chains_sha256=sha,
+                              chains_bytes=(out / 'chains.pkl').stat().st_size,
+                              episode_ids=sorted(report.get('admitted_episode_keys') or []),
+                              recap={'at': round(time.time(), 1), 'max_target_tokens': self.a.round_target_tokens,
+                                     'kept_weighted_target_tokens': cap.get('kept_weighted_target_tokens'),
+                                     'kept_forward_tokens': cap.get('kept_forward_tokens'),
+                                     'expected_hours': self.expected_hours(report)})
+        self.note(round=round_dir.name, recap_for_dgx=str(out), kept_weighted=cap.get('kept_weighted_target_tokens'))
+        return True
 
     def measured_sft_speed(self):
         """{GPU name: round SFT speed against the DGX} this loop measured on rounds that moved (``sft-speed.json``)."""
@@ -3088,11 +3608,11 @@ class AsyncRoundDriver:
         others were tried."""
         import pop_rl_actor
         sha, errors = published['checkpoint_sha256'], []
-        endpoints = {(host, front): endpoint for host, front, endpoint in self.remote_actors()}
-        for target in self.a.rebind_actor:
-            host, _, front = target.rpartition('@')
-            if endpoint_alive(endpoints.get((host, front), front), sha):
-                continue
+        endpoints = {(host, front): endpoint for host, front, endpoint in self.remote_actors(include_pop=False)}
+        for t in self.remote_targets():
+            host, front, target = t['host'], t['front'], self.a.rebind_actor[t['index']]
+            if t['pop'] or endpoint_alive(endpoints.get((host, front), front), sha):
+                continue                    # Pop: pop_step serves the new policy
             try:
                 pop_rl_actor.rebind_actor(front_url=front, policy_id=sha, version=version, factors_dir=factors,
                                           host=host or None, host_profile='colab',
@@ -3109,9 +3629,9 @@ class AsyncRoundDriver:
         ``retry_seconds``). Only a round's publication can be rebound (its factors); the start policy is served as
         it is."""
         published = self.round_dir(policy['round_id']) / 'policy' / 'published.json' if policy.get('round_id') else None
-        if not self.a.rebind_actor or published is None or not published.exists():
+        if not any(not t['pop'] for t in self.remote_targets()) or published is None or not published.exists():
             return
-        if all(endpoint_alive(endpoint, policy['sha256']) for _h, _f, endpoint in self.remote_actors()):
+        if all(endpoint_alive(endpoint, policy['sha256']) for _h, _f, endpoint in self.remote_actors(include_pop=False)):
             return
         last = getattr(self, '_rebind_tried', {}).get(policy['sha256'], 0)
         if time.time() - last < retry_seconds:
@@ -3202,8 +3722,10 @@ class AsyncRoundDriver:
         if not job:
             return
         out = self.root / 'held-v4' / f'hv4-{job["sha256"][:12]}'
-        state = pop_held_measure(out, job['checkpoint'], pin=self.c.held_pin, samples=self.a.held_v4_samples,
-                                 manifest=self.held_v4_manifest(), preempt=lambda: self.held_v3_pending() is not None)
+        with self.POP_LOCK:                 # a Pop collection serve finishes first; pop_held_measure stops its collector
+            state = pop_held_measure(out, job['checkpoint'], pin=self.c.held_pin, samples=self.a.held_v4_samples,
+                                     manifest=self.held_v4_manifest(),
+                                     preempt=lambda: self.held_v3_pending() is not None)
         if state == 'preempted':
             self.note(held_v4_preempted=job['sha256'])
             return
@@ -3320,10 +3842,14 @@ class AsyncRoundDriver:
         self.c.pin_stage()
         threading.Thread(target=self.held_loop, daemon=True).start()
         self.held_wake.set()
+        if self.pop_target() is not None:
+            threading.Thread(target=self.pop_loop, daemon=True).start()
         if getattr(self.a, 'resume_after_hunt', False):
             self.controller.resume_after_hunt()
+        threading.Thread(target=self.teacher_loop, daemon=True).start()
         completed = 0
         while self.a.max_rounds <= 0 or completed < self.a.max_rounds:
+            self.standing_teacher()
             with self.lock:
                 self.apply_verdicts()
             if self.controller.state.get('halted'):
@@ -3345,12 +3871,16 @@ class AsyncRoundDriver:
                     shutil.rmtree(round_dir)                # prepared ahead from a lineage a rollback discarded
                     (round_dir / 'stages').mkdir(parents=True)
                 self.prepare(round_dir, self.lineage_policies())
+                reason = self.rebuild_requested(round_dir)
+                if reason:
+                    self.rebuild_round(round_dir, self.lineage_policies(), reason)
+                self.standing_teacher()
                 self.health_report(round_dir, self.lineage_policies())
                 nxt = f'r{int(self.controller.state["round_counter"]) + 1:04d}'
                 self.prepare_ahead(self.round_dir(nxt), self.lineage_policies())
                 update_round_manifest(round_dir, trained_from=cur['sha256'], trained_from_version=cur['version'])
                 factors = self.train_sft(round_dir, cur)
-                mix = round_dir / 'mix'
+                mix = self.round_mix(round_dir)
             else:
                 self.stop_collections()
                 factors = self.train_grpo(round_dir, cur)
@@ -3422,16 +3952,14 @@ class AsyncRoundDriver:
         collect = self.c.collect_command(self.collection_unit(cur), cur['checkpoint'], cur['sha256'], self.a.slots)
         collect[collect.index('--tasks') + 1] = str(self.collect_dir(cur) / 'tasks.json')
         remote = []
-        for i, (host, front, endpoint) in enumerate(self.remote_actors()):
-            unit = f'{self.collection_unit(cur)}-remote{i}'
-            self.c.collect_dir = self.collect_dir(cur).with_name(self.collect_dir(cur).name + f'-remote{i}')
-            argv = self.c.collect_command(unit, cur['checkpoint'], cur['sha256'], self.a.remote_slots,
-                                          endpoints=[f'{endpoint}={self.a.remote_slots}'])
-            argv[argv.index('--tasks') + 1] = str(self.collect_dir(cur) / 'tasks.json')
-            remote.append({'unit': unit, 'host': host, 'front': front, 'endpoint': endpoint,
-                           'serves_policy': endpoint_alive(endpoint, cur['sha256']),
-                           'budget_gb': max(8, round(self.a.remote_slots * COLLECTOR_SLOT_GB) + 4),
-                           'collect': list(map(str, argv))})
+        for t in self.remote_targets():
+            if not t['host']:
+                continue
+            endpoint = self.target_endpoint(t)
+            unit, _work, argv, budget = self.remote_collect_argv(cur, t, endpoint)
+            remote.append({'unit': unit, 'host': t['host'], 'front': t['front'], 'endpoint': endpoint,
+                           'slots': t['slots'], 'pop': t['pop'], 'serves_policy': endpoint_alive(endpoint, cur['sha256']),
+                           'budget_gb': budget, 'collect': list(map(str, argv))})
         plan = {'phase': self.controller.phase, 'policy': cur, 'pin': str(self.c.pin),
                 'reader_sources': self.reader_sources(),
                 'select': self.select_command(self.collect_dir(cur) / 'tasks.json'), 'collect': collect,
@@ -3723,13 +4251,28 @@ def main():
                     help='where rounds train: colab (a reachable Colab session, DGX takeover after '
                          '--fallback-wait-minutes) or dgx')
     ad.add_argument('--colab-hosts', default=None, help='Colab SSH host aliases (overrides NATLANG_COLAB_HOSTS)')
-    ad.add_argument('--rebind-actor', action='append', default=[], metavar='HOST@FRONT_URL',
+    ad.add_argument('--rebind-actor', action='append', default=[], metavar='HOST@FRONT_URL[=SLOTS]',
                     help='a remote collection actor (its VM-local front URL), rebound to each published policy by '
-                         'factors and collected from through the host\'s forwarded port (repeatable)')
-    ad.add_argument('--remote-slots', type=int, default=64, help='collector slots per remote actor')
+                         'factors and collected from through the host\'s forwarded port (repeatable); =SLOTS sets its '
+                         'collector slots. On Pop\'s host (POP_HOST@http://POP_IP:18531=32) a standing Pop actor: served '
+                         'with each new policy and yielding to Pop held measurements')
+    ad.add_argument('--remote-slots', type=int, default=64, help='collector slots per remote actor (default)')
+    ad.add_argument('--pop-max-running', type=int, default=32,
+                    help='SGLang running cap of the Pop collection actor (pop_rl_actor.POP_COLLECT_RUNNING)')
     ad.add_argument('--round-target-tokens', type=int, default=ROUND_TARGET_TOKENS,
                     help='a round mix\'s weighted target tokens (sft_sources build --max-target-tokens: every part '
                          'scaled alike, unseen episodes first); 0: the uncapped build (r0001: 37.4M, 1247 steps)')
+    ad.add_argument('--colab-round-hours', type=float, default=COLAB_ROUND_HOURS,
+                    help='a round prepared while a Colab session fit for SFT answers is sized to this many hours of '
+                         'its learner (forward tokens at its measured throughput, round-speed.json; the target cap and '
+                         'teacher budget scaled alike, never below the DGX round); 0: every round is the DGX size')
+    ad.add_argument('--no-dgx-recap', action='store_true',
+                    help='a round sized for a session that starts on the DGX trains its whole mix there (default: '
+                         'recapped to --round-target-tokens first, sft_sources recap)')
+    ad.add_argument('--no-prefer-inflight', action='store_true',
+                    help='a round prepared while another trains does not prefer unseen over that round\'s mix')
+    ad.add_argument('--unfilled-live-teacher', choices=('auto', 'drop', 'train'), default=None,
+                    help='sft_sources build --unfilled-live-teacher (default auto: kept, teacher reasoning as context)')
     ad.add_argument('--fallback-wait-minutes', type=float, default=30.0)
     ad.add_argument('--no-sft-handback', action='store_true',
                     help='a round training on the DGX (a takeover) stays there; by default it moves to a Colab session '
@@ -3772,6 +4315,13 @@ def main():
     ad.add_argument('--fill-repo', help='immutable fill-reader checkout (default: --data-repo or controller source); use --pin path to opt out')
     ad.add_argument('--fill-inflight', type=int, default=32)
     ad.add_argument('--no-teacher-campaign', action='store_true')
+    ad.add_argument('--teacher-check-minutes', type=float, default=10.0,
+                    help='how often the standing teacher campaign is checked (relaunched from the newest frontier when '
+                         'its unit is idle) beside the waits')
+    ad.add_argument('--rebuild-round', action='append', default=[], metavar='RNNNN',
+                    help='rebuild this prepared round\'s mix (only the build step, its recorded inputs) under the '
+                         'current build code when it starts, once per build commit; stages/rebuild.request in the '
+                         'round does the same for a running driver',)
     ad.add_argument('--grpo-steps', type=int, default=20, help='GRPO steps per round in the polish phase')
     ad.add_argument('--grpo-budget', type=int, default=100, help='GRPO ledger GB (learner + its actor)')
     ad.add_argument('--grpo-extra', default='')

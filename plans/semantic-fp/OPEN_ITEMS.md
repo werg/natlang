@@ -46,21 +46,29 @@ Closed 2026-11-23 by the language-gaps agent (DECISIONS "Semantic-FP language ga
 `natlang improve DIR` proposes from the program's runs; `escalate`'s nl policy reads its history from the call store;
 `.d.nl.ts` `import type` for `uses:`; `nl.with<T>` in callable-folder factories typed from `import type`; `natlang check
 --idiom`. Found while closing them, not changed:
-- **`natlang improve DIR`:** memetic guidance changes are not a transformation yet (WS8 N4 names them); the improver
-  revises `.nl` instructions only. Owner: language-gaps agent's next session, or N5.
 - **`Untrusted<T>` in the migration loop:** codemod file texts stay fenced (the fence is keyed by text), but a site
   excerpt or an edited revision of an untrusted file is new text and is not marked. Owner: the untrusted-contract
   follow-up.
-- **Type-only imports in callable-folder TypeScript** that resolve to nothing still make the type `any` silently (the
-  module's TypeScript diagnostics are not reported). Owner: language-gaps agent.
+- **Type-only imports in callable-folder TypeScript:** closed 2026-11-24 (semantic-FP review fixes): inline `type`
+  imports, `export type ... from`, package exports and `.d.ts` targets are followed through the AST; a missing file or
+  package is an error and an unknown member of a loaded type file is TS2305/2614/2724 at load. Still untyped on purpose: a
+  type file outside the loaded root (a sub-function loaded on its own whose `types.ts` lives in the program root), since
+  the loader never reads past its root.
+- **`natlang improve DIR` memetic guidance:** `guidance.json` (program-wide and per-function text guidance) is now a
+  transformation the improver proposes, gates on dev/confirmation and adopts with rollback (2026-11-24).
 
 ## Applications
 
 codemod-studio (now `applications/migration/codemod`, on the migration loop), sem-grep-sql (now `applications/nldb/grep`,
 on nldb's SQLite engine) and ci-doctor (natural-language bisection stop, root-cause clustering) are closed. Open:
-- diligence has no Neuralese views or tuning.
-- `ts-host/test/repository-migration.test.mjs` keeps its own copy of the scripted migration stages
-  (`test/support/migration-stages.mjs` is the shared one); fold it in when that test next changes.
+- Flagship CLI targets (`main.ts` in every flagship), split-labeled fixture packs (restored for nldb/grep,
+  migration/codemod, diligence) and bench packs for pr-shepherd, sem-sheet and semantic-etl landed 2026-11-24. Open: bench
+  packs for the other flagships, fixture packs at the WS6 §3 scale, and running Arms A-D / `natlang improve DIR` on any
+  flagship. Owner: unassigned.
+- WS1 L5 (general generics beyond the representation generic) and L8 (`natlang check` Neuralese `view` hint) are not
+  built. Owner: unassigned.
+- `npm run check:layering` fails on main: 7 directory cycles from `std/` (and `improvement -> calls`,
+  `runtime -> evaluation`) that predate the review fixes and are not in `layering-baseline.json`. Owner: unassigned.
 
 ## Typed output contracts
 
@@ -157,6 +165,14 @@ Brief E covered only the Neuralese-free capabilities. Open:
 
 ## Operations
 
+- **Data inclusion schedule (coordinator, 2026-11-24; owner: be circumspect about time, have the next round ready promptly):**
+  - **T1, about 01:50 (round 1 publish).** Restart the driver on the newest pin, carrying the Vibestudio session's added arguments (`--data-repo`, `--fill-repo`, `--minimum-data-reader-commit`). It takes:
+    - the read-back, marker-row, produce-span and duplicate-learner fixes;
+    - the new collection v0001 of the round 1 policy, which draws the typed-contract pool and the 242 new tasks from grpo-pool.
+  - **Round 2's mix:** if the round-budget and teacher-as-context changes are pushed by 01:30, remove `r0002/stages/build.done` and `prepared.done` before the restart, so round 2's build reruns under them (about 20 min). Otherwise round 2 trains as prepared (6.2M target tokens).
+  - **Also at T1:** the teacher specs and Pop collector arguments that are ready by then.
+  - **T2, about 02:30–03:00 (during round 2's SFT, before round 3's build finishes).** Restart again only if changes arrived after T1: teacher specs, Pop, the fallow-22 graphs, the budget work. Round 3's build then uses them, with collection v0001 at about 1.5 h of episodes.
+  - **Continuous:** verified teacher episodes accrue in the teacher pool, and each build takes what exists. Program tuning uses A100 gaps and never delays a round SFT.
 - **aei1 remote collector runs old code:** `aei1-collect-v0000-remote0` was started at 19:15 on 2026-11-23 from pin 108cd84. Its ts-host lacks 98651c669, so against an actor serving the read-back fix it throws `neuralese-native-grad-invalid` on in-context reads. Replace it with a collector at the driver pin at the round boundary, or when the A100 actor is served again after round 1's SFT. Owner: coordinator.
 - **aei1 driver controller owned by the Vibestudio session since 22:41 on 2026-11-23:** `resume-semantic-reader-owner.py` replaced the coordinator's driver with the same argv (pin bdf4c8721, variants on), with controller code from 97e82bcd5 on origin/main and `--data-repo`/`--fill-repo` at its reader pin. The coordinator accepted this: the code contains the hand-back. Its unit is `aei1-drive-reader-v14-final-20261123`. Coordinate before restarting it.
 - **aei1 round 1 -> 2 boundary checklist (coordinator, about 06:00 on 2026-11-24):**

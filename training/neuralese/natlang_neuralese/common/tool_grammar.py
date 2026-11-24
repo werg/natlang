@@ -117,9 +117,27 @@ def tokenizer_info(tokenizer, vocab_size, stop_token_ids):
                                                    stop_token_ids=sorted(int(t) for t in stop_token_ids))
 
 
+_INFO_SHA, INFO_SHA_LIMIT = {}, 16
+
+
 def tokenizer_info_sha256(info) -> str:
     """Identity of what a mask is computed over: every token's decoded bytes, the vocabulary type and width, the stop
-    and special ids."""
+    and special ids. Memoized per TokenizerInfo object (immutable): hashing a 65k vocabulary is ~0.26 s of GIL-held
+    Python, and the SGLang front asked for it twice per chat call, which starved its 128 collection streams (aei1
+    collection stall, 2026-11-24). ``NATLANG_TOOL_GRAMMAR_INFO_MEMO=0`` recomputes it on every call."""
+    memo = os.environ.get('NATLANG_TOOL_GRAMMAR_INFO_MEMO', '1') != '0'
+    entry = _INFO_SHA.get(id(info)) if memo else None
+    if entry is not None and entry[0] is info:
+        return entry[1]
+    value = _tokenizer_info_sha256(info)
+    if memo:
+        while len(_INFO_SHA) >= INFO_SHA_LIMIT:
+            _INFO_SHA.pop(next(iter(_INFO_SHA)))
+        _INFO_SHA[id(info)] = (info, value)    # the reference keeps the id from being reused while memoized
+    return value
+
+
+def _tokenizer_info_sha256(info) -> str:
     digest = hashlib.sha256()
     digest.update(_canonical({'vocab_type': str(info.vocab_type), 'vocab_size': int(info.vocab_size),
                               'add_prefix_space': bool(info.add_prefix_space),
@@ -199,7 +217,9 @@ class Matcher:
     def accept(self, token: int) -> bool:
         if self.failed:
             return False
-        if self.matcher.is_terminated() or not self.matcher.accept_token(int(token)):
+        # accept_token refuses a token after termination itself; each matcher call releases and retakes the GIL, which
+        # the SGLang front pays per streamed token on ~100 request threads (one call per token, not two)
+        if not self.matcher.accept_token(int(token)):
             self.failed = True
             return False
         self.tokens.append(int(token))
@@ -286,7 +306,8 @@ def _info_of(path: str, vocab_size: int, stops: tuple):
 
 def info_from_export(export_dir):
     """(TokenizerInfo, sha256) of an exported model directory as SGLang loads it: its tokenizer files, config
-    `vocab_size` and EOS ids (config and generation config)."""
+    `vocab_size` and EOS ids (config and generation config). The SGLang front calls this for every chat call: the
+    tokenizer and its identity are built once per directory (`_info_of`, `tokenizer_info_sha256` memoized)."""
     from pathlib import Path
     export_dir = Path(export_dir)
     config = json.loads((export_dir / 'config.json').read_text())

@@ -12,8 +12,21 @@ type WriteFence = { path: string | null; displayPrefix: string };
 
 const TOMBSTONE = Symbol('natlang-folder-tombstone');
 
+function requireStringPath(path: unknown, method: string): string {
+  if (typeof path === 'string') return path;
+  if (path && typeof path === 'object' && typeof (path as { path?: unknown }).path === 'string')
+    throw new TypeError(`${method} expects a string path; pass handle.path (${JSON.stringify((path as { path: string }).path)}) instead of the handle object`);
+  throw new TypeError(`${method} expects a string path, got ${typeof path}`);
+}
+
 function cleanPath(path: string, allowRoot = true): string {
-  if (typeof path !== 'string') throw new TypeError('path must be a string');
+  if (typeof path !== 'string') {
+    if (path && typeof path === 'object' && typeof (path as { path?: unknown }).path === 'string')
+      throw new TypeError(`path must be a string; pass handle.path (${JSON.stringify((path as { path: string }).path)}) instead of the handle object`);
+    throw new TypeError('path must be a string');
+  }
+  if (path.includes('[object Object]'))
+    throw new RangeError(`invalid path ${JSON.stringify(path)}: pass a string path or handle.path, not an object coerced to string`);
   if (allowRoot && (path === '' || path === '.')) return '';
   if (!path || path.startsWith('/') || path.includes('\\') || path.includes('\0'))
     throw new RangeError(`invalid relative POSIX path: ${JSON.stringify(path)}`);
@@ -190,6 +203,18 @@ export class EntryHandle {
   async remove(): Promise<void> { this.folder.remove(this.path); }
   /** Move like `mv`: into a folder handle, into a path ending in "/" or naming an existing folder, else to that path. */
   async moveTo(destination: FolderHandle | FileHandle | string): Promise<void> {
+    if (typeof destination !== 'string' && !(destination instanceof FolderHandle) && !(destination instanceof FileHandle)) {
+      if (destination && typeof destination === 'object' && typeof (destination as { path?: unknown }).path === 'string')
+        throw new TypeError(`moveTo expects a FolderHandle, FileHandle, or string path; pass handle.path (${JSON.stringify((destination as { path: string }).path)})`);
+      throw new TypeError(`moveTo expects a FolderHandle, FileHandle, or string path, got ${typeof destination}`);
+    }
+    if (destination instanceof FolderHandle && this.name &&
+        (destination.path === this.name || destination.path.endsWith(`/${this.name}`))) {
+      const parent = destination.path.includes('/') ? destination.path.slice(0, destination.path.lastIndexOf('/')) : '';
+      const suggestion = parent ? `moveTo(folder.dir(${JSON.stringify(parent)}))` : `moveTo(${JSON.stringify(destination.path)})`;
+      throw new RangeError(`cannot move ${JSON.stringify(this.path)} into folder ${JSON.stringify(destination.path)}: ` +
+        `use rename() or ${suggestion} instead of nesting ${this.name} inside a folder with the same name`);
+    }
     const into = (folderPath: string) => this.folder.join(folderPath, this.name);
     const target = typeof destination !== 'string' ?
       (destination instanceof FolderHandle ? into(destination.path) : destination.path) :
@@ -215,16 +240,22 @@ export class FileHandle extends EntryHandle {
 
 export class FolderHandle extends EntryHandle {
   dir(path: string): FolderHandle {
-    const joined = this.folder.join(this.path, path.replace(/\/+$/, ''));
-    checkedKind(this.folder, joined, path, 'folder');
+    const textPath = requireStringPath(path, 'FolderHandle.dir');
+    const joined = this.folder.join(this.path, textPath.replace(/\/+$/, ''));
+    checkedKind(this.folder, joined, textPath, 'folder');
     return new FolderHandle(this.folder, joined);
   }
   file(path: string): FileHandle {
-    const joined = this.folder.join(this.path, path.replace(/\/+$/, ''));
-    checkedKind(this.folder, joined, path, 'file');
+    const textPath = requireStringPath(path, 'FolderHandle.file');
+    const joined = this.folder.join(this.path, textPath.replace(/\/+$/, ''));
+    checkedKind(this.folder, joined, textPath, 'file');
     return new FileHandle(this.folder, joined);
   }
-  entry(path: string): EntryHandle { const joined = this.folder.join(this.path, path); return this.folder.isFile(joined) ? new FileHandle(this.folder, joined) : new FolderHandle(this.folder, joined); }
+  entry(path: string): EntryHandle {
+    const textPath = requireStringPath(path, 'FolderHandle.entry');
+    const joined = this.folder.join(this.path, textPath);
+    return this.folder.isFile(joined) ? new FileHandle(this.folder, joined) : new FolderHandle(this.folder, joined);
+  }
   /** Handle globs are relative to this subtree, as file() and dir() paths are. */
   private scopedPattern(patternText?: string): string | undefined {
     if (patternText === undefined || !this.path || patternText.startsWith(`${this.path}/`)) return patternText;
@@ -378,13 +409,15 @@ export class Folder {
   }
   filePaths(): string[] { return this.allPaths(); }
   dir(path = ''): FolderHandle {
-    const clean = cleanPath(path.replace(/\/+$/, ''));
-    checkedKind(this, clean, path, 'folder');
+    const textPath = requireStringPath(path, 'Folder.dir');
+    const clean = cleanPath(textPath.replace(/\/+$/, ''));
+    checkedKind(this, clean, textPath, 'folder');
     return new FolderHandle(this, clean);
   }
   file(path: string): FileHandle {
-    const clean = cleanPath(path.replace(/\/+$/, ''), false);
-    checkedKind(this, clean, path, 'file');
+    const textPath = requireStringPath(path, 'Folder.file');
+    const clean = cleanPath(textPath.replace(/\/+$/, ''), false);
+    checkedKind(this, clean, textPath, 'file');
     return new FileHandle(this, clean);
   }
   /** Run a directory reducer on the whole folder and install its committed changes. */

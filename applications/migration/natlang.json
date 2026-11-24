@@ -6,6 +6,7 @@
   "include": [
     "README.md",
     "DECOMPOSITION.md",
+    "examples.json",
     "main.ts",
     "index.ts",
     "services.d.ts",
@@ -29,6 +30,21 @@
         "*"
       ],
       "description": "natlang run applications/migration -- MANIFEST.json [--attempts N] [--seed TEXT]... [--exact|--settled crisp|natural-language]"
+    },
+    "codemod": {
+      "entry": "codemod/main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "natlang run applications/migration --target codemod -- INPUT.json: run crisp + semantic repository codemod with rule mining.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "Path to a JSON file containing { spec, files, crispRules?, forbiddenPatterns?, requiredPatterns? }."
+        }
+      ]
     },
     "program": {
       "entry": "program/main.ts",

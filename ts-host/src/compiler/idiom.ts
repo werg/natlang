@@ -50,7 +50,7 @@ export function checkNlIdioms(record: NatlangRecord, file: string): NatlangDiagn
   const lines = record.text.split(/\r?\n/);
   const end = frontmatterEnd(lines);
   const leaf = record.subtype === 'function' && !record.generic && Object.keys(record.codebase).length === 0 &&
-    !record.uses?.length && !Object.values(record.args).some(type => /(?<![\w$])Folder(?![\w$])/.test(type));
+    !record.uses?.length && !Object.keys(record.usesMap ?? {}).length && !Object.values(record.args).some(type => /(?<![\w$])Folder(?![\w$])/.test(type));
   if (leaf && record.readout === undefined) {
     let size = 0;
     try {
@@ -99,8 +99,14 @@ export function checkNlIdiomsIn(levels: Iterable<Record<string, ItemRecord>>, di
         seen.add(item.source);
         out.push(...checkNlIdioms(item, display(item.source)));
       }
-      if (item.kind !== 'natlang' || !item.uses?.length) visit(item.codebase);
-      else visit(Object.fromEntries(Object.entries(item.codebase).filter(([name]) => !item.uses!.some(path => baseName(path) === name))));
+      const usedAliases = item.kind === 'natlang'
+        ? new Set([
+            ...Object.keys(item.usesMap ?? {}),
+            ...(item.usesMap ? [] : (item.uses ?? []).map(path => baseName(path).replace(/\.(?:nl|ts|js)$/, ''))),
+          ])
+        : undefined;
+      if (!usedAliases?.size) visit(item.codebase);
+      else visit(Object.fromEntries(Object.entries(item.codebase).filter(([name]) => !usedAliases.has(name))));
     }
   };
   for (const level of levels) visit(level);

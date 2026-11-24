@@ -20,13 +20,31 @@
     "expected": false
   },
   {
-    "name": "extracts retry timeout from config",
+    "name": "extracts service identifier from config",
     "function": "grep/extractField.nl",
     "inputs": {
       "path": "config/payments.yaml",
       "content": "service: payments\nretry:\n  max_attempts: 4\n  backoff_ms: 2500\n",
-      "question": "What is the retry backoff duration?"
+      "question": "Return the exact value of the service field."
     },
-    "expected": "2500ms"
+    "expected": "payments"
+  },
+  {
+    "name": "sqlite judge identifies late delivery note",
+    "function": "sqlite/judge.nl",
+    "inputs": {
+      "value": "Package arrived four days past the promised delivery window.",
+      "criterion": "mentions a late delivery"
+    },
+    "expected": true
+  },
+  {
+    "name": "sqlite judge rejects on-time note",
+    "function": "sqlite/judge.nl",
+    "inputs": {
+      "value": "Delivered on schedule in intact packaging.",
+      "criterion": "mentions a late delivery"
+    },
+    "expected": false
   }
 ]

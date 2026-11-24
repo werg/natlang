@@ -481,10 +481,16 @@ export class CallStore {
       .map(row => ({ ...row, value: JSON.parse(row.value) })) as never;
   }
   /** Annotations of one kind across calls, newest first, with the call they are attached to (for example `escalation`). */
-  annotationsOf(kind: string, options: { limit?: number } = {}): { call_id: string; value: unknown; definition_id: string | null; created_at: string }[] {
-    return (this.db.prepare(`SELECT a.call_id, a.value, c.definition_id, a.created_at FROM annotations a LEFT JOIN calls c ON c.call_id = a.call_id
-      WHERE a.kind = ? ORDER BY a.id DESC LIMIT ?`).all(kind, options.limit ?? 500) as
-      { call_id: string; value: string; definition_id: string | null; created_at: string }[]).map(row => ({ ...row, value: JSON.parse(row.value) }));
+  annotationsOf(kind: string, options: { limit?: number; functionId?: string } = {}): { call_id: string; value: unknown; definition_id: string | null; created_at: string }[] {
+    const limit = options.limit ?? 500;
+    const rows = options.functionId
+      ? this.db.prepare(`SELECT a.call_id, a.value, c.definition_id, a.created_at FROM annotations a LEFT JOIN calls c ON c.call_id = a.call_id
+          WHERE a.kind = ? AND (c.definition_id = ? OR json_extract(a.value, '$.function') = ?) ORDER BY a.id DESC LIMIT ?`)
+          .all(kind, options.functionId, options.functionId, limit)
+      : this.db.prepare(`SELECT a.call_id, a.value, c.definition_id, a.created_at FROM annotations a LEFT JOIN calls c ON c.call_id = a.call_id
+          WHERE a.kind = ? ORDER BY a.id DESC LIMIT ?`).all(kind, limit);
+    return (rows as { call_id: string; value: string; definition_id: string | null; created_at: string }[])
+      .map(row => ({ ...row, value: JSON.parse(row.value) }));
   }
   annotations(callId: string): { kind: string; value: unknown; source: string | null; created_at: string }[] {
     return (this.db.prepare('SELECT kind, value, source, created_at FROM annotations WHERE call_id = ? ORDER BY id').all(callId) as

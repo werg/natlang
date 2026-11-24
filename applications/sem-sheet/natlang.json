@@ -11,10 +11,38 @@
     "evalSemanticCell.nl",
     "examples.json",
     "fixtures",
+    "main.ts",
     "package.json",
     "sheet.ts",
     "types.ts"
   ],
+  "targets": {
+    "sem-sheet": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "Evaluate a Sem-Sheet workbook or merge collaborative sheet diffs from a JSON file, stdin, or --cells/--merge.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "Path to a JSON file containing { cells?, merge?, concurrency? }."
+        },
+        {
+          "name": "cells",
+          "type": "Record<string, FormulaCell>",
+          "description": "Workbook cells to evaluate in topological DAG order."
+        },
+        {
+          "name": "merge",
+          "type": "{ base: SheetDiff; ours: SheetDiff; theirs: SheetDiff }",
+          "description": "Three-way workbook cell diffs to merge via semanticMerge."
+        }
+      ]
+    }
+  },
   "engines": {
     "natlang": ">=0.1.0",
     "node": ">=22.13.0"

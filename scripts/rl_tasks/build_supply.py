@@ -19,14 +19,33 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / 'scripts/neuralese_data'), str(REPO / 'training/neuralese'), str(REPO)]
-import grpo  # noqa: E402
 from natlang_neuralese.common import data_registry  # noqa: E402
+from natlang_neuralese.common.data_registry import assert_registry_writable, registry_owner_repo  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex as sha  # noqa: E402
 from natlang_neuralese.common.paths import root  # noqa: E402
 
 AUTHORING = root('data_hdd') / 'natlang-rl-authoring'
 LICENSE = ('project-authored: tasks written by Claude subagents under the natlang authoring briefs, qualified by '
            'reference, negative and alias replay')
+
+
+def resolve_output_dir(out_arg) -> Path:
+    """Resolve OUT_DIR, routing relative ``runs/...`` paths under the canonical registry owner repo,
+    guarding against immutable code pins, and refusing non-primary git worktrees."""
+    owner = registry_owner_repo()
+    raw = Path(out_arg)
+    if not raw.is_absolute() and raw.parts and raw.parts[0] == 'runs':
+        out = (owner / raw).resolve()
+    else:
+        out = raw.expanduser().resolve()
+    out = assert_registry_writable(out)
+    for parent in (out, *out.parents):
+        git_marker = parent / '.git'
+        if git_marker.is_file():
+            raise ValueError(f'refusing to write supply output inside non-primary git worktree {parent}: {out}')
+        if git_marker.is_dir():
+            break
+    return out
 
 
 def rows(path):
@@ -41,9 +60,10 @@ def main(argv=None):
     ap.add_argument('--drop-related')
     ap.add_argument('--authoring', default=str(AUTHORING), help='authoring root (admitted/ inside)')
     args = ap.parse_args(argv)
-    out = Path(args.out)
+    out = resolve_output_dir(args.out)
     out.mkdir(parents=True, exist_ok=True)
     admitted = Path(args.authoring) / 'admitted'
+    import grpo
     pools = [p for p in grpo.default_pools() if Path(p).resolve() != (out / 'cases.jsonl').resolve()]
     seen = set()
     for p in pools:   # every pool but the one being built

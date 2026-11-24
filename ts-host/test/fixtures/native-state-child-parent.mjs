@@ -52,7 +52,7 @@ if (recorder) {
     instructions:'Choose the result from the memo.', args:{memo:child.lam.return} }, {neuralese, sharedEpisodeBudget}).session);
   const decisionRecorders=decisions.map(()=>{const own=new ModelTurnRecorder();own.absorb(recorder);return own;});
   await Promise.all(decisions.map((session,index)=>recordingScope.run(decisionRecorders[index],()=>
-    new NativeToolAgent(driver,{maxTurns:2,neuralese,decisionReadout:'finite-returns'}).run(session))));
+    new NativeToolAgent(driver,{maxTurns:2,neuralese,decisionReadout:'finite-returns',decisionSamples:0}).run(session))));
   for(const own of decisionRecorders){
     assert.equal(own.nativeTurns().length,1,'coalesced decisions retain the actual caller recorder');
     recorder.nested.push(...own.turns);recorder.absorb(own);

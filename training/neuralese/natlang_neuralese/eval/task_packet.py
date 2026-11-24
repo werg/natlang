@@ -20,7 +20,8 @@ _CLASSIFIER_SHA256 = hashlib.sha256(_CLASSIFIER_SOURCE.read_bytes()).hexdigest()
 def classification_binding():
     if hashlib.sha256(_CLASSIFIER_SOURCE.read_bytes()).hexdigest() != _CLASSIFIER_SHA256:
         raise ValueError('outcome classifier changed after import; restart from a frozen runtime')
-    return {'version': 'host-evidence-terminal-babi-article/3', 'path': str(_CLASSIFIER_SOURCE),
+    version = 'host-evidence-terminal-babi-alias/4' if babi_alias_repair_on() else 'host-evidence-terminal-babi-article/3'
+    return {'version': version, 'path': str(_CLASSIFIER_SOURCE),
             'sha256': _CLASSIFIER_SHA256}
 
 TASK_OUTCOMES = (
@@ -95,8 +96,38 @@ def _accepted_terminal(outcome: dict[str, Any], finish: dict[str, Any] | None) -
             and all(value is True for value in checks.values()))
 
 
+# bAbI golds the instruction does not determine (teacher campaign 2026-11-24: every teacher answered these correctly and
+# scored 0): task 15 (basic deduction) golds the singular species of "Sheep are afraid of wolves" ("wolf"), task 19
+# (path finding) golds direction letters ("s,e") under "Return only the answer word or words". Opt out with
+# NATLANG_BABI_ALIAS_REPAIR=0 (the previous scoring series, classifier babi-article/3).
+BABI15_PLURALS = {'wolf': 'wolves', 'mouse': 'mice', 'sheep': 'sheep', 'cat': 'cats'}
+BABI19_DIRECTIONS = {'n': 'north', 's': 'south', 'e': 'east', 'w': 'west'}
+
+
+def babi_alias_repair_on():
+    return os.environ.get('NATLANG_BABI_ALIAS_REPAIR', '1') != '0'
+
+
+def babi_alias(family, expected, actual):
+    """The proved bAbI aliases of normalized ``expected``: the redundant leading article ("the kitchen"); with the repair
+    on, task 15's plural species and task 19's spelled-out directions in gold order ("south, east", "south then east")."""
+    if actual == 'the ' + expected and not expected.startswith('the '):
+        return True
+    if not babi_alias_repair_on():
+        return False
+    if family == 'ext_babi_task15':
+        return BABI15_PLURALS.get(expected) == actual
+    if family == 'ext_babi_task19':
+        letters = [part.strip() for part in expected.split(',')]
+        words = [w for w in re.split(r'(?:\s*(?:,|;|->|→|\bthen\b|\band\b)\s*|\s+)', actual) if w]
+        return (bool(letters) and all(letter in BABI19_DIRECTIONS for letter in letters)
+                and words == [BABI19_DIRECTIONS[letter] for letter in letters])
+    return False
+
+
 def accepted_babi_article_answer(result, finish=None):
-    """Repair the historical bAbI location article alias, retaining every other check.
+    """Repair the historical bAbI location article alias (and, by default, the task 15 and 19 aliases of
+    ``babi_alias``), retaining every other check.
 
     This is deliberately narrower than general QA normalization: archived task
     packets declared only generic normalization. Never waive a world/effect,
@@ -132,8 +163,7 @@ def accepted_babi_article_answer(result, finish=None):
     def normalize(value):
         return ' '.join(unicodedata.normalize('NFKC', value).lower().split())
     expected, actual = normalize(expected), normalize(actual)
-    # Only the redundant leading definite article is proved by this repair.
-    return bool(expected) and actual == 'the ' + expected and not expected.startswith('the ')
+    return bool(expected) and babi_alias(str(program.get('family', '')), expected, actual)
 
 
 _MODEL_TERMINAL = re.compile(r"^(?:blocked|error): ")

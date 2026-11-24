@@ -154,6 +154,9 @@ def test_pop_actor_start_reuses_a_served_policy_only_with_the_same_engine_settin
     def stop_unit(_state):
         raise Replaced
     monkeypatch.setattr(pop_rl_actor, 'stop_unit', stop_unit)
+    # never the host's real units: stop_pop_fills stops every live Pop fill and Pop collector on this machine (this test
+    # stopped aei1's Pop collector on 2026-11-24)
+    monkeypatch.setattr(pop_rl_actor, 'stop_pop_fills', lambda: None)
     args = SimpleNamespace(policy_id='p', engine='sglang', kv_cache_dtype='fp8_e4m3', max_running=20)
     assert pop_rl_actor.start(args)['endpoint'] == 'http://x'
     with pytest.raises(Replaced):

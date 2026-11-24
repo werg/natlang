@@ -123,3 +123,14 @@ test('a bash command whose data explodes fails alone with the memory teaching er
     assert.equal(fine.stdout.trim().split('\n').join(' '), 'ok 5');
   } finally { if (previous === undefined) delete process.env.NATLANG_EVAL_MEMORY_MB; else process.env.NATLANG_EVAL_MEMORY_MB = previous; }
 });
+
+test('mv overwrites an existing file cleanly using stable FolderFs stat identity', async () => {
+  const folder = Folder.fromFiles({ 'draft.txt': 'new content\n', 'target.txt': 'old content\n' });
+  const moved = await runFolderBash(folder, 'mv draft.txt target.txt');
+  assert.equal(moved.exitCode, 0, moved.stderr);
+  assert.equal(moved.stderr, '');
+  assert.equal(await folder.exists('draft.txt'), false);
+  assert.equal(await folder.readText('target.txt'), 'new content\n');
+  assert.deepEqual(moved.changedPaths, ['target.txt']);
+  assert.deepEqual(moved.removedPaths, ['draft.txt']);
+});

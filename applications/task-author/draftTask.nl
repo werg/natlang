@@ -3,6 +3,7 @@ description: Draft a Semantic-FP training task from a seed, with the answers tha
 args:
   seed: TaskSeed
   problems: string[]
+  previous?: AuthoredTask
 returns: AuthoredTask
 ---
 Author a realistic Semantic-FP task for seed (using seed.construct and seed.oracleKind) where TypeScript handles
@@ -13,5 +14,5 @@ Write three kinds of answers to the task. reference is a correct answer that the
 least two plausible wrong answers that the oracle must reject. keywordBaseline is the best answer a rule matching
 literal cue words in the inputs would give; the task is only worth training on when the oracle rejects it.
 
-problems lists what exact checks found wrong with an earlier draft; fix every one while keeping seed.id and
+If previous is provided and problems is non-empty, refine previous to fix every listed issue while keeping seed.id and
 seed.splitGroup.

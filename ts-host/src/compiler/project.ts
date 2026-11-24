@@ -89,6 +89,9 @@ export type BuildOptions = {
   write?: boolean;
   /** Emit JavaScript (build) or only check. */
   emit?: boolean;
+  /** Return/write generated declaration documents (default true). Internal
+   * signatures are still generated and checked when false. */
+  declarations?: boolean;
   /** Write generated `.d.nl.ts` files beside their sources (default true; read-only installed packages use false). */
   writeDeclarations?: boolean;
   /**
@@ -606,7 +609,7 @@ function compileProjectInSession(options: BuildOptions, files: SourceFiles): Bui
   for (const [path, record] of namedRecords) {
     const declaration = natlangDeclaration(record, declarationSpecifier, referencesOf(path, record));
     const target = path.replace(/\.nl$/, '.d.nl.ts');
-    declarations[target] = declaration;
+    if (options.declarations !== false) declarations[target] = declaration;
     virtual.set(target, declaration);
   }
   // `.nz` files: typed declarations from their headers, read by TypeScript as `name.d.nz.ts`.
@@ -619,7 +622,7 @@ function compileProjectInSession(options: BuildOptions, files: SourceFiles): Bui
       nzFiles.set(path, bytes);
       const declaration = nzDeclaration(loaded.header, basename(path), typeScriptText);
       const target = path.replace(/\.nz$/, '.d.nz.ts');
-      declarations[target] = declaration;
+      if (options.declarations !== false) declarations[target] = declaration;
       virtual.set(target, declaration);
     } catch (error) { problem(rel(path), error instanceof Error ? error.message : String(error), 'neuralese-file'); }
   }

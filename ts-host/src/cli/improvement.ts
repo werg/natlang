@@ -179,7 +179,8 @@ async function improveDirectoryCommand(directory:string,option:(name:string,fall
   const propose=proposal?undefined:async(context:Parameters<NonNullable<Parameters<typeof improveDirectory>[0]['propose']>>[0])=>{
    // The improver's calls are ordinary recorded calls (training data for its stages), on the same model.
    const runtime=createNatlangRuntime({model:driver!});
-   const proposed=await runtime.run(()=>proposeFromRuns(context,{store:store as never,maxFunctions,protectedPaths:protectedProgramPaths(directory),
+   const mode=flags.includes('--guidance')?'guidance':'instructions';
+   const proposed=await runtime.run(()=>proposeFromRuns(context,{store:store as never,maxFunctions,mode,protectedPaths:protectedProgramPaths(directory),
     evaluateSupport:cases=>evaluateDirectorySplitWithModel(directory,cases,driver!)}));
    decisions=proposed?.decisions??[];
    return proposed;

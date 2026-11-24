@@ -356,20 +356,31 @@ export async function evaluateSheet(
           return { coord, value: label, crisp: false };
         }
         if (cell.kind === 'sem-filter') {
-          const items = cell.deps.map(dep => ({ coord: dep, value: String(state.values[dep] ?? '') }));
+          const items = cell.deps.map(dep => ({
+            coord: dep,
+            value: untrusted(String(state.values[dep] ?? ''), `sheet cell ${dep}`),
+          }));
           const kept = await semanticFilter(items, cell.criterion, { concurrency });
-          return { coord, value: kept.map(item => item.value).join(', '), crisp: false };
+          return { coord, value: kept.map(item => String(item.value)).join(', '), crisp: false };
         }
         if (cell.kind === 'sem-reduce') {
-          const items = cell.deps.map(dep => String(state.values[dep] ?? '')).filter(Boolean);
+          const items = cell.deps
+            .map(dep => ({ dep, text: String(state.values[dep] ?? '') }))
+            .filter(entry => entry.text.length > 0)
+            .map(entry => untrusted(entry.text, `sheet cell ${entry.dep}`));
           const reduced = await semanticReduce(
             items,
             '',
-            (_acc, item) => item,
+            (_acc, item) => String(item),
             {
               mode: 'tree',
               concurrency,
-              combine: (left, right) => combineSummary(cell.goal, left, right),
+              combine: (left, right) =>
+                combineSummary(
+                  cell.goal,
+                  untrusted(String(left), `sheet cell ${coord}:left`),
+                  untrusted(String(right), `sheet cell ${coord}:right`),
+                ),
             },
           );
           return { coord, value: reduced, crisp: false };

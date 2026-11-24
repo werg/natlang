@@ -170,7 +170,7 @@ function wikiModel({ overrides = {}, verdict = () => 'honored' } = {}) {
   };
   return { driver: Object.assign(model.driver, { decide }), seen, openings: model.openings };
 }
-const wikiRuntime = model => createNatlangRuntime({ model: { driver: model.driver, maxTurns: 6 }, seed: { mode: 'derived', root: profile.seed } });
+const wikiRuntime = model => createNatlangRuntime({ model: { driver: model.driver, maxTurns: 6, decisionSamples: 0 }, seed: { mode: 'derived', root: profile.seed } });
 const update = (base, id, block_id, text, author = id) => ({ id, block_id, base_revision: base.revision, author, text });
 const count = (seen, name) => seen.filter(stage => stage === name).length;
 

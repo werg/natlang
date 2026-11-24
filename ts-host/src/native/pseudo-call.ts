@@ -41,10 +41,10 @@ function literal(node: ts.Expression): unknown {
  * keys, trailing commas), or undefined when it is anything else. Parsed, never run.
  */
 export function literalText(text: string): { value: unknown } | undefined {
-  try { return { value: JSON.parse(text) }; } catch { /* not JSON; try a JS literal */ }
-  const trimmed = text.trim();
-  if (!trimmed || trimmed.length > 200_000) return undefined;
-  const source = ts.createSourceFile('value.ts', `(${trimmed}\n)`, ts.ScriptTarget.ES2022, false, ts.ScriptKind.TS);
+  const unwrapped = text.trim().replace(/^```(?:[a-zA-Z0-9_-]+)?[ \t]*\r?\n([\s\S]*?)\r?\n?```$/, '$1').trim();
+  try { return { value: JSON.parse(unwrapped) }; } catch { /* not JSON; try a JS literal */ }
+  if (!unwrapped || unwrapped.length > 200_000) return undefined;
+  const source = ts.createSourceFile('value.ts', `(${unwrapped}\n)`, ts.ScriptTarget.ES2022, false, ts.ScriptKind.TS);
   if (((source as unknown as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics ?? []).length) return undefined;
   if (source.statements.length !== 1) return undefined;
   const statement = source.statements[0]!;

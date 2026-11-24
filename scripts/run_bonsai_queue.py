@@ -422,15 +422,21 @@ def local_decode_progress(server=None):
     if endpoint.scheme not in {'http', 'https'} or endpoint.hostname not in {'localhost', '127.0.0.1', '::1'}:
         return None
     metrics_url = urllib.parse.urlunsplit((endpoint.scheme, endpoint.netloc, '/metrics', '', ''))
+    # The sum of the server's decode counters: the SGLang front decodes on SGLang, so its native counter stays 0
+    # (it moves only for native fallbacks) while its generated-token counter carries the progress.
+    total = None
     try:
         with urllib.request.urlopen(metrics_url, timeout=2) as response:
             for line in response.read().decode().splitlines():
-                if line.startswith(('llamacpp:n_decode_total ', 'natlang_native_decode_tokens_total ')):
+                if line.startswith(('llamacpp:n_decode_total ', 'natlang_native_decode_tokens_total ',
+                                    'natlang_sglang_generated_tokens_total ')):
                     value = float(line.split()[1])
-                    return value if math.isfinite(value) and value >= 0 else None
+                    if not math.isfinite(value) or value < 0:
+                        return None
+                    total = (total or 0) + value
     except (OSError, ValueError):
-        pass
-    return None
+        return None
+    return total
 
 
 def _spooled_partial_path(root, entry, job):

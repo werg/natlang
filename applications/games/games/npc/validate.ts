@@ -9,5 +9,5 @@ import type { NpcObservation, NpcPlan, Settings, Verdict } from '../../types.js'
 
 export default async function validate(observation: NpcObservation, plan: NpcPlan, settings: Settings): Promise<Verdict> {
   return pluggable({ crisp: () => rules(observation, plan), nl: () => judge(observation, plan) },
-    settings.validate, { name: 'npc.validate', same: (crisp, nl) => crisp.ok === nl.ok })();
+    settings.validate, { name: 'npc.validate', same: (crisp, natural) => crisp.ok === natural.ok })();
 }

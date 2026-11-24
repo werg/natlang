@@ -49,6 +49,16 @@ VRAM_UNREPORTED_GIB = 2.0       # nvidia-smi total less what a process can alloc
 ACTOR_FIXED_GIB = 10.0
 ACTOR_BESIDE_KV_SHARE = 0.25
 ACTOR_MEM_FRACTION = 0.88       # alone: SGLang's static memory fraction
+# Alone on a large GPU the pool is capped: 128 running used 20% of the L4's 11.2 GB FP8 pool (1.8M LFM3 tokens, mostly
+# conv state; DECISIONS 2026-11-23 13:50), so 24 GB holds ~10x what the actor's sequences use, and the rest of an A100
+# or G4 (~44 / 60 GiB) is free for tenants between rounds (program tuning, DECISIONS 2026-11-24 "program tuning on the A100"). An L4's
+# fraction-sized pool is below the cap and unchanged. NATLANG_COLAB_ACTOR_FULL=1 opts out (the fraction alone).
+ACTOR_ALONE_KV_CAP_GB = 24
+# Tenants of an actor-alone session (scripts/colab/admission.py --preemptible: a round's learner or an actor served
+# again evicts them): a program fit (tune.build, BF16 base + FP32 rank-16 LoRA; 6.3 GB CUDA measured on the GB10) and a
+# measurement actor (the base, optionally with an adapter release on its SGLang slots, for held_eval arms).
+TENANT_FIT = {'vram_gib': 12.0, 'host_ram_gib': 16.0}
+TENANT_MEASURE_KV_GB = 8
 # Round SFT goes to a Colab session only when it trains faster than the DGX. The learner is compute bound (A100 measured
 # 9 s/step against the GB10's 36.8 s on the same mix), so the session's GPU needs at least SFT_MIN_SPEEDUP x the
 # GB10's dense BF16 throughput (~125 TFLOPS) and room for SFT_MIN_ACTIVATION_GIB of saved activations (below that most
@@ -126,6 +136,14 @@ def colab_layout(hardware: dict) -> dict:
     # after mem fraction 0.88) holds 1.8M tokens, 14k per running sequence; decode is bandwidth bound and gains from them
     alone = {'kv_gb': None, 'max_running': 128, 'vram_gib': float(round(ACTOR_MEM_FRACTION * usable + 1.0)),
              'host_ram_gib': round(min(24.0, 0.2 * host), 1), 'mem_fraction': ACTOR_MEM_FRACTION}
+    if (ACTOR_MEM_FRACTION * usable - ACTOR_FIXED_GIB > ACTOR_ALONE_KV_CAP_GB
+            and os.environ.get('NATLANG_COLAB_ACTOR_FULL') != '1'):
+        alone = {'kv_gb': ACTOR_ALONE_KV_CAP_GB, 'max_running': 128,
+                 'vram_gib': float(ACTOR_ALONE_KV_CAP_GB + ACTOR_FIXED_GIB), 'host_ram_gib': alone['host_ram_gib']}
+    measure = {'kv_gb': TENANT_MEASURE_KV_GB, 'max_running': 64, 'vram_gib': float(TENANT_MEASURE_KV_GB + ACTOR_FIXED_GIB),
+               'host_ram_gib': 16.0}
+    tenants = {'vram_gib': round(usable - alone['vram_gib'] - ADMISSION_RESERVE_GIB, 1), 'fit': dict(TENANT_FIT),
+               'measure_actor': measure}
     learner_alone = learner(usable - ADMISSION_RESERVE_GIB)
     tflops = bf16_dense_tflops(hardware)
     speedup = round(tflops / GB10_BF16_TFLOPS, 2) if tflops else None
@@ -139,7 +157,7 @@ def colab_layout(hardware: dict) -> dict:
                            f'(need {SFT_MIN_ACTIVATION_GIB})'),
             'learner_alone': learner_alone,
             'learner_beside_actor': learner(usable - beside['vram_gib'] - ADMISSION_RESERVE_GIB),
-            'actor_beside_learner': beside, 'actor_alone': alone}
+            'actor_beside_learner': beside, 'actor_alone': alone, 'tenants': tenants}
 
 
 G4_HARDWARE = {'gpu_name': 'NVIDIA RTX PRO 6000 Blackwell Server Edition', 'vram_total_gib': 96.0,

@@ -892,3 +892,19 @@ def test_cycle_stages_outrank_its_collection_and_a_requeued_unit_is_joined(tmp_p
     monkeypatch.setattr(ei.Cycle, 'wait', lambda self, unit, poll=60: None)
     monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: pytest.fail(f'launched again: {argv}'))
     cycle.ledger('sft-v10-collect', 74, ei.COLLECTION_PRIORITY, ['collect'], tmp_path / 'c.log', detach=True)
+
+def test_teacher_specs_come_from_the_ops_file_at_each_launch(tmp_path, monkeypatch):
+    import json
+    import pytest
+    path = tmp_path / 'teachers.json'
+    monkeypatch.setattr(ei, 'TEACHERS_FILE', path)
+    assert ei.teachers() == ei.TEACHERS
+    specs = [{'model_id': 'm', 'endpoint': 'https://integrate.api.nvidia.com/v1', 'api_key_env': 'NVIDIA_API_KEY', 'slots': 1}]
+    path.write_text(json.dumps(specs))
+    assert ei.teachers() == specs
+    command = ei.teacher_command(tmp_path, tmp_path / 'w', [], [], 5)
+    assert command[command.index('--teacher') + 1] == json.dumps(specs[0])
+    path.write_text('[]')
+    with pytest.raises(SystemExit):
+        ei.teachers()
+    assert 'openrouter' in ei.TEACHER_ENV_FILES

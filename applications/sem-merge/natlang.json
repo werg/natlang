@@ -9,11 +9,29 @@
     "examples.json",
     "fixtures",
     "intentsCompatible.nl",
+    "main.ts",
     "merge.ts",
     "mergeHunk.nl",
     "package.json",
     "types.ts"
   ],
+  "targets": {
+    "sem-merge": {
+      "entry": "main.ts",
+      "authority": [
+        "filesystem:workspace"
+      ],
+      "description": "Merge three-way file or repository inputs from a JSON file or stdin and output JSON outcomes.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "string",
+          "path": "file",
+          "description": "Path to a JSON file containing { file } or { files }."
+        }
+      ]
+    }
+  },
   "engines": {
     "natlang": ">=0.1.0",
     "node": ">=22.13.0"

@@ -7,7 +7,7 @@ import { checkProject } from '../compiler/node-project.js';
 import { hexDigest } from '../native/hash.js';
 import { canonicalValue } from '../native/refinement.js';
 import {SYSTEM_PROMPT} from '../native/prompt.js';
-import { isProtectedSource, loadNamedFunction, protectedSources, type SourceFiles } from '../runtime/loader.js';
+import { isProtectedSource, loadNamedFunction, protectedSources, readNatlangFrontmatter, type SourceFiles } from '../runtime/loader.js';
 import { adoptSource, type AdoptionRecord, type SourceManifest } from './adoption.js';
 import { trustedCallOutput } from './run-evidence.js';
 import { OperationJournal } from './operations.js';
@@ -279,10 +279,61 @@ function readProgramFiles(directory: string): Record<string, string> {
   return files;
 }
 
-/** Protected sources of a program (`types.ts` and every `.nl` file's `protect:` list), matching `adopt-call.ts`. */
-function programProtectedSources(directory: string, overrides: Record<string, string | null>): { protected: string[]; lists: Record<string, string> } {
+export type DirectoryGuidance = {
+  program?: string;
+  functions?: Record<string, string>;
+};
+
+export const DIRECTORY_GUIDANCE_FILE = 'guidance.json';
+
+/** Parse and validate a directory program's `guidance.json` (`{ program?: string, functions?: Record<string, string> }`). */
+export function parseDirectoryGuidance(text: string): DirectoryGuidance {
+  let raw: unknown;
+  try { raw = JSON.parse(text); } catch (error) {
+    throw new Error(`guidance.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    throw new Error('guidance.json must be a JSON object with optional "program" and "functions" fields');
+  const record = raw as Record<string, unknown>;
+  const unknownKeys = Object.keys(record).filter(key => key !== 'program' && key !== 'functions');
+  if (unknownKeys.length)
+    throw new Error(`guidance.json has unsupported fields (${unknownKeys.join(', ')}); allowed: program, functions`);
+  const out: DirectoryGuidance = {};
+  if (record.program !== undefined) {
+    if (typeof record.program !== 'string' || !record.program.trim())
+      throw new Error('guidance.json "program" must be a non-empty string');
+    out.program = record.program;
+  }
+  if (record.functions !== undefined) {
+    if (!record.functions || typeof record.functions !== 'object' || Array.isArray(record.functions))
+      throw new Error('guidance.json "functions" must be an object mapping function names or paths to non-empty strings');
+    const functions: Record<string, string> = {};
+    for (const [key, value] of Object.entries(record.functions as Record<string, unknown>)) {
+      if (!key.trim() || typeof value !== 'string' || !value.trim())
+        throw new Error(`guidance.json functions[${JSON.stringify(key)}] must be a non-empty string`);
+      functions[key] = value;
+    }
+    if (Object.keys(functions).length) out.functions = functions;
+  }
+  return out;
+}
+
+/** Load `<DIR>/guidance.json` when present, or undefined when absent. */
+export function loadDirectoryGuidance(directory: string): DirectoryGuidance | undefined {
+  const path = join(directory, DIRECTORY_GUIDANCE_FILE);
+  if (!existsSync(path)) return undefined;
+  return parseDirectoryGuidance(readFileSync(path, 'utf8'));
+}
+
+/** Protected sources and immutable contracts (`types.ts`, `protect:`, `writes:`, `ensures:`) of a program. */
+function programProtectedSources(directory: string, overrides: Record<string, string | null>): {
+  protected: string[];
+  lists: Record<string, string>;
+  contracts: Record<string, string>;
+} {
   const found: string[] = [];
   const lists: Record<string, string> = {};
+  const contracts: Record<string, string> = {};
   const visit = (dir: string) => {
     for (const entry of readdirSync(dir).sort()) {
       if (DIR_SKIPPED.has(entry) || entry.startsWith('.')) continue;
@@ -294,15 +345,23 @@ function programProtectedSources(directory: string, overrides: Record<string, st
       if (Object.hasOwn(overrides, rel) && overrides[rel] === null) continue;
       const text = Object.hasOwn(overrides, rel) ? (overrides[rel] as string) : readFileSync(full, 'utf8');
       const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1];
-      let protect: unknown;
-      try { protect = front ? (YAML.parse(front) as Record<string, unknown> | null)?.protect : undefined; } catch { protect = undefined; }
+      let meta: Record<string, unknown> | null = null;
+      try { meta = front ? readNatlangFrontmatter(front) : null; }
+      catch {
+        try { meta = front ? (YAML.parse(front) as Record<string, unknown> | null) : null; } catch { meta = null; }
+      }
+      const protect = meta?.protect;
       const entries = Array.isArray(protect) ? protect.filter((item): item is string => typeof item === 'string') : [];
       lists[rel] = JSON.stringify(entries);
+      contracts[rel] = canonicalValue({
+        writes: meta?.writes ?? null,
+        ensures: meta?.ensures ?? null,
+      });
       found.push(...protectedSources(rel, entries));
     }
   };
   visit(directory);
-  return { protected: found, lists };
+  return { protected: found, lists, contracts };
 }
 
 /** Paths of `directory` an improvement may not change: `types.ts` files and every `.nl` file's `protect:` items. */
@@ -341,6 +400,7 @@ function materializeDirectoryCopy(directory: string, changes: Record<string, str
 
 function nodeSourceFilesFor(root: string): SourceFiles {
   return {
+    root,
     join,
     dirname,
     basename,
@@ -521,6 +581,7 @@ export async function evaluateDirectorySplitWithModel(
 ): Promise<DirectorySplitResult> {
   if (!cases.length) return { passed: 0, total: 0, passRate: 1, results: [] };
   const files = nodeSourceFilesFor(directory);
+  const guidance = loadDirectoryGuidance(directory);
   const loaded = new Map<string, { params: string[]; fn: (...args: unknown[]) => Promise<unknown> }>();
   const results: DirectorySplitResult['results'] = [];
   let passed = 0;
@@ -535,7 +596,12 @@ export async function evaluateDirectorySplitWithModel(
     }
     const args = entry.params.map(name => item.inputs[name]);
     try {
-      const runtime = createNatlangRuntime({ model, calls: false, workspace: directory });
+      const runtime = createNatlangRuntime({
+        model,
+        calls: false,
+        workspace: directory,
+        ...(guidance ? { programGuidance: { ...guidance, programId: `dir:${basename(directory)}` } } : {}),
+      });
       const received = await runtime.run(() => entry!.fn(...args));
       const ok = canonicalValue(received) === canonicalValue(item.expected);
       if (ok) passed++;
@@ -594,7 +660,8 @@ export async function improveDirectory(options: ImproveDirectoryOptions): Promis
     return { status: 'unchanged', directory, changed: [], reasons: ['proposal leaves every file unchanged'], summary: proposal.summary, casePack };
   }
 
-  // Reject edits to protected sources (`types.ts` and `.nl` `protect:` lists).
+  // Reject edits to protected sources (`types.ts`, `.nl` `protect:` lists, and `.nl` `writes:`/`ensures:` contracts)
+  // and validate `guidance.json` schema before running split evaluations.
   const beforeProtected = programProtectedSources(directory, {});
   const afterProtected = programProtectedSources(directory, normalizedChanges);
   for (const path of changed) {
@@ -604,6 +671,11 @@ export async function improveDirectory(options: ImproveDirectoryOptions): Promis
       reasons.push(`${path} is protected (protect:) and cannot be modified by improvement`);
     } else if (beforeProtected.lists[path] !== afterProtected.lists[path]) {
       reasons.push(`${path}: improvement cannot change a function's protect: list`);
+    } else if (path.endsWith('.nl') && beforeProtected.contracts[path] !== afterProtected.contracts[path]) {
+      reasons.push(`${path}: improvement cannot change a function's writes: or ensures: contract`);
+    } else if (path === DIRECTORY_GUIDANCE_FILE && typeof normalizedChanges[path] === 'string') {
+      try { parseDirectoryGuidance(normalizedChanges[path]!); }
+      catch (error) { reasons.push(error instanceof Error ? error.message : String(error)); }
     }
   }
   if (reasons.length) {

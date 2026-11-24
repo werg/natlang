@@ -28,10 +28,11 @@ export type EscalateOptions<R> = {
   /** Confidence threshold below which the call escalates to `to`/`fallback`. Default `0.8`. */
   floor?: number;
   /**
-   * Asymmetric risk floors keyed by JSON or string label (for example `{ block: 0.2 }` or `{ true: 0.25 }`):
+   * Asymmetric risk floors keyed by JSON or string label (for example `{ block: 0.2 }` or `{ true: 0.25 }`), or
+   * per-field floors for record decisions (`{ 'action.block': 0.2 }` or `{ action: { block: 0.2 } }`):
    * escalate whenever any named value has probability at least its risk threshold, even if another value won argmax.
    */
-  risk?: Record<string, number>;
+  risk?: Record<string, number | Record<string, number>>;
   /**
    * Escalation policy mode (`pluggable`): `'crisp'` (default: asymmetric risk floors then confidence floor),
    * `'nl'` (the shipped `shouldEscalate.nl` decision policy), or `'shadow'` (runs both, serves crisp, records `pluggable_shadow`).
@@ -62,7 +63,7 @@ export type EscalationRecord = { history: EscalationHistory; cost?: TierCost };
 export type EscalationNote = { function: string; escalated: boolean; unavailable?: true; reason?: string; to?: string;
   agreed?: boolean; fallback_call?: string; local_ms: number; fallback_ms?: number };
 
-type HistoryStore = { annotationsOf(kind: string, options?: { limit?: number }): readonly { call_id: string; value: unknown }[] };
+type HistoryStore = { annotationsOf(kind: string, options?: { limit?: number; functionId?: string }): readonly { call_id: string; value: unknown }[] };
 const isHistoryStore = (store: unknown): store is HistoryStore =>
   !!store && typeof (store as HistoryStore).annotationsOf === 'function';
 
@@ -112,7 +113,7 @@ export function escalationHistoryFromStore(store: unknown, functionId: string, l
 function tallyFromStore(store: unknown, functionId: string, limit = 500): Tally | undefined {
   if (!isHistoryStore(store)) return undefined;
   const tally = emptyTally();
-  for (const row of store.annotationsOf('escalation', { limit })) {
+  for (const row of store.annotationsOf('escalation', { limit, functionId })) {
     const note = row.value as EscalationNote | undefined;
     if (note && typeof note === 'object' && note.function === functionId) addTally(tally, tallyOf(note));
   }
@@ -144,30 +145,73 @@ export function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, opti
   if (!to) throw stdError('std-arguments', 'escalate(fn, { to | fallback }) needs a nonempty target model name.');
   const floor = options.floor ?? 0.8;
   if (!(floor >= 0 && floor <= 1)) throw stdError('std-arguments', 'escalate floor is a probability between 0 and 1.');
-  for (const [label, threshold] of Object.entries(options.risk ?? {}))
-    if (!(threshold >= 0 && threshold <= 1))
+  const flatRisk: Record<string, number> | undefined = options.risk ? {} : undefined;
+  for (const [label, spec] of Object.entries(options.risk ?? {})) {
+    if (typeof spec === 'number') {
+      if (!(spec >= 0 && spec <= 1))
+        throw stdError('std-arguments', `escalate risk floor for ${JSON.stringify(label)} must be a probability between 0 and 1.`);
+      flatRisk![label] = spec;
+    } else if (spec && typeof spec === 'object' && !Array.isArray(spec)) {
+      for (const [fieldValue, threshold] of Object.entries(spec)) {
+        if (!(threshold >= 0 && threshold <= 1))
+          throw stdError('std-arguments', `escalate risk floor for ${JSON.stringify(`${label}.${fieldValue}`)} must be a probability between 0 and 1.`);
+        flatRisk![`${label}.${fieldValue}`] = threshold;
+      }
+    } else {
       throw stdError('std-arguments', `escalate risk floor for ${JSON.stringify(label)} must be a probability between 0 and 1.`);
+    }
+  }
 
+  const matchesLabel = (value: unknown, label: string): boolean => String(value) === label || JSON.stringify(value) === label;
   const crispReason = (decision: Decision<R>): string | undefined => {
     // Check asymmetric risk floors before the general confidence floor so high-risk escalations keep their specific reason.
     if (options.risk) {
-      for (const [label, threshold] of Object.entries(options.risk)) {
-        const match = decision.probabilities.find(entry => String(entry.value) === label || JSON.stringify(entry.value) === label);
-        if (match && match.probability >= threshold) return `risk:${label}`;
+      for (const [label, spec] of Object.entries(options.risk)) {
+        if (typeof spec === 'number') {
+          const match = decision.probabilities.find(entry => matchesLabel(entry.value, label));
+          if (match && match.probability >= spec) return `risk:${label}`;
+          if (decision.fields) {
+            const sep = label.indexOf('.') >= 0 ? '.' : label.indexOf(':') >= 0 ? ':' : undefined;
+            if (sep) {
+              const idx = label.indexOf(sep);
+              const fieldName = label.slice(0, idx), valueLabel = label.slice(idx + 1);
+              const fieldEntries = Object.hasOwn(decision.fields, fieldName) ? decision.fields[fieldName] : undefined;
+              const fieldMatch = fieldEntries?.find(entry => matchesLabel(entry.value, valueLabel));
+              if (fieldMatch && fieldMatch.probability >= spec) return `risk:${label}`;
+            }
+          }
+        } else if (spec && typeof spec === 'object' && decision.fields && Object.hasOwn(decision.fields, label)) {
+          const fieldEntries = decision.fields[label]!;
+          for (const [valueLabel, threshold] of Object.entries(spec)) {
+            const fieldMatch = fieldEntries.find(entry => matchesLabel(entry.value, valueLabel));
+            if (fieldMatch && fieldMatch.probability >= threshold) return `risk:${label}.${valueLabel}`;
+          }
+        }
       }
     }
     if (decision.confidence < floor) return 'confidence';
     return undefined;
   };
   const nlJudge = options.nlPolicy ?? (shippedShouldEscalate as unknown as NonNullable<EscalateOptions<R>['nlPolicy']>);
-  // The nl policy reads this function's escalation history from the call store once, then counts this wrapper's runs.
+  // The nl policy reads this function's escalation history per call-store instance once, then counts runs on that store.
   const functionId = callableMeta(fn)?.definition.id;
-  let stored: Tally | undefined;
-  const live = emptyTally();
+  const storedByStore = new WeakMap<object, Tally>();
+  let unstoredTally: Tally | undefined;
   const recorded = (frame: StdSpan['frame']): EscalationRecord | undefined => {
     if (!functionId) return undefined;
-    stored ??= tallyFromStore(frame.task.runtime.callStore(), functionId) ?? emptyTally();
-    return recordOf(addTally({ ...stored }, live));
+    const store = frame.task.runtime.callStore();
+    let tally: Tally;
+    if (store && typeof store === 'object') {
+      let cached = storedByStore.get(store);
+      if (!cached) {
+        cached = tallyFromStore(store, functionId) ?? emptyTally();
+        storedByStore.set(store, cached);
+      }
+      tally = cached;
+    } else {
+      tally = unstoredTally ??= emptyTally();
+    }
+    return recordOf(tally);
   };
   const policyFacts = (frame: StdSpan['frame']): { history?: EscalationHistory; cost?: TierCost } => {
     const wantHistory = options.history === undefined, wantCost = options.cost === undefined;
@@ -181,7 +225,7 @@ export function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, opti
       crisp: decision => crispReason(decision),
       nl: async (decision, frame) => {
         const facts = policyFacts(frame);
-        return (await nlJudge(decision, floor, options.risk, facts.history, facts.cost)) ? 'policy' : undefined;
+        return (await nlJudge(decision, floor, flatRisk, facts.history, facts.cost)) ? 'policy' : undefined;
       },
     },
     options.policy,
@@ -199,14 +243,19 @@ export function escalate<A extends unknown[], R>(fn: NatlangFunction<A, R>, opti
       const reason = options.shouldEscalate
         ? ((await span.run(() => options.shouldEscalate!(decision))) ? 'policy' : undefined)
         : await span.run(() => decidePolicy(decision, span.frame));
-      // This run joins the history once the store has been read (earlier runs are read from the store itself).
-      // The run's note goes on its local call; it joins this wrapper's live history once the store has been read
+      // The run's note goes on its local call; it joins this store's cached tally once that store has been read
       // (earlier runs are read from the store itself).
       const note = (fields: Omit<EscalationNote, 'function' | 'local_ms'>) => {
         if (!functionId) return;
         const value: EscalationNote = { function: functionId, local_ms: localMs, ...fields };
-        if (stored) addTally(live, tallyOf(value));
-        if (localCall) try { span.frame.task.runtime.callStore()?.annotate?.(localCall, 'escalation', value, 'std', false); }
+        const store = span.frame.task.runtime.callStore();
+        if (store && typeof store === 'object') {
+          const cached = storedByStore.get(store);
+          if (cached) addTally(cached, tallyOf(value));
+        } else if (unstoredTally) {
+          addTally(unstoredTally, tallyOf(value));
+        }
+        if (localCall) try { store?.annotate?.(localCall, 'escalation', value, 'std', false); }
         catch { /* recording never fails the call */ }
       };
       if (!reason) { note({ escalated: false }); return { ...decision, escalated: false }; }

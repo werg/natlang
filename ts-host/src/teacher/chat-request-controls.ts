@@ -10,7 +10,8 @@ export function chatRequestControls(value: unknown): Record<string, unknown> {
   const controls = value as Record<string, unknown>;
   const allowed = ['max_tokens', 'top_p', 'top_k', 'min_p', 'chat_template_kwargs', 'repetition_penalty', 'reasoning_effort',
     'x_natlang_adapters', 'x_natlang_rl_capture', 'x_natlang_rl_top_k', 'x_natlang_guidance', 'x_natlang_native_protocol_recovery', 'guidance',
-    'x_natlang_native_coefficient_policy', 'x_natlang_omit_seed', 'x_natlang_host_call_fields'];
+    'x_natlang_native_coefficient_policy', 'x_natlang_omit_seed', 'x_natlang_host_call_fields',
+    'x_natlang_history_reasoning'];
   if (Object.keys(controls).some(key => !allowed.includes(key))) throw new Error('unsupported chat request control');
   if (controls.x_natlang_rl_capture !== undefined && typeof controls.x_natlang_rl_capture !== 'boolean')
     throw new Error('x_natlang_rl_capture must be boolean');
@@ -33,6 +34,9 @@ export function chatRequestControls(value: unknown): Record<string, unknown> {
   if (controls.x_natlang_host_call_fields !== undefined && (!controls.x_natlang_host_call_fields ||
       typeof controls.x_natlang_host_call_fields !== 'object' || Array.isArray(controls.x_natlang_host_call_fields)))
     throw new Error('x_natlang_host_call_fields must be an object of tool-call fields');
+  if (controls.x_natlang_history_reasoning !== undefined &&
+      !['both', 'reasoning', 'reasoning_content', 'none'].includes(String(controls.x_natlang_history_reasoning)))
+    throw new Error('x_natlang_history_reasoning must be both, reasoning, reasoning_content or none');
   if (controls.guidance !== undefined && controls.guidance !== false)
     throw new Error('collection guidance control may only disable guidance');
   if (controls.max_tokens !== undefined && (!Number.isSafeInteger(controls.max_tokens) || Number(controls.max_tokens) < 1))

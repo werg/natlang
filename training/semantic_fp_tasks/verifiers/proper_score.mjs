@@ -11,7 +11,16 @@
 // }
 // Candidate value per item: { value, probabilities: [{ value, probability }] | Record<string, number>, escalated?: boolean }
 const EPS = 1e-6;
-const keyOf = value => typeof value === 'string' ? value : JSON.stringify(value);
+
+function canon(value) {
+  if (Array.isArray(value)) return value.map(canon);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map(k => [k, canon(value[k])]));
+  }
+  return value;
+}
+
+const keyOf = value => typeof value === 'string' ? value : JSON.stringify(canon(value));
 
 function distributionOf(entry) {
   if (!entry || typeof entry !== 'object') return null;
@@ -19,7 +28,9 @@ function distributionOf(entry) {
   if (Array.isArray(entry.probabilities)) {
     for (const item of entry.probabilities) {
       if (!item || typeof item !== 'object' || typeof item.probability !== 'number' || !Number.isFinite(item.probability)) return null;
-      map.set(keyOf(item.value), item.probability);
+      const k = keyOf(item.value);
+      if (map.has(k)) return null;
+      map.set(k, item.probability);
     }
   } else if (entry.probabilities && typeof entry.probabilities === 'object') {
     for (const [k, p] of Object.entries(entry.probabilities)) {
@@ -35,7 +46,8 @@ function distributionOf(entry) {
 
 export function verifyCandidate({ value, oracle }) {
   const issues = [];
-  const entries = Object.entries(oracle.items ?? {});
+  const items = oracle.items ?? {};
+  const entries = Object.entries(items);
   if (!entries.length) throw new Error('proper_score verifier: oracle.items must be nonempty');
   let given;
   if (oracle.shape === 'single') {
@@ -64,7 +76,14 @@ export function verifyCandidate({ value, oracle }) {
     }
     brierSum += brier;
     logLossSum += -Math.log(Math.max(EPS, pTruth));
-    if (keyOf(entry.value) === truthKey) correct++;
+    const maxProb = Math.max(...dist.values());
+    const valKey = keyOf(entry.value);
+    const isArgmax = dist.has(valKey) && dist.get(valKey) >= maxProb - 1e-6;
+    if (!isArgmax) {
+      issues.push(`${id}: value ${valKey} does not match argmax of probabilities`);
+    } else if (valKey === truthKey) {
+      correct++;
+    }
     if (oracle.risk_floors) {
       for (const [riskLabel, floor] of Object.entries(oracle.risk_floors)) {
         if ((dist.get(riskLabel) ?? 0) >= floor && entry.escalated !== true) {
@@ -78,11 +97,12 @@ export function verifyCandidate({ value, oracle }) {
       issues.push(`${id}: expected escalated=${spec.escalate_expected}, got ${entry.escalated}`);
     }
   }
-  for (const id of given.keys()) if (!oracle.items[id]) issues.push(`unexpected item ${id}`);
+  for (const id of given.keys()) if (!Object.hasOwn(items, id)) issues.push(`unexpected item ${id}`);
   if (valid === 0) return { ok: false, issues, score: 0 };
 
   const meanBrier = brierSum / entries.length + (entries.length - valid) * 2 / entries.length;
-  const meanLogLoss = logLossSum / valid;
+  const maxItemLogLoss = -Math.log(EPS);
+  const meanLogLoss = (logLossSum + (entries.length - valid) * maxItemLogLoss) / entries.length;
   const accuracy = correct / entries.length;
   const maxBrier = oracle.max_brier ?? 0.25;
   const maxLogLoss = oracle.max_log_loss ?? 1.0;
