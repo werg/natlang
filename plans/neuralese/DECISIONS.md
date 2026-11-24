@@ -10735,3 +10735,88 @@ Tests (`tests/neuralese/test_async_train.py`): the sft-v7/sft-v9 case, a kept ve
 refusal (recorded and inferred), interval and prefer-unseen adoption, a restarted driver adopting its argument; the
 refused pair re-measuring the reference without reuse, the raise after both were re-measured, other compare failures
 not taken for refusals.
+
+## 2026-11-24 07:40 The SGLang front's single-process ceiling: whole-reply detokenization per chunk, a cold-start tokenizer herd, a 1024-fd limit; fixed in one process (no worker split)
+
+**Brief.** Raise aei1's collection throughput by removing the native front's single-process (one GIL) ceiling: measure
+where its time goes at production concurrency, fix the `Errno 24 Too many open files` seen before the 03:04 OOM kill of
+`aei1-collect-v0001`, remove the ceiling by the mechanism the profile points to.
+
+**Live production (before), aei1-collect-v0002 on pin a034dbf9c, 128 slots, 04:44-04:46.** Front 0.97 cores,
+1,556 tok/s through it (60 s of `/metrics` counters), 0.62 ms of front CPU per generated token; SGLang at 158-160
+running (its `--sglang-max-running 160`, shared with the fill) with 2-30 queued, 1,250-2,330 tok/s in all;
+`/metrics` answered in 1-47 ms. 257 sockets open at 128 streams (one client and one SGLang connection per stream) under
+the unit's soft `RLIMIT_NOFILE` of 1024 (hard 500000). Production rate of that run: 45 groups, 174 episodes from 04:22
+to its 05:21 preemption by `aei1-r0003-build` (~175 episodes/h). py-spy cannot attach to the live front (ptrace scope 1,
+the front is not our child, no sudo), so the front was measured on a bench instead of being signalled.
+
+**Bench** (`benchmarks/sglang-front/`, run on the Colab A100 VM's CPUs as a preemptible admission beside r0003's SFT,
+because the DGX ledger had no room): the front built as `serve_native_checkpoint.py` builds it (checkpoint 7cfc4774,
+its SGLang export, tool grammar on), bound to a mock SGLang that replays 687 recorded aei1 v0002 turns (122 episodes,
+738k tokens) with their per-token records in 8-token chunks at a set rate per stream; 128 streaming chat clients
+replay the episodes; py-spy as the front's parent (`--gil`). 0 mock misses: every request's prompt matched its recording.
+
+**Where the time went (py-spy, GIL-holding samples).**
+1. Cold start: 87-90% in `tool_grammar.info_from_export` -> `AutoTokenizer.from_pretrained` (~3 s of GIL-held Python
+   each). lru_cache and f29b9cd43's per-export cache do not stop concurrent first callers from each building it, so every
+   stream's first request after a start loaded the tokenizer: 4 requests reached SGLang in the first 150 s at 32
+   streams.
+2. Steady state: `_sglang_emit` decoded the whole reply so far at every 8-token chunk (quadratic in the reply
+   length): 57% of the GIL samples at 32 streams, 79% at 128 (`TokenizersBackend._decode` and transformers' `to_py_obj`
+   over the id list). Next: `_sglang_consume` record decoding 6-9%, the HTTP stream's event JSON 4-7%, append-only
+   hashing ~5%. The tool grammar itself is cheap: 0.9 us per accepted token, 0.17 s per new tool set (24 sets in 687
+   turns), cached after.
+
+**Fixes** (each default on with an opt-out and tests; main commits below).
+- Streamed text: `_sglang_emit` decodes the previous chunk plus the new tokens and sends what that adds to the previous
+  chunk's decode (vLLM's prefix/read offsets, which keeps a tokenizer's inter-token spacing); an incomplete UTF-8 tail
+  waits, a context that is not a prefix falls back to the whole decode, and the run's final emission still decodes the
+  reply whole. The 687 recorded replies stream to exactly their whole decode both ways (2.6 s against 75 s of CPU).
+  `NATLANG_SGLANG_INCREMENTAL_DETOKENIZE=0` opts out.
+- Tokenizer info: `tool_grammar.INFO_LOCK` makes `info_from_export`/`info_from_base` and both engines'
+  `_tool_grammar_info` single-flight, and `serve_native_checkpoint` builds it before the server starts.
+- Open files: `common/open_files.raise_open_files_limit` (soft to hard; `NATLANG_RAISE_NOFILE=0` opts out) in
+  `serve/http.serve` (every Python engine), `expert_iteration` and `run_bonsai_queue` (their node workers inherit it).
+  Connection pooling was not added: an open stream holds its sockets either way, and front -> SGLang requests run at
+  ~1.3/s, so connection setup is no cost. The pile-up that reached 1024 in v0001 (likely retried streams whose first
+  attempt kept running during the stalled-front period) was not reconstructed.
+
+**Throughput, bench (steady state 60 s .. end-30 s, mock served tokens; 128 streams).**
+
+| front | demand (tok/s) | tok/s | front cores | CPU ms/token | /metrics |
+|---|---|---|---|---|---|
+| a034dbf9c (before) | 5,120 | 4,054 (front-bound) | 1.42 | 0.352 | 0.9-1.7 s |
+| this change | 5,120 | 5,074 (demand-bound) | 0.82 | 0.162 | 9-15 ms |
+| this change | 12,800 | 8,284 (front-bound) | 1.62 | 0.195 | 0.2-0.7 s |
+
+The single front's ceiling rose from ~4.0k to ~8.3k tok/s on the VM's cores (2.0x, and the before front could not meet
+5.1k). DGX cores ran the production front at 0.62 ms/token against the VM's 0.35 for the same code (slower cores,
+load 70-85), which puts the DGX front's new ceiling near 4.5k tok/s, about twice what SGLang decodes on the GB10 at 160
+running. Episodes per hour on the bench are not comparable to production (recorded tool output, no node workers); the
+production before/after in episodes/h and tok/s is read at the next collection start on the new pin.
+
+**No worker split.** One front per ~64 streams would need SGLang adapter-slot partitioning between processes, rebind
+and attestation fan-out, owner/episode affinity for the exclusive native-state store and append-only histories, and a
+lazily loaded native model per worker (~14 GB each on a fallback). With the front no longer the bound that buys nothing
+now; revisit if SGLang decode passes ~4k tok/s on the DGX or the front's CPU per token rises again.
+
+**For aei1 (coordinator).** Take the pin at the next round boundary. Slots can rise now, together with SGLang's
+running cap, which binds first (160 running with requests queued, KV pool 56% used): e.g. `--slots 192` with
+`--actor-arg=--sglang-max-running --actor-arg=224`; keep it if SGLang's gen throughput rises by >= 10% in the first
+progress lines, else return to 128/160.
+
+**Inventory.** Streaming detokenization: the SGLang front (fixed); the native engine's `Engine._emit` decodes only the
+pending token(s) (`serve/engine.py` `_emit`); guided replies publish through `native_guidance.flush` and never call
+`_sglang_emit` (`_sglang_consume`, `_sglang_feed_forced`: `seq.guide is None`); llama-server and the page detokenize
+per token in llama.cpp. Tokenizer info: `tool_grammar` (both builders), `Engine` and `SglangEngine._tool_grammar_info`
+(fixed); llama-server/wllama compile grammars in C++. Open files: Python servers and collectors (fixed); node raises its
+soft limit to the hard one itself (a live collector: 500000); the SGLang server sets 65535 itself (live process).
+
+**After the change, at its ceiling** (py-spy `--gil --nonblocking`, 128 streams, 8.0k tok/s): the GIL time spreads
+over the grammar matcher's per-token `accept_token` (20%; 0.9 us per token uncontended, so mostly the FFI call's GIL
+release and retake among ~130 busy threads), reading SGLang's chunked stream (12%), the client stream's event JSON and
+writes (13%), append-only prompt hashing (8%) and record decoding (~4%). None dominates; batching the matcher calls per
+chunk is the next lever if the front binds again.
+
+**Not checked.** The new front on DGX cores under production load (read at the next start); the per-token residue
+above was left as is; the exact sequence behind v0001's 1024 descriptors.
