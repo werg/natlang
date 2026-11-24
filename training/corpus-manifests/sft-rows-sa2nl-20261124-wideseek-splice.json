@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sft-rows-sa2nl-20261124-wideseek-splice",
+  "owner": "dgx",
+  "path": "data_nvme:sa2nl-20261124/wideseek-splice",
+  "files": [
+    {
+      "path": "build.json",
+      "bytes": 1864,
+      "sha256": "90bc8fb2273b191e36a1df9f12879e71fa99af2227617c790d15083ded7e0e56"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 344390,
+      "sha256": "47b729d965f61d6d1b7195708b99fad4b2398dd0422e7c4064f5072c3e6e3fce",
+      "lines": 2806
+    },
+    {
+      "path": "chains.pkl",
+      "bytes": 338731655,
+      "sha256": "cff26f668d9c02e4bdb53d870b9d981ae1a9b42aa1d9842131c118d3f9d31987"
+    },
+    {
+      "path": "held-verify-groups.json",
+      "bytes": 72582,
+      "sha256": "7b001f7071925a168b78e65f521cc81e4d207feac49372dba9a922c035ca8b9a"
+    },
+    {
+      "path": "held-verify-ids.json",
+      "bytes": 120284,
+      "sha256": "7014fde69e971a0ccc16eaf444b6fe8cccf1cba2998576fd415efa6f8f68c256"
+    },
+    {
+      "path": "rows.jsonl.zst",
+      "bytes": 1095996,
+      "sha256": "8eb60d4572327177caeae085029a678465a8724eab8bdc4e5a3920dc66ee616c"
+    }
+  ],
+  "bytes": 340366771
+}

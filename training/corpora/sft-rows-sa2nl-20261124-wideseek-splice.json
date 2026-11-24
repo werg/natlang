@@ -1,0 +1,43 @@
+{
+  "id": "sft-rows-sa2nl-20261124-wideseek-splice",
+  "owner": "dgx",
+  "path": "data_nvme:sa2nl-20261124/wideseek-splice",
+  "kind": "sft-rows",
+  "format": "natlang.sft-sources-subagent-neuralese/1: chains.pkl (exp0_sft --chains, sft_sources build --aux), rows.jsonl.zst, cases.jsonl, build.json",
+  "rows": 2806,
+  "license": "apache-2.0 (WideSeek-R1/WideSeek-R1-SFT-data 44c3e177)",
+  "protected": false,
+  "inputs": [
+    {
+      "id": "subagent-sources-nvme-20261124",
+      "path": "data_nvme:sa2nl-20261124/source/D01_sft_width_depth_agent_1p3.jsonl",
+      "sha256": "3a3fe9585bfb06b269d9501cd52fbd61b46db6a50cef096b9dffc8c7f3e73393"
+    },
+    {
+      "id": "held-v3",
+      "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v3/manifest.json",
+      "sha256": "4547106069df540d32b250782651143eb3e7ae60fc64e2b4ffef4e2b30fc3d11"
+    }
+  ],
+  "producer": {
+    "script": "subagent_neuralese.py",
+    "argv": [
+      "build",
+      "--source",
+      "wideseek",
+      "--input",
+      "/home/werg/data/sa2nl-20261124/source/D01_sft_width_depth_agent_1p3.jsonl",
+      "--tokenizer",
+      "/home/werg/data/sft-sources-20261118/tokenizer",
+      "--out",
+      "/home/werg/data/sa2nl-20261124/wideseek-splice",
+      "--workers",
+      "8"
+    ],
+    "git_commit": "289102f14e65fbfaa8a77048d412c51e10c0ecf2",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "ebc1f5233e780e51e36bc28b24d3e52f3e8a05e6da38e5e7215058104f6710df",
+  "training_admission": "registry-recorded"
+}

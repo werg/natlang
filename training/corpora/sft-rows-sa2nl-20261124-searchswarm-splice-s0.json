@@ -1,0 +1,47 @@
+{
+  "id": "sft-rows-sa2nl-20261124-searchswarm-splice-s0",
+  "owner": "dgx",
+  "path": "data_nvme:sa2nl-20261124/searchswarm-splice-s0",
+  "kind": "sft-rows",
+  "format": "natlang.sft-sources-subagent-neuralese/1: chains.pkl (exp0_sft --chains, sft_sources build --aux), rows.jsonl.zst, cases.jsonl, build.json",
+  "rows": 958,
+  "license": "mit (SearchSwarm/SearchSwarm-SFT 4bad3397)",
+  "protected": false,
+  "inputs": [
+    {
+      "id": "subagent-sources-nvme-20261124",
+      "path": "data_nvme:sa2nl-20261124/source/D02_train.parquet",
+      "sha256": "d68150911c33d942f9bc59114ce57ee68caa72c14679974b311400c4a2d5fb38"
+    },
+    {
+      "id": "held-v3",
+      "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v3/manifest.json",
+      "sha256": "4547106069df540d32b250782651143eb3e7ae60fc64e2b4ffef4e2b30fc3d11"
+    }
+  ],
+  "producer": {
+    "script": "subagent_neuralese.py",
+    "argv": [
+      "build",
+      "--source",
+      "searchswarm",
+      "--input",
+      "/home/werg/data/sa2nl-20261124/source/D02_train.parquet",
+      "--tokenizer",
+      "/home/werg/data/sft-sources-20261118/tokenizer",
+      "--out",
+      "/home/werg/data/sa2nl-20261124/searchswarm-splice-s0",
+      "--workers",
+      "5",
+      "--shard",
+      "0",
+      "--shards",
+      "4"
+    ],
+    "git_commit": "c7342d02d7b290d83b077a9dfdda268f933b916f",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "b454cb3ba164e19e2d1b45438e24e2c5738c4ef8659fbee8538b217133d4eede",
+  "training_admission": "registry-recorded"
+}
