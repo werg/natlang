@@ -1147,6 +1147,7 @@ class Cycle:
         self.mix = self.dir / 'mix'
         self.window_closed = threading.Event()
         self.window_started = False
+        self.held_cancelled = set()      # held/NAME measurements dropped (cancel_held): never relaunched
         self.cost = CostTelemetry.load(self.dir / 'cycle-cost.json', getattr(args, 'name', self.dir.name))
 
     def record_cost(self, stage, profile, wall_seconds, *, sessions=1, canonical_chain_tokens=0, note='',
@@ -1403,8 +1404,13 @@ class Cycle:
         # medium and resumable: a training stage (high) preempts it, the ledger requeues it and the
         # measurement resumes its episodes (held_eval measure keeps run.json); nothing that trains waits for it
         for attempt in range(50):
+            if name in self.held_cancelled:
+                break
             self.ledger(unit, budget, 'medium', list(map(str, command)), out / 'driver.log', repo=self.held_pin)
             while ledger_queued(unit) or self.active(unit):     # preempted: the ledger relaunches it when room returns
+                if name in self.held_cancelled:
+                    self.stop_unit(unit)
+                    break
                 time.sleep(60)
             if self.held_result_ok(out):
                 break
@@ -1413,26 +1419,34 @@ class Cycle:
         return out
 
     def pop_held(self, name, checkpoint, reuse=True):
-        """One held-v3 measurement on Pop (ops/grpo-v4/pop-held.sh: the pinned harness, 2 samples)."""
+        """One held-v3 measurement on Pop (ops/grpo-v4/pop-held.sh: the pinned harness, 2 samples) through
+        ``pop_held_measure`` (one measurement per directory; a running unit is joined, never reused around). A
+        measurement ``cancel_held`` dropped stops and returns its directory incomplete."""
         out = self.held / name
         result = out / 'result.json'
         if result.exists() and json.loads(result.read_text()).get('complete'):
             return out
-        import pop_rl_actor
-        join_pop_held(out)                  # a measure unit a restarted driver left running: joined, never reused around
-        if _result_complete(out):
+        cancelled = lambda: name in self.held_cancelled
+        if join_pop_held(out, preempt=cancelled) == 'preempted' or _result_complete(out):
             return out
         if reuse and self.reuse_held(out, checkpoint):
             return out
-        if _result_complete(out):
-            return out
-        pop_rl_actor.stop_pop_fills()       # the held pin's pop_rl_actor may predate the stop in its serves
-        mode = ['base', str(out), str(self.a.held_samples)] if checkpoint == BASE_CKPT else \
-            ['ckpt', str(out), str(self.a.held_samples), str(checkpoint)]
-        out.mkdir(parents=True, exist_ok=True)
-        subprocess.run(['/bin/sh', str(OPS / 'grpo-v4' / 'pop-held.sh'), str(self.held_pin), *mode],
-                       stdout=(out / 'driver.log').open('a'), stderr=subprocess.STDOUT)
+        for _ in range(50):
+            state = pop_held_measure(out, checkpoint, pin=self.held_pin, samples=self.a.held_samples,
+                                     preempt=cancelled)
+            if state == 'complete' or cancelled():
+                break
+            if state == 'incomplete':        # pop-held.sh failed outright: the caller sees the incomplete result
+                break
+            time.sleep(60)                   # preempted by the ledger, or another process measures it: resume after
         return out
+
+    def cancel_held(self, name):
+        """Drop the held measurement DIR/held/NAME (its policy left the lineage): its DGX unit and Pop measure units
+        stop, and ``dgx_held`` / ``pop_held`` return it incomplete instead of relaunching it."""
+        self.held_cancelled.add(name)
+        self.stop_unit(f'{self.a.name}-held-{name}')
+        stop_pop_held_units(self.held / name)
 
     def reuse_held(self, out, checkpoint):
         """Copy an earlier cycle's complete measurement of this policy in this pin's scoring series on this cycle's
@@ -1909,7 +1923,8 @@ class Cycle:
                            # Standing fills resolve publication again at each rescan.
                            *(('--prefer-rates', rates) if rates.exists() else ())])]
 
-    def stop_unit(self, unit):
+    @staticmethod
+    def stop_unit(unit):
         subprocess.run([*LEDGER, 'cancel', '--unit', unit])
         for suffix in ('-waiter', ''):
             subprocess.run(['systemctl', '--user', 'stop', f'{unit}{suffix}.service'], stderr=subprocess.DEVNULL)
@@ -2466,6 +2481,20 @@ class HeldV4Queue:
                     return entry['attempts']
         return 0
 
+    def pending(self, sha):
+        with self.lock:
+            return any(e['sha256'] == sha and e['state'] == 'pending' for e in self.entries)
+
+    def prune(self, keep, why):
+        """Close every pending entry whose policy is not in ``keep`` (state 'dropped', ``why``); returns them."""
+        with self.lock:
+            dropped = [e for e in self.entries if e['state'] == 'pending' and e['sha256'] not in keep]
+            for entry in dropped:
+                entry.update(state='dropped', why=why, finished_at=round(time.time(), 1))
+            if dropped:
+                self.save()
+            return [dict(e) for e in dropped]
+
 
 def _result_complete(out):
     try:
@@ -2474,53 +2503,107 @@ def _result_complete(out):
         return False
 
 
-def pop_held_measure(out, checkpoint, *, pin, samples, manifest, preempt=None, poll=30):
-    """One held measurement of ``checkpoint`` on Pop with ``manifest`` (``pop-held.sh``, resumable). ``preempt``
-    (a callable) is polled: when it answers true the measurement stops (its ``popheld-<OUT name>-*`` ledger unit and the
-    script) and resumes from its episodes next time. Returns 'complete', 'preempted' or 'incomplete'."""
+def pop_held_measure(out, checkpoint, *, pin, samples, manifest=None, preempt=None, poll=30):
+    """One held measurement of ``checkpoint`` on Pop with ``manifest`` (``pop-held.sh``, resumable; None: its default,
+    held-v3). ``preempt`` (a callable) is polled: when it answers true the measurement stops (its ``popheld-<OUT
+    name>-*`` ledger unit and the script) and resumes from its episodes next time. One measurement per ``out`` across
+    driver processes and restarts: ``measure_lock`` (another process measuring answers 'busy'), a measure unit left
+    running is joined and one the ledger holds requeued is cancelled (``join_pop_held``). Returns 'complete',
+    'preempted' (also when the ledger preempted the measure unit), 'busy' or 'incomplete'."""
     import pop_rl_actor
     out = Path(out)
     if _result_complete(out):
         return 'complete'
     out.mkdir(parents=True, exist_ok=True)
-    if join_pop_held(out, preempt=preempt, poll=poll) == 'preempted':
-        return 'preempted'
-    if _result_complete(out):
-        return 'complete'
-    pop_rl_actor.stop_pop_fills()
-    mode = ['base', str(out), str(samples)] if str(checkpoint) == BASE_CKPT else \
-        ['ckpt', str(out), str(samples), str(checkpoint)]
-    env = {**os.environ, 'HELD_MANIFEST': str(manifest)}
-    with (out / 'driver.log').open('a') as handle:
-        process = subprocess.Popen(['/bin/sh', str(OPS / 'grpo-v4' / 'pop-held.sh'), str(pin), *mode], env=env,
-                                   stdout=handle, stderr=subprocess.STDOUT, start_new_session=True)
-    while process.poll() is None:
-        if preempt is not None and preempt():
-            os.killpg(process.pid, signal.SIGTERM)
-            process.wait()
-            stop_pop_held_units(out)
+    with measure_lock(out) as mine:
+        if not mine:
+            return 'busy'
+        if join_pop_held(out, preempt=preempt, poll=poll) == 'preempted':
             return 'preempted'
-        time.sleep(poll)
-    return 'complete' if _result_complete(out) else 'incomplete'
+        if _result_complete(out):
+            return 'complete'
+        if preempt is not None and preempt():
+            return 'preempted'
+        pop_rl_actor.stop_pop_fills()
+        mode = ['base', str(out), str(samples)] if str(checkpoint) == BASE_CKPT else \
+            ['ckpt', str(out), str(samples), str(checkpoint)]
+        env = {k: v for k, v in os.environ.items() if k != 'HELD_MANIFEST'}
+        if manifest:
+            env['HELD_MANIFEST'] = str(manifest)
+        with (out / 'driver.log').open('a') as handle:
+            process = subprocess.Popen(['/bin/sh', str(OPS / 'grpo-v4' / 'pop-held.sh'), str(pin), *mode], env=env,
+                                       stdout=handle, stderr=subprocess.STDOUT, start_new_session=True)
+        while process.poll() is None:
+            if preempt is not None and preempt():
+                os.killpg(process.pid, signal.SIGTERM)
+                process.wait()
+                stop_pop_held_units(out)
+                return 'preempted'
+            time.sleep(poll)
+        # pop-held.sh ends when its measure unit is inactive: also when the ledger preempted it and holds it requeued
+        # (it would relaunch it later with this pin beside the next measurement). That one is cancelled here; the
+        # measurement resumes from its episodes at the next attempt, which a preemption does not count against
+        requeued = cancel_queued_pop_held(out)
+        if _result_complete(out):
+            return 'complete'
+        return 'preempted' if requeued else 'incomplete'
+
+
+@contextlib.contextmanager
+def measure_lock(out):
+    """An exclusive, non-blocking lock on ``out/.measure.lock`` held while this process measures into ``out``
+    (released with the process): yields False when another process holds it."""
+    import fcntl
+    Path(out).mkdir(parents=True, exist_ok=True)
+    with open(Path(out) / '.measure.lock', 'a') as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def pop_held_pattern(out):
+    return f'popheld-{Path(out).name}-*'
 
 
 def stop_pop_held_units(out):
+    """Stop every measure unit of ``out``: the ledger's queue entry first (a preempted, requeued unit would otherwise
+    be relaunched), then the unit and its waiter."""
     import pop_rl_actor
-    for unit in pop_rl_actor.pop_held_units(f'popheld-{Path(out).name}-*'):
-        subprocess.run(['systemctl', '--user', 'stop', f'{unit}.service'], check=False)
+    for unit in pop_rl_actor.pop_held_units(pop_held_pattern(out)):
+        Cycle.stop_unit(unit)
+
+
+def cancel_queued_pop_held(out):
+    """Cancel the measure units of ``out`` the ledger holds without a running unit (waiting with no live owner, or
+    requeued after a preemption); returns their names."""
+    import pop_rl_actor
+    queued = [u for u in pop_rl_actor.pop_held_units(pop_held_pattern(out)) if not Cycle.active(u)]
+    for unit in queued:
+        Cycle.stop_unit(unit)
+    return queued
 
 
 def join_pop_held(out, *, preempt=None, poll=30):
     """Wait for a measure unit of ``out`` that is still running (``popheld-<OUT name>-*``: a driver restart killed the
-    ``pop-held.sh`` that started it, not the unit) instead of starting a second measurement on the same episodes.
+    ``pop-held.sh`` that started it, not the unit) instead of starting a second measurement on the same episodes. One
+    the ledger only holds (requeued after a preemption, or waiting for a ``pop-held.sh`` that is gone) is cancelled:
+    relaunched by the ledger it would measure beside the caller's own (2026-11-24, two units on ``hv4-85e61f04241e``).
     Returns 'preempted' when ``preempt`` stopped it, else None."""
     import pop_rl_actor
-    while pop_rl_actor.pop_held_units(f'popheld-{Path(out).name}-*'):
+    while True:
+        cancel_queued_pop_held(out)
+        if not pop_rl_actor.pop_held_units(pop_held_pattern(out)):
+            return None
         if preempt is not None and preempt():
             stop_pop_held_units(out)
             return 'preempted'
         time.sleep(poll)
-    return None
 
 
 # ---- async round driver & phase switching (async-train §2, §4, §5, §7.4) ---------------------------------------------
@@ -2846,6 +2929,18 @@ class PhaseController:
 
     def held_due(self):
         return int(self.state['since_held']) >= int(self.state['held_every'])
+
+    def drop_measurement_off_lineage(self):
+        """The held-v3 job whose candidate left the lineage (a rollback below it): cleared (its verdict would be moot)
+        and returned, else None."""
+        job = self.state.get('measuring')
+        if not job or self.in_lineage(job['candidate']['sha256']):
+            return None
+        self.state['measuring'] = None
+        self.state['history'].append({'at': round(time.time(), 1), 'action': 'measurement dropped',
+                                      'sha256': job['candidate']['sha256'], 'why': 'it left the lineage'})
+        self.save()
+        return job
 
     def start_measurement(self):
         """The current policy goes to held against the reference: (candidate, reference); the interval restarts."""
@@ -3892,11 +3987,18 @@ class AsyncRoundDriver:
                 self.colab_sft_hosts.add(up[0])
                 try:
                     with (round_dir / 'sft-colab.log').open('a') as handle:
-                        subprocess.run(self.colab_command(round_dir, up[0], profile), env=self.c.env, stdout=handle,
-                                       stderr=subprocess.STDOUT)
+                        rc = subprocess.run(self.colab_command(round_dir, up[0], profile), env=self.c.env,
+                                            stdout=handle, stderr=subprocess.STDOUT).returncode
                 finally:
                     self.colab_sft_hosts.discard(up[0])
                     self.c.session(up[0], profile, False)
+                if rc == pop_rl_actor.SESSION_LOST_RC:
+                    # the session was replaced mid-round (run-sft saw it at once): the DGX resumes the synced state
+                    # now; a fresh session fit for SFT takes it back through the hand-back when that pays
+                    record_profile_change(round_dir, from_profile='colab', to_profile='dgx',
+                                          reason=f'the Colab session {up[0]} was replaced mid-round')
+                    self.note(round=round_dir.name, takeover='dgx', session_lost=up[0])
+                    return
                 continue
             away_since = away_since or time.time()
             if time.time() - away_since >= 60 * self.a.fallback_wait_minutes:
@@ -4287,6 +4389,9 @@ class AsyncRoundDriver:
             try:
                 record = json.loads(path.read_text()) if path.exists() else self.judge_measurement(job)
             except BaseException as error:     # a failed held unit (SystemExit from Cycle.wait) is retried
+                if self.held_v3_pending() is None:  # dropped meanwhile (drop_off_lineage): nothing to retry
+                    self.note(held_ended=job['candidate']['sha256'], why='its policy left the lineage')
+                    continue
                 self.note(held_failed=job['candidate']['sha256'], error=repr(error)[:300])
                 time.sleep(300)
                 self.held_wake.set()
@@ -4309,7 +4414,12 @@ class AsyncRoundDriver:
         return Path(data_registry.role_path('held-eval-semantic-fp'))
 
     def queue_held_v4(self, policy, reasons):
+        """Queue ``policy`` for held-v4 with ``reasons``; a policy no longer in the lineage (a rejected candidate, or
+        one a rollback dropped while its health report ran) is not measured."""
         if not reasons:
+            return
+        if not self.controller.in_lineage(policy['sha256']):
+            self.note(held_v4_skipped=policy['sha256'], reasons=reasons, why='not in the lineage')
             return
         entry = self.held_v4.add(policy, reasons)
         self.note(held_v4_queued=policy['sha256'], reasons=entry['reasons'])
@@ -4321,15 +4431,33 @@ class AsyncRoundDriver:
         job = self.held_v4.next()
         if not job:
             return
-        out = self.root / 'held-v4' / f'hv4-{job["sha256"][:12]}'
+        sha = job['sha256']
+        # the lineage decides, whatever the queue holds (the queue lives in this process: a hand edit of queue.json
+        # under a running driver is overwritten at its next save; 2026-11-24 20:53 r6 was measured again after its
+        # entry was removed on disk): a policy that left it is dropped here, before and after every attempt
+        if not self.controller.in_lineage(sha):
+            self.drop_off_lineage()
+            return
+        out = self.root / 'held-v4' / f'hv4-{sha[:12]}'
         with self.POP_LOCK:                 # a Pop collection serve finishes first; pop_held_measure stops its collector
+            # a held-v3 job that becomes due stops it (resumed later); a rollback that drops its policy ends it
             state = pop_held_measure(out, job['checkpoint'], pin=self.c.held_pin, samples=self.a.held_v4_samples,
                                      manifest=self.held_v4_manifest(),
-                                     preempt=lambda: self.held_v3_pending() is not None)
-        if state == 'preempted':
-            self.note(held_v4_preempted=job['sha256'])
+                                     preempt=lambda: self.held_v3_pending() is not None or not self.held_v4.pending(sha))
+        if not self.held_v4.pending(sha):
+            import pop_rl_actor
+            self.note(held_v4_stopped=sha, why='its policy left the lineage',
+                      pop_actor_stopped=pop_rl_actor.stop_pop_actor_serving(sha))
+            return
+        if state in ('preempted', 'busy'):
+            self.note(held_v4_preempted=sha, why=state)
+            if state == 'busy':
+                time.sleep(300)
             return
         if state != 'complete':
+            if not self.controller.in_lineage(sha):       # left the lineage during the attempt: never retried
+                self.drop_off_lineage()
+                return
             attempts = self.held_v4.attempt(job['sha256'])
             self.note(held_v4_incomplete=job['sha256'], attempts=attempts, out=str(out))
             if attempts >= 3:
@@ -4421,6 +4549,25 @@ class AsyncRoundDriver:
             self.note(round=round_dir.name, health_failed=repr(error)[:300])
             return None
 
+    def drop_off_lineage(self):
+        """Work for policies no longer in the lineage ends (a rollback or phase switch dropped them): pending held-v4
+        entries close as 'dropped' (a running held-v4 measurement of one stops at its next preempt poll and stops Pop's
+        actor), and a held-v3 measurement of a dropped candidate is cancelled with its DGX or Pop units. Collections,
+        prepared rounds and remote actors follow the lineage head at the round's start (``ensure_collection``,
+        ``ensure_remote_collection``, the prepared-round check). 2026-11-24 19:12: a rollback to round 1 left rounds 3
+        and 6 queued for held-v4 and round 6 measuring on Pop for 1.5 h."""
+        import pop_rl_actor
+        with self.lock:
+            keep = {p['sha256'] for p in self.controller.state['lineage']}
+            job = self.controller.drop_measurement_off_lineage()
+        for entry in self.held_v4.prune(keep, 'its policy left the lineage'):
+            self.note(held_v4_dropped=entry['sha256'], reasons=entry['reasons'])
+        if job:
+            self.c.cancel_held(self.held_name(job['candidate']))
+            self.note(held_dropped=job['candidate']['sha256'], why='its policy left the lineage',
+                      pop_actor_stopped=pop_rl_actor.stop_pop_actor_serving(job['candidate']['sha256']))
+        self.held_wake.set()
+
     def apply_verdicts(self):
         """Apply finished verdicts in the main loop: adoption, rollback, phase switch; a failure leaves a bug-hunt note
         (``bug-hunt-<sha12>.json``) for the supervisor; a success promotes the policy to lfm-latest."""
@@ -4444,6 +4591,8 @@ class AsyncRoundDriver:
                 promote_policy(self.c, record['checkpoint'], record['sha256'], label=f'{self.a.name}',
                                why=f'{self.a.name}: held success {json.dumps(record["vs_start"])}',
                                unit=f'{self.a.name}-promote-{record["sha256"][:8]}')
+        if pending:
+            self.drop_off_lineage()
 
     # -- the loop -----------------------------------------------------------------------------------------------------
     def round_dir(self, round_id):
@@ -4454,6 +4603,7 @@ class AsyncRoundDriver:
         self.c.require_data_readers()
         self.record_reader_sources()
         self.c.pin_stage()
+        self.drop_off_lineage()         # a lineage an earlier driver changed: nothing measures its dropped policies
         threading.Thread(target=self.held_loop, daemon=True).start()
         self.held_wake.set()
         if self.pop_target() is not None:

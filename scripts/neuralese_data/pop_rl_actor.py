@@ -76,6 +76,8 @@ RL_PORT = 18531
 # Pop ledger admission bound of an actor unit; the ssh that waits on it gets this plus a margin (a 600 s ssh timeout
 # under a 900 s admission ended sft-v7's candidate held, 2026-11-21).
 POP_ADMISSION_WAIT = 900
+# seconds a Pop actor unit gets to stop: pop_actor_driver waits 90 s for its engine before killing it
+POP_ACTOR_STOP_SECONDS = 120
 STATE = ROOT / 'rl-actor.json'
 EXPORT_FORMAT = 'native-pop-rtx4060-bf16'
 SGLANG_EXPORT_FORMAT = 'sglang-pop-rtx4060-bf16-vendor-projection'
@@ -846,7 +848,9 @@ def pop_containers():
 def stop_unit(state):
     unit = state.get('unit')
     if unit:
-        ssh(shlex.join(['systemctl', '--user', 'stop', unit + '.service']), check=False, timeout=120)
+        # systemctl stop returns once the unit stopped: up to its TimeoutStopSec (POP_ACTOR_STOP_SECONDS + 30)
+        ssh(shlex.join(['systemctl', '--user', 'stop', unit + '.service']), check=False,
+            timeout=POP_ACTOR_STOP_SECONDS + 90)
         for _ in range(30):
             if pop_unit_state(unit).get('ActiveState') in ('inactive', 'failed', None):
                 break
@@ -951,7 +955,8 @@ def start(args):
     cap = ['--host-max-gb', str(SGLANG_MEMORY_GB - .5)] if args.engine == 'sglang' else []
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
                         '--budget-gb', budget, *cap, '--reserve-gb', str(POP_RESERVE_GB),
-                        '--class', 'experiment', '--no-resumable', '--wait', str(POP_ADMISSION_WAIT), *container, '--workdir', work, '--',
+                        '--class', 'experiment', '--no-resumable', '--stop-seconds', str(POP_ACTOR_STOP_SECONDS),
+                        '--wait', str(POP_ADMISSION_WAIT), *container, '--workdir', work, '--',
                         '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']), timeout=POP_ADMISSION_WAIT + 300)
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': source, 'work': work, 'runtime': runtime,
               'engine': args.engine, **({'sglang': sglang} if args.engine == 'sglang' else {}),
@@ -1041,14 +1046,49 @@ def pop_serve_lock(blocking=True):
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def pop_held_units(pattern='*popheld*'):
+def pop_held_units(pattern='*popheld*', *, queued=True):
     """DGX units of a Pop held measurement, running or waiting for admission: ``popheld-<OUT>-<t>`` (pop-held.sh's
     measure unit, with its ledger ``-waiter``) and grpo's ``<prefix>-popheld-<step>-<t>`` (``held-eval`` jobs). They
     outlive the process that started them: a driver restart kills ``pop-held.sh`` but its measure unit runs on
-    (2026-11-24: the Pop loop then served Pop for collection and failed round 1's held at 279 episodes)."""
+    (2026-11-24: the Pop loop then served Pop for collection and failed round 1's held at 279 episodes).
+
+    ``queued`` (default) adds the ones the DGX ledger holds without a running unit: waiting for admission, or
+    preempted and requeued (2026-11-24: ``popheld-hv4-85e61f04241e-1795538339``, preempted at 18:52, was relaunched by
+    the ledger at 19:13 beside the new measurement a restarted driver had started on the same episodes)."""
     out = subprocess.run(['systemctl', '--user', 'list-units', pattern, '--state=active,activating', '--plain',
                           '--no-legend'], capture_output=True, text=True).stdout
-    return [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
+    units = [line.split()[0].removesuffix('.service') for line in out.splitlines() if line.strip()]
+    if queued:
+        units += [u for u in ledger_owned(pattern) if u not in units]
+    return units
+
+
+def ledger_owned(pattern):
+    """DGX ledger units matching ``pattern`` (fnmatch, without ``.service``) that it admitted, waits on or requeued.
+    An unreadable ledger answers nothing (the systemd view above still holds the running ones)."""
+    import fnmatch
+    try:
+        from scripts.memory_ledger import owned_units
+        owned = owned_units()
+    except Exception:
+        return []
+    names = sorted(u.removesuffix('.service') for u in owned)
+    return [u for u in names if fnmatch.fnmatchcase(u, pattern.removesuffix('.service'))
+            and not u.endswith('-waiter')]
+
+
+def stop_pop_actor_serving(policy):
+    """Stop Pop's actor when it serves ``policy`` (``STATE``): a measurement stopped for good (its policy left the
+    lineage) takes its actor with it (2026-11-24: Pop's ``held-actor-85e61f04241e`` served a dropped policy for 1.5 h
+    after its measurement units were stopped). Returns whether it stopped one; a serve in progress is left alone."""
+    state = read_json(STATE) or {}
+    if not policy or state.get('policy_id') != policy:
+        return False
+    with pop_serve_lock(blocking=False) as free:
+        if not free:
+            return False
+        stop()
+    return True
 
 
 def held_measure_pids(address, proc=Path('/proc')):
@@ -1624,15 +1664,47 @@ def remote_learner_state(host, remote_run):
     return ssh_host(host, _learner_probe(remote_run), timeout=60).strip()
 
 
+BOOT_ID = '/proc/sys/kernel/random/boot_id'
+# run_detached's answer when the session it ran on was replaced (another VM answers, the keeper requested a new
+# session, or the host key changed): the learner is gone with its VM, so the caller hands the work on at once
+SESSION_LOST_RC = 75
+HOST_KEY_CHANGED = ('REMOTE HOST IDENTIFICATION HAS CHANGED', 'Host key verification failed')
+
+
+def _session_probe(host, remote_run):
+    """(learner state as ``remote_learner_state``, the VM's boot id or None)."""
+    lines = [line.strip() for line in ssh_host(host, f'{_learner_probe(remote_run)}; cat {BOOT_ID} 2>/dev/null || true',
+                                                timeout=60).splitlines() if line.strip()]
+    return (lines[0] if lines else 'none'), (lines[1] if len(lines) > 1 else None)
+
+
+def keeper_replaced_since(host, since, root=None):
+    """Why the session keeper gave up ``host``'s session after ``since`` (it requested a replacement: the session went
+    missing, changed hardware or stayed unreachable), else None. Reads the keepers' state files
+    (``scripts/colab/session_keeper.py``: ``alias``, ``last_request_try``; the default state file is alias
+    ``colab-g4``'s)."""
+    root = Path(root) if root is not None else W / 'ops/ei/colab'
+    for path in sorted(root.glob('session-keeper*.json')):
+        state = read_json(path) or {}
+        alias = state.get('alias') or ('colab-g4' if path.name == 'session-keeper.json' else None)
+        if alias == host and float(state.get('last_request_try') or 0) > since:
+            return f'the session keeper requested a new session at {state["last_request_try"]:.0f} ({path.name})'
+    return None
+
+
 def run_detached(host, cfg, remote_run, command, *, poll_seconds=30, away_seconds=1800):
     """Run ``command`` on ``host`` detached from the SSH connection (``setsid nohup``: a dropped ``colab ssh`` link
     used to kill the learner through its stdout pipe) and wait for its exit status; a learner of this run still alive
     from an earlier call is waited for instead of a second one started, and one that already finished with status 0
-    is not run again. Output goes to REMOTE_RUN/learner.log. Returns the exit status, or None when the host stayed
-    unreachable ``away_seconds`` (the learner may still run)."""
+    is not run again. Output goes to REMOTE_RUN/learner.log. Returns the exit status, None when the host stayed
+    unreachable ``away_seconds`` (the learner may still run), or ``SESSION_LOST_RC`` as soon as the session is known
+    to be replaced: another VM answers (boot id), the host key changed, or the session keeper requested a new session
+    (2026-11-24: the A100 vanished at ~18:15, the keeper knew at 18:16; this wait went on until the L4 answered at
+    18:27)."""
     pid_file, rc_file, log_file = (f'{remote_run}/learner.pid', f'{remote_run}/learner.rc', f'{remote_run}/learner.log')
     q = shlex.quote
-    state = remote_learner_state(host, remote_run)
+    started = time.time()
+    state, boot = _session_probe(host, remote_run)
     if state == 'rc 0':
         log(event='Colab learner already finished', host=host, remote_run=remote_run)
         return 0
@@ -1646,17 +1718,29 @@ def run_detached(host, cfg, remote_run, command, *, poll_seconds=30, away_second
     else:
         log(event='Colab learner already running: waiting for it', host=host, remote_run=remote_run)
     last_seen = time.time()
+
+    def lost(why):
+        log(event='Colab session replaced: the learner is gone with its VM', host=host, remote_run=remote_run,
+            why=why[:300])
+        return SESSION_LOST_RC
     while True:
         time.sleep(poll_seconds)
+        replaced = keeper_replaced_since(host, started)
+        if replaced:
+            return lost(replaced)
         try:
-            state = remote_learner_state(host, remote_run)
+            state, now_boot = _session_probe(host, remote_run)
         except (RuntimeError, subprocess.TimeoutExpired) as error:
+            if any(marker in str(error) for marker in HOST_KEY_CHANGED):
+                return lost(f'the host key of {host} changed')
             if time.time() - last_seen >= away_seconds:
                 log(event='Colab learner unreachable', host=host, seconds=round(time.time() - last_seen),
                     error=repr(error)[:200])
                 return None
             continue
         last_seen = time.time()
+        if boot and now_boot and now_boot != boot:
+            return lost(f'another VM answers as {host} (boot id {now_boot[:8]}, was {boot[:8]})')
         if state.startswith('rc '):
             return int(state.split()[1] or 1)
         if state == 'none':          # neither running nor finished: killed with its whole group (preemption)
@@ -2021,7 +2105,9 @@ def run_remote_sft(args):
         # the latest learner state, so the DGX can resume a failed or preempted run; a finished round needs only its
         # factors (the state's one use is a resume), so the 2 GB state no longer delays them
         try:
-            if rc != 0:
+            if rc == SESSION_LOST_RC:   # the VM is gone: the DGX resumes the last state it pulled
+                log(event='Colab SFT session lost: no post-run pull', host=host)
+            elif rc != 0:
                 pull_state(3)
             else:     # the logs only (no lock: an in-flight periodic state pull must not hold up the factors)
                 for name, local_name in (('train.jsonl', 'train.jsonl'), ('learner.log', 'train.log')):
@@ -2073,7 +2159,7 @@ def run_remote_sft(args):
                 rc = 1
                 log(event='Colab SFT checkpoint pull failed', host=host, error=repr(err)[:300])
     timings.update(train_seconds=round(trained - started, 1), pull_seconds=round(time.time() - trained, 1))
-    if yielded:
+    if yielded and rc != SESSION_LOST_RC:     # a replaced session's actor is the keeper's to serve again
         t = time.time()
         restore_colab_actor(yielded)
         timings['actor_restore_seconds'] = round(time.time() - t, 1)
@@ -2130,9 +2216,12 @@ def _serve_pop(args):
     # Pop's 15 GB leave 10.9-11.5 GiB admissible (10.9 with the gdm greeter and slab after a desktop logout,
     # 2026-11-19: 10.5 + the 0.5 reserve waited out its admission). The engine runs in a docker container capped by
     # its own --memory, so this unit's budget is accounting for the driver, not the engine's limit.
+    # --stop-seconds: a stop gives the driver the 90 s it waits for its engine's process group before systemd kills
+    # the unit (the default 60 s TimeoutStopSec cut it: 2026-11-24 18:55 'stop-sigterm timed out')
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
                     '--budget-gb', pop_sglang_budget_gb(), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
-                    '--no-resumable', '--wait', str(POP_ADMISSION_WAIT), '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']),
+                    '--no-resumable', '--stop-seconds', str(POP_ACTOR_STOP_SECONDS),
+                    '--wait', str(POP_ADMISSION_WAIT), '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']),
         timeout=POP_ADMISSION_WAIT + 300)
     result = {'endpoint': endpoint, 'unit': unit, 'container': name, 'policy_id': sha, 'work': work, 'runtime': runtime,
               'code': commit, 'engine': 'sglang', 'sglang': sglang, 'copy_seconds': round(copied - started, 1),

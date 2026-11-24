@@ -413,10 +413,27 @@ def attest_sglang_source(python, fork, pythonpath=''):
               # online FP8 weights run in LFM3's natlang projection paths and reload in place (collection profile)
               'fp8_weights': lfm3.is_file() and 'NATLANG_FP8_WEIGHTS = True' in lfm3.read_text(),
               # grammars (structural_tag) under --skip-tokenizer-init, continued across requests (natlang_grammar_prefix)
-              'grammar_prefix': params.is_file() and 'NATLANG_GRAMMAR_PREFIX = True' in params.read_text()}
+              'grammar_prefix': params.is_file() and 'NATLANG_GRAMMAR_PREFIX = True' in params.read_text(),
+              # decode graph variants at one batch size share their attention wrappers (adapter slots replay safely)
+              'shared_graph_wrappers': params.is_file() and 'NATLANG_SHARED_GRAPH_WRAPPERS = True' in params.read_text()}
     if actual != declared or dirty:
         print(json.dumps({'event': 'sglang_fork_differs_from_declared', **record}), file=sys.stderr, flush=True)
     return record
+
+
+def adapter_slots_on_fork(args, source):
+    """No adapter slots on a fork whose adapted decode graph reads a freed attention plan (CUDA illegal memory access or
+    wrong attention in adapted decode, 2026-11-24): before NATLANG_SHARED_GRAPH_WRAPPERS the "lora" decode graph was
+    captured against FlashInfer wrappers that the "nolora" capture replaced. Adapted turns then run on the native engine
+    (exact, slower). NATLANG_SGLANG_ADAPTER_SLOTS_ANY_FORK=1 opts out."""
+    import os
+    if (args.sglang_adapter_slots and not source.get('shared_graph_wrappers')
+            and os.environ.get('NATLANG_SGLANG_ADAPTER_SLOTS_ANY_FORK') != '1'):
+        print(json.dumps({'event': 'sglang_adapter_slots_disabled', 'requested': args.sglang_adapter_slots,
+                          'reason': 'fork lacks NATLANG_SHARED_GRAPH_WRAPPERS (adapted decode graph reads a freed plan)',
+                          'package': source.get('package')}), file=sys.stderr, flush=True)
+        args.sglang_adapter_slots = 0
+    return args.sglang_adapter_slots
 
 
 FP8_MIN_CAPABILITY = (8, 9)   # FP8 tensor-core GEMM: Ada (sm_89), Hopper, Blackwell (GB10 sm_121); not A100 (sm_80)
@@ -573,6 +590,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
         # the store refuses. Not a commit gate: a missing capability.
         raise RuntimeError(f"the SGLang fork at {source['package']} predates native-state file handoff "
                            f"(NATLANG_NATIVE_STATE_FILES): move it to the declared commit {fork.get('commit')}")
+    adapter_slots_on_fork(args, source)
     # A transported model-only view (Pop) exports under the training checkpoint's identity, which the front attests.
     export_dir = args.hf_export_dir or ((args.store_dir or checkpoint.parent) / 'sglang-hf' / engine.checkpoint_sha256[:16])
     manifest = export_loaded(engine.shared_model, engine.tokenizer, engine.role_tokens, engine.model_config,

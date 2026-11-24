@@ -191,7 +191,7 @@ def test_held_v4_runs_only_while_no_held_v3_job_waits_and_yields_to_one(tmp_path
     ei, d = _driver(tmp_path, monkeypatch)
     calls = []
 
-    def measure(out, checkpoint, *, pin, samples, manifest, preempt=None, poll=30):
+    def measure(out, checkpoint, *, pin, samples, manifest=None, preempt=None, poll=30):
         calls.append((Path(out).name, samples, preempt()))
         if preempt():
             return 'preempted'
@@ -200,16 +200,90 @@ def test_held_v4_runs_only_while_no_held_v3_job_waits_and_yields_to_one(tmp_path
         return 'complete'
     monkeypatch.setattr(ei, 'pop_held_measure', measure)
     monkeypatch.setattr(d, 'held_v4_manifest', lambda: Path('/held-v4/manifest.json'))
-    d.queue_held_v4({'sha256': '1' * 64, 'checkpoint': '/a.pt'}, ['every-3:round-3'])
+    cur = d.controller.current
+    d.queue_held_v4(cur, ['every-3:round-3'])
     # a held-v3 job is due: held-v4 yields (the measurement stops and stays queued)
     d.controller.state['measuring'] = {'candidate': {'sha256': '9' * 64}, 'reference': {}}
     d.held_v4_step()
-    assert calls == [('hv4-111111111111', 2, True)] and d.held_v4.next()['sha256'] == '1' * 64
+    assert calls == [(f'hv4-{cur["sha256"][:12]}', 2, True)] and d.held_v4.next()['sha256'] == cur['sha256']
     d.held_done.add('9' * 64)                     # the held-v3 job finished
     d.held_v4_step()
     assert d.held_v4.next() is None
-    record = json.loads((d.root / 'held-v4' / 'hv4-111111111111' / 'record.json').read_text())
+    record = json.loads((d.root / 'held-v4' / f'hv4-{cur["sha256"][:12]}' / 'record.json').read_text())
     assert record['result']['success_rate'] == 0.4 and record['reasons'] == ['every-3:round-3']
+
+
+def _published(d, n):
+    """``n`` published rounds on top of the driver's lineage: [(sha, checkpoint)]."""
+    out = []
+    for i in range(1, n + 1):
+        sha = f'{i:x}' * 64
+        rid = d.controller.begin_round(d.controller.current['sha256'])
+        d.controller.record_round_published(rid, f'/r{i}.pt', sha[:64], base_sha256=d.controller.current['sha256'])
+        out.append({'sha256': sha[:64], 'checkpoint': f'/r{i}.pt'})
+    return out
+
+
+def test_a_rollback_drops_held_work_of_policies_that_left_the_lineage(tmp_path, monkeypatch):
+    """2026-11-24 19:12: a neutral verdict rolled the lineage back from round 7 to round 1; held-v4 entries of rounds
+    3 and 6 stayed pending and round 6's held-v4 kept measuring on Pop for 1.5 h. A lineage change closes pending
+    held-v4 entries of dropped policies, cancels a held-v3 measurement of a dropped candidate (its units included),
+    and a dropped policy is not queued again."""
+    import pop_rl_actor
+    ei, d = _driver(tmp_path, monkeypatch)
+    rounds = _published(d, 3)
+    d.queue_held_v4(rounds[0], ['every-1:round-1'])
+    d.queue_held_v4(rounds[2], ['every-1:round-3'])
+    d.controller.state['measuring'] = {'candidate': rounds[2], 'reference': d.controller.state['reference_policy']}
+    stopped, actors = [], []
+    monkeypatch.setattr(d.c, 'stop_unit', lambda unit: stopped.append(unit))
+    monkeypatch.setattr(ei, 'stop_pop_held_units', lambda out: stopped.append(f'pop:{Path(out).name}'))
+    monkeypatch.setattr(pop_rl_actor, 'stop_pop_actor_serving', lambda sha: actors.append(sha) or True)
+    # the lineage returns to round 1 (a rollback to the reference adopted there)
+    d.controller.state['lineage'] = d.controller.state['lineage'][:2]
+    d.drop_off_lineage()
+    assert d.held_v4.next()['sha256'] == rounds[0]['sha256']
+    dropped = [e for e in d.held_v4.entries if e['state'] == 'dropped']
+    assert [e['sha256'] for e in dropped] == [rounds[2]['sha256']]
+    assert d.controller.state['measuring'] is None and d.held_v3_pending() is None
+    name = f'policy-{rounds[2]["sha256"][:12]}'
+    assert name in d.c.held_cancelled and f'aei-held-{name}' in stopped and f'pop:{name}' in stopped
+    assert actors == [rounds[2]['sha256']]
+    d.queue_held_v4(rounds[2], ['significant:failure'])          # a dropped policy is not measured
+    assert not d.held_v4.pending(rounds[2]['sha256'])
+    # a cancelled DGX held measurement is not launched (or relaunched)
+    launched = []
+    monkeypatch.setattr(d.c, 'ledger', lambda *a, **kw: launched.append(a))
+    monkeypatch.setattr(d.c, 'held_measuring', lambda out: False)
+    monkeypatch.setattr(d.c, 'reuse_held', lambda out, ckpt: False)
+    monkeypatch.setattr(ei, 'held_budget_gb', lambda slots: 1)
+    monkeypatch.setattr(d.c, 'record_cost', lambda *a, **kw: None)
+    import natlang_neuralese.common.hashing as hashing
+    monkeypatch.setattr(hashing, 'sha256_file_hex_cached', lambda p: rounds[2]['sha256'])
+    d.c.dgx_held(name, '/r3.pt')
+    assert launched == []
+
+
+def test_a_running_held_v4_measurement_stops_when_its_policy_leaves_the_lineage(tmp_path, monkeypatch):
+    import pop_rl_actor
+    ei, d = _driver(tmp_path, monkeypatch)
+    (r1,) = _published(d, 1)
+    d.queue_held_v4(r1, ['every-1:round-1'])
+    actors = []
+    monkeypatch.setattr(pop_rl_actor, 'stop_pop_actor_serving', lambda sha: actors.append(sha) or True)
+    monkeypatch.setattr(d, 'held_v4_manifest', lambda: Path('/held-v4/manifest.json'))
+
+    def measure(out, checkpoint, *, pin, samples, manifest=None, preempt=None, poll=30):
+        assert not preempt()
+        d.controller.state['lineage'] = d.controller.state['lineage'][:1]     # a rollback meanwhile
+        d.drop_off_lineage()
+        assert preempt()                                                      # the poll stops it
+        return 'preempted'
+    monkeypatch.setattr(ei, 'pop_held_measure', measure)
+    d.held_v4_step()
+    assert actors == [r1['sha256']] and d.held_v4.next() is None
+    log = [json.loads(line) for line in (d.root / 'drive.log').read_text().splitlines()]
+    assert any(e.get('held_v4_stopped') == r1['sha256'] and e.get('pop_actor_stopped') for e in log)
 
 
 def test_a_rounds_health_report_is_written_logged_alerted_and_queues_held_v4_on_sfp(tmp_path, monkeypatch):
@@ -264,3 +338,27 @@ def test_earlier_collections_come_only_from_caches_and_a_finished_collection_clo
     shutil.rmtree(prev / 'groups')                       # v2's cache was closed: a later report reads none of it
     again = ch.report([now], [], [prev, old], cache_dir=cache, sfp=SFP, earlier_cached_only=True)
     assert again['earlier']['overall']['scored'] == 16 and again['collections']['uncached'] == []
+
+
+def test_an_incomplete_held_v4_attempt_of_a_policy_off_the_lineage_is_never_retried(tmp_path, monkeypatch):
+    """2026-11-24 20:53: r6's entry, removed from queue.json on disk, was still pending in the running driver's memory;
+    it was measured again and, stopped by hand, logged attempt 2 and stayed due. The lineage decides: an entry whose
+    policy left it is dropped before an attempt, and after an incomplete one, never retried."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    (r1,) = _published(d, 1)
+    d.queue_held_v4(r1, ['every-1:round-1'])
+    monkeypatch.setattr(d, 'held_v4_manifest', lambda: Path('/held-v4/manifest.json'))
+    calls = []
+
+    def measure(out, checkpoint, *, pin, samples, manifest=None, preempt=None, poll=30):
+        calls.append(1)
+        d.controller.state['lineage'] = d.controller.state['lineage'][:1]     # rolled back, nothing pruned yet
+        return 'incomplete'
+    monkeypatch.setattr(ei, 'pop_held_measure', measure)
+    d.held_v4_step()
+    assert calls == [1] and d.held_v4.next() is None
+    assert [e['state'] for e in d.held_v4.entries] == ['dropped'] and d.held_v4.entries[0]['attempts'] == 0
+    # an entry in memory for a policy off the lineage (a hand-edited file does not reach it) is not measured
+    d.held_v4.entries.append({**d.held_v4.entries[0], 'state': 'pending'})
+    d.held_v4_step()
+    assert calls == [1] and d.held_v4.next() is None
