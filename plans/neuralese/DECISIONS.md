@@ -10631,3 +10631,36 @@ Tests: `tests/neuralese/test_async_train.py`. The r0003 sequence: prepared ahead
 snapshot, data recovered from its journal, only the build runs, round.json on v1/v0. Also: a restart in the
 snapshot wait waits on the recorded policy; exit records (success not rerun, failure rerun); a rolled-back record
 starts over.
+
+## 2026-11-24 05:55 Program tuning on the A100: a tenant's GPU fault killed aei1's actor under MPS; tenants leave MPS; state (program-tuning strand)
+
+- **Incident.** At 03:47:31 UTC T3's tenant (`runs/t3-score/sglang-keyed`: an SGLang measurement with adapted and
+  base requests in one prefill, the fork's open crash) hit a CUDA illegal memory access (kernel Xid 31). Under MPS
+  that ends every client of the server: aei1's actor engine got SIGKILL 5 s later. The actor record still named it,
+  so the keeper said "serves", and the A100 stood idle from 03:47 to 05:15 UTC+1. That cost aei1 about 1.5 h of A100
+  collection. The tenancy design coupled the failure domains, and the T3 job was the riskiest workload to run there.
+- **Fixes (defaults, tests; ff0f7d75e).**
+  - Tenants run outside MPS: their own CUDA context, compute mode Default, MPS pipe directory pointed at a path with
+    no daemon. They time-slice with the actor and fail alone. `NATLANG_COLAB_TENANT_MPS=1` (or `--mps-percent`) opts
+    back in.
+  - The keeper treats a recorded actor whose admission pid is gone on the VM as down and serves it again (10-min
+    spacing, never under a round).
+  - The actor was served again at 05:15 (policy 7cfc4774, r0002's publication).
+- **Throughput beside a tenant.** With the tenant measurement actor loading beside it (outside MPS), the actor
+  decoded 2.7-5.0k tok/s at 122-128 running, the same range as alone (2.7-6.0k). Fit steps beside it are not measured
+  yet.
+- **Other defects fixed (tests).**
+  - The fit store's scratch directory did not exist on the VM (2f73a2a2d).
+  - The SGLang slot rank: T3 found that a fit's rank was passed where the packed rank (48) was needed, so every
+    adapted turn went to the native engine (18e158961, every caller).
+  - The radix cache keyed without the adapter (9cf56138e).
+- **Cadence found.** Round SFTs now run about 40 min with about 25 min of actor time between them (r0002 ended 05:15,
+  r0003 started 05:41). Tenants get those windows only; fits and held_eval resume across evictions.
+- **Running (pin ff0f7d75e688; bank track at 0c53c23f9d96).**
+  - `progtune-colab-fits`: searchqa, multihop, iterate, pubmed, retail, tree, tally, verdict.
+  - `progtune-colab-arms`: the dev64 base arm on 9 programs (route partial: 37/40 scored pass), then each program's
+    adapter arm and `compare`.
+  - `progtune-colab-bank`: the PCA bank (`--steps 0`) over 7 meta-train fits, held tree and retail, their bank arms
+    vs base, once the fits are home.
+  - The DGX chain is stopped (coordinator: no program-tuning DGX unit above 8 GB); measurement collectors run at 6 GB.
+- **Credits.** 196.21 CU at 00:32, 148.85 at 05:54 (8.88/h, the A100 assignment). Tenants add no Colab cost.
