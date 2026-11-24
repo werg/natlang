@@ -279,6 +279,11 @@ PROVIDER_FAILURE = 'provider request retry exhausted'
 # teacher is retired for this launch instead of deferring task after task (an hour-long cooldown still wakes 8 slots)
 PERMANENT_PROVIDER_FAILURES = ('credit balance is too low', 'insufficient_quota', 'exceeded your current quota',
                                'Insufficient balance')   # the last: Z.ai code 1113, OpenCode Zen 402
+# a provider refusing further requests for a time window (a subscription's usage limit). Unlike a refused account it
+# passes, so the teacher cools down instead of retiring; and it can hit a nested child call mid-episode, after which the
+# teacher's root answers "failed" or a wrong value: that is the provider's verdict, not the teacher's, so an episode
+# whose logs carry it and that did not succeed is no verdict (deferred and retried)
+TEMPORARY_PROVIDER_LIMITS = ('You have hit your ChatGPT usage limit',)
 # decide() collection needs the actor's exact native capture, which a hosted teacher endpoint does not give
 UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 
@@ -513,6 +518,8 @@ class Generator:
         retries (e.g. a 429 mid-episode; a model-call budget stop is the teacher's own verdict): the provider failed (rate limit, outage), not the teacher. Such a record is no teacher verdict; it goes to deferred.jsonl and the task is retried.
         A harness infrastructure error (e.g. the collector's record digest failing while ts-host/dist is rebuilt) is
         no verdict either: it would count against the teacher's family yield and use up one of the task's --attempts."""
+        if record.get('provider_limited') and not any(e['outcome'] == 'task_success' for e in record['episodes']):
+            return True
         return 'unsupported' not in record and all(
             e['outcome'] == 'infrastructure_error' or (e['outcome'] == 'unresolved' and e['turns'] == 0)
             for e in record['episodes'])
@@ -651,6 +658,8 @@ class Generator:
                   'rollouts': str(directory / 'rollouts.jsonl')}
         logs = ''.join(path.read_text(errors='replace') for path in directory.glob('*.log'))
         record['provider_failure'] = PROVIDER_FAILURE in logs
+        if any(limit in logs for limit in TEMPORARY_PROVIDER_LIMITS):
+            record['provider_limited'] = True
         if UNSUPPORTED_DECIDE in logs:   # a deterministic harness limit, not a provider failure: recorded, never retried
             record['unsupported'] = 'decide-native-capture'
         with self.lock:
@@ -663,7 +672,8 @@ class Generator:
                 self.attempts[index] = self.attempts.get(index, 0) + 1
                 with (self.work / 'deferred.jsonl').open('a') as handle:
                     handle.write(json.dumps({**record, 'attempt': self.attempts[index]}) + '\n')
-                provider = record.get('provider_failure') or any(e['outcome'] == 'unresolved' for e in record['episodes'])
+                provider = (record.get('provider_failure') or record.get('provider_limited')
+                            or any(e['outcome'] == 'unresolved' for e in record['episodes']))
                 if provider and not refusal:   # the harness failing is no reason to back the teacher off
                     teacher.failures += 1
                     teacher.cool_until = max(teacher.cool_until, time.time() + min(
