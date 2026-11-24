@@ -2608,6 +2608,7 @@ def test_the_dgx_collection_runs_192_slots_and_claims_its_measured_size(tmp_path
     ei, d = _driver(tmp_path, monkeypatch, argv=['--fill', str(tmp_path / 'fill')])
     assert d.a.slots == ei.DGX_COLLECT_SLOTS == 192 and d.c.max_running() == 224
     assert ei.dgx_collection_budget_gb(12, 192) == 70 and ei.dgx_collection_budget_gb(12, 128) == 58
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')    # not the live driver's prep claims
     launched = []
     monkeypatch.setattr(d.c, 'present', lambda unit: False)
     monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(start=lambda: None))
