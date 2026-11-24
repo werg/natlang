@@ -453,3 +453,31 @@ def test_colab_fit_refuses_a_program_another_session_claimed(tmp_path):
         raise AssertionError('a program claimed by another session must not be fitted twice')
     except SystemExit as stop:
         assert 'claimed by colab-g4' in str(stop)
+
+
+def test_a_merged_release_equals_its_summed_free_lora_stack():
+    """`merge`: a stack of free-LoRA artifacts becomes one factor pair per backbone target whose product is the sum of
+    each artifact's scale x alpha / rank x B @ A, and the learner's merge applies it to the base weight."""
+    import types
+    import torch
+    from natlang_neuralese.train.lfm3_learner import merge_policy_state
+    g = torch.Generator().manual_seed(0)
+    name = 'port.hf.model.layers.0.conv.in_proj.weight'
+
+    def artifact(rank, alpha):
+        B, A = torch.randn(6, rank, generator=g), torch.randn(rank, 4, generator=g)
+        record = types.SimpleNamespace(kind='adapter-coefficients', tensors={'lora_B.' + name: B, 'lora_A.' + name: A},
+                                       provenance={'adapter_spec': {'kind': 'free-lora', 'alpha': alpha,
+                                                                    'parameter_names': [name]}})
+        return record, (alpha / rank) * B @ A
+    (one, d1), (two, d2) = artifact(2, 4.0), artifact(3, 3.0)
+    tensors, scales, specs = P.merged_factors({'a': one, 'b': two}, [('a', 1.0), ('b', 0.5)])
+    key = 'model.layers.0.conv.in_proj.weight'
+    assert set(scales) == {key} and len(specs) == 2
+    assert torch.allclose(tensors[f'lora_B.{key}'] @ tensors[f'lora_A.{key}'], d1 + 0.5 * d2, atol=1e-5)
+    base = torch.randn(6, 4, generator=g)
+    state = {'backbone_state': {key: base, 'model.embed_tokens.weight': torch.zeros(2, 4)}}
+    backbone, _, _ = merge_policy_state(state, tensors, scales, dtype=torch.float32)
+    assert torch.allclose(backbone[key], base + d1 + 0.5 * d2, atol=1e-5)
+    with pytest.raises(SystemExit):
+        P.merged_factors({'a': one}, [('missing', 1.0)])

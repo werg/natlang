@@ -722,6 +722,90 @@ def colab_bank(args):
     return 0
 
 
+def merge_release(args):
+    """DIR's fit release (or --release) merged into its start checkpoint: OUT/checkpoint.pt (default DIR/fit/merged),
+    a plain native checkpoint any engine serves without adapter slots, and OUT/merged.json (identity and how much of
+    the delta survives the checkpoint's precision). The merge is the learner's (``lfm3_learner.merge_policy_state``:
+    ``W = bf16(fp32(W0) + s * B @ A)``); a stack of several artifacts on one target is summed (B concatenated, scaled).
+    Why: SGLang's adapter slots crash (CUDA illegal memory access) above 2 concurrent adapted requests and their parity is
+    unverified (DECISIONS 2026-11-24 05:10 T3), so an adapter arm measured on slots is not trustworthy yet."""
+    import torch
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    from natlang_neuralese.train.learner_state import _write_merged
+    from natlang_neuralese.train.lfm3_learner import merge_policy_state
+    from natlang_neuralese.tune.stack_export import load_artifacts
+    directory = Path(args.dir)
+    release = Path(args.release) if args.release else directory / 'fit' / 'release'
+    out = Path(args.out) if args.out else directory / 'fit' / 'merged'
+    plan = json.loads((directory / 'fit' / 'plan.json').read_text())
+    base_path = Path(plan['engine']['checkpoint'])
+    base_sha = plan['manifest']['base']['checkpoint_sha256']
+    result = json.loads((release / 'result.json').read_text())
+    if result.get('softStates'):
+        raise SystemExit(f'{release}: soft states do not merge into weights')
+    artifacts = load_artifacts(release / 'artifacts')
+    tensors, scales, specs = merged_factors(artifacts, [(item['artifact'], args.scale) for item in result['artifacts']])
+    if sha256_file(base_path) != base_sha:
+        raise SystemExit(f'{base_path} is not the plan\'s start checkpoint {base_sha[:12]}')
+    state = CheckpointPolicy.load(base_path)
+    backbone, interface, changed = merge_policy_state(state, tensors, scales)
+    retained = {}
+    original = state['backbone_state']
+    for name in scales:
+        delta = float(scales[name]) * (tensors[f'lora_B.{name}'].float() @ tensors[f'lora_A.{name}'].float())
+        served = backbone[name].float() - original[name].to(torch.bfloat16).float()
+        retained[name] = (float(delta.norm()), float(served.norm()),
+                          float(torch.nn.functional.cosine_similarity(delta.flatten(), served.flatten(), dim=0)))
+    norm = sum(d * d for d, _, _ in retained.values()) ** .5
+    stats = {'targets': len(retained), 'delta_norm': norm,
+             'served_over_delta_norm': (sum(s * s for _, s, _ in retained.values()) ** .5) / norm if norm else None,
+             'min_cosine': min((c for _, _, c in retained.values()), default=None),
+             'mean_cosine': sum(c for _, _, c in retained.values()) / max(1, len(retained)), 'changed_elements': changed}
+    effective = canonical_json_sha256_hex({'base': base_sha, 'release': sha256_file(release / 'result.json'),
+                                           'scale': args.scale})
+    out.mkdir(parents=True, exist_ok=True)
+    record = _write_merged(out / 'checkpoint.pt', state, backbone, interface, learner_step=int(state['step']),
+                           adapter_spec={'kind': 'program-release-merge', 'specs': specs}, effective_sha=effective,
+                           source={'training_checkpoint_sha256': base_sha,
+                                   'training_checkpoint_bytes': base_path.stat().st_size,
+                                   'release_result_sha256': sha256_file(release / 'result.json')})
+    merged = {'schema': 'natlang.program-merged/1', 'release': str(release), 'base_checkpoint_sha256': base_sha,
+              'scale': args.scale, **record, 'retention': stats}
+    (out / 'merged.json').write_text(json.dumps(merged, indent=1) + '\n')
+    print(json.dumps({'event': 'merged', 'dir': str(directory), 'checkpoint_sha256': record['checkpoint_sha256'],
+                      **stats}))
+    return 0
+
+
+def merged_factors(artifacts, stack):
+    """``merge_policy_state`` inputs for a runtime stack [(artifact id, scale)] of free-LoRA coefficient artifacts:
+    ``lora_A.<backbone name>`` / ``lora_B.<backbone name>`` (several artifacts on one target concatenated along the
+    rank, each B scaled by its stack scale x alpha / rank) and a scale of 1 per target; the native target names
+    (``port.hf.<backbone name>``) map to the checkpoint's backbone names."""
+    import torch
+    parts, specs = {}, []
+    for ident, scale in stack:
+        record = artifacts.get(ident)
+        if record is None or record.kind != 'adapter-coefficients':
+            raise SystemExit(f'stack entry {ident} is not a coefficient artifact of the release')
+        spec = record.provenance['adapter_spec']
+        if spec['kind'] != 'free-lora':
+            raise SystemExit(f'{ident}: only free-lora artifacts merge here, not {spec["kind"]}')
+        specs.append({'artifact': ident, 'scale': scale, 'alpha': spec['alpha'], 'targets': len(spec['parameter_names'])})
+        for name in spec['parameter_names']:
+            B, A = record.tensors['lora_B.' + name].float(), record.tensors['lora_A.' + name].float()
+            if B.dim() != 2:
+                raise SystemExit(f'{ident}: {name} has batched factors {tuple(B.shape)}')
+            key = name[len('port.hf.'):] if name.startswith('port.hf.') else name
+            parts.setdefault(key, []).append((B * (float(scale) * float(spec['alpha']) / A.shape[0]), A))
+    tensors, scales = {}, {}
+    for key, items in parts.items():
+        tensors[f'lora_B.{key}'] = torch.cat([b for b, _ in items], dim=1)
+        tensors[f'lora_A.{key}'] = torch.cat([a for _, a in items], dim=0)
+        scales[key] = 1.0
+    return tensors, scales, specs
+
+
 def colab_measure(args):
     """One held_eval arm on dev manifests against a Colab tenant actor: the start checkpoint (``--arm base``, every
     --dir on one actor) or it with DIR's fit release on an SGLang adapter slot (``--arm adapter``, one --dir). The
@@ -737,11 +821,16 @@ def colab_measure(args):
         raise SystemExit(f'--arm {args.arm} measures one program')
     if (args.arm == 'bank') != bool(args.release):
         raise SystemExit('--arm bank measures a --release (a bank-adapted program, colab-bank OUT/adapt/<family>)')
+    if args.arm == 'merged' and len(dirs) != 1:
+        raise SystemExit('--arm merged measures one program')
     plan = json.loads((dirs[0] / 'fit' / 'plan.json').read_text())
-    sha = plan['manifest']['base']['checkpoint_sha256']
+    sha, checkpoint = plan['manifest']['base']['checkpoint_sha256'], plan['engine']['checkpoint']
+    if args.arm == 'merged':     # the release merged into the weights (`merge`): a plain checkpoint, no adapter slot
+        merged = json.loads((dirs[0] / 'fit' / 'merged' / 'merged.json').read_text())
+        sha, checkpoint = merged['checkpoint_sha256'], merged['path']
     release = (Path(args.release) if args.arm == 'bank' else
                dirs[0] / 'fit' / 'release' if args.arm == 'adapter' else None)
-    record = A.serve_colab_tenant_actor(host=args.host, checkpoint=plan['engine']['checkpoint'], sha=sha,
+    record = A.serve_colab_tenant_actor(host=args.host, checkpoint=checkpoint, sha=sha,
                                         commit=args.commit, release=str(release) if release else None,
                                         beside=args.beside or None)
     pin = Path(args.pin).resolve()
@@ -881,7 +970,8 @@ def main(argv=None):
     cf.add_argument('--take-over', action='store_true', help='fit on Colab although a local fit state exists')
     cm = sub.add_parser('colab-measure', help='one dev arm against a Colab tenant actor (held_eval on the DGX)')
     cm.add_argument('--dir', action='append', required=True)
-    cm.add_argument('--arm', choices=('base', 'adapter', 'bank'), required=True)
+    cm.add_argument('--arm', choices=('base', 'adapter', 'bank', 'merged'), required=True,
+                    help='merged: DIR/fit/merged (`merge`) served as a plain checkpoint')
     cm.add_argument('--release', help='--arm bank: the bank-adapted release directory')
     cm.add_argument('--host', default=None)
     cm.add_argument('--beside', default='actor-',
@@ -909,6 +999,11 @@ def main(argv=None):
     ss.add_argument('--split', default='dev')
     ss.add_argument('--tasks', type=int, required=True)
     ss.add_argument('--name')
+    mg = sub.add_parser('merge', help='a fit release merged into its start checkpoint (DIR/fit/merged), served plain')
+    mg.add_argument('--dir', required=True)
+    mg.add_argument('--release', help='default DIR/fit/release')
+    mg.add_argument('--out', help='default DIR/fit/merged')
+    mg.add_argument('--scale', type=float, default=1.0, help='stack scale of every artifact (serving default 1.0)')
     cm.add_argument('--samples', type=int, default=2)
     cm.add_argument('--slots', type=int, default=32)
     cm.add_argument('--budget-gb', type=float, default=12.)
@@ -916,7 +1011,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     status = {'split': split, 'rows': rows, 'plan': plan, 'release': release, 'teacher-tasks': teacher_tasks,
               'bank': bank, 'colab-fit': colab_fit, 'colab-measure': colab_measure, 'colab-bank': colab_bank,
-              'subset': subset}[args.command](args)
+              'subset': subset, 'merge': merge_release}[args.command](args)
     return status if isinstance(status, int) else 0
 
 
