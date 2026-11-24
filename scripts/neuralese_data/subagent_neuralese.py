@@ -538,6 +538,10 @@ def build(args):
         for bundle in bundles(args.source, args.input, funnel, args):
             if args.limit and funnel['admitted'] >= args.limit:
                 return
+            question = ' '.join(norm_words(bundle['question']))   # by question: the per-question cap stays global
+            if args.shards > 1 and int(hashlib.sha256(question.encode()).hexdigest(), 16) % args.shards != args.shard:
+                funnel['other_shard'] += 1
+                continue
             bundle['task_id'] = task_id(bundle)
             if not bundle['verified']:
                 funnel['unverified'] += 1
@@ -599,7 +603,7 @@ def build(args):
         'schema': SCHEMA, 'code': code_provenance(), 'argv': sys.argv, 'source': args.source,
         'inputs': {'source': str(args.input), 'source_sha256': sha256_file(args.input),
                    'held_manifest': args.held_manifest, 'tokenizer': str(args.tokenizer)},
-        'policy': {'read_mode': args.read_mode, 'min_width_f1': args.min_width_f1,
+        'policy': {'read_mode': args.read_mode, 'min_width_f1': args.min_width_f1, 'shard': [args.shard, args.shards],
                    'max_per_question': args.max_per_question, 'seed': args.seed,
                    'targets': 'every recorded assistant reply of the lead and of each recorded subagent; teacher '
                               'reasoning and lead-in text zero weight (think_context); prompts, tool outputs and the '
@@ -757,6 +761,9 @@ def main():
     b.add_argument('--workers', type=int, default=8)
     b.add_argument('--limit', type=int, default=0)
     b.add_argument('--seed', type=int, default=0)
+    b.add_argument('--shard', type=int, default=0, help='this build holds the bundles whose question hash is SHARD mod SHARDS')
+    b.add_argument('--shards', type=int, default=1,
+                   help='split a large source into SHARDS disjoint files by question (each a loadable aux part)')
     s = sub.add_parser('scope', help='read-only counts for a natlang conversion')
     s.add_argument('--source', choices=('wideseek', 'searchswarm', 'evidence'), required=True)
     s.add_argument('--input', type=Path, required=True)
