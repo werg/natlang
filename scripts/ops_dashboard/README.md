@@ -61,6 +61,11 @@ applies each one once (`data_edits.py`), then records `recordApplication {edit, 
   split group. SFT row, demo and episode exclusions are recorded but no builder reads them yet; corrections need
   re-qualification (see the findings doc).
 
+## Mobile layout
+
+Tendriller injects a fixed "Page options" button at the bottom right of every page (about 125 x 54 px, maximum z-index, not configurable; werg/tendriller#92). On a
+phone the tab bar therefore sits under the header at the top, and the page keeps 100 px of bottom padding so nothing ends under the button.
+
 ## The supervising agent's inbox
 
 `inbox.sh` (list), `inbox.sh wait` (block until an unanswered ask exists; run in the background, uncapped), `inbox.sh answer OP TEXT`

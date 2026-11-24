@@ -280,7 +280,9 @@ function render() {
   document.title = `${hv.level === 'ok' ? '✔' : hv.level === 'crit' ? '✖' : '▲'} natlang ops`;
   chrome(hv); tabs(hv);
   $('tabs').hidden = !!S.gate;
-  document.documentElement.style.setProperty('--hdr', `${document.querySelector('.top').offsetHeight}px`);
+  const top = document.querySelector('.top'), tabsEl = $('tabs');       // what stays pinned: the header on wide screens, the tab bar always
+  const topH = getComputedStyle(top).position === 'sticky' ? top.offsetHeight : 0;
+  document.documentElement.style.setProperty('--toph', `${topH}px`); document.documentElement.style.setProperty('--hdr', `${topH + tabsEl.offsetHeight}px`);
   const view = $('view'), keepScroll = window.scrollY;
   const detKey = (() => { const seen = new Map(); return d => { const t = (d.querySelector(':scope > summary')?.textContent || '').slice(0, 80); const n = (seen.get(t) || 0) + 1; seen.set(t, n); return `${t}#${n}`; }; });
   const openState = new Map(), k1 = detKey();
