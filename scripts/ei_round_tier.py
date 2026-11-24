@@ -6,8 +6,8 @@ An async driver (``ops/ei/<name>/phase-state.json``) adds about 15 GB per round 
 (``rNNNN``: ``policy/`` checkpoint and exports, ``sft/`` states, ``mix/``, ``filled/``). Run by ``storage_sweep.sh``
 every 30 minutes; dry run unless ``--apply``.
 
-Collections stay for the last two lineage policies and the active round's base (round builds read the current and
-previous policy's collections). Checkpoints and factors stay for those and for the held measurement's candidate and
+Collections stay for the last two lineage policies, the active round's base (round builds read the current and
+previous policy's collections) and the driver's reference and start policies (a rollback resumes their collection). Checkpoints and factors stay for those and for the held measurement's candidate and
 reference, the last applied verdict, the driver's reference and start policies and ``ops/current-policy.json``.
 
 Collections of an unprotected policy: the actor export (``actor/sglang-hf``, rebuilt from the checkpoint whenever an
@@ -100,9 +100,11 @@ def plan(driver: Path, state: dict, current_policy: dict | None) -> list[dict]:
     """The actions for one driver directory, oldest first: {'op': 'delete'|'move', 'path', 'why'}."""
     keep = protected_policies(state, current_policy)
     lineage = state.get('lineage') or []
-    # round builds read only the current and previous policy's collections (and the active round's base)
+    # round builds read only the current and previous policy's collections (and the active round's base); the
+    # reference and start policies are what a rollback returns to, whose collection then resumes (2026-11-24 19:12:
+    # aei1 rolled back to r1, whose collections were on the HDD, and its live collectors wrote there)
     keep12 = {e['sha256'][:12] for e in lineage[-2:] if e.get('sha256')} | \
-        {s[:12] for s in _shas(state.get('active_round'))}
+        {s[:12] for key in ('active_round', 'reference_policy', 'start_policy') for s in _shas(state.get(key))}
     by_round = {e.get('round_id'): e for e in lineage if e.get('round_id')}
     last_two = {e.get('round_id') for e in lineage[-2:]}
     active = (state.get('active_round') or {}).get('round_id')

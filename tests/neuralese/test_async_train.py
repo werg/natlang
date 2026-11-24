@@ -2756,3 +2756,59 @@ def test_a_round_whose_colab_session_was_replaced_moves_to_the_dgx_at_once(tmp_p
     assert len(runs) == 1 and 'run-sft' in runs[0]
     change = json.loads((rd / 'round.json').read_text())['profile_changes'][-1]
     assert change['to_profile'] == 'dgx' and 'replaced mid-round' in change['reason']
+
+
+def test_a_collection_tiered_to_the_hdd_resumes_on_the_nvme_and_readers_see_both(tmp_path, monkeypatch):
+    """2026-11-24: after the 19:12 rollback to r1 the driver collected into r1's collections, which ei_round_tier had
+    moved to the HDD that morning (symlinks): ~15 MB/s of small files, sda 97% busy, the Pop collector in D state.
+    A tiered collection directory is never written: the collector (DGX, remote, Pop) runs in the NVMe continuation
+    ``<dir>-n1`` (the same task order), one still running through the symlink is stopped and relaunched there, and
+    collections_of / the teacher read both."""
+    ei, d = _remote_driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    hdd = tmp_path / 'hdd'
+    for suffix in ('', '-remote0'):
+        moved = hdd / f'{d.collection_base(cur).name}{suffix}'
+        (moved / 'groups' / 'g000001').mkdir(parents=True)
+        (moved / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+        d.collection_base(cur).parent.mkdir(parents=True, exist_ok=True)
+        d.collection_base(cur, suffix).symlink_to(moved)
+    (hdd / d.collection_base(cur).name / 'tasks.json').write_text('["t1", "t2"]')
+    unit = d.collection_unit(cur)
+    present, stopped, launched = {unit, f'{unit}-fill', f'{unit}-remote0'}, [], []
+    monkeypatch.setattr(d.c, 'present', lambda u: u in present)
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), present.discard(u)))
+    monkeypatch.setattr(d.c, 'ledger', lambda u, *a, **kw: (launched.append((u, a[2])), present.add(u)))
+    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (10, 10))
+    monkeypatch.setattr(d.a, 'fill', None, raising=False)
+    work = d.collect_dir(cur)
+    assert work.name == d.collection_base(cur).name + '-n1' and not work.exists()
+    assert d.ensure_collection(cur) == unit
+    assert stopped == [unit, f'{unit}-fill'] and [u for u, _ in launched] == [unit]       # no select: tasks copied
+    argv = launched[0][1]
+    assert argv[argv.index('--work') + 1] == str(work) and argv[argv.index('--tasks') + 1] == str(work / 'tasks.json')
+    assert json.loads((work / 'tasks.json').read_text()) == ['t1', 't2'] and (work / 'collector.json').exists()
+    launched.clear()
+    assert d.ensure_collection(cur) == unit and not launched          # the relaunched one is joined
+    # the remote actor's collector too
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda endpoint, sha: True)
+    d.start_remote_collector(cur, d.remote_targets()[0])
+    remote = d.collect_dir(cur, '-remote0')
+    assert stopped[-1] == f'{unit}-remote0' and launched[-1][0] == f'{unit}-remote0'
+    assert remote.name == d.collection_base(cur).name + '-remote0-n1' and (remote / 'collector.json').exists()
+    argv = launched[-1][1]
+    assert argv[argv.index('--work') + 1] == str(remote) and argv[argv.index('--tasks') + 1] == str(work / 'tasks.json')
+    # readers: the tiered directories and their continuations
+    (work / 'runs.jsonl').write_text('{}\n')
+    (remote / 'runs.jsonl').write_text('{}\n')
+    names = [p.name for p in d.collections_of([cur])]
+    base = d.collection_base(cur).name
+    assert names == sorted([base, f'{base}-n1', f'{base}-remote0', f'{base}-remote0-n1'])
+    assert [p.name for p in d.collection_dirs(cur)] == [base, f'{base}-n1']
+    # a continuation tiered later gets the next number; a directory on the NVMe is its own work directory
+    (hdd / 'n1').mkdir()
+    import shutil
+    shutil.rmtree(work)
+    work.symlink_to(hdd / 'n1')
+    assert d.collect_dir(cur).name == f'{base}-n2'
+    assert ei.nvme_work_dir(tmp_path / 'plain') == tmp_path / 'plain'

@@ -2496,6 +2496,21 @@ class HeldV4Queue:
             return [dict(e) for e in dropped]
 
 
+def nvme_work_dir(path):
+    """``path``, or when ``ei_round_tier`` moved it to the HDD (a symlink there) its NVMe continuation
+    ``<path>-nN``: the highest one still on the NVMe, else the next free number. A live collection never writes
+    through a tiered directory's symlink; its readers glob ``<path>*`` and see both."""
+    path = Path(path)
+    if not path.is_symlink():
+        return path
+    rx = re.compile(re.escape(path.name) + r'-n(\d+)')
+    found = sorted((int(m.group(1)), d) for d in path.parent.glob(path.name + '-n*') if (m := rx.fullmatch(d.name)))
+    for _, d in reversed(found):
+        if not d.is_symlink():
+            return d
+    return path.with_name(f'{path.name}-n{(found[-1][0] if found else 0) + 1}')
+
+
 def _result_complete(out):
     try:
         return bool(json.loads((Path(out) / 'result.json').read_text()).get('complete'))
@@ -3109,8 +3124,33 @@ class AsyncRoundDriver:
         self.c.note(stage='async', **record)
 
     # -- the standing services ----------------------------------------------------------------------------------------
-    def collect_dir(self, policy):
-        return self.root / 'collect' / f'v{policy["version"]:04d}-{policy["sha256"][:12]}'
+    def collection_base(self, policy, suffix=''):
+        """``collect/vNNNN-<sha12><suffix>``: a policy's collection by name (the DGX one, or a remote actor's)."""
+        return self.root / 'collect' / f'v{policy["version"]:04d}-{policy["sha256"][:12]}{suffix}'
+
+    def collect_dir(self, policy, suffix=''):
+        """Where ``policy``'s collection (``suffix``: a remote actor's) is written now: its base directory, or once
+        ``ei_round_tier`` moved that to the HDD, its NVMe continuation (``nvme_work_dir``). ``collections_of`` reads
+        both."""
+        return nvme_work_dir(self.collection_base(policy, suffix))
+
+    def collector_on_old_dir(self, unit, policy, suffix=''):
+        """Whether ``unit`` (present) collects into ``policy``'s tiered base directory rather than its NVMe work
+        directory: the work directory differs from the base and records no launch (``collector.json``)."""
+        work = self.collect_dir(policy, suffix)
+        return work != self.collection_base(policy, suffix) and not (work / 'collector.json').exists()
+
+    def prepare_collection_dir(self, policy, work, unit):
+        """``work`` exists with the collection's task order and records the unit launched into it. A continuation
+        takes the tiered base directory's ``tasks.json`` (the same policy's selection; one small file from the HDD)."""
+        work.mkdir(parents=True, exist_ok=True)
+        tasks = self.collect_dir(policy) / 'tasks.json'
+        old = self.collection_base(policy) / 'tasks.json'
+        if not tasks.exists() and tasks != old and old.exists():
+            tasks.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(old, tasks)
+        (work / 'collector.json').write_text(json.dumps({'unit': unit, 'at': round(time.time(), 1)}) + '\n')
+        return tasks
 
     def collection_unit(self, policy):
         return f'{self.a.name}-collect-v{policy["version"]:04d}'
@@ -3159,9 +3199,17 @@ class AsyncRoundDriver:
                     self.c.stop_unit(u)
                     self.note(collection_stopped=u)
         if self.c.present(unit):           # running, or preempted and requeued (the ledger relaunches it)
-            return unit
-        work.mkdir(parents=True, exist_ok=True)
-        tasks = work / 'tasks.json'
+            if not self.collector_on_old_dir(unit, policy):
+                return unit
+            # 2026-11-24: after the 19:12 rollback to r1, its collections (tiered to the HDD that morning) took the
+            # live collectors' writes at ~15 MB/s of small files (sda 97% busy, the Pop collector in D state): the
+            # collector moves to the NVMe continuation (it resumes there; what it scored stays readable)
+            for u in (unit, f'{unit}-fill'):
+                if self.c.present(u):
+                    self.c.stop_unit(u)
+            self.note(collection_moved=unit, policy=policy['sha256'], work=str(work),
+                      why='its directory is on the HDD (ei_round_tier)')
+        tasks = self.prepare_collection_dir(policy, work, unit)
         if not tasks.exists():
             self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
         with self.COLLECT_LOCK:
@@ -3250,7 +3298,7 @@ class AsyncRoundDriver:
     def remote_collect_argv(self, policy, target, endpoint):
         """(unit, work dir, argv, ledger GB) of ``target``'s DGX-side collector of ``policy``."""
         unit = self.collection_unit(policy) + target['suffix']
-        work = self.collect_dir(policy).with_name(self.collect_dir(policy).name + target['suffix'])
+        work = self.collect_dir(policy, target['suffix'])
         with self.COLLECT_LOCK:
             self.c.collect_dir = work
             argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], target['slots'],
@@ -3262,11 +3310,14 @@ class AsyncRoundDriver:
         """``target``'s collector of ``policy`` (``collect --actor``) once its actor serves ``policy``."""
         endpoint = self.target_endpoint(target)
         unit = self.collection_unit(policy) + target['suffix']
+        if self.c.present(unit) and self.collector_on_old_dir(unit, policy, target['suffix']):
+            self.c.stop_unit(unit)          # on the HDD (ei_round_tier): it resumes on the NVMe continuation
+            self.note(collection_moved=unit, policy=policy['sha256'], work=str(self.collect_dir(policy, target['suffix'])),
+                      why='its directory is on the HDD (ei_round_tier)')
         if self.c.present(unit) or not endpoint_alive(endpoint, policy['sha256']):
             return
         unit, work, argv, budget = self.remote_collect_argv(policy, target, endpoint)
-        work.mkdir(parents=True, exist_ok=True)
-        tasks = self.collect_dir(policy) / 'tasks.json'
+        tasks = self.prepare_collection_dir(policy, work, unit)
         if not tasks.exists():
             self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
         self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
@@ -3508,7 +3559,8 @@ class AsyncRoundDriver:
                     return None
             standing = not getattr(self.a, 'no_standing_teacher', False)
             n = launch_teacher(self.c, work, frontier,
-                               [self.collect_dir(p) / 'groups' / 'g*' for p in self.lineage_policies()], unit,
+                               [d / 'groups' / 'g*' for p in self.lineage_policies()
+                                for d in self.collection_dirs(p)], unit,
                                covered_extra=sorted(self.root.glob('teacher-*')), standing=standing,
                                student_rates=self.student_rates_files() if standing else ())
             if n or standing:
@@ -3533,9 +3585,15 @@ class AsyncRoundDriver:
         return [p for p in (self.controller.previous, self.controller.current) if p]
 
     # -- 1. prepare ---------------------------------------------------------------------------------------------------
+    def collection_dirs(self, policy, suffix=''):
+        """``policy``'s collection directories of one actor (``suffix``): the base and its NVMe continuations."""
+        base = self.collection_base(policy, suffix)
+        rx = re.compile(re.escape(base.name) + r'(-n\d+)?')
+        return sorted(d for d in base.parent.glob(base.name + '*') if rx.fullmatch(d.name) and d.is_dir())
+
     def collections_of(self, policies):
         """Every collection of ``policies`` (the DGX one and the remote actors'), in policy order."""
-        return [d for p in policies for d in sorted(self.collect_dir(p).parent.glob(self.collect_dir(p).name + '*'))
+        return [d for p in policies for d in sorted(self.collection_base(p).parent.glob(self.collection_base(p).name + '*'))
                 if (d / 'runs.jsonl').exists()]
 
     def dgx_round_size(self, why='DGX'):
