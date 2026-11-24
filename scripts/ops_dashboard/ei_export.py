@@ -185,7 +185,7 @@ class Lineage:
 # ---------- drive.log: events, held gate failures ----------
 
 def short_error(e):
-    e = re.sub(r'/home/werg/data/lfm3-rl-dgx-20261029/ops/', '', str(e))
+    e = re.sub(r'\S*/ops/', '', str(e))
     if 'held_eval' in e and 'compare' in e:
         return 'held compare failed (the pair is not comparable yet)'
     if 'incomplete' in e:
