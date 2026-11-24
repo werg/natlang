@@ -24,7 +24,7 @@ orchestration is TypeScript (`invent.ts`).
 | 7 | Build the idea into `program/`, `submission.json` (instances, references, ablations, wrong answers, keyword baselines) and `NOTES.md` | service `build()`: a frontier coding agent (Claude Code `claude -p`, or Codex `codex exec`) given `BUILD_BRIEF.md` | writing a multi-file program needs a shell to run `natlang check` and the qualifier; that is a coding-agent harness, the outside world. The natlang-native harness for this is `applications/pi` (pi's coding agent ported to natlang); it replaces the CLI agents when it runs frontier models end to end |
 | 8 | Crisp qualification: F1 `natlang check`; F2-F4, S1-S3, C1, C2, D1, D2, D4, N2 by static checks and replay | service `qualify()` over `scripts/rl_tasks/sources/invented.py qualify` (static checks, packaging to `natlang.program/2`, `verify.mjs`, `ablate.mjs`) | exact; the collector's own replay path judges references, wrong answers, keyword baselines and judgment ablations |
 | 9 | Repair until qualification passes | `semanticRepair` from `@natlang/node/std` with `check` = part 8 and `fix` = service `revise()` (the same agent with the problem list), 3 attempts | std convergence combinator: exact check, judged fix |
-| 10 | Judged requirements S4, C3, D3 | fn `meetsBar.nl` (`readout: decision`, `model: judge`) mapped over the judged requirements with `Promise.all` | judgment per requirement, each a scored decision |
+| 10 | Judged requirements S4, C3, D3 | fn `meetsBar.nl` (`readout: decision`, `model: reviewer`, another family than the builder) mapped over the judged requirements with `Promise.all` | judgment per requirement, each a scored decision |
 | 11 | Live run: a teacher model executes the root on each instance through the collector | service `liveRun()` over `teacher_gen.py --pool CASES` | the outside world (teacher providers, the collector); it proves a real run reaches the checked answer and yields the first teacher episodes |
 | 12 | Settle a disagreement between the expected answer and a teacher's answer | fn `adjudicate.nl` (`readout: decision`: `expected-wrong` / `answer-wrong` / `ambiguous`) | judgment; `expected-wrong` and `ambiguous` send the submission back, `answer-wrong` stands |
 | 13 | Record the accepted idea in the ledger the atlas reads | service `record()` (append to `OUT/accepted.jsonl`) | exact durability |
@@ -39,11 +39,12 @@ accepted submission) are registered and promoted by the data pipeline (`data_reg
 | Runtime model | Role | Default |
 |---|---|---|
 | `inventor` | part 2 | GPT-6.1 Sol (`openai-codex`) and Claude Opus 5.5, alternating by round so neither family's taste fills the atlas |
-| `judge` | parts 5, 6, 10, 12 | the other family than the round's inventor |
+| `judge` | parts 5, 6 | the other family than the round's inventor |
+| `reviewer` | parts 10, 12 | the other family than the round's builder |
 | builder (service) | parts 7, 9 | Claude Opus 5.5 (Claude Code) or GPT-6.1 Sol (Codex) |
 | teacher (service) | part 11 | `ops/ei/teachers.json`'s Luna, then Sol on a failure |
 
-Profiles named `inventor` and `judge` in `~/.config/natlang/config.json` select them.
+Profiles named `inventor`, `judge` and `reviewer` in `~/.config/natlang/config.json` select them.
 
 ## Not built yet
 

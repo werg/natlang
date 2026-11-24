@@ -2,9 +2,9 @@
  * `natlang run applications/program-inventor -- CONFIG.json`
  *
  * CONFIG: { "out": DIR, "count": N, "builder": "claude" | "codex", "builderModel": ID, "teacher": TEACHER_SPEC }
- * Models of the judgments come from the runtime's models named `inventor` and `judge` (natlang.json); the judge is of
- * another family than the inventor. Writes DIR/<slug>/ submissions, DIR/accepted.jsonl (the ledger the atlas reads) and
- * DIR/round.json. Run on the DGX through the memory ledger.
+ * Models of the judgments come from the runtime's models named `inventor`, `judge` (another family than the inventor)
+ * and `reviewer` (another family than the builder). Writes DIR/<slug>/ submissions, DIR/accepted.jsonl (the ledger the
+ * atlas reads) and DIR/round.json. Run on the DGX through the memory ledger.
  */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -89,11 +89,17 @@ function services(config: Config): InventorServices {
         run(PYTHON, ['scripts/neuralese_data/teacher_gen.py', '--work', work, '--pool', cases, '--teacher', JSON.stringify(config.teacher), '--attempts', '1']);
       } catch { /* scored episodes are what count */ }
       const rows = readFileSync(cases, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
-      const scored = existsSync(join(work, 'score.json')) ? JSON.parse(readFileSync(join(work, 'score.json'), 'utf8')) : {};
+      // teacher_gen's manifest: one record per scored attempt, {task_id, teacher, episodes: [{outcome, reward}], rollouts}
+      const manifest = join(work, 'manifest.jsonl');
+      const records = existsSync(manifest)
+        ? readFileSync(manifest, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) as
+          { task_id: string; teacher: unknown; episodes: { outcome: string }[]; rollouts: string }[]
+        : [];
       return rows.map(row => {
-        const verdict = (scored.tasks ?? {})[row.id] ?? {};
-        return { instance: JSON.stringify(row.semantics.inputs), expected: JSON.stringify(row.semantics.expected),
-          passed: verdict.passed === true, answer: JSON.stringify(verdict.value ?? null), issues: verdict.issues ?? [] };
+        const mine = records.filter(record => record.task_id === row.id);
+        const passed = mine.some(record => record.episodes.some(episode => episode.outcome === 'task_success'));
+        return { instance: JSON.stringify(row.semantics.inputs), expected: JSON.stringify(row.semantics.expected), passed,
+          answer: 'null', issues: mine.map(record => `${JSON.stringify(record.teacher)}: ${record.episodes.map(e => e.outcome).join(', ')} (${record.rollouts})`) };
       });
     },
     async record(idea: IdeaCard, submission: string): Promise<void> {

@@ -72,8 +72,9 @@ TypeScript helpers.
 
 - **reference** runs the program for real: the root eval calls the program's own helpers, the TypeScript runs, and
   each judgment call is answered by the first `children` entry whose `match` fragments all appear in the call's
-  opening (its instruction text and its arguments). Use one fragment from the judgment's instruction (within one line)
-  and one unique to the item (an id in its arguments). A decision's value is the plain option; a `Neuralese<string>`
+  opening (its instruction text, its arguments and the doc comments of the types it uses). Use one fragment from the
+  judgment's instruction (within one line) and one unique to the item (an id in its arguments). Keep instance ids out
+  of `types.ts` doc comments, and make no id a substring of another, or a fragment matches calls it was not meant for. A decision's value is the plain option; a `Neuralese<string>`
   result is text. The value the eval returns must be accepted by the checker.
 - **ablations**: one per judgment. Its children are placed before the reference's, so they answer that judgment's
   calls with the trap reading. Each ablated replay must return an answer the checker rejects (S2): this is what shows
@@ -87,10 +88,12 @@ TypeScript helpers.
   several answers are right.
 - `expected` comes from running the program literally: each judgment read as the function would read it, receiving
   only its own arguments; each exact step as the code does it. Never the answer you intend.
+- `semanticMap` and `semanticFilter` call their function with `(item, index)`: wrap a `.partial`-bound judgment in a
+  lambda that passes only the item.
 
 ## Checks you run
 
-From `SUBMISSION/program/`, through the memory ledger on the DGX:
+From `SUBMISSION/program/`, through the memory ledger on the DGX (logs go to `SUBMISSION/../logs/`; create it):
 
 ```
 python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-check-<slug>-<n> --budget-gb 3 --wait 3600 \
