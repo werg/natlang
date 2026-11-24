@@ -34,7 +34,7 @@ export function makeViews(ctx) {
     const el = h('div', { class: `card round ${r.state}` }, h('header', {}, h('h2', {}, `Round ${r.id}`, h('span', { class: 'muted small' }, r.trained_from != null ? ` · v${r.trained_from} → v${r.trained_from + 1}` : '')), stateChip), stepsStrip(r));
     if (r.state === 'sft' && s) {
       el.append(h('div', { class: 'prog' }, meter(s.step / s.of, 'good'), h('div', { class: 'row between small' }, h('span', {}, `step ${s.step} of ${s.of} (${Math.round(100 * s.step / s.of)}%)`), h('span', { class: 'muted' }, `${s.s_per_step ? s.s_per_step + ' s/step' : ''}`))),
-        h('div', { class: 'eta' }, h('b', {}, `SFT ends ${etaText(e.sftEnd, now())}`), h('span', { class: 'muted' }, `, then merge and publish ${e.publish ? `≈ ${clock(e.publish)}` : ''}. The log is read from the learner about every 20 minutes (last step ${ago(s.step_ts, now())}).`)));
+        h('div', { class: 'eta' }, h('b', {}, e.sftEnd && e.sftEnd < now() ? 'SFT is due to finish now' : `SFT ends ${etaText(e.sftEnd, now())}`), h('span', { class: 'muted' }, `, then merge and publish ${e.publish ? `≈ ${clock(e.publish)}` : ''}. The log is read from the learner about every 20 minutes (last step ${ago(s.step_ts, now())}).`)));
     } else if (r.state === 'preparing') {
       const t = ei()?.teacher;
       el.append(h('div', { class: 'small muted' }, `Prepared in parallel with the running SFT. Teacher campaign ${t ? `${t.tasks_done}/${t.eligible ?? '?'} tasks, ${t.success} verified successes` : 'not started'}${r.data_progress != null ? `; student fill ${r.data_progress} episodes` : ''}.`));
