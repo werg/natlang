@@ -104,7 +104,8 @@ class FakeColab:
 def keeper(tmp_path, fake, monkeypatch, *, ssh_ok=True, sft=False, state=None):
     a = types.SimpleNamespace(order='A100:hm,G4,L4', state=str(tmp_path / 'state.json'), session='g4a',
                               alias='colab-g4', tunnel_unit='colab-g4a-tunnel', forward=['19731:9570'],
-                              tunnel_fail_minutes=15, upgrade_minutes=20, request_minutes=5)
+                              tunnel_fail_minutes=15, upgrade_minutes=20, request_minutes=5, serve_minutes=10,
+                              actor_root=str(tmp_path / 'actors'))
     k = sk.Keeper(a, runner=fake)
     if state is not None:
         k.save(state)
@@ -166,3 +167,26 @@ def test_a_request_answered_with_other_hardware_is_stopped(tmp_path, monkeypatch
     k, events = keeper(tmp_path, cpu_instead, monkeypatch)
     k.run = cpu_instead
     assert k.request('g4a', 'A100', True, retries=0) is None and 'g4a' not in fake.sessions
+
+
+def test_a_down_or_oversized_actor_is_served_again_but_never_under_a_round():
+    """2026-11-23 22:37: the A100's actor serve failed once and the keeper answered 'A100 serves' for hours (the lost
+    VM's record already moved aside): a failed serve stays pending and is retried every 10 min; an actor restored
+    by an older pin at the full fraction is re-served at the current layout (tenants need the room)."""
+    up = [{'name': 'g4a', 'endpoint': 'e', 'hardware': 'A100', 'shape': 'High-RAM', 'variant': 'GPU'}]
+    obs = lambda **kw: sk.Observation(sessions=up, ssh_ok=True, now=10_000.0, **kw)
+    assert sk.decide(obs(actor_down=True), {}, session='g4a').action == 'serve'
+    assert sk.decide(obs(actor_oversized=True), {}, session='g4a').action == 'serve'
+    assert sk.decide(obs(actor_down=True, sft_active=True), {}, session='g4a').action == 'ok'
+    assert sk.decide(obs(actor_down=True), {'last_serve_try': 9_700.0}, session='g4a').action == 'ok'
+    assert sk.decide(obs(), {}, session='g4a').action == 'ok'
+
+
+def test_a_pending_serve_is_retried_and_cleared_when_it_serves(tmp_path, monkeypatch):
+    fake = FakeColab({'g4a': 'A100'})
+    serve = {'checkpoint': '/c.pt', 'policy_id': 'p' * 64, 'commit': 'c' * 40, 'port': 8570}
+    k, _ = keeper(tmp_path, fake, monkeypatch, state={'pending_serve': {'serve': serve, 'commit': 'c' * 40}})
+    d = k.step()
+    assert d.action == 'serve' and ('other', str(sk.REPO / '.venv-neuralese/bin/python')) in fake.calls
+    assert 'pending_serve' not in k.load() and k.load()['last_serve_try'] > 0
+    assert k.step().action == 'ok'                       # served: nothing pending, no retry
