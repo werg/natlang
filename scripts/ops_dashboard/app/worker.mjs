@@ -5,6 +5,7 @@ import { createPeersClient } from '@tendriller/core/peers';
 import { serveBrowserOwner } from '@tendriller/core/worker-owner';
 import { participateApplication } from '@tendriller/core/participation';
 import { definition } from './domain.mjs';
+import { SIGNAL_CLOCK_SKEW_MS } from './ops-protocol.mjs';
 
 serveBrowserOwner({ async load({ signal }) {
 const configuration = await fetch(new URL('./configuration.json', import.meta.url), { signal }).then(response => {
@@ -42,7 +43,7 @@ return { profileId,
       // Queues sized for multi-piece live replies (each signal is at most 16 KiB): a
       // page reading a reply of a few hundred KB must not overflow its subscription.
       session = await openBrowserApplication({ device, definition, authority,
-        signals: { localEcho: true, delivery: 'neighbors', limits: { maxSubscriptions: 256, maxQueuedSignals: 2048, maxQueuedBytes: 16777216 } } });
+        signals: { localEcho: true, delivery: 'neighbors', limits: { maxSubscriptions: 256, maxQueuedSignals: 2048, maxQueuedBytes: 16777216, maxClockSkewMs: SIGNAL_CLOCK_SKEW_MS } } });
       const control = session.connectControlParticipant({ exchange: (message, options) => peers.exchange(message, options) });
       await participateApplication(session, { peers, control, openDirectConnection });
       return { session, control };

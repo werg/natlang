@@ -1711,3 +1711,39 @@ def test_a_requeued_unit_in_its_backoff_does_not_hold_its_priority_queue_but_a_h
     for entry in state['waiting'].values():
         entry['seen'] = now + 901                       # the waiting runs keep refreshing
     assert [u for u, _ in ledger.waiting_order(state, now + 901)][2:] == ['fill.service', 'preflight.service']
+
+
+def test_a_yielding_collection_lowers_its_claim_so_a_waiting_stage_fits_beside_it_and_restores_it(monkeypatch, tmp_path):
+    """2026-11-24: the DGX collection (74 GiB budget, ~49 GiB used) was preempted for a round's 12 GiB data step that
+    fit physically: half its unspent budget (12.5 GiB) counted as reserved. Shrinking in place, it lowers its claim to
+    its use (resize yield) and the step is admitted beside it; restore gives back the budget (or the guard's raise)."""
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 46 * GIB)
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    use = {'aei1-collect-v0006.service': 49 * GIB, 'teacher.service': 8 * GIB}
+    monkeypatch.setattr(ledger, 'unit_usage',
+                        lambda unit, gpu, command=None, containers=(), cuda_separate=False: use.get(unit))
+    now = ledger.time.time()
+    with ledger.ledger() as state:
+        state['claims']['aei1-collect-v0006.service'] = dict(claim('experiment', 74, 0, now - 3600), gpu=True,
+                                                             priority='medium')
+        state['claims']['teacher.service'] = claim('experiment', 40, 0, now - 3600)      # reserves 8 (CPU quarter)
+    assert not ledger.admissible(12, reserve_gb=15)           # 46 - 12.5 - 8 reserved < 12 + 15: it would preempt
+    resize = lambda mode: ledger.resize(type('Args', (), {'unit': 'aei1-collect-v0006', 'mode': mode})())
+    assert resize('yield') == 0
+    with ledger.ledger() as state:
+        held = state['claims']['aei1-collect-v0006.service']
+    assert held['budget'] == int(49 * GIB * ledger.YIELD_FACTOR) and held['unyielded_budget'] == 74 * GIB
+    assert ledger.admissible(12, reserve_gb=15)               # 46 - 2.45 - 8 reserved >= 27: admitted beside it
+    resize('yield')                                           # a second yield never raises it, keeps the original
+    with ledger.ledger() as state:
+        held = state['claims']['aei1-collect-v0006.service']
+        assert held['unyielded_budget'] == 74 * GIB
+        held['budget'] = 80 * GIB                             # the guard raised it meanwhile
+    resize('restore')
+    with ledger.ledger() as state:
+        held = state['claims']['aei1-collect-v0006.service']
+    assert held['budget'] == 80 * GIB and 'unyielded_budget' not in held
+    c = {'budget': 10 * GIB}
+    assert ledger.yield_claim(c, 0) == GIB and ledger.restore_claim(c) == 10 * GIB          # at least 1 GiB
+    assert ledger.resize(type('Args', (), {'unit': 'gone', 'mode': 'yield'})()) == 1

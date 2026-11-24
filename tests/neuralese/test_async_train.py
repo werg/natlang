@@ -12,6 +12,7 @@ import hashlib
 import json
 import sys
 import time
+import types
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1032,6 +1033,56 @@ def test_round_stages_preempt_the_standing_collection_which_resumes_on_its_polic
     d.prepare(rd, d.lineage_policies())
     assert launched == [(f'aei-r0001-{s}', ei.STAGE_PRIORITY) for s in ('frontier', 'data', 'build')]
 
+
+
+def test_round_preparation_runs_beside_a_yielding_collection_instead_of_preempting_it(tmp_path, monkeypatch):
+    """DECISIONS 2026-11-24 "the DGX collection yields to round preparation": frontier, data and build run inside one
+    prep claim (every DGX collection keeps PREP_YIELD_SHARE of its slots and lowers its ledger claim); each step first
+    waits (bounded) until the ledger would admit it, then launches either way; the build claims its measured 24 GB."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')
+    cur = d.controller.current
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': cur['sha256'], 'started': 0}) + '\n')
+    rd = d.root / 'r0001'
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd, policies, size=None: (['frontier'], [['data']], ['build']))
+    monkeypatch.setattr(ei, 'record_collection', lambda *a, **kw: None)
+    monkeypatch.setattr(ei, 'write_round_manifest', lambda *a, **kw: {})
+    monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda rd: None)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    launched, rooms = [], []
+    monkeypatch.setattr(d.c, 'wait_for_room', lambda unit, budget, **kw: rooms.append((unit, budget)) or True)
+
+    def stage(unit, budget, priority, command, log, room=False, **kw):
+        claims = ei.held_priority_claims(tmp_path / 'prio')
+        launched.append((unit, budget, priority, [c['share'] for c in claims]))
+        if room:
+            d.c.wait_for_room(unit, budget)
+        (rd / 'mix').mkdir(parents=True, exist_ok=True)
+        (rd / 'mix' / 'build.json').write_text('{}')
+    monkeypatch.setattr(d.c, 'ledger', stage)
+    d.prepare(rd, d.lineage_policies())
+    assert launched == [(f'aei-r0001-{s}', b, ei.STAGE_PRIORITY, [ei.PREP_YIELD_SHARE])
+                        for s, b in (('frontier', 4), ('data', 12), ('build', 24))]
+    assert rooms == [(u, b) for u, b, _, _ in launched]
+    assert not ei.held_priority_claims(tmp_path / 'prio')            # released after the build
+
+
+def test_wait_for_room_is_bounded_and_skipped_when_opted_out(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    answers = iter([False, False, True])
+    monkeypatch.setattr(ei, 'ledger_admissible', lambda gb: next(answers))
+    assert d.c.wait_for_room('aei-r0001-data', 12, poll=0)
+    clock = iter(range(0, 10_000, 400))
+    monkeypatch.setattr(ei.time, 'time', lambda: next(clock))
+    monkeypatch.setattr(ei, 'ledger_admissible', lambda gb: False)
+    assert not d.c.wait_for_room('aei-r0001-build', 24, seconds=600, poll=0)     # launched anyway after the wait
+    d.c.a.prep_yield_share = 1.0
+    monkeypatch.setattr(ei, 'ledger_admissible', lambda gb: (_ for _ in ()).throw(AssertionError('no wait')))
+    assert d.c.wait_for_room('aei-r0001-build', 24)
 
 def test_a_round_prepares_from_the_lineages_collections_with_frontier_and_previous_policy(tmp_path, monkeypatch):
     ei, d = _driver(tmp_path, monkeypatch, argv=['--aux', 'x=/a.pkl,share=0.1'])
@@ -2501,3 +2552,23 @@ def test_selection_reads_the_previous_rates_and_the_lineage_collections_never_ev
     assert argv[argv.index('--rates-json') + 1] == str(old / 'tasks.rates.json')
     globs = [argv[i + 1] for i, x in enumerate(argv) if x == '--rates-groups']
     assert globs == [str(d.collect_dir(cur) / 'groups' / 'g*'), str(d.root / '*' / 'grpo' / 'groups' / 'g*')]
+
+
+def test_the_dgx_collection_runs_192_slots_and_claims_its_measured_size(tmp_path, monkeypatch):
+    """v0006's engine ran at its cap (160 running, KV 0.61): 192 slots, 224 running with the fill; the claim is the
+    measured engine (kv + 20) plus 0.2 GiB per slot, not kv + 24 + 0.3/slot (94 GiB at 192, unreadmittable)."""
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--fill', str(tmp_path / 'fill')])
+    assert d.a.slots == ei.DGX_COLLECT_SLOTS == 192 and d.c.max_running() == 224
+    assert ei.dgx_collection_budget_gb(12, 192) == 70 and ei.dgx_collection_budget_gb(12, 128) == 58
+    launched = []
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(start=lambda: None))
+
+    def ledger(unit, budget, priority, command, log, **kw):
+        launched.append((unit, budget, command))
+        if unit.endswith('-select'):
+            Path(command[command.index('--out') + 1]).write_text('[]')
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    unit = d.ensure_collection(d.controller.current)
+    _, budget, argv = launched[-1]
+    assert budget == 70 and argv[argv.index('--slots') + 1] == '192' and '--actor-arg=224' in argv

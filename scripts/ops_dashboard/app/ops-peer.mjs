@@ -76,7 +76,7 @@ async function serveQueries(session, rpc, signal) {
         const parts = await encodeReply(await rpc(q, input ?? null));
         if (parts.length > MAX_REPLY_CHUNKS) throw Object.assign(Error(`Answer too large (${parts.length} chunks); ask for a smaller page.`), { code: 'too_large' });
         for (let i = 0; i < parts.length; i++) await sendPaced(session, TOPICS.reply, { id, i, n: parts.length, z: parts[i] }, { ttlMs: REPLY_TTL_MS });
-        log({ query: q, ms: Date.now() - t0, chunks: parts.length, from: sig.authorId?.slice(0, 12) });
+        log({ query: q, ms: Date.now() - t0, chunks: parts.length, from: sig.authorId?.slice(0, 12), ahead_ms: t0 - sig.issuedAtMs < 0 ? sig.issuedAtMs - t0 : 0 });
       } catch (e) {
         log({ query: q, error: e.message });
         await sendPaced(session, TOPICS.reply, { id, error: e.message.slice(0, 2000), code: e.code || 'error' }, { ttlMs: REPLY_TTL_MS }).catch(() => {});
@@ -95,7 +95,7 @@ async function serveTelemetry(session, rpc, signal) {
   const file = (await rpc('ops.paths', null).catch(() => null))?.telemetry;
   for await (const sig of session.signals.subscribe({ topics: [TOPICS.telemetry], mode: 'all', signal })) {
     const rec = { t: new Date().toISOString(), from: sig.authorId?.slice(0, 12), ...(sig.payload || {}) };
-    log({ page: { from: rec.from, seq: rec.seq, version: rec.version, build: rec.build?.build, visible: rec.visible, counts: rec.counts, events: (rec.events || []).slice(0, 12) } });
+    log({ page: { from: rec.from, seq: rec.seq, version: rec.version, build: rec.build?.build, visible: rec.visible, clock_skew_ms: rec.clock_skew_ms, counts: rec.counts, events: (rec.events || []).slice(0, 12) } });
     if (file) await appendFile(file, JSON.stringify(rec) + '\n').catch(() => {});
   }
 }

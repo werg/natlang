@@ -11,13 +11,14 @@ import { browserProfileId } from '../helpers/browser-profile.mjs';
 import { createBrowserPairing } from '../pairing-browser.mjs';
 import { createQueryClient, TOPICS } from '../ops-protocol.mjs';
 import { reloadOnOwnerReplaced } from './connection.mjs';
+import { clockSkew } from './model.mjs';
 
 /* global __OPS_BUILD__ */
 export const BUILD = typeof __OPS_BUILD__ === 'object' ? __OPS_BUILD__ : { build: 'dev', commit: '' };
 
 /** Page telemetry for the operators, never shown to the person: what this page sent, received and drew goes to the native
  * participant as `ops/t` signals every 10 s (counts per kind plus the latest events), logged on the DGX. */
-export function createTelemetry(signals) {
+export function createTelemetry(signals, { extra = () => ({}) } = {}) {
   const counts = {}, events = [];
   let seq = 0;
   const COUNT_ONLY = new Set(['reply_unmatched', 'query_ok']);    // frequent and benign: counted, not listed
@@ -26,7 +27,7 @@ export function createTelemetry(signals) {
     if (!events.length && !Object.keys(counts).length) return;
     const batch = events.splice(0, 40);
     const payload = { seq: ++seq, build: BUILD, publication: window.tendril?.identity?.publication?.slice?.(0, 12) ?? null, version: window.tendril?.identity?.version ?? null,
-      visible: document.visibilityState, counts: { ...counts }, events: batch };
+      visible: document.visibilityState, counts: { ...counts }, events: batch, ...extra() };
     try { await signals.send(TOPICS.telemetry, payload, { ttlMs: 30000 }); }
     catch { events.unshift(...batch.slice(0, 200 - events.length)); }
   };
@@ -103,7 +104,10 @@ export async function createConnection(ui) {
         context: { viewId: sessionStorage.getItem('ops.view') || (() => { const v = crypto.randomUUID(); sessionStorage.setItem('ops.view', v); return v; })(),
           ...(identity?.documentPath ? { documentPath: identity.documentPath } : {}), ...(identity?.publication ? { publicationId: identity.publication } : {}) },
         // The browser's device owner moved (another tab took it over, or it restarted): reconnect by reloading, at most once a minute.
-        onOwnerReplaced: reloadOnOwnerReplaced({ key: 'ops.reloaded', onSkipped() { ui.status('The connection moved to another tab of this page. Reload to reconnect here.', 'warn'); } }),
+        // A skipped reload is retried when the minute is over: a page whose owner route ended must not stay silently dead.
+        onOwnerReplaced: reloadOnOwnerReplaced({ key: 'ops.reloaded', onSkipped() {
+          ui.status('The connection moved to another tab of this page. Reconnecting in a minute.', 'warn');
+          setTimeout(() => location.reload(), Math.max(1000, 61_000 - (Date.now() - Number(sessionStorage.getItem('ops.reloaded') || 0)))); } }),
       });
       try { return await mount(attachment); } catch (e) { await attachment.detach().catch(() => {}); throw e; }
     },
@@ -121,15 +125,17 @@ export async function createConnection(ui) {
       // The runtime binding installs once per page: only after the session is usable, so a failed attempt can retry.
       window.tendril.application.install(createApplicationBackend({ id: session.applicationId, session }));
       window.tendril.signals.install(session.signals);
-      const tele = createTelemetry(session.signals);
+      const clock = cell(null);          // this device's clock minus the DGX's (ms), from the signing time of the participant's ticks
+      const tele = createTelemetry(session.signals, { extra: () => ({ clock_skew_ms: clock.get() }) });
       tele.event({ ev: 'connected', ms_since_load: Math.round(performance.now()), shared_worker: typeof SharedWorker === 'function', ua: navigator.userAgent.slice(0, 120) });
-      const client = createQueryClient(session.signals, { onTick: t => { tele.count('tick'); ticks.set(t); }, onEvent: e => tele.event(e) });
+      const client = createQueryClient(session.signals, { onTick: (t, sig) => {
+        tele.count('tick'); const k = clockSkew(sig?.issuedAtMs, Date.now()); if (k != null) clock.set(k); ticks.set(t); }, onEvent: e => tele.event(e) });
       const tracker = commandTracker(session, list => pending.set([...list]));
       pending.set([...tracker.list()]);
       window.addEventListener('pagehide', () => { tele.close(); client.close(); ev.close(); iv.close(); void attachment.detach().catch(() => {}); }, { once: true });
       setTimeout(() => void tele.flush(), 3000);
       return { kind: 'session', report: e => tele.event(e), deviceId: session.deviceId, nativeDeviceId: configuration.nativeDeviceId,
-        query: (q, input, opts) => client.query(q, input, opts), command: (n, i) => tracker.submit(n, i),
+        query: (q, input, opts) => client.query(q, input, opts), command: (n, i) => tracker.submit(n, i), clock,
         retry: id => tracker.retry(id), dismiss: id => tracker.dismiss(id), edits, inbox, pending, ticks };
   }
 }

@@ -735,6 +735,44 @@ def test_held_priority_claims_shrink_a_collection_and_expire(tmp_path):
     assert collector.active_slots == 128
 
 
+
+def test_round_preparation_claim_shrinks_the_dgx_collection_further_and_its_ledger_claim_follows(tmp_path, monkeypatch):
+    """DECISIONS 2026-11-24 "the DGX collection yields to round preparation": a prep claim carries its own share (the
+    smallest live share wins); entering and leaving a yield the collection lowers and restores its ledger claim
+    (memory_ledger resize), once per transition; the claim is removed after the block, and share 1 writes none."""
+    assert ei.priority_slots(128, [{}, {'share': 0.5}]) == 64 and ei.priority_slots(128, [{'share': 1.0}]) == 128
+    with ei.yield_claim(tmp_path, 'aei-r0002-prep', 1.0) as none:
+        assert none is None and not list(tmp_path.glob('*.json'))          # the opt-out
+    resized = []
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(
+        start=lambda: args and resized.append(args[0])))          # the claim's heartbeat thread is not started
+    collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    collector.setup(['t1'], time.time() + 3600, endpoints=[('http://own', 128)], priority_dir=tmp_path,
+                    ledger_unit='aei-collect-v0001')
+    collector.active_slots = 128
+    with ei.yield_claim(tmp_path, 'aei-r0002-prep', ei.PREP_YIELD_SHARE, extra={'reason': 'round preparation'}) as path:
+        assert json.loads(path.read_text())['share'] == 0.5
+        with ei.yield_claim(tmp_path, 'aei-r0002-prep', 0.5) as nested:
+            assert nested is None                       # nested: the outer block owns the claim
+        assert path.exists()
+        collector._priority()
+        assert collector.active_slots == 64 and resized == ['yield']
+        held = tmp_path / 'aei-held-v0001.json'
+        held.write_text(json.dumps({'pid': os.getpid()}))
+        collector.priority_read = 0
+        collector._priority()
+        assert collector.active_slots == 64 and resized == ['yield']      # still yielding: no second resize
+        held.unlink()
+    assert not path.exists()
+    collector.priority_read = 0
+    collector._priority()
+    assert collector.active_slots == 128 and resized == ['yield', 'restore']
+    calls = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: calls.append(argv) or
+                        types.SimpleNamespace(stdout='{"budget_gb": 54}'))
+    collector._resize_claim('yield')
+    assert calls == [[*ei.LEDGER, 'resize', '--unit', 'aei-collect-v0001', 'yield']]
+
 def test_pop_rl_actor_profiles_keep_pop_settings():
     pop_settings, pop_fmt = pop_rl_actor.pop_sglang('fp8_e4m3', 20, profile='pop')
     assert pop_settings['max_running'] == 20 and pop_fmt == 'sglang-pop-rtx4060-bf16-vendor-projection-kv-fp8_e4m3'

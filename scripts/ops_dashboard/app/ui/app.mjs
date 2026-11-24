@@ -1,4 +1,4 @@
-import { num, fmt, gb, signed, dur, ago, clock, dayClock, shortUnit, health, metricSeries, askState, inboxSummary, listenerStatus, SNAP_STALE_MS } from './model.mjs';
+import { num, fmt, gb, signed, dur, ago, clock, dayClock, shortUnit, health, metricSeries, askState, inboxSummary, listenerStatus, feedState, CLOCK_WARN_MS } from './model.mjs';
 import { h, lineChart, valueTable, slotVar } from './charts.mjs';
 import { makeViews } from './views.mjs';
 import { dataView, link as dl } from './data.mjs';
@@ -16,7 +16,8 @@ const S = {
   acked: store('ops.acked') || {}, slots: store('ops.slots') || {}, tab: 'overview', sel: new Set(), selTouched: false,
   smooth: store('ops.smooth') ?? 0.3, logy: false, extra: store('ops.extra') || '', tables: new Set(), open: new Set(), showAcked: false,
   q: '', procMachine: 'all', procState: 'live', evAll: false, hold: false, sent: 0, route: '', gate: null,
-  asks: store('ops.asks') || {}, seen: store('ops.seen') || [], tick: null,
+  asks: store('ops.asks') || {}, seen: store('ops.seen') || [], tick: null, skew: null,
+  read: { okAt: null, failAt: null, error: null, since: now(), pending: false },   // snapshot reads of this page (model.mjs feedState)
   dui: { forms: {}, taskTab: {}, file: {}, traj: { reasoning: false, context: false, results: false, ...(store('ops.traj') || {}) }, tokens: {}, cmp: [] },
 };
 const runLink = id => h('a', { class: 'btn sm', href: dl.run(id), title: 'Steps, selected groups, episodes and held evals of this run' }, 'Training data');
@@ -61,16 +62,26 @@ function takeMachine(rec) {
 }
 function takeEvent(rec) { S.events.push({ ts: rec.ts, ...rec.data }); if (S.events.length > 400) S.events.shift(); schedule(); }
 
-/* Exporter state arrives through the session's on-demand queries; a tick names the files that changed. */
+/* Exporter state arrives through the session's on-demand queries; a tick names the files that changed. The snapshot is read
+   when a tick says it changed, and also (force) right after connecting, on coming back to the foreground and whenever no read
+   succeeded for a minute: a held tick says nothing about what changed while the page slept, and ticks may not arrive at all. */
 const offsets = { metrics: 0, machines: 0, events: 0 }, seen = {};
-let pulling = false;
-async function pull(tick) {
-  if (pulling || !src) return;
+let pulling = false, again = false;
+async function pull(tick, force = false) {
+  if (!src) return;
+  if (pulling) { again ||= force; return; }
   pulling = true;
   try {
-    if (!S.snap || tick?.snapshot !== seen.snapshot) {
-      const snap = await src.query('ops.snapshot');
-      seen.snapshot = tick?.snapshot; takeSnapshot({ data: snap }); notice('snap', '');
+    if (force || S.snapCached || !S.snap || tick?.snapshot !== seen.snapshot) {
+      S.read.pending = true; freshness();
+      try {
+        const snap = await src.query('ops.snapshot');
+        S.read.okAt = now(); S.read.error = null;
+        seen.snapshot = tick?.snapshot; takeSnapshot({ data: snap }); notice('snap', '');
+      } catch (e) {
+        S.read.failAt = now(); S.read.error = e.message;
+        throw e;
+      } finally { S.read.pending = false; schedule(); }
     }
     const streams = S.tab === 'investigations' ? [['metrics', takeMetric]] : [];      // the snapshot carries everything else; the metric stream only feeds the old investigation charts
     for (const [key, fn] of streams) {
@@ -79,9 +90,14 @@ async function pull(tick) {
       for (const rec of r.records) fn(rec);
       offsets[key] = r.offset; seen[key] = tick?.[key];
     }
-  } catch (e) { notice('snap', `Could not read the ops state: ${e.message}`); report({ ev: 'pull_failed', error: String(e.message).slice(0, 200) }); }
-  finally { pulling = false; }
+  } catch (e) { notice('snap', `No connection to the DGX: ${e.message}`); report({ ev: 'pull_failed', error: String(e.message).slice(0, 200) }); }
+  finally {
+    pulling = false;
+    if (again) { again = false; void pull(src.ticks.get(), true); }
+  }
 }
+/** The page (re)opened or came back to the foreground: what it shows is held data until the next read answers. */
+function resumed() { S.read.since = now(); schedule(); void pull(src?.ticks.get(), true); }
 
 /* ---------- colours: a run keeps its colour slot for good (colour follows the entity) ---------- */
 function slotOf(id) {
@@ -269,14 +285,24 @@ function releaseLine() {
 }
 function freshness() {
   releaseLine();
-  const el = $('fresh'), age = S.snap ? now() - S.snap.ts : null;
-  el.className = `live ${age == null ? 'dead' : age < 90e3 ? 'fresh' : age < SNAP_STALE_MS * 2 ? 'stale' : 'dead'}`;
-  $('fresh-text').textContent = S.snapCached ? `saved ${dur(age / 1000)} · ${src ? 'updating' : 'connecting'}`
-    : !src ? 'connecting' : age == null ? 'waiting for data' : age < 90e3 ? 'live' : `${dur(age / 1000)} old`;
+  const el = $('fresh'), feed = feedState(S.snap, now(), { ...S.read, cached: !!S.snapCached }), age = feed.age;
+  const tone = feed.state === 'waiting' ? 'dead' : feed.state === 'link_down' || feed.state === 'exporter_behind' ? 'dead'
+    : feed.state === 'refreshing' || S.read.pending ? 'stale' : age < 90e3 ? 'fresh' : 'stale';
+  el.className = `live ${tone}`;
+  const held = age == null ? '' : `${dur(age / 1000)} old`;
+  $('fresh-text').textContent = !src ? (S.snap ? `saved ${held} · connecting` : 'connecting')
+    : feed.state === 'waiting' ? (S.read.failAt ? 'no connection to the DGX' : 'waiting for data')
+    : feed.state === 'link_down' ? `${held} · no connection to the DGX`
+    : feed.state === 'refreshing' || (S.read.pending && age >= 90e3) ? `${S.snapCached ? 'saved ' : ''}${held} · refreshing`
+    : feed.state === 'exporter_behind' ? `${held} · exporter behind`
+    : age < 90e3 ? 'live' : held;
+  const skewText = S.skew != null && Math.abs(S.skew) > CLOCK_WARN_MS
+    ? `This device's clock is ${dur(Math.abs(S.skew) / 1000)} ${S.skew > 0 ? 'ahead of' : 'behind'} the DGX. Past 10 s live data cannot pass; turn on automatic date and time.` : '';
+  if ((S.notices.get('clock') || '') !== skewText) notice('clock', skewText);
 }
 function render() {
   syncAskTimes();
-  const hv = health(S.snap, now(), S.acked);
+  const hv = health(S.snap, now(), S.acked, { ...S.read, cached: !!S.snapCached });
   document.title = `${hv.level === 'ok' ? '✔' : hv.level === 'crit' ? '✖' : '▲'} natlang ops`;
   chrome(hv); tabs(hv);
   $('tabs').hidden = !!S.gate;
@@ -386,11 +412,15 @@ export function start(source) {
   });
   if (src.kind === 'preview') document.querySelector('.top .brand')?.append(h('span', { class: 'chip warn previewchip', title: 'A local preview of the page over the DGX exporter files and data service. Edits made here stay in this preview server and are not applied.' }, 'local preview'));
   src.ticks.on(t => { if (t) { const was = listenerStatus(S.tick, now()).state; S.tick = t; if (listenerStatus(t, now()).state !== was) schedule(); void pull(t); } });
-  // a phone resumes a backgrounded page: read the current state at once rather than at the next tick
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void pull(src.ticks.get()); });
+  src.clock?.on(v => { S.skew = v; });
+  // a phone resumes a backgrounded page: its snapshot is held data until a fresh read answers (not an exporter alarm)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resumed(); });
+  addEventListener('pageshow', e => { if (e.persisted) resumed(); });
   for (const c of [src.edits, src.inbox, src.pending]) c.on(() => { if (S.tab === 'data' || S.tab === 'inbox') softRender(); else schedule(); });
-  void pull(null);
-  setInterval(() => void pull(src.ticks.get()), 60000);      // ticks drive refreshes; this is the fallback
+  S.read.since = now();
+  void pull(src.ticks.get(), true);
+  // ticks drive refreshes; this fallback reads again whenever no read succeeded for a minute
+  setInterval(() => void pull(src.ticks.get(), !S.read.okAt || now() - S.read.okAt > 60000), 30000);
   render();
 }
 export function showGate(node) { S.gate = node; render(); }

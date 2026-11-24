@@ -15,6 +15,8 @@ heavy job declare a budget and enforces it from outside the job:
            read-once checkpoints and corpora makes model loads fail with "CUDA error: out of memory" while
            MemAvailable looks ample. The GB10 guard and admitted high-priority GB10 runs call it when MemFree is
            short. Linux reclaims cache on demand for host allocations and discrete CUDA devices use separate VRAM.
+  resize   yield: lower a running claim to its measured use while the unit shrinks in place for a waiting job (the
+           elastic DGX collection gives up slots to round preparation instead of being preempted); restore: undo.
   status   claims with measured use (cgroup memory plus each process's CUDA memory from nvidia-smi).
   guard    loop: under memory pressure (available below twice the floor) stop the unit most over its budget,
            and below the floor the lowest-priority admitted unit; without pressure an over-budget unit keeps
@@ -1136,6 +1138,65 @@ def cancel(args):
     return 0 if entry is not None else 1
 
 
+YIELD_FACTOR = 1.1   # a yielding unit's claim: its measured use times this (it is shrinking, not growing)
+
+
+def yield_claim(claim, used, factor=YIELD_FACTOR):
+    """Lower a running claim to ``used`` x ``factor`` (never raise it) for a unit that is shrinking in place (an
+    elastic collection giving up slots to a waiting job): its unspent budget stops reserving room it is releasing, so
+    the job is admitted beside it instead of preempting it. The budget before the first yield is kept
+    (``unyielded_budget``) for ``restore_claim``. Returns the new budget."""
+    claim.setdefault('unyielded_budget', claim['budget'])
+    claim['budget'] = max(GIB, min(claim['budget'], int(used * factor)))
+    return claim['budget']
+
+
+def restore_claim(claim):
+    """Undo ``yield_claim``: the budget before the yield, or what the guard raised it to since, whichever is larger."""
+    if 'unyielded_budget' in claim:
+        claim['budget'] = max(claim['budget'], claim.pop('unyielded_budget'))
+    return claim['budget']
+
+
+def resize(args):
+    """``yield``: lower the unit's claim to its measured use (``yield_claim``); ``restore``: back to its budget before
+    the yield (``restore_claim``). Accounting only: MemoryMax is not changed."""
+    unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
+    with ledger() as state:
+        claim = state['claims'].get(unit)
+        if claim is None:
+            print(json.dumps({'unit': unit, 'claim': None}))
+            return 1
+        before = claim['budget']
+        if args.mode == 'yield':
+            used = unit_usage(unit, gpu_usage(), claim.get('command'), claim.get('spec', {}).get('containers') or (),
+                              cuda_separate=bool(claim.get('cuda_budget')))
+            if used is None:
+                print(json.dumps({'unit': unit, 'running': False}))
+                return 1
+            after = yield_claim(claim, used)
+        else:
+            used, after = None, restore_claim(claim)
+        state['events'].append({'time': time.time(), 'event': f'claim {args.mode}', 'unit': unit, 'budget_before': before,
+                                'budget': after, **({'used': used} if used is not None else {})})
+    print(json.dumps({'unit': unit, 'mode': args.mode, 'budget_gb': round(after / GIB, 1),
+                      'before_gb': round(before / GIB, 1)}))
+    return 0
+
+
+def admissible(budget_gb, reserve_gb=None, state_path=None):
+    """Whether a job of ``budget_gb`` would be admitted now by real headroom (``fits``: MemAvailable minus what running
+    claims still reserve, the reserve left), read without the allocator lock; False when the ledger is unreadable."""
+    try:
+        state = read_snapshot(state_path)
+    except (OSError, ValueError):
+        return False
+    state.setdefault('claims', {})
+    free, _ = headroom(state, gpu_usage())
+    budget = int(budget_gb * GIB)
+    return fits(free, budget, int(reserve_gb * GIB) if reserve_gb is not None else default_reserve(budget))
+
+
 def reset_peak(args):
     """Clear (or set, with --to-gb) a family's learned peak, e.g. after a memory leak was fixed."""
     with ledger() as state:
@@ -1600,6 +1661,9 @@ def main():
     sub.add_parser('status')
     c = sub.add_parser('cancel', help='drop a waiting or requeued entry from the queue')
     c.add_argument('--unit', required=True)
+    rs = sub.add_parser('resize', help='yield: lower a shrinking unit\'s claim to its measured use; restore: undo')
+    rs.add_argument('--unit', required=True)
+    rs.add_argument('mode', choices=['yield', 'restore'])
     rp = sub.add_parser('reset-peak', help="clear or set a family's learned peak (admission claims 1.1x it)")
     rp.add_argument('--family', required=True)
     rp.add_argument('--to-gb', type=float, default=None)
@@ -1622,6 +1686,7 @@ def main():
         if not args.command:
             parser.error('run needs a command after --')
     {'run': run, 'adopt': adopt, 'status': status, 'guard': guard, 'cancel': cancel, 'reset-peak': reset_peak,
+     'resize': resize,
      'release-cache': lambda _: print(json.dumps(release_cache()))}[args.action](args)
 
 

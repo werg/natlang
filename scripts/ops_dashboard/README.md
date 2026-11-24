@@ -47,6 +47,18 @@ the page and the exporter never pair across series.
 - Query names: `ops.tick` (exporter file signatures, plus `listener`: the agent's heartbeat) `|snapshot|metrics|machines|events`; `data.catalog|dataset|items|item|tokens|chain|task_refs|search|registry`.
   `edits.*` and `inbox.*` are native-only.
 
+- **Freshness and the stale alert** (`ui/model.mjs` `feedState`). The page reads the snapshot right after connecting, on every return to the
+  foreground and whenever no read succeeded for a minute, besides the ticks. A snapshot held from before (saved copy, or a phone that slept)
+  shows "N old · refreshing" and raises nothing until a read finishes. Then: a read that fails while the data is over 150 s old raises
+  "No connection to the DGX" (warn; the exporter may be fine); a read that succeeds but returns exporter data already over 150 s old raises
+  "Exporter behind" (crit after 10 min).
+- **Clock skew.** A Chronolog signal receiver rejects a frame signed more than `maxClockSkewMs` ahead of its own clock (default 2 s) and then
+  tears down the whole peer connection; history (commands) still syncs between the reconnects, signals never pass. On 2026-11-24 the owner's
+  phone drifted ahead of the DGX by ~0.1 s/h and crossed 2 s at about 09:50Z: from then on no query or telemetry reached the DGX and the
+  connection flapped every 10-30 s (werg/tendriller#103). Both sessions now set `maxClockSkewMs` to Chronolog's maximum, 10 s
+  (`SIGNAL_CLOCK_SKEW_MS` in `ops-protocol.mjs`). The page measures its clock against the signing time of the ticks, reports it as
+  `clock_skew_ms` in its telemetry and shows a notice beyond 5 s (turn on automatic date and time on the device).
+
 ## Edits: from the page to the data
 
 `proposeEdit {target{kind,dataset,id,ref,label}, action, text, correction?, field?, basedOn?}` is a signed operation. The participant

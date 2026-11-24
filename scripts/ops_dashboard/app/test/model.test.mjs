@@ -1,7 +1,8 @@
 // Pure helpers of the ops page (ui/model.mjs): round steps and estimates, the progress verdict, health, activity. Run: node --test test/
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compact, etaText, roundSteps, roundEta, roundSegments, hourlyBars, progress, activity, health, rate } from '../ui/model.mjs';
+import { compact, etaText, roundSteps, roundEta, roundSegments, hourlyBars, progress, activity, health, rate, clockSkew } from '../ui/model.mjs';
+import { SIGNAL_CLOCK_SKEW_MS } from '../ops-protocol.mjs';
 
 const NOW = Date.parse('2026-11-24T09:00:00Z');
 const round = (over = {}) => ({ id: 'r0004', state: 'sft', version: null, stamps: { start: NOW - 5 * 3600e3, frontier: NOW - 5 * 3600e3, data: NOW - 3 * 3600e3, build: NOW - 2 * 3600e3, sft_start: NOW - 3600e3, sft_end: null, published: null },
@@ -108,4 +109,49 @@ test('askState follows a question from this device through the journal to the an
   assert.equal(askState(inbox, [], {}, ['ans-1'], 'alert', 'ei:gate').unread, false);
   assert.deepEqual(inboxSummary(inbox, [], []), { waiting: 0, unread: 1, total: 1 });
   assert.deepEqual(inboxSummary(inbox, [{ id: 'op-2', name: 'ask', input: { kind: 'ask' } }], ['ans-1']), { waiting: 1, unread: 0, total: 2 });
+});
+
+/* 2026-11-24: a reopened page showed "Exporter data is 4h 30m old" (crit) while the exporter wrote every 30 s; the page held an old
+   snapshot and could not reach the DGX. Age alone must never raise the exporter alarm. */
+test('a held snapshot after reopening is refreshing, not an exporter alarm', () => {
+  const snap = { v: 3, ts: NOW - 4.5 * 3600e3 };
+  const since = NOW - 5e3;
+  for (const read of [{ since, cached: true }, { since, okAt: NOW - 5 * 3600e3 }, { since }]) {
+    const hv = health(snap, NOW, {}, read);
+    assert.equal(hv.feed.state, 'refreshing');
+    assert.ok(!hv.items.some(i => i.id === 'stale' || i.id === 'link'), JSON.stringify(hv.items));
+    assert.equal(hv.level, 'ok');
+  }
+});
+
+test('a failed read names the missing connection, not the exporter', () => {
+  const snap = { v: 3, ts: NOW - 4.5 * 3600e3 };
+  const hv = health(snap, NOW, {}, { since: NOW - 60e3, okAt: NOW - 4.5 * 3600e3, failAt: NOW - 10e3, error: 'No answer to ops.snapshot from the DGX yet.' });
+  assert.equal(hv.feed.state, 'link_down');
+  const link = hv.items.find(i => i.id === 'link');
+  assert.match(link.text, /No connection to the DGX/);
+  assert.equal(link.level, 'warn');
+  assert.ok(!hv.items.some(i => i.id === 'stale'));
+  // a cached snapshot whose first read failed is also a connection problem
+  assert.equal(health(snap, NOW, {}, { since: NOW - 60e3, failAt: NOW - 1e3, cached: true }).feed.state, 'link_down');
+  // a failure while the data is still young is not an alert
+  assert.equal(health({ v: 3, ts: NOW - 60e3 }, NOW, {}, { since: NOW - 90e3, okAt: NOW - 60e3, failAt: NOW - 1e3 }).items.length, 0);
+});
+
+test('a successful read of old data says the exporter is behind', () => {
+  const snap = { v: 3, ts: NOW - 20 * 60e3 };
+  const hv = health(snap, NOW, {}, { since: NOW - 120e3, okAt: NOW - 2e3 });
+  assert.equal(hv.feed.state, 'exporter_behind');
+  const st = hv.items.find(i => i.id === 'stale');
+  assert.match(st.text, /^Exporter behind/);
+  assert.equal(st.level, 'crit');
+  assert.equal(health({ v: 3, ts: NOW - 200e3 }, NOW, {}, { since: NOW - 300e3, okAt: NOW - 2e3 }).items[0].level, 'warn');
+  // a fresh read of fresh data is live, and a later failed read only matters once the data is old
+  assert.equal(health({ v: 3, ts: NOW - 20e3 }, NOW, {}, { since: NOW - 300e3, okAt: NOW - 2e3 }).feed.state, 'live');
+});
+
+test('clock skew from a signal signing time', () => {
+  assert.equal(clockSkew(NOW - 2400, NOW), 2400);
+  assert.equal(clockSkew(undefined, NOW), null);
+  assert.equal(SIGNAL_CLOCK_SKEW_MS, 10000);
 });
