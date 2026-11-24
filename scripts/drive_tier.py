@@ -306,8 +306,8 @@ def mirror_manifest(drive: Drive, manifest=None):
 
 # ---------- the HDD -> Drive tier ----------
 
-# natlang's finished-run archives on the HDD; other projects' data (bgkit, hindsight, megatoken, ComfyUI, Vibestudio
-# campaigns) is not here and is never touched (owner decision pending)
+# natlang's finished-run archives on the HDD; other projects' data (bgkit-checkpoints, hindsight, megatoken, ComfyUI,
+# Vibestudio campaigns) is not here and is never touched (bgkit-data: RELEASED_ROOTS)
 DEFAULT_ROOTS = (
     'dgx-moved-20261104', 'dgx-moved-20261107-internal', 'dgx-ops-archive-20261118', 'lfm3-rl-dgx-20261029-ops',
     'natlang-grpo-v1', 'natlang-grpo-v2', 'natlang-grpo-v2-archive', 'natlang-grpo-v3', 'natlang-grpo-v4',
@@ -322,6 +322,14 @@ DEFAULT_ROOTS = (
 LINK_TOLERANT = {'dgx-moved-ei': 0.5, 'dgx-moved-2026112*': 0.5}
 # Where the round inflow lands: drained before the older run archives (top-level names, fnmatch patterns).
 PRIORITY_ROOTS = ('dgx-moved-ei', 'dgx-moved-2026112*')
+# Other projects' data the owner released to Drive (2026-11-24: bgkit-data), drained after the round inflow and
+# before the older run archives.
+RELEASED_ROOTS = ('bgkit-data',)
+# Top-level subdirectories of a root that registered data reads: they stay. multi_news_v1, arxiv_v1, pubmed_v1: the
+# local copies the registered view-sources-20261010-v3 corpus reads on a rebuild. bgkit-data/repos is released: the
+# K3 pool (natlang-rl-git-history-20261120) serves NVMe snapshots, and its authoring (git_history.stage) copies only
+# repos whose object store is 0.2-25 MB, below --min-mb, so only packs of larger repos move (restore restores them).
+KEEP_SUBPATHS = {'bgkit-data': ('multi_news_v1', 'arxiv_v1', 'pubmed_v1')}
 # Path fragments never moved, whatever the root: the lineage's base checkpoints (keep-list: active lineage and parents).
 NEVER_FRAGMENTS = ('/native-pins/',)
 
@@ -333,12 +341,12 @@ def default_roots() -> list[str]:
     except OSError:
         names = []
     ordered = [n for pattern in PRIORITY_ROOTS for n in names if fnmatch.fnmatch(n, pattern)]
-    return list(dict.fromkeys([*ordered, *DEFAULT_ROOTS]))
+    return list(dict.fromkeys([*ordered, *RELEASED_ROOTS, *DEFAULT_ROOTS]))
 
 
 def _tolerance(name: str):
     return next((days for pattern, days in LINK_TOLERANT.items() if fnmatch.fnmatch(name, pattern)), None)
-NEVER = ('bgkit*', '*hindsight*', 'megatoken*', 'ComfyUI*', '*vibestudio*', 'claude-scratch*', 'lost+found',
+NEVER = ('bgkit-checkpoints*', '*hindsight*', 'megatoken*', 'ComfyUI*', '*vibestudio*', 'claude-scratch*', 'lost+found',
          'natlang-test-tmp', 'natlang-development-data')
 
 
@@ -422,8 +430,10 @@ def candidates(roots, *, min_mb, min_age_days, exclude, links, held):
         tolerance = _tolerance(name)
         tolerant = tolerance is not None
         age_days = min_age_days if tolerance is None else tolerance
+        keep = KEEP_SUBPATHS.get(name, ())
         for directory, children, files in os.walk(top):
-            children[:] = sorted(c for c in children if not os.path.islink(os.path.join(directory, c)))
+            children[:] = sorted(c for c in children if not os.path.islink(os.path.join(directory, c))
+                                 and not (directory == str(top) and c in keep))
             for file in sorted(files):
                 path = os.path.join(directory, file)
                 if file.endswith((STUB_SUFFIX, '.part', '.partial', '.archiving')) or os.path.islink(path) \

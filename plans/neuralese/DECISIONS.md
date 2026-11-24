@@ -10918,3 +10918,13 @@ and 08:18. The rule now runs in `storage_sweep.sh` every 30 min (`SWEEP_EI=0` op
   - `/native-pins/` is never moved: `dgx-moved-20261123/native-pins` holds the lineage's fresh-init base 5ff07638.
   - Before the change: 39.8 GB in 195 files had gone to Drive since 11-23 18:42, at 5-8 GB per hourly pass (3 MiB/s
     nominal).
+- **bgkit-data released to Drive (owner 2026-11-24, "Yes that can go").** The Drive tier drains `bgkit-data` (591 GB)
+  after the round inflow and before the older run archives (`RELEASED_ROOTS`).
+  - The usual safety applies: md5 and size verified before the HDD delete, a stub per file, the manifest, and
+    `drive_tier.py restore PATH` (any prefix: one repo or a subtree).
+  - Live readers were checked. The K3 pool (`natlang-rl-git-history-20261120`) serves its snapshots from NVMe assets.
+    Its authoring (`git_history.stage`) copies only repos with 0.2-25 MB object stores, below the 64 MB file floor, so
+    `repos` (412 GB) moves only packs of repos K3 never draws.
+  - `multi_news_v1`, `arxiv_v1` and `pubmed_v1` stay on the HDD (`KEEP_SUBPATHS`): the registered view-sources-v3
+    corpus reads them on a rebuild.
+  - `bgkit-checkpoints` and the hindsight data stay out (not approved).
