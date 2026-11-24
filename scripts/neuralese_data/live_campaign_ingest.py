@@ -20,7 +20,9 @@ A scan's kept manifests are extracted together by ``sft_sources.extract --live-r
 the build and filled_reasoning read every ``episodes*.jsonl.zst``, each key once), then one line per directory is
 appended to ``WORK/ingest.jsonl`` (the ingested marker: a rerun skips it; a scan cut off before its lines is extracted
 again). The catalog is copied once to ``WORK/live-holdout-registry.jsonl``
-(the build's ``--live-holdout-registry``) and must stay byte-identical. Nothing under the campaign root is written.
+(the build's ``--live-holdout-registry``) and must stay byte-identical. Original campaign data is never modified. After durable ingestion, unreferenced native diagnostic pack
+infrastructure excluded from all registered snapshots may be retired, with a small retirement receipt;
+original trajectories, IR, source and verification evidence remain unchanged.
 
     live_campaign_ingest.py once --campaign ROOT --work WORK [--held-manifest HELD]
     live_campaign_ingest.py poll --campaign ROOT --work WORK --every 1800
