@@ -14,6 +14,10 @@ def load():
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
+    # the copy's global os.sync() waits for every filesystem: on a host whose HDD is saturated (2026-11-24 22:40, a
+    # live collection writing there) a test hung on it for minutes. Its files are fdatasync'ed one by one already
+    module.os = SimpleNamespace(**{k: getattr(os, k) for k in dir(os) if not k.startswith('__')})
+    module.os.sync = lambda: None
     return module
 
 
@@ -73,6 +77,20 @@ def test_plan_keeps_current_previous_and_measured(tmp_path):
     assert ('move', 'r0002/sft/factors') not in acts
     assert ('move', 'r0002/mix/chains.pkl') in acts and ('move', 'r0002/filled') in acts
     assert not any(p.endswith(('rows.jsonl.zst', 'trained-units.json', 'train.jsonl')) for op, p in acts)
+
+
+def test_plan_never_tiers_the_collections_of_the_rollback_targets(tmp_path):
+    """2026-11-24 19:12: aei1 rolled back to r1, whose collections ei_round_tier had moved to the HDD that morning
+    (only the last two lineage entries were kept); its live collectors then wrote there. The reference and start
+    policies' collections (and NVMe continuations ``-nN``) stay."""
+    m = load()
+    root, state = driver(tmp_path)
+    state['reference_policy'] = {'sha256': sha('1'), 'checkpoint': '/r1.pt'}
+    state['start_policy'] = {'sha256': sha('0'), 'checkpoint': '/s.pt'}
+    write(root / 'collect' / f'v0001-{sha("1")[:12]}-n1' / 'runs.jsonl')
+    acts = {str(Path(a['path']).relative_to(root)) for a in m.plan(root, state, None)}
+    assert not any(p.startswith(('collect/v0000', 'collect/v0001')) for p in acts)
+    assert 'collect/v0002-222222222222' in acts
 
 
 def test_apply_moves_with_symlinks_and_keeps_referenced(tmp_path, monkeypatch):
