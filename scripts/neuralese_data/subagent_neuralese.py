@@ -442,7 +442,7 @@ def norm_words(text):
 
 
 def held_texts():
-    """Normalized strings of every held set's task inputs (held_eval.held_manifests: held-v3, held-v4 and reservations)
+    """Normalized strings of every held set's task inputs (held_eval.held_manifests: held-v3, held-v4, and what they also exclude)
     and their 10-word shingles."""
     from natlang_neuralese.common.jsonio import read_jsonl
     from natlang_neuralese.rl.held_eval import held_manifests
@@ -460,9 +460,17 @@ def held_texts():
         elif isinstance(value, list):
             for item in value:
                 walk(item)
-    for _, path in held_manifests():
-        manifest = json.loads(Path(path).read_text())
-        cases = Path(path).parent / manifest['cases']['path']
+    read, manifests = set(), [Path(p) for _, p in held_manifests()]
+    for path in list(manifests):    # the earlier held sets a manifest still excludes (held-v3: held-v2)
+        try:
+            manifests += [Path(e['path']) for e in json.loads(path.read_text()).get('also_excludes') or ()]
+        except (ValueError, AttributeError, TypeError):
+            pass
+    for path in manifests:
+        cases = path.parent / 'cases.jsonl'    # a held set's own rows sit beside its manifest
+        if not cases.exists() or cases in read:
+            continue
+        read.add(cases)
         for row in read_jsonl(cases):
             semantics = row.get('semantics') or {}
             walk(semantics.get('inputs'))
@@ -673,7 +681,13 @@ def scope(args):
             all_subs = dispatched == len(subs)
             final = swarm_answer(swarm_messages(row['messages']) or [{'role': 'user'}])
             right = bool(final and gold and qa_norm(gold) in qa_norm(final))
+            # the gold in the recorded tool outputs (lead and subagents): a frozen fixture could answer the item
+            evidence = qa_norm(' '.join(m['content'] for conv in [row['messages'], *[x['messages'] for x in subs]]
+                                        for m in conv if m['role'] in ('user', 'tool') and '<tool_response>' in m['content']
+                                        and 'A sub-agent dispatched for goal' not in m['content']))
+            found = bool(gold and qa_norm(gold) and qa_norm(gold) in evidence)
             rows[(kind, 'gold', 'teacher_right' if right else 'teacher_wrong',
+                  'gold_in_evidence' if found else 'gold_not_in_evidence',
                   'no_dispatch' if not dispatched else 'complete' if complete and all_subs else
                   'subagents_missing' if complete else 'outputs_missing')] += 1
             stats['items'] += 1
