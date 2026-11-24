@@ -1523,7 +1523,7 @@ def test_dry_run_shows_the_remote_collection_and_the_dgx_sft_sizing(tmp_path, mo
     monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: True)
     plan = d.plan()
     (remote,) = plan['remote_collect']
-    assert remote['endpoint'] == 'http://127.0.0.1:18731' and remote['serves_policy'] and remote['budget_gb'] == 23
+    assert remote['endpoint'] == 'http://127.0.0.1:18731' and remote['serves_policy'] and remote['budget_gb'] == 12
     argv = remote['collect']
     assert argv[argv.index('--actor') + 1] == 'http://127.0.0.1:18731=64' and argv[argv.index('--slots') + 1] == '64'
     assert argv[argv.index('--work') + 1].endswith('-remote0')
@@ -1739,7 +1739,7 @@ def test_rebind_targets_carry_their_own_slots_and_pop_is_a_standing_actor_with_i
     assert [a[0] for a in d.remote_actors(include_pop=False)] == ['colab-g4']
     _u, work, argv, budget = d.remote_collect_argv(cur, t[1], 'http://100.1.2.3:18531')
     assert work.name.endswith('-pop') and argv[argv.index('--slots') + 1] == '24'
-    assert argv[argv.index('--actor') + 1] == 'http://100.1.2.3:18531=24' and budget == 11
+    assert argv[argv.index('--actor') + 1] == 'http://100.1.2.3:18531=24' and budget == 8
     assert argv[argv.index('--tasks') + 1] == str(d.collect_dir(cur) / 'tasks.json')
     # the Colab collector only: Pop's is pop_step's
     started = []
