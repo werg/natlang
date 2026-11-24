@@ -1802,6 +1802,21 @@ def test_pop_yields_to_a_held_measurement_and_serves_the_head_again_after_it(tmp
     assert want not in present and len(served) == 1
 
 
+def test_pop_actor_driver_keeps_a_dead_engines_log_tail_outside_its_work_directory(tmp_path):
+    import pop_actor_driver
+    work = tmp_path / 'held-actor-x'
+    work.mkdir()
+    (work / 'actor.log').write_text('\n'.join(f'line {i}' for i in range(1000)) +
+                                    '\ntorch.OutOfMemoryError: CUDA out of memory.\nSIGQUIT received\n')
+    kept = pop_actor_driver.keep_crash_tail(work, lines=50)
+    path = Path(kept['path'])
+    assert path.parent == tmp_path / 'actor-crashes' and path.name.startswith('held-actor-x-')
+    text = path.read_text().splitlines()
+    assert len(text) == 50 and text[-1] == 'SIGQUIT received'
+    assert kept['last_error'] == 'torch.OutOfMemoryError: CUDA out of memory.'
+    assert 'error' in pop_actor_driver.keep_crash_tail(tmp_path / 'gone')
+
+
 def test_pop_actor_driver_and_serve_pass_the_collection_law(tmp_path):
     import pop_actor_driver
     import pop_rl_actor

@@ -71,6 +71,31 @@ def test_queue_samples_distinct_seeds_and_refuses_greedy_groups(tmp_path):
                     max_model_requests=8, max_turns=4, seed_base=0)
 
 
+def test_queue_entries_ride_out_an_actor_relaunch(tmp_path, monkeypatch):
+    """aei1 held 2026-11-24: 32 in-flight episodes were lost to engine relaunches after the single default resend."""
+    from natlang_neuralese.rl import task_rollouts
+    monkeypatch.delenv("NATLANG_ACTOR_REQUEST_RETRIES", raising=False)
+    entries = build_queue(tmp_path / "p.jsonl", 1, 2, tmp_path, temperature=1.0, case_seconds=60,
+                          max_model_requests=8, max_turns=4, seed_base=10)
+    assert {e["request_retries"] for e in entries} == {task_rollouts.ACTOR_REQUEST_RETRIES} and \
+        task_rollouts.ACTOR_REQUEST_RETRIES >= 4
+    monkeypatch.setenv("NATLANG_ACTOR_REQUEST_RETRIES", "1")
+    assert build_queue(tmp_path / "p.jsonl", 1, 2, tmp_path, temperature=1.0, case_seconds=60, max_model_requests=8,
+                       max_turns=4, seed_base=10)[0]["request_retries"] == 1
+    monkeypatch.setenv("NATLANG_ACTOR_REQUEST_RETRIES", "x")
+    with pytest.raises(ValueError):
+        task_rollouts.actor_request_retries()
+
+
+def test_pass_rate_counts_leave_infrastructure_out_and_fail_other_unscored():
+    from natlang_neuralese.rl.task_rollouts import pass_rate_counts
+    rows = [{"reward": 1.0, "outcome": "task_success"}, {"reward": {"quality": 1.0}, "outcome": "task_success"},
+            {"reward": None, "outcome": "infrastructure_error"}, {"reward": None, "outcome": "unresolved"},
+            {"reward": None, "outcome": "unresolved", "infra_lost": "request_budget_spent_on_resends"},
+            {"reward": 0.4, "outcome": "memetic_scored", "memetic_success": True}, {"reward": 0.0}]
+    assert pass_rate_counts(rows) == (3, 5)
+
+
 def test_score_routes_groups_by_spread(tmp_path):
     packet = [authored_root_row(_row()), {**authored_root_row(_row()), "id": "row-2"}]
     (tmp_path / "packet.jsonl").write_text("".join(json.dumps(r) + "\n" for r in packet))

@@ -154,7 +154,9 @@ def episode_success(row):
 
 def group_outcomes(group_dirs):
     """task id -> [successes, scored] over the student samples of GRPO-format group directories (rewards.jsonl; JOLT+
-    teacher attempts and unscored samples left out)."""
+    teacher attempts left out). ``scored`` counts every sample that measured the policy (``task_rollouts.pass_rate_counts``):
+    a sample lost to infrastructure is left out, any other unscored one is a failure."""
+    from natlang_neuralese.rl.task_rollouts import pass_rate_counts
     rates = collections.defaultdict(lambda: [0, 0])
     for directory in group_dirs:
         path = Path(directory) / 'rewards.jsonl'
@@ -164,11 +166,12 @@ def group_outcomes(group_dirs):
             if not line.strip():
                 continue
             row = json.loads(line)
-            if row.get('reward') is None or row.get('jolt_role', 'student') != 'student':
+            if row.get('jolt_role', 'student') != 'student':
                 continue
-            rates[row['task_id']][0] += episode_success(row)
-            rates[row['task_id']][1] += 1
-    return dict(rates)
+            successes, counted = pass_rate_counts([row])
+            rates[row['task_id']][0] += successes
+            rates[row['task_id']][1] += counted
+    return {task: rate for task, rate in rates.items() if rate[1]}
 
 
 def tier(successes, scored, solved=0.75, min_scored=2):

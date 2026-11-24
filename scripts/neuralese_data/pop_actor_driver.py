@@ -276,13 +276,29 @@ def serve_sglang(job, checkpoint, transport, stage, work):
             quick_deaths = quick_deaths + 1 if time.time() - ready < 600 else 1
             print(json.dumps({'state': 'actor exited', 'returncode': process.returncode, 'pid': process.pid,
                               'served_seconds': round(time.time() - ready), 'log': str(work / 'actor.log'),
-                              'action': 'fail' if quick_deaths >= 3 else 'relaunch'}), flush=True)
+                              'crash': keep_crash_tail(work), 'action': 'fail' if quick_deaths >= 3 else 'relaunch'}),
+                  flush=True)
             if quick_deaths >= 3:
                 current['exit'] = 1
                 break
             time.sleep(10)   # the dead engine's GPU memory returns to the driver
     finally:
         stop()
+
+def keep_crash_tail(work, lines=400):
+    """Copy the tail of a dead engine's ``actor.log`` to ``<eval root>/actor-crashes/<actor>-<time>.log``, which
+    outlives the actor's work directory (removed when the actor is stopped: the cause of the two aei1 held engine deaths
+    on 2026-11-24 went with it), and return its path and last error line for the driver's journal."""
+    try:
+        tail = (work / 'actor.log').read_bytes()[-512 * 1024:].decode('utf-8', 'replace').splitlines()[-lines:]
+        keep = work.parent / 'actor-crashes' / f'{work.name}-{int(time.time())}.log'
+        keep.parent.mkdir(exist_ok=True)
+        keep.write_text('\n'.join(tail) + '\n')
+        errors = [line for line in tail if 'Error' in line or 'error:' in line]
+        return {'path': str(keep), 'last_error': errors[-1][-400:] if errors else None}
+    except OSError as error:
+        return {'error': repr(error)[:200]}
+
 
 if __name__ == '__main__':
     main(sys.argv[1])

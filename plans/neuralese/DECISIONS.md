@@ -11356,3 +11356,31 @@ The success verdict (>= +2 pts, ran-out <= +2) holds. For reference: counting th
     marker or a `collect.log` written within the hour keeps the whole collection, and any error keeps it too.
     `--trim PATH` covers the sft-v7..v9 cycle collections. Tests added.
   - **First dry run:** 40.1 GB across aei1 v0000..v0002, 27.4 GB of it v0000's native-state cache.
+
+
+## 2026-11-24 Training pass rates follow the held loss rule; Pop held episodes ride out an engine relaunch
+
+Follow-ups to "Held episodes lost to infrastructure are re-run ..." (coordinator, fix-what-turns-up rule).
+
+Pass rates for frontier weights and selection (`expert_iteration.group_outcomes`, `grpo.Collector._record_outcome`,
+`exp1_pass_rates.py` -> base-pass-rates.json) now use one helper, `task_rollouts.pass_rate_counts`: a row lost to
+infrastructure (`infrastructure_error`, or a held sample's `infra_lost`) is left out, every other unscored row (wall
+clock, unresolved) counts as a failure; training targets are unchanged (unscored rows still never train). Left as is:
+`grpo._teachers` (JOLT+ trigger; its scored rows are the trajectories handed to the teacher, not a rate). Rows written
+before the classifier fix label a transport loss `unresolved`, so old groups count such losses as failures.
+
+Pop engine deaths (exit 70 at 02:52 and 05:47 under the aei1 round-1 measurement): the actor's log went with its work
+directory, Pop's kernel/system journal shows no host OOM, NVRM or Xid. The earlier Pop deaths in the surviving
+rl-actor log (11-12..11-16) were all CUDA OOMs of prefill transients (input-logprob chunks; `natlang_conv_prefill`),
+fixed on 11-13 (`SGLANG_LOGPROB_CHUNK_SIZE` 256), 11-16 (fork dbc51ddb7 bounded conv rows) and 11-16 (mem fraction
+0.77); none after 11-16 in 5 days of that log. Today's engine (fork 17e3458c2) keeps 1.00 GB after CUDA graphs and the
+device shows ~0.6 GB free beside it. A low-priority model-free Vibe native-oracle chain ran on Pop across both deaths
+(02:18-04:12, 04:25 on); whether it touched the GPU (Xorg is on it) is not established. Cause therefore not proven; a
+CUDA OOM is the likeliest. Changes: (1) `pop_actor_driver.keep_crash_tail` copies the dead engine's last 400 log lines
+to `pop-behavior-eval/actor-crashes/` and puts the path and last error line in the driver's journal, so the next death
+is diagnosable; (2) collector queue entries (`task_rollouts.build_queue`: held and training collection) resend a
+failed actor request 6 times (about 2.5 min at the 15 s delay and 30 s cap) instead of once, so in-flight episodes wait
+out the ~1 min relaunch; resends never spend call budget (ts-host fix); `NATLANG_ACTOR_REQUEST_RETRIES` overrides;
+(3) held measurement re-runs whatever is still lost (previous entry). Running measurements are untouched: their sealed
+queues keep their entries, and the driver change applies to actors started on the new code. Not checked: whether a
+relaunch keeps Neuralese states that in-flight episodes still reference (the front restarts with the engine).

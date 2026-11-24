@@ -72,8 +72,11 @@ def refresh(runs, out):
         rate = rates.setdefault(item['task_id'], {'family': item['family'], 'finished': 0, 'scored': 0, 'successes': 0,
                                                   'timeouts': 0, '_tokens': []})
         rate['finished'] += 1
-        rate['scored'] += item['reward'] is not None
-        rate['successes'] += item['reward'] == 1.0
+        # 'scored': the episodes that measured the policy (task_rollouts.pass_rate_counts): one lost to infrastructure
+        # is left out, any other unscored one is a failure
+        successes, counted = task_rollouts.pass_rate_counts([item])
+        rate['scored'] += counted
+        rate['successes'] += successes
         rate['timeouts'] += item['status'] == 'timeout' or (item['outcome'] == 'budget_exhaustion' and item['reward'] is None)
         if item['tokens'] is not None:
             rate['_tokens'].append(item['tokens'])
