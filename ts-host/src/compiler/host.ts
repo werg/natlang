@@ -26,20 +26,34 @@ const dirname = (path: string) => { const at = path.replace(/[\\/]+$/, '').lastI
 declare const __NATLANG_TS_LIBS__: Record<string, string> | undefined;
 const embeddedLibs: LibProvider | undefined = typeof __NATLANG_TS_LIBS__ === 'undefined' ? undefined : name => __NATLANG_TS_LIBS__![name];
 
-/** Parsed library and intrinsic files are shared by every program with the same target. */
-const sharedSourceFiles = new Map<string, { text: string; file: ts.SourceFile }>();
+/** Only immutable libraries can outlive their program. Parse callbacks belong to their options owner. */
+type ParseOptions = ts.ScriptTarget | ts.CreateSourceFileOptions;
+type SourceCache = Map<string, { text: string; file: ts.SourceFile }>;
+const sharedNumericLibraries: SourceCache = new Map();
+const sharedOptionLibraries = new WeakMap<ts.CreateSourceFileOptions, SourceCache>();
+const MAX_SHARED_LIBRARY_FILES = 128;
 
-function cachedSourceFile(fileName: string, text: string, target: ts.ScriptTarget): ts.SourceFile {
-  const key = `${target}\0${fileName}`;
-  const found = sharedSourceFiles.get(key);
-  if (found && found.text === text) return found.file;
-  const file = ts.createSourceFile(fileName, text, target, true);
-  sharedSourceFiles.set(key, { text, file });
+function cachedLibrary(fileName: string, text: string, options: ParseOptions): ts.SourceFile {
+  let cache: SourceCache;
+  if (typeof options === 'number') cache = sharedNumericLibraries;
+  else {
+    const found = sharedOptionLibraries.get(options);
+    cache = found ?? new Map();
+    if (!found) sharedOptionLibraries.set(options, cache);
+  }
+  const key = `${typeof options === 'number' ? options : options.languageVersion}\0${fileName}`;
+  const found = cache.get(key);
+  if (found && found.text === text) {
+    cache.delete(key);
+    cache.set(key, found);
+    return found.file;
+  }
+  const file = ts.createSourceFile(fileName, text, options, true);
+  cache.delete(key);
+  cache.set(key, { text, file });
+  if (cache.size > MAX_SHARED_LIBRARY_FILES) cache.delete(cache.keys().next().value!);
   return file;
 }
-
-const isShared = (fileName: string) => fileName.startsWith('/__natlang__/') ||
-  /[\\/]typescript[\\/]lib[\\/]lib\.[^\\/]*\.d\.ts$/.test(fileName);
 
 export type NatlangCompilerHostOptions = {
   options: ts.CompilerOptions;
@@ -51,6 +65,8 @@ export type NatlangCompilerHostOptions = {
    * compiler/host-cell.ts, rewrites only the built-in `nl` and passes false). */
   desugarNl?: boolean;
   currentDirectory?: string;
+  /** Reuse immutable library ASTs (default true); user and generated program sources are always owned by this host. */
+  shareLibrarySourceFiles?: boolean;
 };
 
 /** A compiler host over real or virtual files, always including the natlang intrinsics. */
@@ -77,7 +93,7 @@ export function createNatlangCompilerHost(config: NatlangCompilerHostOptions): t
     while (dir && !directories.has(dir)) { directories.add(dir); const parent = dirname(dir); if (parent === dir) break; dir = parent; }
   }
   return {
-    getSourceFile(fileName, languageVersion) {
+    getSourceFile(fileName, languageVersion, _onError, shouldCreateNewSourceFile) {
       const read_ = read(fileName);
       if (read_ === undefined) return undefined;
       // `nl` called on its literal instructions reads as the tag form (compiler/nl-call.ts): every program built here
@@ -86,9 +102,12 @@ export function createNatlangCompilerHost(config: NatlangCompilerHostOptions): t
       // A file that declares its own nl keeps its calls as written (that nl is an ordinary function).
       const text = config.desugarNl === false || /\.d\.[cm]?ts$/.test(fileName) || fileName.startsWith(`${libDir}/`) ||
         /\b(?:function|const|let|var|class)\s+nl\b/.test(read_) ? read_ : desugarNlCalls(read_);
-      const target = typeof languageVersion === 'number' ? languageVersion : languageVersion.languageVersion;
-      return isShared(fileName) ? cachedSourceFile(fileName, text, target) :
-        ts.createSourceFile(fileName, text, languageVersion, true);
+      const intrinsic = fileName === INTRINSICS_FILE || fileName === SURFACE_MODULE_FILE || fileName === STD_MODULE_FILE;
+      // Virtual overlays and user package/folder/eval declarations are program state, even under our synthetic prefix.
+      const library = !virtual.has(fileName) && fileName.startsWith(`${libDir}/`) && /(?:^|\/)lib\.[^/]+\.d\.ts$/.test(fileName);
+      return config.shareLibrarySourceFiles !== false && !shouldCreateNewSourceFile && (intrinsic || library)
+        ? cachedLibrary(fileName, text, languageVersion)
+        : ts.createSourceFile(fileName, text, languageVersion, true);
     },
     getDefaultLibFileName: options => `${libDir}/${ts.getDefaultLibFileName(options)}`,
     getDefaultLibLocation: () => libDir,
