@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sft-rows-sa2nl-20261124-searchswarm-splice-s1",
+  "owner": "dgx",
+  "path": "data_nvme:sa2nl-20261124/searchswarm-splice-s1",
+  "files": [
+    {
+      "path": "build.json",
+      "bytes": 2031,
+      "sha256": "7723c0f42adebad13a95fd44901dedb46080dbd4d4b0d2cb14325ea22d4bd724"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 161396,
+      "sha256": "d71eea4608282ee5d3fb5351ec398ff3fc329ee1259a948c0204c27ff671c910",
+      "lines": 930
+    },
+    {
+      "path": "chains.pkl",
+      "bytes": 1159934234,
+      "sha256": "3e441f1ef41fd05ddf5897c429420036d51c0a375969bbfc6a925d3824f8c4da"
+    },
+    {
+      "path": "rows.jsonl.zst",
+      "bytes": 1741892,
+      "sha256": "399e5fa91517c58a35e0196f7550f47fcb069bd54f6dd5141a27df523a6ce02c"
+    }
+  ],
+  "bytes": 1161839553
+}
