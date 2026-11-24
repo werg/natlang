@@ -11468,3 +11468,187 @@ SharedWorker in the background; a skew beyond 10 s (it fails the same way).
   `test_wait_for_room_is_bounded_and_skipped_when_opted_out` (test_async_train.py). Telemetry: `held priority` and
   `ledger claim` events in the collection's `collect.log`, `prep yield` notes in `drive.log`, `claim yield`/`claim
   restore` ledger events.
+
+## 2026-11-24 18:00 A DGX collection launched during round preparation starts shrunk; preparation lets it in first
+
+- **Observation (coordinator, pin-1a8157454419).** At the r0007 publish (17:18) `aei1-collect-v0007` (192 slots,
+  70 GB) launched while `aei1-r0008-build` (old driver, 32 GB) ran: it waited with need 85 vs 82.4 obtainable, GPU at
+  0% for 11 min, until the build was adopted down to 24 GB. The yield lowered a claim only once a collection ran; a
+  collection launched under a live prep claim asked for its full size although its collector starts at the share.
+- **Fix.** `Cycle.collection_budget(slots)`: with a live round-preparation claim (`prep_share`: the smallest `share`
+  of the claims; held claims carry none) a DGX collection launches at `dgx_collection_budget_gb(kv, slots x share)`
+  (51 GB at 192 x 0.5) and passes its full size (`collect --ledger-full-gb`, 70); when the claim ends the collector
+  restores to it (`memory_ledger resize restore --budget-gb`: the largest of the current, pre-yield and full budget).
+  Every DGX launch site uses it (async `ensure_collection`, cycle `collect_stage`, `halt` recollect). The driver's own
+  collection goes first: `Cycle.wait_for_room` also waits while `AsyncRoundDriver.collection_pending()` (its newest
+  policy's collection queued in the ledger, not running), within the same 10 min bound, so a prep step queued at high
+  priority never holds the relaunch after a publish out. A step already admitted is not touched; the shrunk launch
+  is what lets the collection in beside it. Opt-out unchanged (`--prep-yield-share 1` launches at full size).
+- **Test.** `test_a_collection_launched_during_round_preparation_starts_shrunk_and_preparation_lets_it_in_first`
+  (test_async_train.py), restore-to-full cases in test_memory_ledger.py and test_colab_and_profiles.py.
+
+## 2026-11-24 18:25 Program tuning takeover: the L4 runs one job at a time, adapter arms serve merged weights; route merged vs base: no gain (program-tuning strand)
+
+**Blocking (found 16:45).**
+- The L4 (`colab-g4b`, 22.5 GiB) ran arms and fits as separate preemptible tenants. The measurement actor claimed 18 GiB
+  (8 GB KV + 10; 15.1 GB used) and a fit claims 12 GiB: 30 > 21.5 admissible. Preemptible tenants never evict each
+  other, so the verdict fit waited 8.7 h in admission behind the 9-program base arm. Shrinking the actor would not
+  make room for both: SGLang's static allocation is weights 3.4 + KV + 6 GB slack (`sglang_pool`), so >= 10.6 GiB
+  even at 2 GB KV, and fits peak at 11.5 GB (verdict, step 5) to 18.6 GB (a whole fit; DECISIONS 11-20). The 12 GiB
+  fit claim is below the measured peaks, not above them.
+- The A100 fit (searchqa) is not wasted work: `tune.build` resumes from state.json (steps 1-10, 11-14 and 15-19 over
+  three evictions; 2.5 min/step beside aei1's actor). The "2.3 h attempts" were mostly admission waits through round
+  SFTs; each window between rounds gives ~5 steps, so the remaining 41 steps take ~8 windows (~18 h). It stays on
+  searchqa only (`progtune-colab-fits-2`); the L4 takes every other program.
+- **SGLang adapter slots crash.** The route adapter arm's actor (release on one slot, every request adapted) died at
+  the first batch of 27 running: CUDA illegal memory access (reported in xgrammar's bitmask kernel, sticky error).
+  This is T3's open crash (05:10: above 2 concurrent adapted requests), and slot parity after T3's fixes was never
+  re-measured. An adapter arm on slots is not trustworthy now.
+
+**Changes.**
+- `program_tune.py merge` (becad4efb): the release merged into its start checkpoint with the learner's own merge
+  (`merge_policy_state`, `W = bf16(fp32(W0) + s B A)`), a plain checkpoint any engine serves; `merged.json` records
+  how much of the delta survives BF16. `colab-measure --arm merged` serves it. Test:
+  `test_a_merged_release_equals_its_summed_free_lora_stack`. Route: 153 targets, served/true delta norm 1.001, min
+  cosine 0.989: the BF16 merge keeps the adapter.
+- `program-tune-20261117/l4-seq.sh` (`progtune-l4-seq-2`): per program fit -> merge (DGX ledger, 12 GB) -> base arm
+  if missing -> merged arm -> `compare`, one GPU job at a time; a measurement preempts a running fit (it resumes).
+  Then the PCA bank and its held arms (`colab-seq2.sh bank`). Measurements run 32 slots (was 16; 2.4 GB peak at 16).
+  The episodes run from the base arms' pin (de2b36add32f) so every pair is one series; the driver code from
+  pin-becad4efb. `progtune-l4-arms`, `-l4-fits`, `-l4-bank` and `-colab-fits` stopped (base arm progress kept: all
+  nine resume from their result directories).
+
+**Base arms complete (dev64, 2 samples, L4 series):** route 0.883, verdict 0.727, tally 0.685, tree 0.719, retail
+0.875, pubmed 0.305, searchqa 0.313; multihop and iterate are measured when their fits land.
+
+**First comparison: route (11-18 fit, 60 steps x 8 rows) merged vs base:** 0.883 -> 0.844, -3.9 pts, CI [-11.7,
++3.9], permutation p 0.29, McNemar 11 vs 6 (p 0.33), 5 tasks up / 8 down. Not a success and not a significant
+regression: recorded as no gain. Headroom is small (base 88%) and the fit drove its targets' NLL from 1.49 to 0.32
+nats (T3) on 480 rows, so overfitting the support rows is a candidate; not diagnosed yet. Next: verdict (base 0.727)
+fits on the L4 now, then tally, tree, retail, pubmed, iterate, multihop.
+
+## 2026-11-24 19:00 aei1 ran-out rise from round 1 to round 5: a measurement artefact; two mix defects fixed
+
+**Observation (brief).** Held-v3 on Pop: round 1 (8e634a0f) ran-out 0.0742, loop 0.0742; round 5 (3eb3f435) ran-out
+0.0977, loop 0.0898, 4 timeouts; the driver's verdict for round 5 vs round 1: +2.15 pts (p 0.39), ran-out +2.35 pts,
+so `neutral`, not adopted (the ran-out gate is +2). The two results come from different commits and series
+(0076be613/f0195216786c vs b63c35c54/5e44e8e2c585).
+
+**Cause of the ran-out rise: the reference's 52 lost episodes.** Round 1's result.json predates the `infra_lost`
+field. Read as recorded, only its 18 `infrastructure_error` episodes leave the pairs; its 34 `unresolved` episodes
+(result-less, 0 model calls, the 01:56 actor stop and the two engine deaths at 02:52 and 05:47, DECISIONS "Held
+episodes lost to infrastructure") stay in as failures that never run out, and all 52 sit in its ran-out denominator.
+Round 5 ran out on 9 of those 52 (task, sample) slots. `compare`'s `ran_out_rate_delta`, which the verdict's gate
+reads, was the difference of the two sides' unpaired rates. Relabelled (`held_eval relabel`, 56 lost: the 52 and four
+budget stops spent on resends) and paired:
+- round 5 vs round 1: -2.44 pts (p 0.36, CI [-6.9, +2.2]); ran-out 34 -> 41 of 456 pairs (+1.5 pts, McNemar 16:23,
+  p 0.34); tasks 32 up, 43 down;
+- round 5 vs start (sft-v9 e15b20a8, same scoring sources, ts-host tree differs): +2.54 pts (p 0.29); ran-out 60 -> 50
+  of 512 (-1.95 pts, p 0.26);
+- round 1 vs start: +5.49 pts (p 0.025); ran-out 51 -> 34 of 456 (-3.7 pts, p 0.02).
+On the 460 episodes round 1 measured: ran out start 51, round 1 38, round 5 41; budget stops with 0 recorded calls
+11/9/8 (no new mode); newly run-out slots 23 in round 5 vs 20 in round 1, spread over families (no task cluster); per
+episode model calls +0.74 (p 0.31), completion tokens +1,393 (p 0.017) vs round 1 but +447 (p 0.45) vs start, which
+shares round 5's scoring sources. So the rise is not shown to be real: round 5 sits between round 1 and the start on
+both measures, none of the round 5 vs round 1 differences is significant, and the token difference may be round 1's
+series. The 4 timeouts were 3600 s wall-clock stops (counted as ran out); round 5's 16,273 s elapsed against round
+1's 5,965 s is not a speed difference: round 1's elapsed covers only its last resumed session (233 episodes).
+
+**What rounds 2-8 trained on (mix build.json and rows.jsonl.zst, offline).** No drift towards long or budget-ending
+trajectories: rl-own 8.3-8.8 calls per episode, 1-4 episodes per round at >= 38 calls, think mean 3.1-3.6 k chars and
+10-12% of calls >= 8 k chars in every round; teacher episodes with consecutive identical actions 2.8% (r2), else
+5.9-6.6%.
+Two defects instead:
+1. **Repetition across rounds.** Each round re-trained the fixed teacher pool from the previous round's policy: kept
+   filled-reasoning episodes trained before 78% (r2), 83% (r3), 91% (r4), 98% (r5), 96% (r7); teacher 7% (r2) to 93%
+   (r5). Admitted episodes with 5-7 earlier exposures: 1,372 by round 8. `prefer-unseen` only puts unseen first; the
+   round size then fills with repeats, and which repeats is arbitrary (one subset every round).
+2. **Own share from old policies.** The per-task cap in `student_selection` picked own producers at random, so the
+   step-4 priority's frontier-policy preference (async-train §3) never applied under it. Round 7 kept 834 own
+   episodes: 383 from aei1 collections (43 from v0005, the trained policy's), 451 from grpo-v3/v4/v5 and sft-v7..v9
+   collections, which carry 55% of the own target tokens.
+
+**Fixes (default on, opt-outs, targeted tests).**
+- `held_eval`: `compare` (CLI) relabels a result written before `infra_lost` from its directory (`load_result`;
+  `--no-relabel`, `NATLANG_HELD_RELABEL=0`); `ran_out_rate` leaves lost episodes out of its denominator;
+  `ran_out_rate_delta` is the change over the matched pairs the primary uses (`ran_out_rate_delta_unpaired` kept;
+  `NATLANG_HELD_RAN_OUT_DELTA=unpaired` restores both). Consumers: the driver's `judge`/`verdict_stage` (through the
+  compare CLI), the dashboard (reads `ran_out_rate` as recorded; left out: it does not import held_eval and a
+  relabelled result is not written back, so round 1's dashboard row keeps 0.0742).
+- `sft_sources build`: no repetition, **the owner's decision for the current aei1 rounds (2026-11-24: "I don't want
+  to train on repetition at all"; not a standing rule)**: `--max-prior-exposures 1` (default; 0: off, the old rule;
+  N: an episode may train N times) drops every core episode (teacher, October, rl-own, jolt-guided) and every aux unit
+  (filled, operators, neuralese-graph, own-neuralese-graph, fallow22, live) that any `--prefer-unseen` build trained:
+  candidates before admission, aux units in `take_unit`, and all chains again before the round cap (reported in
+  `target_cap.exposure_cap` and the funnel's `over_exposed`). Trained units go least-trained first at the round cap
+  and in share-bounded aux parts (`Exposures`, also in `recap`), which matters only with the opt-out. A round with
+  little unseen data is smaller, never padded; a mix whose live goals all trained before skips the open-goal
+  distinctness check instead of failing. Round 8's mix under the rule would have kept ~1,270 of its ~9,170 episodes
+  (teacher 385 of 3,295, filled 232 of 5,005, own 655 of 867).
+  - Lineage: aei1's `prefer_unseen` holds sft-v7..v9 and r0001..r0007 but not `runs/sft-mix-20261120-v2`, sft-v6's
+    data (sft-v6 started from the base 5ff07638; sft-v7 from sft-v6): it belongs in the lineage. The GRPO runs
+    (grpo-v3..v6) are no ancestors (they trained from the base, not into this lineage); their episodes are repeats
+    only where a lineage build trained them, which the rows of sft-v7..v9 and the rounds already record.
+- `sft_sources build`: `--own-cap-order recent` (default; `any`: old rule) ranks the frontier policy's and its
+  previous policy's own successes before older policies' under the per-task, family and wrapper caps.
+Round 5's verdict under the fixed compare: -2.44 pts, neutral, not adopted (unchanged outcome).
+
+**Not checked.** Re-measuring round 1 on the current series (Pop, ~1.5-4.5 h at 2 samples) to separate the series
+from training in the token-length difference: it changes no verdict here (no significant difference either way) and
+the held-v4 measurement of round 6 holds Pop. Per-call think lengths in held episodes (only per-request completion
+tokens were compared: non-decision calls >= 8 k tokens 67/46/65 for start/r1/r5). The filled part's content (chains.pkl
+on /mnt/external) beyond its exposure counts. Whether the repetition caused round 1 -> 5's flat-to-negative point
+estimate (no experiment isolates it; the fixes are first-principles).
+
+**2026-11-24 19:25 addendum: two fits at once on the L4 (51cf1173c).** A fit on the L4 runs 2.5-2.6 min/step at 9%
+GPU and ~8 GB VRAM, one CPU core at 100%. py-spy (60 s, verdict) puts 57% of samples in autograd backward functions,
+37% in `_RowwiseNormAdjoint.backward` (`native_parameter_precision.py:160-162`), and the native graph's eager
+checkpointed forward (`shared_state._forward_graph`). The fit is Python/launch bound, not GPU bound, and that is the
+same on the A100 (2.5 min/step). `colab-fit --vram-gib` (claim override, default unchanged; `TENANT_FIT`'s only
+consumer is `colab_fit`) and `--segment-steps` (bounds the 11.5 -> 18.6 GB growth; exit 75 reruns) now let two lanes
+(`progtune-l4-fits-a`/`-b`, `l4-fits2.sh`, 10 GiB claims each) fit two programs at once. Measured: 16.4 GB, 65% GPU,
+two cores, both stepping. `progtune-l4-seq-3` only measures: it preempts the fits (they resume from state.json) and
+stops its actor after each comparison. Expected: verdict release ~21:10 CET and comparison ~22:15; tally ~23:30; then
+two programs every ~2.7 h (tree, retail, pubmed, iterate, multihop). searchqa stays on the A100 (step 19/60). Open: the
+fit's single-core hot path (the norm adjoint backward) is the real ceiling on fit throughput; not worked on yet.
+
+## 2026-11-24 20:40 Program-tuning fits: the norm adjoint's per-block loop removed (0f16e04fa), exact, ~1.9x per step
+
+**Bottleneck.** Program-tuning fits train adapters only, so every `Lfm3RMSNorm` gain is frozen
+(`requires_grad=False`, BF16). `_RowwiseNormAdjoint.backward` sent frozen gains to its per-128-row Python replay
+(one norm forward plus one `autograd.grad` per 128-row block). The q/k norms have tokens x heads rows, so that is
+thousands of iterations per call. The batched exact adjoint (`_batched/_windowed_lfm3_norm_adjoint`) required a
+trainable gain. A DGX repro (`ext_decisions_tree` plan, fresh fit, 4 steps; ledger units `progtune-prof-ab2`, the
+backward timed per call) put 86.5 s of norm backward in those 4 steps: 47.4 s for q/k norms (width 128, 704 calls)
+and 37.6 s for hidden norms (width 2048, 1,330 calls).
+
+**Fix (0f16e04fa, default on, `NATLANG_NORM_BATCHED_FROZEN=0` opts out).** Frozen gains take the batched and windowed
+adjoint too. It returns dx only and builds no per-block gain parts. Inventory: `_RowwiseNormAdjoint` is installed by
+`configure_norm_execution` (`native_composite.py:329`, `shared_state.py:1008`) on every native LFM3 port. Its
+consumers are every native-graph gradient path: `tune.build`/`JointTrainer` (program tuning, distill, families,
+learned), `serve/native_grad.py` (whole-graph Neuralese gradients, operator soft states) and `tune/rl.py`. The fix
+lives in the one shared function, so it reaches all of them. Not applicable: the GRPO/SFT learner
+(`train/lfm3_fast.py:134` `_rms`, its own compiled norm; it does not use the native port).
+
+**Exactness.** Norm tests (37, CUDA included, under the ledger): the frozen-gain batched adjoint is bit-identical to
+the per-block loop and to the concatenated forward's adjoint at 129-16,401 rows and widths 64/2048. End to end, the
+4-step A/B fits from one seed have identical per-step row losses. Their adapter and optimizer artifacts after step 4
+are byte-identical (content-addressed artifact ids and `state.json` equal). In-flight fits therefore resume on the
+new code without any change in their numbers.
+
+**Speed** (DGX, GPU shared with the aei1 collection, so absolute times are noisy). Steps 2-4: 169.8/115.3/87.8 s
+before and 102.4/61.5/36.1 s after, 373 s -> 200 s (1.86x; 0.48 -> 0.90 steps/min). Norm backward: 86.5 s -> 3.0 s
+over 4 steps. On the L4 (2.5 min/step, 37% of it in this loop by py-spy) the expected step is ~1.6 min. Not measured
+on Colab.
+
+**Switch-over.** The fits run `tune.build` on the VM at `--commit` (`l4-fits2.sh` and `l4-seq.sh`:
+`COMMIT=de2b36add`; `colab-seq*.sh` take it as an argument). A lane picks the fix up when it is relaunched with a
+commit containing 0f16e04fa. The pin for the driver scripts needs no change: the fix is VM-side code. Resuming from
+state.json is exact (above).
+
+**Not checked.** Step timing on the L4/A100 itself. FP32-gain profiles (`fp32-norms-v1`): their gains keep the
+per-block loop, because the fast path still requires BF16 gains and program tuning does not use FP32 gains. The
+trainable-gain path's per-block Python sum of gain parts (`_sum_norm_gain_parts`, kept for exact BF16 fan-in
+order). The small-input forward's per-128-row loop (`rowwise_norm_forward` below 4,096 rows). What dominates the
+remaining ~60 s/step: py-spy is not permitted on the DGX, and a cProfile run (`progtune-prof-cp1`) was queued
+behind the collection.

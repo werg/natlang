@@ -764,12 +764,17 @@ def settle_deferred(deferred, admitted_tasks, task_of):
 
 
 def student_selection(unique, rng, funnel, cap_of, family_share, is_wrapper, wrapper_share, trained=frozenset(),
-                      tiers=None):
+                      tiers=None, recent=None):
     """The student's own distribution of a build: unguided own successes (``rl-own``) and leak-checked JOLT+ guided
     successes (``jolt-guided``) under one per-task cap, one family share and one wrapper share, own first under each
     (``capped`` ``rank``). With a frontier (``tiers``): a task's guided successes go where it has unguided ones
     (``frontier_drop``). Returns (pool, own tasks, guided-only tasks); the guided-only tasks' teacher data waits for
-    the own share (``build`` step 5: it trains unless their guided successes enter the mix)."""
+    the own share (``build`` step 5: it trains unless their guided successes enter the mix).
+
+    ``recent`` (frontier policy, previous policy): under each cap the successes of the trained (or adjacent previous)
+    policy go before older policies' (``own_policy_tier``), as the step-4 priority orders them across tasks; without
+    it the cap picked producers at random, and in aei1 round 7 55% of the own target tokens came from grpo-v3/v4/v5
+    and sft-v7..v9 collections (DECISIONS 2026-11-24 aei1 ran-out). ``--own-cap-order any`` restores the random pick."""
     own = [c for c in unique if c['source'] == 'rl-own']
     own_candidate_tasks = {c['task_id'] for c in own}
     candidates = list(own)
@@ -783,7 +788,7 @@ def student_selection(unique, rng, funnel, cap_of, family_share, is_wrapper, wra
             candidates.append(c)
 
     def rank(c):
-        return int(c['source'] == 'jolt-guided')
+        return (int(c['source'] == 'jolt-guided'), own_policy_tier(c, *recent) if recent and recent[0] else 0)
     pool = wrapper_capped(capped(candidates, rng, funnel, cap_of, family_share, lambda c: 0, trained, rank=rank), rng,
                           funnel, is_wrapper, wrapper_share, trained, rank=rank)
     if tiers is None:
@@ -1819,17 +1824,77 @@ def trained_in(builds):
     episodes its ``--max-target-tokens`` cap dropped after their rows were written (build.json ``target_cap``)."""
     keys, tasks = set(), set()
     for build in builds:
-        report = Path(build) / 'build.json'
-        dropped = set(((json.loads(report.read_text()).get('target_cap') or {}).get('dropped_episode_keys') or ())
-                      if report.exists() else ())
-        for line in zstd_lines(Path(build) / 'rows.jsonl.zst'):
-            if line.strip():
-                row = json.loads(line)
-                if row['episode'] in dropped:
-                    continue
-                keys.add(row['episode'])
-                tasks.add(row['task_id'])
+        k, t = _trained_in_build(build)
+        keys |= k
+        tasks |= t
     return frozenset(keys), frozenset(tasks)
+
+
+def _trained_in_build(build):
+    report = Path(build) / 'build.json'
+    dropped = set(((json.loads(report.read_text()).get('target_cap') or {}).get('dropped_episode_keys') or ())
+                  if report.exists() else ())
+    keys, tasks = set(), set()
+    for line in zstd_lines(Path(build) / 'rows.jsonl.zst'):
+        if line.strip():
+            row = json.loads(line)
+            if row['episode'] in dropped:
+                continue
+            keys.add(row['episode'])
+            tasks.add(row['task_id'])
+    return keys, tasks
+
+
+# An episode the lineage already trained in this many earlier builds (``--prefer-unseen``) is not trained again
+# (``--max-prior-exposures``; 0: no bound). 1: nothing trains twice, the owner's decision for the aei1 rounds
+# (2026-11-24: "I don't want to train on repetition at all"); rounds 2-8 had re-trained the fixed teacher pool every
+# round from the previous round's policy: 91% of round 4's and 98% of round 5's kept filled-reasoning episodes and
+# 89-93% of their teacher episodes had trained before, by round 8 1,372 kept episodes for the 6th-8th time.
+MAX_PRIOR_EXPOSURES = 1
+
+
+class Exposures:
+    """How many earlier builds (``--prefer-unseen``) trained a unit ``(part, task, round)``: a build counts once when
+    its rows hold the episode key or its trained units hold ``(task, round)`` (``unit_seen``). ``keys``, ``tasks`` and
+    ``units`` are the unions ``trained_in`` and ``trained_units`` return."""
+
+    def __init__(self, per_build):
+        self.per_build = [(frozenset(keys), frozenset(units)) for keys, _, units in per_build]
+        self.keys = frozenset().union(*(k for k, _ in self.per_build))
+        self.units = frozenset().union(*(u for _, u in self.per_build))
+        self.tasks = frozenset().union(*(t for _, t, _ in per_build))
+
+    def __call__(self, key):
+        if key[2] not in self.keys and key[1:] not in self.units:
+            return 0
+        return sum(1 for keys, units in self.per_build if key[2] in keys or key[1:] in units)
+
+
+def trained_exposures(builds):
+    """``Exposures`` of the earlier builds (each read once: rows.jsonl.zst and trained-units.json)."""
+    return Exposures([(*_trained_in_build(build), trained_units([build])) for build in builds])
+
+
+def drop_overexposed(chains, exposure, max_prior):
+    """(kept chains, report): whole units ``(part, task, round)`` that ``max_prior`` or more earlier builds trained
+    (``exposure``: ``Exposures``) leave the mix; the round is smaller rather than padded by repetition."""
+    from exp0_sft import chain_mass
+    if not max_prior:
+        return chains, {'max_prior_exposures': 0}
+    seen, parts, kept = {}, collections.defaultdict(lambda: {'dropped_episodes': 0, 'dropped_weighted_target_tokens': 0.}), []
+    for chain in chains:
+        key = unit_key(chain)
+        if key not in seen:
+            seen[key] = exposure(key) >= max_prior
+            if seen[key]:
+                parts[key[0]]['dropped_episodes'] += 1
+        if seen[key]:
+            parts[key[0]]['dropped_weighted_target_tokens'] += chain_mass(chain)
+        else:
+            kept.append(chain)
+    return kept, {'max_prior_exposures': max_prior,
+                  'parts': {p: {**v, 'dropped_weighted_target_tokens': int(v['dropped_weighted_target_tokens'])}
+                            for p, v in sorted(parts.items())}}
 
 
 TRAINED_UNITS = 'trained-units.json'      # a build's trained (task, round) units, every part (``trained_units``)
@@ -1876,7 +1941,8 @@ def unit_seen(key, trained_keys, trained_unit_keys):
     return key[2] in trained_keys or key[1:] in trained_unit_keys
 
 
-def cap_target_tokens(chains, cap, trained_keys=frozenset(), trained_unit_keys=frozenset(), max_forward=0):
+def cap_target_tokens(chains, cap, trained_keys=frozenset(), trained_unit_keys=frozenset(), max_forward=0,
+                      exposure=None):
     """(kept chains, report) of a mix bounded to ``cap`` weighted target tokens (``--max-target-tokens``; the
     async round size) and to ``max_forward`` forward tokens (``--max-forward-tokens``: the learner's wall time follows
     its forward tokens; a placement-aware round sets it from the learner GPU's measured throughput); the tighter bound
@@ -1885,8 +1951,9 @@ def cap_target_tokens(chains, cap, trained_keys=frozenset(), trained_unit_keys=f
     chains sharing task and round) are kept or dropped. Within a part the units an earlier build trained
     (``--prefer-unseen``: an episode key in ``trained_keys`` or a (task, round) in ``trained_unit_keys``) go last,
     otherwise the admission order stands (own and teacher: the build's priority, breadth-first over tasks; aux parts:
-    their shuffle); a unit that would overshoot its part's budget is skipped for a smaller one. A mix within both
-    bounds is returned whole."""
+    their shuffle); a unit that would overshoot its part's budget is skipped for a smaller one. With ``exposure``
+    (``Exposures``) the trained units go in order of how many earlier builds trained them, fewest first, so repeats
+    spread over the pool instead of one subset training every round. A mix within both bounds is returned whole."""
     from exp0_sft import chain_mass, source_tokens
     total = sum(chain_mass(c) for c in chains)
     total_forward = sum(len(c['ids']) + source_tokens(c) for c in chains)
@@ -1914,7 +1981,8 @@ def cap_target_tokens(chains, cap, trained_keys=frozenset(), trained_unit_keys=f
         mass = {k: sum(chain_mass(c) for c in units[k]) for k in keys}
         seen = {k: unit_seen(k, trained_keys, trained_unit_keys) for k in keys}
         budget, taken = fraction * sum(mass.values()), 0.
-        for k in sorted(keys, key=seen.get):      # stable: unseen first, then admission order
+        order_of = seen.get if exposure is None else exposure
+        for k in sorted(keys, key=order_of):      # stable: unseen (then least trained) first, then admission order
             if taken + mass[k] <= budget:
                 kept_units.add(k)
                 taken += mass[k]
@@ -2709,14 +2777,24 @@ def build(args):
 
     def is_wrapper(c):
         return constructs.get(c['task_id'], ((), False))[1]
-    trained_keys, trained_before = trained_in(getattr(args, 'prefer_unseen', None) or [])
-    trained_unit_keys = trained_units(getattr(args, 'prefer_unseen', None) or [])
+    exposure = trained_exposures(getattr(args, 'prefer_unseen', None) or [])
+    trained_keys, trained_before, trained_unit_keys = exposure.keys, exposure.tasks, exposure.units
+    max_prior = getattr(args, 'max_prior_exposures', MAX_PRIOR_EXPOSURES) or 0
+    if max_prior:   # an episode the lineage trained max_prior times already is no candidate (``drop_overexposed``)
+        fresh = []
+        for c in unique:
+            if exposure((c['source'], c['task_id'], c['key'])) >= max_prior:
+                funnel[c['source']]['over_exposed'] += 1
+            else:
+                fresh.append(c)
+        unique = fresh
     # the student's own distribution: unguided own successes and leak-checked JOLT+ guided successes share one per-task
     # cap, one family share and one wrapper share (own first under each); a frontier build drops a task's guided
     # successes where it has unguided ones (``frontier_drop``: own > jolt-guided > teacher, async-train §8)
     student_pool, own_tasks, guided_tasks = student_selection(
         unique, rng, funnel, core_cap, args.max_family_share, is_wrapper, args.wrapper_share, trained_keys,
-        tiers if frontier else None)
+        tiers if frontier else None,
+        (frontier_policy, previous_policy) if getattr(args, 'own_cap_order', 'recent') == 'recent' else None)
     deferred = {'teacher': [], 'aux': []}
     teacher_candidates = []
     for c in unique:
@@ -3048,6 +3126,9 @@ def build(args):
         if (unit['task'], unit['round']) in taken_rounds:
             used['duplicate_round'] += 1
             return
+        if max_prior and exposure((part['name'], unit['task'], unit['round'])) >= max_prior:
+            used['over_exposed'] += 1     # trained by an earlier build often enough (``--max-prior-exposures``)
+            return
         if state['budget'] is not None and state['taken'] + unit['weighted'] > state['budget']:
             used['over_share'] += 1     # a unit that would overshoot: a smaller one may fit
             return
@@ -3076,8 +3157,7 @@ def build(args):
         rng.shuffle(units)
         # unseen units first (``--prefer-unseen``: a share-bounded part takes the units no earlier build trained before
         # repeats; stable, so the shuffle orders each group)
-        units.sort(key=lambda unit: unit_seen((part['name'], unit['task'], unit['round']), trained_keys,
-                                              trained_unit_keys))
+        units.sort(key=lambda unit: exposure((part['name'], unit['task'], unit['round'])))   # least trained first
         for unit in units:
             if frontier and part.get('replaces'):
                 why = frontier_drop(unit['task'], tiers, own_tasks)
@@ -3171,9 +3251,12 @@ def build(args):
                                                      and str(c.get('round')).startswith('live:')})
     # the round size (``--max-target-tokens``): every part scaled alike, unseen episodes first; an episode the cap
     # dropped is not trained (admitted_episode_keys, round.json, and the next build's prefer-unseen leave it out)
+    all_chains[:], exposure_cap = drop_overexposed(all_chains, exposure, max_prior)
     all_chains[:], target_cap = cap_target_tokens(all_chains, getattr(args, 'max_target_tokens', 0) or 0, trained_keys,
-                                                  trained_unit_keys, getattr(args, 'max_forward_tokens', 0) or 0)
-    if target_cap['applied']:
+                                                  trained_unit_keys, getattr(args, 'max_forward_tokens', 0) or 0,
+                                                  exposure=exposure)
+    target_cap['exposure_cap'] = exposure_cap
+    if target_cap['applied'] or exposure_cap.get('parts'):
         kept_rounds = {str(c.get('round')) for c in all_chains}
         target_cap['dropped_episode_keys'] = sorted(e['round'] for e in sft_episodes if str(e['round']) not in kept_rounds)
         dropped = set(target_cap['dropped_episode_keys'])
@@ -3189,6 +3272,11 @@ def build(args):
             task.get('source_namespace', '').startswith('vibestudio:') for task in tasks.values()) or
             mix['open_user_goals']['distinct_goals']):
         minimum_open_goal_share = 0.8
+    if minimum_open_goal_share is not None and not open_goals_only and getattr(args, 'min_open_goal_share', None) is None \
+            and not mix['open_user_goals'].get('trajectories'):
+        # every live goal trained before (``--max-prior-exposures``): no open-goal trajectory is left to check, and the
+        # round is smaller rather than failed
+        minimum_open_goal_share = None
     publish_sft_rows(rows_out, mix, minimum_open_goal_share)
     rng.shuffle(chains)
     with (out / 'chains.pkl.partial').open('wb') as handle:
@@ -3261,7 +3349,8 @@ def build(args):
                    'exclude_run': args.exclude_run, 'guided': args.guided,
                    'prefer_unseen': {'builds': list(getattr(args, 'prefer_unseen', None) or []),
                                      'episodes': len(trained_keys), 'tasks': len(trained_before),
-                                     'units': len(trained_unit_keys), 'scope': unseen_scope},
+                                     'units': len(trained_unit_keys), 'scope': unseen_scope,
+                                     'max_prior_exposures': max_prior},
                    'filled_teacher': getattr(args, 'filled_teacher', 'skip'),
                    'max_forward_tokens': getattr(args, 'max_forward_tokens', 0) or 0,
                    'backend_workarounds': args.backend_workarounds, 'own_empty_think': args.own_empty_think,
@@ -3316,9 +3405,9 @@ def recap(args):
     out.mkdir(parents=True, exist_ok=True)
     with (src / 'chains.pkl').open('rb') as handle:
         payload = pickle.load(handle)
-    trained_keys, _ = trained_in(args.prefer_unseen or [])
-    chains, cap = cap_target_tokens(payload['chains'], args.max_target_tokens, trained_keys,
-                                    trained_units(args.prefer_unseen or []), args.max_forward_tokens)
+    exposure = trained_exposures(args.prefer_unseen or [])
+    chains, cap = cap_target_tokens(payload['chains'], args.max_target_tokens, exposure.keys, exposure.units,
+                                    args.max_forward_tokens, exposure=exposure)
     report = json.loads((src / 'build.json').read_text())
     kept_rounds = {str(c.get('round')) for c in chains}
     admitted = report.get('admitted_episode_keys') or []
@@ -3785,6 +3874,14 @@ def main():
                    help='an earlier build the start checkpoint already trained (its OUT dir): its episodes go after '
                         'every untrained one at each cap and budget, and its tasks stay out of validation (for SFT from '
                         'a checkpoint descended from that build; repeatable)')
+    b.add_argument('--own-cap-order', choices=('recent', 'any'), default='recent',
+                   help="recent (default): under the per-task, family and wrapper caps the frontier policy's own "
+                        'successes (and its previous policy\'s) go before older policies\'; any: producers at random '
+                        '(the old rule)')
+    b.add_argument('--max-prior-exposures', type=int, default=MAX_PRIOR_EXPOSURES,
+                   help='an episode or aux unit that this many --prefer-unseen builds already trained is not trained '
+                        'again: the round is smaller instead of padded by repetition (default %(default)s; 0: no '
+                        'bound, the old rule). Trained units go least-trained first at the round cap')
     b.add_argument('--prefer-unseen-scope', choices=PREFER_UNSEEN_SCOPES, default='family',
                    help='family (default): each family takes its breadth-first turns, untrained tasks first within '
                         'its turn, then tasks an earlier build trained (a second epoch where a family has nothing '

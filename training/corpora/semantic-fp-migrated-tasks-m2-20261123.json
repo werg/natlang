@@ -47,5 +47,11 @@
     "host": "mltick"
   },
   "manifest_sha256": "c3eecf985e35ba569a73f8ecb83d9d5c9d296e3bda24a5d43ed7e248911e5dc1",
-  "training_admission": "registry-recorded"
+  "training_admission": "registry-recorded",
+  "roles": {
+    "grpo-pool": {
+      "order": 22,
+      "file": "tasks.jsonl"
+    }
+  }
 }

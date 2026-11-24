@@ -1151,10 +1151,10 @@ def yield_claim(claim, used, factor=YIELD_FACTOR):
     return claim['budget']
 
 
-def restore_claim(claim):
-    """Undo ``yield_claim``: the budget before the yield, or what the guard raised it to since, whichever is larger."""
-    if 'unyielded_budget' in claim:
-        claim['budget'] = max(claim['budget'], claim.pop('unyielded_budget'))
+def restore_claim(claim, full=None):
+    """Undo ``yield_claim``: the budget before the yield, ``full`` (the full-size claim of a unit launched already
+    shrunk), or what the guard raised it to since, whichever is largest."""
+    claim['budget'] = max(claim['budget'], claim.pop('unyielded_budget', 0), int(full or 0))
     return claim['budget']
 
 
@@ -1176,7 +1176,8 @@ def resize(args):
                 return 1
             after = yield_claim(claim, used)
         else:
-            used, after = None, restore_claim(claim)
+            full = getattr(args, 'budget_gb', None)
+            used, after = None, restore_claim(claim, int(full * GIB) if full else None)
         state['events'].append({'time': time.time(), 'event': f'claim {args.mode}', 'unit': unit, 'budget_before': before,
                                 'budget': after, **({'used': used} if used is not None else {})})
     print(json.dumps({'unit': unit, 'mode': args.mode, 'budget_gb': round(after / GIB, 1),
@@ -1664,6 +1665,7 @@ def main():
     rs = sub.add_parser('resize', help='yield: lower a shrinking unit\'s claim to its measured use; restore: undo')
     rs.add_argument('--unit', required=True)
     rs.add_argument('mode', choices=['yield', 'restore'])
+    rs.add_argument('--budget-gb', type=float, help='restore: at least this full-size claim (a unit launched shrunk)')
     rp = sub.add_parser('reset-peak', help="clear or set a family's learned peak (admission claims 1.1x it)")
     rp.add_argument('--family', required=True)
     rp.add_argument('--to-gb', type=float, default=None)

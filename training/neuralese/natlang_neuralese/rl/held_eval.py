@@ -65,8 +65,18 @@ def ran_out(sample):
 
 
 def ran_out_rate(result):
-    ran = [s for s in result['samples'] if s['ran']]
+    """The share of measured episodes that ran out. An episode lost to infrastructure (``sample_infra_lost``) measured
+    no policy and is left out of the denominator, as of ``success_rate``'s (aei1 round 1: 52 lost episodes in the
+    denominator lowered its ran-out rate by 0.8 pts and moved round 5's verdict; DECISIONS 2026-11-24 aei1 ran-out).
+    ``NATLANG_HELD_RAN_OUT_DELTA=unpaired`` restores the rate over every episode that ran."""
+    ran = [s for s in result['samples'] if s['ran'] and (_ran_out_legacy() or not sample_infra_lost(s))]
     return round(sum(map(ran_out, ran)) / len(ran), 4) if ran else None
+
+
+def _ran_out_legacy():
+    """``NATLANG_HELD_RAN_OUT_DELTA=unpaired``: the ran-out rate over every episode that ran and ``compare``'s
+    ``ran_out_rate_delta`` as the difference of the two sides' unpaired rates (before 2026-11-24)."""
+    return os.environ.get('NATLANG_HELD_RAN_OUT_DELTA', 'paired') == 'unpaired'
 
 
 def settings(config):
@@ -910,6 +920,35 @@ def relabel(directory):
             'relabeled': {'at': round(time.time(), 1), 'code': _code_commit()}}
 
 
+def load_result(path, *, relabel_legacy=True, notes=None):
+    """A result.json for ``compare``. A result written before the ``infra_lost`` field (a sample that ran without it)
+    is labelled again from its directory's episodes (``relabel``) when the directory holds them: read as recorded,
+    only its scorer ``infrastructure_error`` episodes left the pairs, and its result-less lost episodes (``unresolved``)
+    stayed in as failures that never ran out (aei1 round 1, the reference of every later round: 34 such episodes).
+    ``relabel_legacy=False`` (``compare --no-relabel``) or ``NATLANG_HELD_RELABEL=0`` reads it as recorded; a
+    directory without its episodes is read as recorded with a note."""
+    path = Path(path)
+    result = json.loads(path.read_text())
+    legacy = any(s.get('ran') and 'infra_lost' not in s for s in result.get('samples') or ())
+    if not legacy or not relabel_legacy or os.environ.get('NATLANG_HELD_RELABEL', '1') == '0':
+        return result
+    directory = path.parent
+    if path.name != 'result.json' or not (directory / 'sealed-queue.jsonl').is_file():
+        if notes is not None:
+            notes.append(f'{path} predates infra_lost and its episodes are not beside it: read as recorded')
+        return result
+    try:
+        relabeled = relabel(directory)
+    except (KeyError, OSError, ValueError) as error:
+        if notes is not None:
+            notes.append(f'{path} predates infra_lost and could not be relabelled ({error!r}): read as recorded')
+        return result
+    if notes is not None:
+        notes.append(f'{path} predates infra_lost: relabelled from its episodes '
+                     f'({relabeled["infra_lost"]} lost to infrastructure)')
+    return relabeled
+
+
 def _code_commit():
     try:
         from ..common.code_provenance import code_provenance
@@ -1216,6 +1255,10 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
     out_first = sum(ran_out(a[k]) and not ran_out(b[k]) for k in common)
     out_second = sum(ran_out(b[k]) and not ran_out(a[k]) for k in common)
     rates = ran_out_rate(first), ran_out_rate(second)
+    unpaired = round(rates[1] - rates[0], 4) if None not in rates else None
+    # The verdict's ran-out gate reads ``ran_out_rate_delta``: over the matched pairs the primary statistic uses (an
+    # episode lost on either side leaves its pair out), so a side's losses or unmatched episodes cannot move it
+    paired_delta = round((out_second - out_first) / len(common), 4) if common else None
     return {'first': side(first), 'second': side(second), 'engine': engines[0] or engines[1],
             'engine_attested': None not in engines, 'complete': not incomplete, 'same_code': side(first)['code'] == side(second)['code'],
             'same_series': side(first)['series'] == side(second)['series'],
@@ -1231,7 +1274,8 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
             'paired': paired(first, second),
             'loop_rate_delta': (round(second['loop_rate'] - first['loop_rate'], 4)
                                 if first['loop_rate'] is not None and second['loop_rate'] is not None else None),
-            'ran_out_rate_delta': round(rates[1] - rates[0], 4) if None not in rates else None,
+            'ran_out_rate_delta': unpaired if _ran_out_legacy() else paired_delta,
+            'ran_out_rate_delta_unpaired': unpaired,
             # Over every matched pair that ran, timeouts included (they are part of the measure).
             'ran_out_paired': {'pairs': len(common), 'first': sum(ran_out(a[k]) for k in common),
                                'second': sum(ran_out(b[k]) for k in common), 'only_first': out_first,
@@ -1547,6 +1591,9 @@ def main(argv=None):
     c.add_argument('--trained-families', type=Path,
                    help='JSON list of families the second policy trained on: splits the change into trained/untrained')
     c.add_argument('--resamples', type=int, default=2000)
+    c.add_argument('--no-relabel', dest='relabel', action='store_false',
+                   help="read a result written before the infra_lost field as recorded (default: its episodes lost "
+                        "to infrastructure are labelled again from its directory, as `relabel` does)")
     c.add_argument('--strict-series', action='store_true',
                    help='pair only results of one scoring series and one attested engine (fork commit, running cap '
                         'included); by default other series pair with a warning and the differences recorded')
@@ -1562,9 +1609,13 @@ def main(argv=None):
     if args.command == 'run':
         run(args.dir)
     elif args.command == 'compare':
-        report = compare(json.loads(args.first.read_text()), json.loads(args.second.read_text()), resamples=args.resamples,
+        relabel_notes = []
+        first, second = (load_result(path, relabel_legacy=args.relabel, notes=relabel_notes)
+                         for path in (args.first, args.second))
+        report = compare(first, second, resamples=args.resamples,
                          trained_families=json.loads(args.trained_families.read_text()) if args.trained_families else None,
                          ignore_ids=read_ids(args.ignore_ids), strict_series=args.strict_series)
+        report['warnings'].extend(relabel_notes)
         if report['warnings']:
             print('held_eval compare WARNING: ' + '; '.join(report['warnings']), file=sys.stderr, flush=True)
         text = json.dumps(report, indent=1)

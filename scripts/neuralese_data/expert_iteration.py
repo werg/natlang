@@ -303,6 +303,12 @@ def priority_slots(slots, claims, share=HELD_PRIORITY_SHARE):
     return slots if share >= 1 else max(1, int(round(slots * share)))
 
 
+def prep_share(directory):
+    """The smallest share live round-preparation claims in ``directory`` ask for (1: none): a DGX collection launched
+    meanwhile starts at that share of its slots and claims the matching budget (``Cycle.collection_budget``)."""
+    return min((float(c['share']) for c in held_priority_claims(directory) if 'share' in c), default=1.)
+
+
 @contextlib.contextmanager
 def yield_claim(directory, name, share, extra=None):
     """While the block runs, every DGX collection reading ``directory`` runs ``share`` of its slots
@@ -416,7 +422,7 @@ def frontier_collector(base):
         ``priority_share``."""
 
         def setup(self, order, deadline, endpoints=None, priority_dir=None, priority_share=HELD_PRIORITY_SHARE,
-                  verify=None, ledger_unit=None):
+                  verify=None, ledger_unit=None, ledger_full_gb=None):
             self.order = collections.deque(t for t in order if t in self.by_id and t not in self.own)
             self.deadline = deadline
             self.endpoints = list(endpoints) if endpoints else [(getattr(self.args, 'actor', None),
@@ -427,6 +433,7 @@ def frontier_collector(base):
             self.dead, self.dead_checked = set(), {}
             self.priority_dir, self.priority_share, self.priority_read = priority_dir, priority_share, 0.
             self.ledger_unit = ledger_unit      # this collection's ledger unit: its claim follows a yield
+            self.ledger_full_gb = ledger_full_gb    # its full-size claim (a collection launched shrunk restores to it)
             self.full_slots = sum(count for _, count in self.endpoints)
             self._learnable()
 
@@ -448,7 +455,8 @@ def frontier_collector(base):
             is not held back from the job it yields to); taking them back, it restores the claim
             (``memory_ledger resize``)."""
             try:
-                out = subprocess.run([*LEDGER, 'resize', '--unit', self.ledger_unit, mode], capture_output=True,
+                full = (['--budget-gb', str(self.ledger_full_gb)] if mode == 'restore' and self.ledger_full_gb else [])
+                out = subprocess.run([*LEDGER, 'resize', '--unit', self.ledger_unit, mode, *full], capture_output=True,
                                      text=True, timeout=120)
                 print(json.dumps({'event': 'ledger claim', 'mode': mode, 'result': out.stdout.strip()[-300:]}), flush=True)
             except (OSError, subprocess.SubprocessError) as error:
@@ -638,7 +646,8 @@ def collect(args):
     collector.setup(order, time.time() + args.hours * 3600, endpoints=endpoints,
                     priority_dir=None if args.no_held_priority or actor is None else Path(args.held_priority_dir),
                     priority_share=args.held_priority_share, verify=actor is None,
-                    ledger_unit=None if actor is None else args.unit_prefix)
+                    ledger_unit=None if actor is None else args.unit_prefix,
+                    ledger_full_gb=getattr(args, 'ledger_full_gb', None))
     log({'event': 'collect start', 'tasks': len(collector.order), 'already_scored': len(collector.own), 'k': args.k,
          'slots': total_slots, 'actor': url, 'endpoints': endpoints})
     stop = threading.Event()
@@ -1247,6 +1256,17 @@ class Cycle:
         return yield_claim(HELD_PRIORITY_DIR, f'{name}-prep', float(getattr(self.a, 'prep_yield_share', PREP_YIELD_SHARE)),
                            extra={'reason': 'round preparation'})
 
+    def collection_budget(self, slots):
+        """(ledger GB to launch a DGX collection of ``slots`` with, its full-size GB): while a round prepares
+        (``prep_share``) it launches at the prepared share's budget, since its collector starts with that share of its
+        slots, and restores the full claim when the preparation ends (2026-11-24 17:18: v0007 launched at its full
+        70 GB beside r0008's build and waited 11 min, GPU idle)."""
+        full = dgx_collection_budget_gb(self.a.kv_gb, slots)
+        share = prep_share(HELD_PRIORITY_DIR) if float(getattr(self.a, 'prep_yield_share', PREP_YIELD_SHARE)) < 1 else 1.
+        return (full if share >= 1 else dgx_collection_budget_gb(self.a.kv_gb, max(1, round(slots * share)))), full
+
+    collection_pending = staticmethod(lambda: False)   # the async driver's: its standing collection waits in the ledger
+
     def wait_for_room(self, unit, budget, seconds=PREP_YIELD_WAIT, poll=20):
         """Before launching a stage beside a yielding collection: until the ledger would admit ``budget`` GB (the
         collection lowers its claim within ~30 s and frees its idle slots as their episodes end), at most ``seconds``;
@@ -1254,7 +1274,8 @@ class Cycle:
         if self.present(unit) or float(getattr(self.a, 'prep_yield_share', PREP_YIELD_SHARE)) >= 1:
             return True
         deadline, started = time.time() + seconds, time.time()
-        while not ledger_admissible(budget):
+        # the driver's own (re)launched collection goes first: a step queued at high priority would hold it out
+        while self.collection_pending() or not ledger_admissible(budget):
             if time.time() >= deadline:
                 self.note(stage='prep yield', unit=unit, budget_gb=budget, room=False, waited=round(time.time() - started))
                 return False
@@ -1489,7 +1510,7 @@ class Cycle:
             os.replace(self.collect_dir, aside)
             self.note(stage='collect', moved_aside=str(aside), served=sorted(served))
 
-    def collect_command(self, unit, start, sha, slots, endpoints=()):
+    def collect_command(self, unit, start, sha, slots, endpoints=(), full_gb=None):
         """``expert_iteration.py collect`` for this cycle (one builder for the DGX actor and remote endpoints): the
         task order, k, hours, Neuralese variants, JOLT+ attempts, FP8 collection weights, slots; the DGX actor's
         engine flags, or ``--actor`` endpoints."""
@@ -1507,7 +1528,8 @@ class Cycle:
                        '--memetic-fit-quantile', getattr(self.a, 'memetic_fit_quantile', 0.9),
                        '--memetic-nested-slots' if getattr(self.a, 'memetic_nested_slots', True)
                        else '--no-memetic-nested-slots',
-                       '--slots', slots, '--unit-prefix', unit, *actor)
+                       '--slots', slots, '--unit-prefix', unit, *actor,
+                       *(['--ledger-full-gb', full_gb] if full_gb is not None and not endpoints else []))
 
     def serve_colab(self, hosts, start, sha, profile):
         """Serve the collected policy on each reachable Colab G4 session (``pop_rl_actor serve-checkpoint
@@ -1556,8 +1578,9 @@ class Cycle:
                             self.collect_command(unit, start, sha, profile.collect_slots, endpoints),
                             self.dir / 'collect.log', detach=True)
             else:
-                budget = dgx_collection_budget_gb(self.a.kv_gb, self.a.slots)
-                self.ledger(unit, budget, COLLECTION_PRIORITY, self.collect_command(unit, start, sha, self.a.slots),
+                budget, full = self.collection_budget(self.a.slots)
+                self.ledger(unit, budget, COLLECTION_PRIORITY,
+                            self.collect_command(unit, start, sha, self.a.slots, full_gb=full),
                             self.dir / 'collect.log', detach=True)
                 if self.a.fill:         # filled reasoning draws on the DGX actor (a remote one exposes no SGLang port)
                     self.fill_alongside(unit, sha)
@@ -2178,8 +2201,9 @@ class Cycle:
             sha = self.previous_start_sha(reference)
             self.set_collect_aside(sha)
             unit = f'{self.a.name}-recollect'
-            budget = dgx_collection_budget_gb(self.a.kv_gb, self.a.slots)
-            self.ledger(unit, budget, COLLECTION_PRIORITY, self.collect_command(unit, reference, sha, self.a.slots),
+            budget, full = self.collection_budget(self.a.slots)
+            self.ledger(unit, budget, COLLECTION_PRIORITY,
+                        self.collect_command(unit, reference, sha, self.a.slots, full_gb=full),
                         self.dir / 'collect.log', detach=True)
             record['collecting'] = unit
         if stop_next and self.done('next'):
@@ -2943,6 +2967,7 @@ class AsyncRoundDriver:
             reference_sha=args.reference and (args.reference_sha or sha256_file_hex_cached(Path(args.reference))),
             held_every=args.held_every, held_every_max=args.held_every_max, prefer_unseen=args.prefer_unseen)
         self.c = Cycle(self.cycle_args())
+        self.c.collection_pending = self.collection_pending
         if self.argument_changes:
             self.note(arguments_reconciled=self.argument_changes)
         self.lock = threading.RLock()
@@ -3016,6 +3041,15 @@ class AsyncRoundDriver:
                          *[x for g in groups for x in ('--rates-groups', g)],
                          *[x for f in frontiers for x in ('--frontier', f)], *self.a.select_args.split())
 
+    def collection_pending(self):
+        """Whether the standing DGX collection of the newest policy waits in the ledger (launched or requeued, not
+        running): the round's preparation steps let it in first (``Cycle.wait_for_room``)."""
+        try:
+            unit = self.collection_unit(self.controller.current)
+            return ledger_queued(unit) and not self.c.active(unit)
+        except Exception:
+            return False
+
     def ensure_collection(self, policy):
         """The standing DGX collection serves exactly ``policy`` (the newest published): an earlier policy's collection
         unit stops (its scored groups stay), this one starts once (``--hours`` is a long horizon: the next publication
@@ -3037,9 +3071,9 @@ class AsyncRoundDriver:
             self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
         with self.COLLECT_LOCK:
             self.c.collect_dir = work
-            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots)
+            budget, full = self.c.collection_budget(self.a.slots)
+            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots, full_gb=full)
         argv[argv.index('--tasks') + 1] = str(tasks)
-        budget = dgx_collection_budget_gb(self.a.kv_gb, self.a.slots)
         self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
         self.note(collection_started=unit, policy=policy['sha256'], work=str(work))
         if self.a.fill:
@@ -4665,6 +4699,8 @@ def main():
     c.add_argument('--held-priority-share', type=float, default=HELD_PRIORITY_SHARE,
                    help='share of the slots the collection keeps while a held measurement runs (1: no priority)')
     c.add_argument('--no-held-priority', action='store_true')
+    c.add_argument('--ledger-full-gb', type=float,
+                   help='the full-size ledger claim this collection restores after a yield (one launched shrunk)')
     f = sub.add_parser('frontier')
     f.add_argument('--out', required=True)
     f.add_argument('--collect', action='append', required=True)

@@ -938,6 +938,25 @@ def test_frontier_guided_only_tasks_keep_their_teacher_data_until_guided_enters(
     assert not replaced and len(trains) == 2
 
 
+def test_the_task_cap_takes_the_frontier_policys_own_successes_before_older_policies():
+    # aei1 round 7: the per-task cap picked producers at random, so 35% of the own share was grpo-v3/v4 episodes
+    own = [{'key': f'old{i}', 'source': 'rl-own', 'task_id': 'a', 'family': 'f', 'policy': 'grpo'} for i in range(6)]
+    own += [{'key': 'new', 'source': 'rl-own', 'task_id': 'a', 'family': 'f', 'policy': 'P'},
+            {'key': 'prev', 'source': 'rl-own', 'task_id': 'a', 'family': 'f', 'policy': 'Q'}]
+    for seed in range(5):
+        pool, _, _ = s.student_selection(own, random.Random(seed), collections.defaultdict(collections.Counter),
+                                         lambda task: 2, 1.0, lambda c: False, 1.0, recent=('P', 'Q'))
+        assert sorted(c['key'] for c in pool) == ['new', 'prev']
+    # an untrained older success still goes before a trained recent one (--prefer-unseen first)
+    pool, _, _ = s.student_selection(own, random.Random(0), collections.defaultdict(collections.Counter),
+                                     lambda task: 1, 1.0, lambda c: False, 1.0, trained={'new', 'prev'},
+                                     recent=('P', 'Q'))
+    assert pool[0]['policy'] == 'grpo'
+    picks = {s.student_selection(own, random.Random(seed), collections.defaultdict(collections.Counter),
+                                 lambda task: 1, 1.0, lambda c: False, 1.0)[0][0]['key'] for seed in range(12)}
+    assert len(picks) > 1                                              # without recent (--own-cap-order any): random
+
+
 def test_guided_replays_get_the_actors_context():
     assert s.replay_context_tokens('jolt-guided') == s.replay_context_tokens('rl-own') == 131072
     assert s.replay_context_tokens('teacher') == 65536

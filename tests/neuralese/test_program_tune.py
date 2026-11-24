@@ -453,3 +453,62 @@ def test_colab_fit_refuses_a_program_another_session_claimed(tmp_path):
         raise AssertionError('a program claimed by another session must not be fitted twice')
     except SystemExit as stop:
         assert 'claimed by colab-g4' in str(stop)
+
+
+def test_a_merged_release_equals_its_summed_free_lora_stack():
+    """`merge`: a stack of free-LoRA artifacts becomes one factor pair per backbone target whose product is the sum of
+    each artifact's scale x alpha / rank x B @ A, and the learner's merge applies it to the base weight."""
+    import types
+    import torch
+    from natlang_neuralese.train.lfm3_learner import merge_policy_state
+    g = torch.Generator().manual_seed(0)
+    name = 'port.hf.model.layers.0.conv.in_proj.weight'
+
+    def artifact(rank, alpha):
+        B, A = torch.randn(6, rank, generator=g), torch.randn(rank, 4, generator=g)
+        record = types.SimpleNamespace(kind='adapter-coefficients', tensors={'lora_B.' + name: B, 'lora_A.' + name: A},
+                                       provenance={'adapter_spec': {'kind': 'free-lora', 'alpha': alpha,
+                                                                    'parameter_names': [name]}})
+        return record, (alpha / rank) * B @ A
+    (one, d1), (two, d2) = artifact(2, 4.0), artifact(3, 3.0)
+    tensors, scales, specs = P.merged_factors({'a': one, 'b': two}, [('a', 1.0), ('b', 0.5)])
+    key = 'model.layers.0.conv.in_proj.weight'
+    assert set(scales) == {key} and len(specs) == 2
+    assert torch.allclose(tensors[f'lora_B.{key}'] @ tensors[f'lora_A.{key}'], d1 + 0.5 * d2, atol=1e-5)
+    base = torch.randn(6, 4, generator=g)
+    state = {'backbone_state': {key: base, 'model.embed_tokens.weight': torch.zeros(2, 4)}}
+    backbone, _, _ = merge_policy_state(state, tensors, scales, dtype=torch.float32)
+    assert torch.allclose(backbone[key], base + d1 + 0.5 * d2, atol=1e-5)
+    with pytest.raises(SystemExit):
+        P.merged_factors({'a': one}, [('missing', 1.0)])
+
+
+def test_colab_fit_reruns_segments_and_takes_a_claim_override(tmp_path, monkeypatch):
+    """Two fits share the L4 (11-24): `--vram-gib` sets the fit's admission claim, and with `--segment-steps` each
+    segment's exit 75 reruns tune.build (it resumes from state.json) until the fit ends."""
+    import pop_rl_actor as A
+    prog = tmp_path / 'prog'
+    (prog / 'fit').mkdir(parents=True)
+    (prog / 'split.json').write_text(json.dumps({'family': 'ext_fam'}))
+    (prog / 'rows.jsonl').write_text('{"r": 1}\n')
+    P.main(['plan', '--dir', str(prog), '--checkpoint', str(prog / 'rows.jsonl'), '--checkpoint-sha256', 'c' * 64,
+            '--base', '/hf', '--steps', '3'])
+    runs, rcs = [], [75, 75, 0]
+    monkeypatch.setattr(A, 'colab_tenant_checkout', lambda h, cfg, c: {**cfg, 'repo': '/t', 'admission': '/t/adm.py', 'commit': c})
+    monkeypatch.setattr(A, 'ensure_remote_checkpoint', lambda *a: 'present')
+    monkeypatch.setattr(A, 'ship_file', lambda *a: 'drive')
+    monkeypatch.setattr(A, 'colab_hardware', lambda h: {'gpu_name': 'NVIDIA L4', 'vram_total_gib': 22.5,
+                                                        'host_ram_total_gib': 53.0})
+    monkeypatch.setattr(A, 'log', lambda **e: None)
+    monkeypatch.setattr(A, 'ssh_host', lambda host, command, **k: 'nnt1_abc.nnt\n' if command.startswith('ls ') else '')
+    monkeypatch.setattr(A, 'run_detached', lambda host, cfg, remote, command: runs.append(command) or rcs.pop(0))
+
+    def pull(remote, local, host, attempts=5):
+        Path(local).parent.mkdir(parents=True, exist_ok=True)
+        Path(local).write_text(json.dumps({'artifacts': []}) if remote.endswith('.json') else 'x')
+    monkeypatch.setattr(A, 'pull_verified', pull)
+    assert P.main(['colab-fit', '--dir', str(prog), '--host', 'colab-g4b', '--beside', '', '--commit', 'f' * 40,
+                   '--vram-gib', '10', '--segment-steps', '10']) == 0
+    assert len(runs) == 3 and (prog / 'fit' / 'release' / 'result.json').exists()
+    command = runs[0]
+    assert command[command.index('--vram-gib') + 1] == '10.0' and command[-2:] == ['--segment-steps', '10']

@@ -1730,6 +1730,54 @@ def test_the_round_cap_binds_on_forward_tokens_and_prefers_unseen_aux_units(tmp_
     assert sft_sources.trained_units([legacy, new]) == {('t1', 'filled:a'), ('op1', '0')}
 
 
+def test_an_episode_the_lineage_trained_often_is_not_trained_again_and_repeats_go_least_trained_first(tmp_path):
+    # aei1 rounds 2-8 re-trained the fixed teacher pool every round (98% of round 5's filled episodes had trained before)
+    import numpy as np
+    import sft_sources
+
+    def chain(part, task, round_, n=100):
+        return {'part': part, 'task': task, 'round': round_, 'ids': np.zeros(n + 4, dtype=np.int32),
+                'segs': [(4, n, {'sample': np.zeros(n)})]}
+    builds = []
+    for i, (keys, units) in enumerate([({'teacher:1', 'teacher:2'}, [chain('filled', 't5', 'f:5')]),
+                                       ({'teacher:1'}, [chain('filled', 't5', 'f:5'), chain('filled', 't6', 'f:6')]),
+                                       (set(), [])]):
+        out = tmp_path / f'b{i}'
+        out.mkdir()
+        w = sft_sources.ZstdWriter(out / 'rows.jsonl.zst')
+        for k in sorted(keys):
+            w.write({'episode': k, 'task_id': 't' + k[-1]})
+        w.close()
+        sft_sources.write_trained_units(out, units)
+        builds.append(out)
+    exposure = sft_sources.trained_exposures(builds)
+    assert [exposure(('teacher', 't1', 'teacher:1')), exposure(('teacher', 't2', 'teacher:2')),
+            exposure(('teacher', 't3', 'teacher:3')), exposure(('filled', 't5', 'f:5')),
+            exposure(('filled', 't6', 'f:6'))] == [2, 1, 0, 2, 1]
+    assert exposure.keys == {'teacher:1', 'teacher:2'} and exposure.tasks == {'t1', 't2'}
+    assert exposure.units == {('t5', 'f:5'), ('t6', 'f:6')}
+    chains = [chain('teacher', 't1', 'teacher:1'), chain('teacher', 't2', 'teacher:2'),
+              chain('teacher', 't3', 'teacher:3'), chain('filled', 't5', 'f:5'), chain('filled', 't6', 'f:6'),
+              chain('filled', 't7', 'f:7')]
+    kept, report = sft_sources.drop_overexposed(chains, exposure, 2)
+    assert [c['round'] for c in kept] == ['teacher:2', 'teacher:3', 'f:6', 'f:7']
+    assert report['parts'] == {'filled': {'dropped_episodes': 1, 'dropped_weighted_target_tokens': 100},
+                               'teacher': {'dropped_episodes': 1, 'dropped_weighted_target_tokens': 100}}
+    assert sft_sources.drop_overexposed(chains, exposure, 0)[0] is chains        # opt-out: --max-prior-exposures 0
+    # the default (owner 2026-11-24, aei1 rounds): nothing an earlier build trained trains again
+    assert sft_sources.MAX_PRIOR_EXPOSURES == 1
+    kept, _ = sft_sources.drop_overexposed(chains, exposure, sft_sources.MAX_PRIOR_EXPOSURES)
+    assert [c['round'] for c in kept] == ['teacher:3', 'f:7']
+    assert sft_sources.drop_overexposed([chains[0]], exposure, 1)[0] == []       # an all-trained pool leaves nothing
+    # at the round cap the trained units go least trained first: teacher:1 (twice) after teacher:2 (once)
+    capped, _ = sft_sources.cap_target_tokens([chains[1], chains[0], chains[2]], 200, exposure.keys, exposure.units,
+                                              exposure=exposure)
+    assert [c['round'] for c in capped] == ['teacher:2', 'teacher:3']
+    capped, _ = sft_sources.cap_target_tokens([chains[0], chains[1]], 100, exposure.keys, exposure.units,
+                                              exposure=exposure)
+    assert [c['round'] for c in capped] == ['teacher:2']
+
+
 def test_recap_bounds_a_built_mix_and_records_what_it_left_out(tmp_path, monkeypatch):
     import numpy as np
     import pickle
@@ -2560,6 +2608,7 @@ def test_the_dgx_collection_runs_192_slots_and_claims_its_measured_size(tmp_path
     ei, d = _driver(tmp_path, monkeypatch, argv=['--fill', str(tmp_path / 'fill')])
     assert d.a.slots == ei.DGX_COLLECT_SLOTS == 192 and d.c.max_running() == 224
     assert ei.dgx_collection_budget_gb(12, 192) == 70 and ei.dgx_collection_budget_gb(12, 128) == 58
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')    # not the live driver's prep claims
     launched = []
     monkeypatch.setattr(d.c, 'present', lambda unit: False)
     monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(start=lambda: None))
@@ -2572,3 +2621,44 @@ def test_the_dgx_collection_runs_192_slots_and_claims_its_measured_size(tmp_path
     unit = d.ensure_collection(d.controller.current)
     _, budget, argv = launched[-1]
     assert budget == 70 and argv[argv.index('--slots') + 1] == '192' and '--actor-arg=224' in argv
+
+
+def test_a_collection_launched_during_round_preparation_starts_shrunk_and_preparation_lets_it_in_first(tmp_path,
+                                                                                                    monkeypatch):
+    """2026-11-24 17:18: v0007 (70 GB, 192 slots) launched at its full claim beside r0008's build and waited 11 min
+    (need 85 vs 82.4 obtainable), GPU idle. Launched while a prep claim is live it claims the prepared share's budget
+    (its collector starts at that share) and restores its full claim afterwards (--ledger-full-gb); a preparation step
+    waits (bounded) while the driver's own collection waits in the ledger."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(start=lambda: None))
+    launched = []
+
+    def ledger(unit, budget, priority, command, log, **kw):
+        launched.append((unit, budget, command))
+        if unit.endswith('-select'):
+            Path(command[command.index('--out') + 1]).write_text('[]')
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    with ei.yield_claim(tmp_path / 'prio', 'aei-r0002-prep', 0.5):
+        assert ei.prep_share(tmp_path / 'prio') == 0.5 and d.c.collection_budget(192) == (51, 70)
+        d.ensure_collection(d.controller.current)
+    _, budget, argv = launched[-1]
+    assert budget == 51 and argv[argv.index('--ledger-full-gb') + 1] == '70' and argv[argv.index('--slots') + 1] == '192'
+    held = tmp_path / 'prio' / 'aei-held-v0001.json'          # a held claim (no share) does not shrink the launch
+    held.write_text(json.dumps({'pid': __import__('os').getpid()}))
+    assert d.c.collection_budget(192) == (70, 70)
+    d.c.a.prep_yield_share = 1.0                               # the opt-out launches at full size
+    with ei.yield_claim(tmp_path / 'prio', 'aei-r0003-prep', 0.5):
+        assert d.c.collection_budget(192) == (70, 70)
+    d.c.a.prep_yield_share = 0.5
+    pending = iter([True, True, False])
+    monkeypatch.setattr(d.c, 'collection_pending', lambda: next(pending))
+    monkeypatch.setattr(ei, 'ledger_admissible', lambda gb: True)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    assert d.c.wait_for_room('aei-r0002-build', 24, poll=0)
+    monkeypatch.setattr(ei, 'ledger_queued', lambda unit: True)
+    monkeypatch.setattr(d.c, 'active', lambda unit: False)
+    assert d.collection_pending()                              # the driver's hook: queued, not running
+    monkeypatch.setattr(d.c, 'active', lambda unit: True)
+    assert not d.collection_pending()

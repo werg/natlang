@@ -196,3 +196,55 @@ def test_windowed_cuda_norm_preserves_gain_fanin_across_windows(rows, width, mon
     assert dx.is_contiguous()
     for actual, expected in ((output, reference), (dx, ref_dx), (dw, ref_dw)):
         assert torch.equal(actual, expected)
+
+
+def _frozen_gain_adjoint(precision, layer, x, gradient):
+    output = precision._RowwiseNormAdjoint.apply(x, layer.weight, layer.forward)
+    dx, = torch.autograd.grad(output, x, gradient)
+    return output, dx
+
+
+@pytest.mark.parametrize('rows', [129, 511, 1024, 1025, 3000])
+def test_frozen_gain_takes_batched_adjoint_with_the_per_block_gradient(monkeypatch, rows):
+    # Program-tuning fits train adapters only: the norm gains are frozen. Their input adjoint must equal the
+    # per-128-row replay (NATLANG_NORM_BATCHED_FROZEN=0) and the concatenated forward's, bit for bit.
+    from natlang_neuralese.model import native_parameter_precision as precision
+    monkeypatch.setattr(torch.Tensor, 'is_cuda', property(lambda _: True))
+    torch.manual_seed(rows)
+    layer = Lfm3RMSNorm()
+    layer.weight.requires_grad_(False)
+    x = torch.randn(1, rows, 8, dtype=torch.bfloat16, requires_grad=True)
+    gradient = torch.randn_like(x) + torch.randn_like(x)
+    calls = []
+    original = precision._lfm3_norm_adjoint_parts
+    monkeypatch.setattr(precision, '_lfm3_norm_adjoint_parts', lambda *a: calls.append(True) or original(*a))
+    output, dx = _frozen_gain_adjoint(precision, layer, x, gradient)
+    assert calls
+    monkeypatch.setenv('NATLANG_NORM_BATCHED_FROZEN', '0')
+    calls.clear()
+    loop_output, loop_dx = _frozen_gain_adjoint(precision, layer, x, gradient)
+    assert not calls
+    reference = concatenated_norm_reference(layer.forward, x)
+    ref_dx, = torch.autograd.grad(reference, x, gradient)
+    for actual, expected in ((output, loop_output), (output, reference), (dx, loop_dx), (dx, ref_dx)):
+        assert torch.equal(actual, expected)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA norm adjoint geometry')
+@pytest.mark.parametrize('rows', [129, 1024, 8193, 16401])
+@pytest.mark.parametrize('width', [64, 2048])
+def test_cuda_frozen_gain_batched_adjoint_is_exact(rows, width, monkeypatch):
+    from natlang_neuralese.model import native_parameter_precision as precision
+    torch.manual_seed(rows + width)
+    layer = Lfm3RMSNorm().to('cuda')
+    layer.weight = nn.Parameter(torch.randn(width, device='cuda', dtype=torch.bfloat16), requires_grad=False)
+    x = torch.randn(rows, width, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+    gradient = torch.randn_like(x)
+    output, dx = _frozen_gain_adjoint(precision, layer, x, gradient)
+    monkeypatch.setenv('NATLANG_NORM_BATCHED_FROZEN', '0')
+    loop_output, loop_dx = _frozen_gain_adjoint(precision, layer, x, gradient)
+    reference = concatenated_norm_reference(layer.forward, x)
+    ref_dx, = torch.autograd.grad(reference, x, gradient)
+    assert dx.is_contiguous()
+    for actual, expected in ((output, loop_output), (output, reference), (dx, loop_dx), (dx, ref_dx)):
+        assert torch.equal(actual, expected)

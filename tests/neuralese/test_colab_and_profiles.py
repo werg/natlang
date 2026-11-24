@@ -772,6 +772,9 @@ def test_round_preparation_claim_shrinks_the_dgx_collection_further_and_its_ledg
                         types.SimpleNamespace(stdout='{"budget_gb": 54}'))
     collector._resize_claim('yield')
     assert calls == [[*ei.LEDGER, 'resize', '--unit', 'aei-collect-v0001', 'yield']]
+    collector.ledger_full_gb = 70.0                           # launched shrunk during a round's preparation
+    collector._resize_claim('restore')
+    assert calls[-1] == [*ei.LEDGER, 'resize', '--unit', 'aei-collect-v0001', 'restore', '--budget-gb', '70.0']
 
 def test_pop_rl_actor_profiles_keep_pop_settings():
     pop_settings, pop_fmt = pop_rl_actor.pop_sglang('fp8_e4m3', 20, profile='pop')

@@ -644,6 +644,47 @@ def test_held_ran_out_counts_call_budget_repetition_and_wall_clock_stops_togethe
     assert report['ran_out_paired']=={'pairs':8,'first':4,'second':4,'only_first':1,'only_second':1,'mcnemar_exact_p':1.0}
     assert report['loop_rate_delta']==0 and report['first']['loop_rate']==.1   # loop_rate stays as recorded
 
+def test_held_ran_out_delta_pairs_and_leaves_infrastructure_losses_out(monkeypatch):
+    # aei1 round 5 vs round 1: the reference's lost episodes sat in its ran-out denominator and its unmatched episodes
+    # in the unpaired rates; the verdict's gate reads the change over the matched pairs
+    monkeypatch.delenv('NATLANG_HELD_RAN_OUT_DELTA', raising=False)
+    tasks=[(f't{i}',0) for i in range(10)]
+    first,second=held_result('a',1,{k:0.0 for k in tasks}),held_result('b',2,{k:0.0 for k in tasks})
+    for s in first['samples'][:4]:
+        s['outcome'],s['infra_lost'],s['reward']='unresolved','infrastructure_error',None   # lost in the reference
+    for s in second['samples'][:4]:
+        s['outcome']='budget_exhaustion'                                                 # ran out where it was lost
+    first['samples'][4]['outcome']=second['samples'][4]['outcome']='budget_exhaustion'
+    assert held_eval.ran_out_rate(first)==round(1/6,4)          # 6 measured episodes, 1 ran out
+    report=held_eval.compare(first,second)
+    assert report['ran_out_rate_delta']==0 and report['ran_out_paired']['pairs']==6
+    assert report['ran_out_rate_delta_unpaired']==round(.5-1/6,4)
+    monkeypatch.setenv('NATLANG_HELD_RAN_OUT_DELTA','unpaired')   # opt-out: every episode that ran, unpaired
+    assert held_eval.ran_out_rate(first)==.1 and held_eval.compare(first,second)['ran_out_rate_delta']==.4
+
+
+def test_held_compare_relabels_a_result_written_before_infra_lost(tmp_path, monkeypatch):
+    monkeypatch.delenv('NATLANG_HELD_RELABEL', raising=False)
+    d=tmp_path/'policy-a';d.mkdir()
+    legacy=held_result('a',1,{('t0',0):None,('t1',0):1.0})
+    legacy['samples'][0]['outcome']='unresolved'
+    (d/'result.json').write_text(json.dumps(legacy))
+    (d/'sealed-queue.jsonl').write_text('')
+    relabeled={**legacy,'samples':[{**s,'infra_lost':'infrastructure_error' if s['task_id']=='t0' else None}
+                                    for s in legacy['samples']]}
+    seen=[]
+    monkeypatch.setattr(held_eval,'relabel',lambda directory:(seen.append(directory),{**relabeled,'infra_lost':1})[1])
+    notes=[]
+    assert held_eval.load_result(d/'result.json',notes=notes)['samples'][0]['infra_lost']=='infrastructure_error'
+    assert seen==[d] and 'relabelled' in notes[0]
+    assert 'infra_lost' not in held_eval.load_result(d/'result.json',relabel_legacy=False)['samples'][0]
+    monkeypatch.setenv('NATLANG_HELD_RELABEL','0')
+    assert 'infra_lost' not in held_eval.load_result(d/'result.json')['samples'][0]
+    monkeypatch.delenv('NATLANG_HELD_RELABEL')
+    (d/'result.json').write_text(json.dumps(relabeled))          # a labelled result is read as written
+    assert held_eval.load_result(d/'result.json')['samples'][1]['infra_lost'] is None and len(seen)==1
+
+
 def test_held_trend_pairs_with_previous_and_first_within_one_series(tmp_path):
     tasks=[(f't{i}',s) for i in range(6) for s in (0,1)]
     def write(policy,started,successes,key='s1'):
