@@ -197,9 +197,10 @@ DECISIONS.md entries are authoritative.
   held gain per machine hour and measure it like anything else. Measure repetition and diversity in what is actually
   trained: in 2026-11 scripted templates carried ~78% of SFT loss and RL tasks were 98% one wrapper generator
   (`plans/neuralese/RECIPE_REVIEW_20261103/`); step counts on such a mixture are not capability.
-- **Task supply.** Subagents author task programs with exact oracles, qualified by reference, negative and alias
-  replay, continuously and across rotating domains, seeded from existing agentic and reasoning datasets (never held
-  inputs) and invented ones. Measure repetition against the pool before admitting a batch
+- **Task supply.** Tasks come from existing agentic and reasoning datasets (never held inputs) with exact oracles,
+  qualified by reference, negative and alias replay. No invented task worlds and no procedural generation (owner
+  2026-11-24: "I want to rip out task worlds from our generation process. That's not helpful. No procedural
+  generation."). Measure repetition against the pool before admitting a batch
   (`scripts/rl_tasks/measure_repetition.py`, `simulate_selection.py`); never pad scarce behaviours by repetition.
 - **Breadth from more natlang domains** (chat and writing included) rather than anchor KL or broad mixing; forgetting
   general ability outside natlang is acceptable.

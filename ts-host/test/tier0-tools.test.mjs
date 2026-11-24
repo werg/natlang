@@ -1,4 +1,4 @@
-// End-to-end tests for Tier 0 campaign tools: applications/idiom-reviewer (WS3 I2) and applications/task-author (WS3 T3).
+// End-to-end tests for Tier 0 campaign tools: applications/idiom-reviewer (WS3 I2).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -113,65 +113,4 @@ test('applications/idiom-reviewer: stepKind per step (escalated when unsure), pr
   writeFileSync(join(dir, 'route/inner.nl'), files[1].content);
   writeFileSync(join(dir, 'node_modules/x/skip.nl'), files[0].content);
   assert.deepEqual(programFiles(dir).map(f => [f.path, f.hasHelpers]), [['route/inner.nl', false], ['route.nl', true]]);
-});
-
-test('applications/task-author: structure and custody checks, oracle replay (reference passes, negatives and keyword baseline fail) drive repair; judgments gate admission', async () => {
-  const load = await buildApp('task-author');
-  const { authorAndQualifyTask } = await load('author.js');
-
-  const drafts = [
-    // 1: missing natlang.json and verifier name -> structural problems.
-    `return { id: seed.id, split_group: seed.splitGroup, constructs: [seed.construct], oracle: 'verifier',
-      prompt: 'Review untrusted PR hunks against security invariants and escalate uncertain block risks.',
-      files: { 'review.ts': 'export {};' }, reference: 'block', negatives: ['approve', 'request-changes'], keywordBaseline: 'block' }`,
-    // 2: structurally fine, but the keyword baseline equals the reference, so the oracle accepts it -> replay problem.
-    `return { id: seed.id, split_group: seed.splitGroup, constructs: [seed.construct], oracle: 'verifier', verifier: 'policy_eval.mjs',
-      prompt: 'Review untrusted PR hunks against security invariants and escalate uncertain block risks.',
-      files: { 'natlang.json': '{}', 'review.ts': 'export {};' }, reference: 'block', negatives: ['approve', 'request-changes'], keywordBaseline: 'block' }`,
-    // 3: the keyword baseline now fails the oracle.
-    `return { id: seed.id, split_group: seed.splitGroup, constructs: [seed.construct], oracle: 'verifier', verifier: 'policy_eval.mjs',
-      prompt: 'Review untrusted PR hunks against security invariants and escalate uncertain block risks.',
-      files: { 'natlang.json': '{}', 'review.ts': 'export {};' }, reference: 'block', negatives: ['approve', 'request-changes'], keywordBaseline: 'approve' }`,
-  ];
-  const problemsSeen = [];
-  let attempt = 0;
-  const model = scriptedModel(opening => {
-    if (!opening.includes('Author a realistic Semantic-FP task')) return null;
-    if (attempt > 0) problemsSeen.push(opening);
-    return drafts[Math.min(attempt++, drafts.length - 1)];
-  });
-  const driver = async req => req.tools.length ? model.driver(req) : { text: 'true', calls: [] };
-  let semanticYes = 0.92;
-  driver.decide = async req => ({ log_probs: req.options.map(o => Math.log(JSON.parse(o) === true ? semanticYes : 1 - semanticYes)) });
-
-  const seed = { id: 'sfp-pr-001', domain: 'code-review', construct: 'escalate', oracleKind: 'verifier',
-    summary: 'Escalate risky PR merge verdicts under asymmetric block floor.', splitGroup: 'sfp:pr:001' };
-  const replayed = [];
-  const options = {
-    isReserved: group => group === 'sfp:held:999',
-    replay: (task, answer) => { replayed.push(answer); return answer === task.reference; },
-  };
-  const result = await createNatlangRuntime({ model: driver, models: { teacher: driver } }).run(() => authorAndQualifyTask(seed, options));
-
-  assert.equal(attempt, 3, 'two repairs: structure, then the keyword baseline the oracle accepted');
-  assert.match(problemsSeen[0], /natlang\.json/);
-  assert.match(problemsSeen[1], /keywordBaseline/);
-  assert.equal(result.admitted, true);
-  assert.deepEqual(result.problems, []);
-  assert.equal(result.task.keywordBaseline, 'approve');
-  assert.ok(replayed.includes('request-changes'), 'every negative was replayed');
-
-  // A held split group is never admitted, whatever the judgments say.
-  attempt = 2;
-  const held = await createNatlangRuntime({ model: driver, models: { teacher: driver } })
-    .run(() => authorAndQualifyTask({ ...seed, splitGroup: 'sfp:held:999' }, { ...options, attempts: 1 }));
-  assert.equal(held.admitted, false);
-  assert.ok(held.problems.some(p => /reserved for held evaluation/.test(p)));
-
-  // The judgments gate admission: a task judged not semantic is rejected.
-  attempt = 2;
-  semanticYes = 0.03;
-  const shallow = await createNatlangRuntime({ model: driver, models: { teacher: driver } }).run(() => authorAndQualifyTask(seed, options));
-  assert.equal(shallow.admitted, false);
-  assert.equal(shallow.semanticVerdict, false);
 });

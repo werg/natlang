@@ -8,7 +8,6 @@ spider-hard sql:spider_hard
 bird-hard sql:bird_hard
 xlam tools:xlam
 knights-knaves puzzles:knights
-reasoning-gym puzzles:reasoning_gym
 squad reading:squad
 drop reading:drop
 quality reading:quality
@@ -35,7 +34,6 @@ multihiertt numeric:multihiertt
 toolace tools:toolace
 nestful tools:nestful
 countdown puzzles:countdown
-rg-multi-solution puzzles:rg_multi_solution
 tau-retail agentic:tau_retail
 apigen-mt-retail agentic:apigen_retail
 tau-airline agentic:tau_airline
