@@ -26,6 +26,8 @@ export type EvalScopeDeclarations = {
   captures: { name: string; type: string; mutable: boolean }[];
   imports: EvalImport[];
   services?: string[];
+  /** Known host ports excluded by this invocation’s authored service scope. */
+  unavailableServices?: string[];
   /** Declarations of host services by name (TypeScript module text), so their methods and results are typed. */
   serviceDeclarations?: Record<string, string>;
   /** The call's return type: the type of the snippet's top-level return. */
@@ -235,6 +237,11 @@ export function checkEvalFields(source: string, scope: EvalScopeDeclarations): N
     `${node.getText(snippet)} is the decision record that decide(...) returns, not its answer: compare ${node.getText(snippet)}.value.`);
   const comparisons = new Set<ts.Node>();
   for (const diagnostic of program.getSemanticDiagnostics(snippet)) {
+    if ((diagnostic.code === 2304 || diagnostic.code === 2552) && diagnostic.start !== undefined) {
+      const node = innermostNode(snippet, diagnostic.start);
+      if (node && ts.isIdentifier(node) && scope.unavailableServices?.includes(node.text))
+        at(node, 'callable-scope', `${node.text} is a host service unavailable in this call's authored scope. Use the call's admitted inputs and callables instead.`);
+    }
     if ((diagnostic.code === 2367 || diagnostic.code === 2678) && diagnostic.start !== undefined) {
       let node: ts.Node | undefined = innermostNode(snippet, diagnostic.start);
       while (node && !ts.isBinaryExpression(node) && !ts.isCaseClause(node)) node = node.parent;

@@ -3404,3 +3404,17 @@ No opt-out: both change only the text of an error that already occurred, never w
   `ts-host/test/decision-records.test.mjs`.
 
 - **2026-11-24 — service authority follows authored source ancestry.** Program-owned and context-bound NL calls previously placed qualified recursion identities into the service-scope ancestry, hiding services configured for their actual relative source paths. The scope filter now reads each native invocation's owned frame, so detached host callbacks retain only their own grants and unrelated ambient frames cannot confer services. Exact paths and explicit `/**` descendant scopes remain enforced. Recursion/budget identities retain their program/context qualification. Model-free Node/workerd platform regressions cover both boundaries; engine request formats and model policy are unchanged.
+
+### 2026-11-25 — scoped services have one declaration and value view
+
+Configured task services remain available to authored TS imports. Each NL
+invocation now offers only its admitted services through `search_code`,
+`read_code` and eval type analysis, matching its existing live service injection.
+An unresolved reference to a known excluded service is rejected before execution
+with `callable-scope`; input/local shadowing keeps normal lexical semantics.
+The original V24 undefined-service failures belonged to an intentionally excluded
+chooser, not the authorized reader. No grant is broadened. Authored
+`serviceScopes` remains the authority configuration. Node and Workerd platform
+regressions exercise actual TS coordinator and NL reader method values, chooser
+refusal, exact/descendant selectors, program/context identities and shadows.
+Serving engines do not execute this shared host evaluator; no inference change.

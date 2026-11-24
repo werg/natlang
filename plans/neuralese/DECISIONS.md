@@ -11468,3 +11468,19 @@ SharedWorker in the background; a skew beyond 10 s (it fails the same way).
   `test_wait_for_room_is_bounded_and_skipped_when_opted_out` (test_async_train.py). Telemetry: `held priority` and
   `ledger claim` events in the collection's `collect.log`, `prep yield` notes in `drive.log`, `claim yield`/`claim
   restore` ledger events.
+
+### 2026-11-25 — repair scoped service declarations without broadening authority
+
+Preserved V24 SQLite evidence identifies the reported undefined `spectroliteGoal`
+call as `workOnVaultKnowledgeGoal/chooseKnowledgeStep.nl`; the authored scope
+excludes that chooser and grants its TS coordinator and NL reader. Core7dff's
+value filtering is working. Investigation found independent mismatches:
+`read_code` and symbol search disclosed configured-but-excluded declarations,
+and eval type analysis used the whole task service list rather than admitted
+ports. Repair all three per-invocation views and diagnose a reference to an
+excluded port before execution. Preserve task/project declarations for authored
+TS imports and all existing scope selectors. Actual Node build passed; 46
+existing related regressions passed, and all eight final scope/value tests
+passed on Node+Workerd (including actual allowed method calls and lexical
+shadowing). No model/inference or native full-scope claim. This correctness fix
+enters the next source pin; collection does not wait on a full reference sweep.
