@@ -27,3 +27,52 @@ test('validation-only products preserve diagnostics/declarations without executa
  assert.deepEqual(product.build.outputs,{});assert.ok(Object.keys(product.build.declarations).length);
  assert.throws(()=>core.instantiateVirtualProjectProduct({...product,schema:'wrong'},core,{platform:core.nodePlatform()}),/unsupported/);
 });
+
+test('an executable owner releases declaration documents after its public build result is dropped',async()=>{
+ const {execFile}=await import('node:child_process');
+ const {promisify}=await import('node:util');
+ const script=`
+ import assert from 'node:assert/strict';
+ import * as core from ${JSON.stringify(new URL('../dist/index.js',import.meta.url).href)};
+ const product=core.compileVirtualProjectProduct({files:{'main.ts':'let count=0; export function next():number {return ++count;}','answer.nl':'---\\nargs: {}\\nreturns: string\\n---\\nAnswer.'},root:'/lifetime'},{target:'node',adaptation:false,constrained:false});
+ assert.equal(product.build.ok,true,JSON.stringify(product.build.diagnostics));
+ function owner(){
+  const compiled=core.instantiateVirtualProjectProduct(product,core,{platform:core.nodePlatform()});
+  assert.ok(Object.keys(compiled.declarations).length);
+  assert.equal(compiled.require('main.ts').next(),1);
+  return {require:compiled.require,documents:new WeakRef(compiled.declarations)};
+ }
+ const live=owner();
+ for(let attempt=0;attempt<30;attempt++){
+  await new Promise(resolve=>setImmediate(resolve));globalThis.gc();
+  await new Promise(resolve=>setImmediate(resolve));
+  if(live.documents.deref()===undefined)break;
+ }
+ assert.equal(live.documents.deref(),undefined,'runtime closures retained unused declaration documents');
+ assert.equal(live.require('main.ts').next(),2,'module state must remain owned and live');
+ `;
+ await promisify(execFile)(process.execPath,['--expose-gc','--input-type=module','--eval',script],{timeout:30000});
+});
+
+test('runtime-only products omit declaration output while preserving JavaScript and type diagnostics',()=>{
+ const files={'answer.nl':'---\nargs: { value: number }\nreturns: string\n---\nDescribe value.','main.ts':'import answer from "./answer.nl"; export async function main(value:number):Promise<string>{return await answer(value);}'};
+ const full=core.compileVirtualProjectProduct({files},options);
+ const runtime=core.compileVirtualProjectProduct({files},{...options,declarations:false});
+ assert.equal(full.build.ok,true,JSON.stringify(full.build.diagnostics));
+ assert.ok(Object.keys(full.build.declarations).length);
+ assert.deepEqual(runtime.build.declarations,{});
+ assert.deepEqual(runtime.build.outputs,full.build.outputs);
+ assert.deepEqual(runtime.build.manifest,full.build.manifest);
+ assert.deepEqual(runtime.build.diagnostics,full.build.diagnostics);
+ const store=core.virtualProjectFiles(files);
+ const build=core.compileProject({project:'/project',files:store,target:'node',module:'commonjs',adaptation:false,declarations:false,surfaceSpecifiers:['@natlang/browser','@natlang/node']});
+ assert.equal(build.ok,true,JSON.stringify(build.diagnostics));
+ assert([...store.outputs.keys()].some(path=>path.endsWith('.js')));
+ assert(![...store.outputs.keys()].some(path=>path.endsWith('.d.nl.ts')));
+ const invalid={files:{...files,'main.ts':'import answer from "./answer.nl";export async function main():Promise<string>{return await answer("wrong");}'}};
+ const fullBad=core.compileVirtualProjectProduct(invalid,options);
+ const runtimeBad=core.compileVirtualProjectProduct(invalid,{...options,declarations:false});
+ assert.equal(fullBad.build.ok,false);
+ assert.deepEqual(runtimeBad.build.diagnostics,fullBad.build.diagnostics);
+ assert.deepEqual(runtimeBad.build.declarations,{});
+});
