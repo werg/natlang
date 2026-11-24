@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "subagent-sources-nvme-20261124",
+  "owner": "dgx",
+  "path": "data_nvme:sa2nl-20261124/source",
+  "files": [
+    {
+      "path": "D01_sft_width_depth_agent_1p3.jsonl",
+      "bytes": 309025367,
+      "sha256": "3a3fe9585bfb06b269d9501cd52fbd61b46db6a50cef096b9dffc8c7f3e73393",
+      "lines": 12176
+    },
+    {
+      "path": "D02_train.parquet",
+      "bytes": 2124558886,
+      "sha256": "d68150911c33d942f9bc59114ce57ee68caa72c14679974b311400c4a2d5fb38"
+    },
+    {
+      "path": "D10_data_train.parquet",
+      "bytes": 402110755,
+      "sha256": "84e4d99bcb46fc77c1f83e44a28d363287ec1998d001ce9514ee8b0cfd16bc85"
+    }
+  ],
+  "bytes": 2835695008
+}

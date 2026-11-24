@@ -1,0 +1,62 @@
+{
+  "id": "subagent-sources-nvme-20261124",
+  "owner": "dgx",
+  "path": "data_nvme:sa2nl-20261124/source",
+  "include": [
+    "*.jsonl",
+    "*.parquet"
+  ],
+  "kind": "trajectories",
+  "format": "NVMe working copies of pinned external sources (byte copies): D01_sft_width_depth_agent_1p3.jsonl (WideSeek-R1 SFT), D02_train.parquet (SearchSwarm-SFT), D10_data_train.parquet (evidence-subagent)",
+  "rows": 12176,
+  "license": "WideSeek-R1 apache-2.0; SearchSwarm-SFT mit; evidence-subagent unstated (owner accepts all licenses)",
+  "protected": false,
+  "note": "read by scripts/neuralese_data/subagent_neuralese.py (plans/neuralese/SUBAGENT_NEURALESE_20261124.md); delete once the builds are final",
+  "inputs": [
+    {
+      "id": "external-expansion-d01-source-20261014-v1",
+      "manifest_sha256": null
+    },
+    {
+      "id": "external-expansion-d02-source-20261014-v1",
+      "manifest_sha256": null
+    },
+    {
+      "id": "external-expansion-d10-source-20261014-v1",
+      "manifest_sha256": null
+    }
+  ],
+  "producer": {
+    "script": "data_registry.py",
+    "argv": [
+      "record",
+      "--id",
+      "subagent-sources-nvme-20261124",
+      "--path",
+      "/home/werg/data/sa2nl-20261124/source",
+      "--kind",
+      "trajectories",
+      "--format",
+      "NVMe working copies of pinned external sources (byte copies): D01_sft_width_depth_agent_1p3.jsonl (WideSeek-R1 SFT), D02_train.parquet (SearchSwarm-SFT), D10_data_train.parquet (evidence-subagent)",
+      "--include",
+      "*.jsonl",
+      "--include",
+      "*.parquet",
+      "--input",
+      "external-expansion-d01-source-20261014-v1",
+      "--input",
+      "external-expansion-d02-source-20261014-v1",
+      "--input",
+      "external-expansion-d10-source-20261014-v1",
+      "--license",
+      "WideSeek-R1 apache-2.0; SearchSwarm-SFT mit; evidence-subagent unstated (owner accepts all licenses)",
+      "--note",
+      "read by scripts/neuralese_data/subagent_neuralese.py (plans/neuralese/SUBAGENT_NEURALESE_20261124.md); delete once the builds are final"
+    ],
+    "git_commit": "206b5ebd6d359a82411c98fd388b4df06c28fd17",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "0f99494f1e9dfca07a60164f3a06dc0ccfc5c1a89cb8cb3f3848cf4883fb2544",
+  "training_admission": "registry-recorded"
+}

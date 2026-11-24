@@ -11653,6 +11653,177 @@ order). The small-input forward's per-128-row loop (`rowwise_norm_forward` below
 remaining ~60 s/step: py-spy is not permitted on the DGX, and a cProfile run (`progtune-prof-cp1`) was queued
 behind the collection.
 
+## 2026-11-24 21:40 SGLang adapter slots: the adapted decode graph read a freed attention plan (CUDA illegal memory access); fixed in fork 7a29eff9ee (adapter-serving strand)
+
+**Observations.** The route adapter arm (Colab L4, one slot, every request adapted) died at its first batch of 27
+running with a CUDA illegal memory access, reported in xgrammar's bitmask kernel (a sticky error). T3 (05:10) had
+recorded the same fault at 4 running. The base arm runs with `--sglang-adapter-slots 0` and never faulted.
+
+**Inventory.** The mechanism is a per-request adapter stack applied at serving. Below are every engine and consumer of
+it, and where the defect lives: decode CUDA graphs captured per variant.
+
+| Component | Role | Status |
+| --- | --- | --- |
+| Python native engine (`native_adapters.run_native`, `engine.py` `_native_run`) | reference, eager | reference; captures no graph variants |
+| SGLang actor + fork (`sglang_actor._sglang_adapter_file` / `_adapter_acquire` / `adapter_cache_key`; fork `lfm3.py` `NatlangAdapters`, `decode_cuda_graph_runner` lora/nolora capture, `flashinfer_backend._prepare_cuda_graph_metadata`) | slots | defect found and fixed (below); scores not yet re-measured |
+| Managed llama-server (fork `build_lora_mm`, ts-host `llama/server.ts` `--lora-per-sequence`, `model/lora-scales.ts`) | GGUF LoRA, per-request scales | T3: 288/288 serial (`-np 1`); shared batches (`-np 4`) not run (harness `--parallel` added) |
+| In-page wllama (vendored natlang-b12092) | same fork code, wasm CPU | T3: 144/144; no device graphs |
+| Upstream SGLang LoRA (`triton_v2` `skip_inactive_dense_lora`) | the same dual capture | fixed by the same backend change (shared code) |
+| Other attention backends' per-bs capture metadata | trtllm_mla decode reused like its verify tiers (fixed); hpc_ops and xpu build metadata as views of shared buffers (no orphan); flashinfer_mla (`flashinfer_mla_backend.py:376-397`) still builds a wrapper per capture | left out: no model the fork serves uses MLA, and its plan patching (`fast_mla_decode_plan` installed after the first `begin_forward`) needs its own reuse path that no available model can test |
+| serve_native_checkpoint (slot rank, slots per actor), pop_rl_actor `serve_colab_tenant_actor` (1 slot for adapter arms), pop_actor_driver `adapter_args` | launch | new gate: no slots on a fork without the fix |
+| program_tune (`colab-measure --arm adapter`, merged arm becad4efb), LoRA mixtures (`tune/learned`: composed stacks on the same slot path), held_eval (`policy_id_of`: identity only), ts-host `neuralese-server.ts` / `rollout-episodes.mjs` / `s7_decode_probe.py` (wire only) | consumers | no adapter result measured on slots exists to invalidate (route `adapter-dev64-l4` scored 0) |
+
+**Root cause.** The fork captures each decode batch size twice when adapter slots exist: "lora" first, then
+"nolora" (`_lora_backend_skips_inactive`). FlashInfer's `_prepare_cuda_graph_metadata` created new decode wrappers
+for every capture and overwrote `decode_cuda_graph_metadata[bs]`. The "lora" graph therefore baked in the first
+wrapper set's buffers: the int workspace holding the plan, and qo_indptr. A replay plans only the stored set. Every
+adapted decode step thus ran kernels over a plan that no replay writes, from wrappers that were garbage-collected
+after capture. Where that memory was unmapped or reused, the result was an illegal memory access. Where it stayed
+mapped, attention ran on a stale capture-time plan.
+
+This predicts the observations. Base-only batches replay the correctly planned "nolora" graph, so the base arm (0
+slots) and all collection are unaffected. Adapted serving faults or drifts in decode only. Whether it faults depends
+on where the freed buffers land: it faulted on the L4 at 27 running and in T3 at 4 running, while a GB10 run at 2
+running completed. T3's pre-fix adapted turns sat 2.6 nats from native (top-1 0.34), and this defect predicts wrong
+adapted decode on top of the prefix-cache defect fixed there. A static investigator found the mechanism and
+independently cited the code: `flashinfer_backend.py:765`, `:1328-1332`; `decode.py` workspace and qo_indptr
+allocation; replay planning at `decode_cuda_graph_runner.py:1881`.
+
+**Reproduction (GB10, ledger units of 15-20 GB).** On 17e3458c2e, with 32 running, BF16 KV, 8192-token chunks and
+mixed requests, the run did not fault. With 64 running, FP8 KV and 4096-token chunks (the L4 tenant's settings), all
+adapted, it faulted at the first decode after the prefills (`adslot-repro-6`). On 7a29eff9ee, with the same settings
+and adapted and base requests at once, it served 192 requests at up to 64 running with 0 native fallbacks and no fault
+(`adslot-fix-3`). The captures are in `/mnt/external/adapter-slots-20261124/runs/f3-l4like/captures.json`.
+
+**Fix (defaults, opt-outs, tests).**
+- Fork 7a29eff9ee (doc 6c4a42b624, branch natlang). The graphs of one batch size share its FlashInfer decode, verify
+  and draft-extend wrappers; they are rebuilt only when the token width or verify kind changes. TRT-LLM MLA decode
+  metadata is reused the way its verify tiers already were. Opt-out: `NATLANG_SHARE_GRAPH_WRAPPERS=0`. Marker:
+  `NATLANG_SHARED_GRAPH_WRAPPERS`. CPU tests: `test/natlang/test_graph_variant_wrappers.py` (4 passed).
+- natlang 63a71cd9d: `serve_native_checkpoint.adapter_slots_on_fork` serves 0 slots on a fork without the marker, so
+  adapted turns run on the native engine. Opt-out: `NATLANG_SGLANG_ADAPTER_SLOTS_ANY_FORK=1`. Test added in
+  `test_sglang_source_attestation.py`. `sglang-fork.json` now points to the fork head. Harnesses gained
+  `check_sglang_adapter_parity.py --concurrency/--adapted-only/--server-arg/--merged` and
+  `check_tuned_lora_llama_parity.py --parallel N`.
+- **Rollout.** The DGX checkout `/home/werg/sglang-natlang`, which live actors import and Colab bootstraps from, stays
+  at 17e3458c2e. Moving it changes the attested engine, and held pairs stay within one fork commit, so it moves at the
+  next experiment boundary. Until then, adapter arms on Colab run their adapted turns on the native engine (the gate),
+  and the merged arm (becad4efb) stays the way program tuning serves fits.
+
+**Not done / not checked.**
+- Scores and greedy tokens on 7a29eff9ee against the native stack and against the merged checkpoint (8ceb7cd8) have
+  not been measured. The reference runs were stopped after a few minutes, at the coordinator's request, to readmit the
+  aei1 collection. They need Pop idle (it was serving aei1's held actor) or a ~20 GB DGX slot: `repro.sh f3-l4like ''
+  64 64 48 --phase reference` and `--merged`.
+- llama-server with adapted and base sequences in one batch (`--parallel 4`) has not run (CPU, 22 GB peak).
+- Not checked: ggml CUDA graphs on a GPU llama-server; flashinfer_mla (left out, above); the held-task outcome of an
+  adapter served on slots; Colab L4/A100 runs of the fix (only the GB10 was run).
+
+## 2026-11-24 23:00 New ideas as complete programs: the program inventor replaces procedural task generation (designed, piloted; nothing admitted)
+
+Owner, verbatim: "I also want us to design a process for generating truly new ideas and building truly complex, new,
+native and idiomatic, functional semantic programming NatLang programs. That hopefully would replace the fixed idea
+procedural generation. The approach will be to provide an overview of the worlds and ideas and tasks that already
+exist, and always have the model come up with a completely new idea. And there should be clear requirements on
+functional, semantic, complexity, and code-based depth."
+
+**Design** `plans/NOVEL_PROGRAMS_20261124.md`; **program** `applications/program-inventor/` (DECOMPOSITION.md,
+`inventIdea`/`isNew`/`meetsBar`/`adjudicate` judgments, `semanticRepair` over crisp qualification, BUILD_BRIEF.md,
+requirements.json: 18 requirements, 13 crisp, 5 judged); crisp mechanism `scripts/rl_tasks/program_atlas.py` (atlas of
+740 existing ideas from grpo-pool families, applications, design briefs, examples, dataset sources and the inventor's
+own accepted ideas; nearest-idea retrieval), `sources/invented.py` (static requirement checks, `natlang.program/2`
+packaging, qualification through `verify.mjs`), `ablate.mjs` (S2: the answer must change when any one judgment takes its
+trap reading, replayed through the program's own code). One idea = one program with 2-3 literal instances; no generator,
+no rotation, no assigned theme.
+
+**Pilot** (`/home/werg/data/natlang-novel-programs/pilot-20261124/`): Sol invented 6 ideas, Opus judged all new and built
+all 6; all 6 passed crisp qualification (references through the real code, 56 wrong answers and 12 keyword baselines
+rejected, 48/48 ablations rejected). Sol's review then failed S4 everywhere (outside free text left untyped) and D3 twice;
+one repair round fixed 5 of 6 fully. Live run: Sol solved 2 programs (3 instances); the adjudicated double failures were
+one ambiguous instance (causal auditor b, to be reworded) and one teacher error. Round 1's ideas shared one template
+("expert audit: prose to formal structure to textbook algorithm"); `inventIdea` now reads accepted ideas as a group and
+leaves their shared pattern, and a 3-idea Opus round with it produced more varied work (knitting errata, liturgical ordo,
+bug-bounty payouts).
+
+**Fixed along the way (main):** `teacher_gen` scored a Codex usage-limit hit on a nested child call as a teacher failure
+(d670ae655: now no verdict, deferred, cooldown; test). Found: the 40-call episode budget cannot fit programs of 16-40
+judgment calls (owner decision 5 in the plan); the Codex window was spent by the pilot's live run on 2026-11-24 evening
+(shared with the teacher campaign).
+
+**Open for the owner** (plan §14): admission of the pilot's 12 tasks; held split for new ideas; one bar or shape-specific
+bars; whole-output tasks vs per-stage; episode budget for long programs; inventor families.
+
+## 2026-11-24 23:30 Subagent -> lead handoffs as Neuralese: WideSeek-R1 and SearchSwarm built (subagent-neuralese strand)
+
+Owner: "take subagent-heavy existing agentic training data and just turn the subagent to parent connections into
+neuralese to train that in". Refined the same day: no conversion to natlang programs. The data is a source of format
+and domain diversity that still trains Neuralese. Design and results: `plans/neuralese/SUBAGENT_NEURALESE_20261124.md`.
+Code: `scripts/neuralese_data/subagent_neuralese.py` (acb78d91e, e35ad7411, c78a1e37b, ea505717b).
+
+- **Mapping.**
+  - Each lead and subagent conversation stays as recorded and is rendered by the engine's chat template for the
+    student. SearchSwarm's in-prompt Qwen tool block becomes structured tools in the student's call format.
+  - Each report the lead receives becomes a Neuralese value written from the report's text. In the default
+    `--read-mode splice` this is the learner's existing pass-through: consume markers, placeholder rows and an import
+    in the lead's prompt, with the producer document `[produce_open] + written ids`. The lead's later replies train the
+    producer computation and the marker rows.
+  - Every recorded reply is a target. Teacher reasoning, lead-in text, prompts, tool outputs and the spans are zero
+    weight.
+- **Recorded tool outputs are zero-weight context, and the October "not replayable" exclusion does not apply.** That
+  rule excluded October rows because they predated the answer protocol and would have taught a retired natlang
+  surface (2026-11-18). These rows claim no natlang surface: they are other harnesses' conversations kept in their
+  own format, and the student never sees them as natlang calls. Their outputs are what the teacher actually saw, so
+  the teacher's next action is conditioned on the true observation. Admission instead rests on the source's own
+  verification: WideSeek `item_f1` (depth 1.0, width >= 0.9), and SearchSwarm's gold answer contained in the lead's
+  final answer.
+- **Splice, not inline, is deliberate.** Since 2026-11-23 the engines read a text write inline, and a spliced
+  context-free write read back 0/12. Only the spliced read trains the Neuralese operators, which is the owner's goal
+  for this data. `--read-mode inline` builds the serving-identical variant, which is plain text and trains no
+  operator.
+- **Built:**
+  - D01 `sft-rows-sa2nl-20261124-wideseek-splice`: 2,806 episodes, 8,955 chains, 25,655 calls, 42,143 Neuralese reads
+    (19,075 per chain) of 18,932 distinct states; 46.7M forward tokens, 4.0M weighted target tokens.
+  - D02 SearchSwarm in 4 disjoint shards by question (a single file would be ~860M forward tokens). Shard 0
+    `sft-rows-sa2nl-20261124-searchswarm-splice-s0`: 958 episodes, 8,122 chains, 65,533 trained calls (27,874 calls
+    over the 32k limit dropped, mostly late lead and long subagent calls), 7,554 chain reads of 10,483 distinct
+    states; 216M forward tokens, 13.3M weighted target tokens in the chains. Shards 1-3 are building under the
+    ledger (`sa2nl-d02-s{1,2,3}`).
+  - D10 is not built: child-only conversations with no lead, so there is no handoff.
+- **Checks:**
+  - Held: 0 hits by id and group, and 0 by content (each question against every held set's inputs: exact match or
+    10-word shingles). `held_eval verify` on held-v3 and held-v4 for D01: no overlap.
+  - Repetition: one bundle per normalized question (183 repeated SearchSwarm questions dropped in shard 0). Exact
+    duplicate trained targets: 0.8% of weighted tokens (D01) and 0 (shard 0). No marker token in any target.
+- **Also fixed: own Neuralese episodes with in-context reads trained nowhere** (66f9472f1). `sft_sources
+  neuralese-graph` dropped any episode without a lowered import, and since the in-context read change none has one
+  (aei1 r0008's own graph: 30 lowered, 0 admitted). `build` skips such episodes for their native_state messages.
+  They are now admitted as plain rows (`in_context_reads`). `--require-import` restores the drop.
+- **Not checked:**
+  - a learner step on these chains: many imports per chain, 22+ states in some D01 leads, untested with the pass-through
+    at this count;
+  - the driver build's memory when loading a 1.2 GB aux pickle;
+  - whether the teacher reports' content repeats across bundles beyond exact duplicates;
+  - the source verification beyond what the sources record (D01 gold is not in the release);
+  - `held_eval verify` for the D02 shards (their ids and groups are new strings like D01's, which verified clean).
+- **Conversion to natlang programs:** scoping only, in the plan's last section. 429 SearchSwarm items have a gold
+  answer, a teacher that got it right, and complete recorded evidence. 4,437 teacher-right items have the gold
+  somewhere in the recorded outputs. D01 needs upstream gold. Estimate: about 3 agent-days for D02.
+### 2026-11-25 — repair scoped service declarations without broadening authority
+
+Preserved V24 SQLite evidence identifies the reported undefined `spectroliteGoal`
+call as `workOnVaultKnowledgeGoal/chooseKnowledgeStep.nl`; the authored scope
+excludes that chooser and grants its TS coordinator and NL reader. Core7dff's
+value filtering is working. Investigation found independent mismatches:
+`read_code` and symbol search disclosed configured-but-excluded declarations,
+and eval type analysis used the whole task service list rather than admitted
+ports. Repair all three per-invocation views and diagnose a reference to an
+excluded port before execution. Preserve task/project declarations for authored
+TS imports and all existing scope selectors. Actual Node build passed; 46
+existing related regressions passed, and all eight final scope/value tests
+passed on Node+Workerd (including actual allowed method calls and lexical
+shadowing). No model/inference or native full-scope claim. This correctness fix
+enters the next source pin; collection does not wait on a full reference sweep.
+
 ## 2026-11-24 20:45 No invented task worlds: procedural task generation removed (owner)
 
 Owner, verbatim: "I want to rip out task worlds from our generation process. That's not helpful. No procedural
@@ -11716,37 +11887,3 @@ program.
 
 Whether to stop training on A and B rows (a pool-errata or role change, plus a mix filter) is put to the owner. aei1
 keeps running as it is.
-
-## 2026-11-24 23:00 New ideas as complete programs: the program inventor replaces procedural task generation (designed, piloted; nothing admitted)
-
-Owner, verbatim: "I also want us to design a process for generating truly new ideas and building truly complex, new,
-native and idiomatic, functional semantic programming NatLang programs. That hopefully would replace the fixed idea
-procedural generation. The approach will be to provide an overview of the worlds and ideas and tasks that already
-exist, and always have the model come up with a completely new idea. And there should be clear requirements on
-functional, semantic, complexity, and code-based depth."
-
-**Design** `plans/NOVEL_PROGRAMS_20261124.md`; **program** `applications/program-inventor/` (DECOMPOSITION.md,
-`inventIdea`/`isNew`/`meetsBar`/`adjudicate` judgments, `semanticRepair` over crisp qualification, BUILD_BRIEF.md,
-requirements.json: 18 requirements, 13 crisp, 5 judged); crisp mechanism `scripts/rl_tasks/program_atlas.py` (atlas of
-740 existing ideas from grpo-pool families, applications, design briefs, examples, dataset sources and the inventor's
-own accepted ideas; nearest-idea retrieval), `sources/invented.py` (static requirement checks, `natlang.program/2`
-packaging, qualification through `verify.mjs`), `ablate.mjs` (S2: the answer must change when any one judgment takes its
-trap reading, replayed through the program's own code). One idea = one program with 2-3 literal instances; no generator,
-no rotation, no assigned theme.
-
-**Pilot** (`/home/werg/data/natlang-novel-programs/pilot-20261124/`): Sol invented 6 ideas, Opus judged all new and built
-all 6; all 6 passed crisp qualification (references through the real code, 56 wrong answers and 12 keyword baselines
-rejected, 48/48 ablations rejected). Sol's review then failed S4 everywhere (outside free text left untyped) and D3 twice;
-one repair round fixed 5 of 6 fully. Live run: Sol solved 2 programs (3 instances); the adjudicated double failures were
-one ambiguous instance (causal auditor b, to be reworded) and one teacher error. Round 1's ideas shared one template
-("expert audit: prose to formal structure to textbook algorithm"); `inventIdea` now reads accepted ideas as a group and
-leaves their shared pattern, and a 3-idea Opus round with it produced more varied work (knitting errata, liturgical ordo,
-bug-bounty payouts).
-
-**Fixed along the way (main):** `teacher_gen` scored a Codex usage-limit hit on a nested child call as a teacher failure
-(d670ae655: now no verdict, deferred, cooldown; test). Found: the 40-call episode budget cannot fit programs of 16-40
-judgment calls (owner decision 5 in the plan); the Codex window was spent by the pilot's live run on 2026-11-24 evening
-(shared with the teacher campaign).
-
-**Open for the owner** (plan §14): admission of the pilot's 12 tasks; held split for new ideas; one bar or shape-specific
-bars; whole-output tasks vs per-stage; episode budget for long programs; inventor families.
