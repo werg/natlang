@@ -440,3 +440,13 @@ td.nowrap{white-space:nowrap}
 .now { max-width: 960px; margin: 0 auto; }
 .pill { flex: 0 0 auto; }
 @media (max-width: 480px) { .previewchip { display: none; } }
+
+/* inbox: ask status on the item, listener heartbeat */
+.acts { flex-wrap: wrap; align-items: center; }
+.answer { flex: 1 0 100%; width: 100%; margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--good-bg); font-size: 13px; line-height: 1.4; }
+.inboxstrip { display: flex; justify-content: space-between; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); padding: 10px 14px; margin-bottom: 12px; }
+.inboxstrip.fresh { border-color: var(--good); box-shadow: inset 4px 0 var(--good); } .inboxstrip.warn { border-color: var(--warn); box-shadow: inset 4px 0 var(--warn); }
+.card.fresh { border-color: var(--good); box-shadow: inset 4px 0 var(--good); }
+.lst-live { border-left: 4px solid var(--good); } .lst-stale, .lst-none { border-left: 4px solid var(--warn); }
+.arow .chip { white-space: normal; text-align: left; }
+.card.listener { margin-bottom: 10px; }

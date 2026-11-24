@@ -1,4 +1,5 @@
 // Pure helpers of the ops dashboard: formatting, health verdicts, series building. No DOM, no tendril: testable in node.
+import { editRef } from '../ops-protocol.mjs';
 
 export const num = v => typeof v === 'number' && Number.isFinite(v);
 
@@ -200,3 +201,45 @@ export function outcomeParts(t) {
 }
 
 export const matches = (row, q) => !q || Object.values(row).some(v => typeof v === 'string' && v.toLowerCase().includes(q.toLowerCase()));
+
+
+/* ---------- the supervising agent's inbox: what happened to a question, and whether anyone is listening ---------- */
+export const LISTENER_LIVE_MS = 180_000;
+const ASKS = ['ask', 'request_stop'];
+
+/** The agent's listener heartbeat as carried by the participant's tick ({ts, listener}: both DGX epoch milliseconds). */
+export function listenerStatus(tick, nowMs = null) {
+  if (!tick) return { state: 'unknown', text: 'Waiting for the first tick from the DGX.' };
+  if (nowMs != null && nowMs - tick.ts > 120_000) return { state: 'unknown', text: `The participant on the DGX has not reported for ${dur((nowMs - tick.ts) / 1000)}, so whether the agent listens is unknown.` };
+  if (!num(tick.listener)) return { state: 'none', text: 'Nobody is listening: the agent has not started its inbox listener (inbox.sh wait).' };
+  const age = Math.max(0, tick.ts - tick.listener);
+  return age < LISTENER_LIVE_MS ? { state: 'live', age, text: `The agent is listening (heard ${dur(age / 1000)} ago).` }
+    : { state: 'stale', age, text: `Nobody is listening: the agent's inbox listener was last heard ${dur(age / 1000)} ago.` };
+}
+
+/**
+ * What became of the newest question asked about one item (kind, id): still being sent from this device, waiting for the agent, or
+ * answered. `pending` are this device's unapplied commands, `times` maps ask operation id to {at}, `seen` lists answer operation ids already read.
+ */
+export function askState(inbox, pending, times, seen, kind, id) {
+  const subj = s => s?.kind === kind && s?.id === String(id);
+  const known = new Set((inbox?.asks || []).map(a => a.operationId));
+  const queued = (pending || []).filter(p => p.name === 'ask' && ASKS.includes(p.input?.kind) && subj(p.input?.subject) && !known.has(p.id)).at(-1);
+  if (queued) return { state: 'waiting', confirmed: false, failed: queued.state === 'uncertain', at: queued.ts, text: queued.input.text, op: queued.id };
+  const a = (inbox?.asks || []).filter(x => ASKS.includes(x.kind) && subj(x.subject)).at(-1);
+  if (!a) return null;
+  const ans = (inbox.answers || []).filter(x => x.ask === editRef(a.operationId)).at(-1);
+  const at = times?.[a.operationId]?.at ?? null;
+  if (!ans) return { state: 'waiting', confirmed: true, at, text: a.text, op: a.operationId };
+  return { state: 'answered', at, text: a.text, answer: ans.text, op: a.operationId, answerOp: ans.operationId, unread: !(seen || []).includes(ans.operationId) };
+}
+
+/** Counts for the badges: questions waiting for an answer and answers not yet read. */
+export function inboxSummary(inbox, pending, seen) {
+  const asks = (inbox?.asks || []).filter(a => ASKS.includes(a.kind));
+  const answered = new Set((inbox?.answers || []).map(x => x.ask));
+  const known = new Set((inbox?.asks || []).map(a => a.operationId));
+  const queued = (pending || []).filter(p => p.name === 'ask' && ASKS.includes(p.input?.kind) && !known.has(p.id)).length;
+  const unread = (inbox?.answers || []).filter(x => asks.some(a => editRef(a.operationId) === x.ask) && !(seen || []).includes(x.operationId)).length;
+  return { waiting: asks.filter(a => !answered.has(editRef(a.operationId))).length + queued, unread, total: asks.length + queued };
+}

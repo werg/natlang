@@ -44,7 +44,7 @@ the page and the exporter never pair across series.
 - **Retained facts** are small and human-made: edits and questions (declared commands), the participant's application records
   and the agent's answers. The page reads them with the `edits` and `inbox` queries (live views).
 - The page reads only the snapshot (and the `ops.metrics` stream while the Investigations tab is open, for its old GRPO charts); machine history, events, rounds and held results travel inside the snapshot.
-- Query names: `ops.tick|snapshot|metrics|machines|events`; `data.catalog|dataset|items|item|tokens|chain|task_refs|search|registry`.
+- Query names: `ops.tick` (exporter file signatures, plus `listener`: the agent's heartbeat) `|snapshot|metrics|machines|events`; `data.catalog|dataset|items|item|tokens|chain|task_refs|search|registry`.
   `edits.*` and `inbox.*` are native-only.
 
 ## Edits: from the page to the data
@@ -63,8 +63,20 @@ applies each one once (`data_edits.py`), then records `recordApplication {edit, 
 
 ## The supervising agent's inbox
 
-`inbox.sh` (list), `inbox.sh wait` (block until an unanswered ask exists; run in the background), `inbox.sh answer OP TEXT`
-(declared `answer` command through the running participant), `inbox.sh handled OP`.
+`inbox.sh` (list), `inbox.sh wait` (block until an unanswered ask exists; run in the background, uncapped), `inbox.sh answer OP TEXT`
+(declared `answer` command through the running participant), `inbox.sh handled OP`, `inbox.sh listener` (age of the heartbeat in seconds).
+
+- **What the owner sees.** After Ask > Send the item itself shows "Sent HH:MM; waiting for the agent" at once (this device's pending command, kept in
+  localStorage until the journal has it) and the agent's answer inline when it arrives, with a "New answer" chip and a "Got it" button. Unread answers badge the
+  More tab and the Inbox entry; Now has an Inbox strip one tap from the top. The Inbox tab lists every question with its state and the listener card.
+- **Is anyone listening?** `inbox.sh wait` touches `<data>/ops/dashboard/inbox.listener` every 10 s. The participant puts that mtime in every `ops.tick` (every 10 s)
+  as `listener`; the page shows "agent listening" while it is under 3 minutes old and "nobody listening" otherwise, on the strip, on waiting questions and in the Inbox tab.
+  A tick older than 2 minutes makes the state "unknown" (the participant is not reporting).
+- **A restart of the participant (`ops-peer-N`) kills the agent's listener.** The old `wait_event.sh` (and the contract-3 collector) are gone; the listener is only `inbox.sh wait`.
+  After every restart of ops-peer, and after every ask `wait` returns, re-arm it: `scripts/ops_dashboard/inbox.sh wait` as a background command. The heartbeat on the page tells
+  you whether you did. The ask itself is always kept: it is in the journal and in `inbox.jsonl` whether or not anyone listens.
+- Ask records carry no timestamp (the journal's `authorTimestampMs` is not in the `inbox` query result, and changing a query's read function changes the definition the
+  descriptor binds), so the page keeps the send time of this device's own questions in localStorage; questions from elsewhere show "Sent earlier".
 
 ## Operate
 

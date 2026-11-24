@@ -78,3 +78,34 @@ test('activity groups what runs where and hides plumbing', () => {
   assert.deepEqual(a.dgx.map(x => x.text), ['Collecting with v3 · 270/h', 'Vibestudio student data ×2']);
   assert.deepEqual(a.pop.map(x => x.text), ['Held eval']);
 });
+
+test('listener status reads the heartbeat in the tick and says when nobody listens', async () => {
+  const { listenerStatus } = await import('../ui/model.mjs');
+  assert.equal(listenerStatus(null).state, 'unknown');
+  assert.equal(listenerStatus({ ts: NOW, listener: null }).state, 'none');
+  assert.equal(listenerStatus({ ts: NOW, listener: NOW - 20e3 }).state, 'live');
+  const stale = listenerStatus({ ts: NOW, listener: NOW - 600e3 });
+  assert.equal(stale.state, 'stale');
+  assert.match(stale.text, /Nobody is listening.*10m/);
+  assert.equal(listenerStatus({ ts: NOW - 600e3, listener: NOW - 601e3 }, NOW).state, 'unknown');       // an old tick says nothing about the listener
+});
+
+test('askState follows a question from this device through the journal to the answer', async () => {
+  const { askState, inboxSummary } = await import('../ui/model.mjs');
+  const subject = { kind: 'alert', id: 'ei:gate', title: 't' };
+  const pending = [{ id: 'op-1', name: 'ask', state: 'saved', ts: NOW, input: { kind: 'ask', subject, text: 'why?' } },
+    { id: 'op-x', name: 'ask', state: 'saved', ts: NOW, input: { kind: 'ask', subject: { kind: 'unit', id: 'u' }, text: 'other' } }];
+  let st = askState({ asks: [], answers: [] }, pending, {}, [], 'alert', 'ei:gate');
+  assert.deepEqual([st.state, st.confirmed, st.at, st.text], ['waiting', false, NOW, 'why?']);
+  assert.equal(askState({ asks: [], answers: [] }, pending, {}, [], 'alert', 'other-id'), null);
+  const inbox = { asks: [{ operationId: 'op-1', kind: 'ask', subject, text: 'why?' }, { operationId: 'ack-1', kind: 'ack_alert', subject, text: 'ack' }], answers: [] };
+  st = askState(inbox, [], { 'op-1': { at: NOW } }, [], 'alert', 'ei:gate');          // applied: the pending record is gone, the ask is in the journal; an acknowledgement is not a question
+  assert.deepEqual([st.state, st.confirmed, st.at], ['waiting', true, NOW]);
+  assert.deepEqual(inboxSummary(inbox, [], []), { waiting: 1, unread: 0, total: 1 });
+  inbox.answers.push({ ask: 'op-1', text: 'because', operationId: 'ans-1' });
+  st = askState(inbox, [], {}, [], 'alert', 'ei:gate');
+  assert.deepEqual([st.state, st.answer, st.unread], ['answered', 'because', true]);
+  assert.equal(askState(inbox, [], {}, ['ans-1'], 'alert', 'ei:gate').unread, false);
+  assert.deepEqual(inboxSummary(inbox, [], []), { waiting: 0, unread: 1, total: 1 });
+  assert.deepEqual(inboxSummary(inbox, [{ id: 'op-2', name: 'ask', input: { kind: 'ask' } }], ['ans-1']), { waiting: 1, unread: 0, total: 2 });
+});

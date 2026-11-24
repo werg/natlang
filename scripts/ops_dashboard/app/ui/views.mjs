@@ -12,7 +12,7 @@ const HOSTS = [{ key: 'dgx', label: 'DGX', slot: 0 }, { key: 'colab', label: 'Co
 const TIERS = [['solved', 'solved', 2], ['sometimes', 'sometimes solved', 3], ['never', 'never solved', 7], ['unmeasured', 'unmeasured', 1]];
 
 export function makeViews(ctx) {
-  const { S, go, askBtn, alertsView, now, chartPanel, machineChip, meter, section, stat, runLink } = ctx;
+  const { S, go, askBtn, alertsView, now, chartPanel, machineChip, meter, section, stat, runLink, inboxStrip, inboxCounts } = ctx;
   const snap = () => S.snap, ei = () => S.snap?.ei;
   const chip = (text, tone = '', title) => h('span', { class: `chip ${tone}`, title }, text);
   const tile = (value, label, tone = '') => h('div', { class: `tile ${tone}` }, h('b', {}, value), h('span', {}, label));
@@ -123,7 +123,7 @@ export function makeViews(ctx) {
     const e = ei(), v = h('div', { class: 'now' });
     if (!snap()) return v.append(h('div', { class: 'card muted' }, 'Loading…')), v;
     if (!e) return v.append(h('div', { class: 'notice' }, 'The exporter running on the DGX has no expert-iteration section yet. Restart it from the current checkout.')), v;
-    v.append(statusCard(hv, e));
+    v.append(statusCard(hv, e), inboxStrip());
     const al = alertsView(hv);
     if (al) v.append(al);
     const train = latestRound('sft') || latestRound('ready'), prep = (e.rounds || []).filter(r => r.state === 'preparing').at(-1);
@@ -394,7 +394,8 @@ export function makeViews(ctx) {
   function moreView(hv) {
     const items = [['units', 'Units', 'Everything systemd runs, grouped by what it does'], ['teachers', 'Teacher details', 'Per teacher outcomes, families, history'], ['data', 'Training data', 'Browse datasets, tasks, episodes and rounds'], ['backlog', 'Open items and fallow', 'In-flight work and built capabilities not in use'],
       ['investigations', 'Investigations', 'Open questions with findings'], ['inbox', 'Inbox', 'Questions to the supervising agent and its answers'], ['events', 'All events', 'The driver\'s event log']];
-    return h('div', { class: 'moremenu' }, items.map(([id, t, d]) => h('a', { class: 'card menuitem', href: `#${id}` }, h('b', {}, t), h('span', { class: 'muted small' }, d))));
+    const sum = inboxCounts();
+    return h('div', { class: 'moremenu' }, items.map(([id, t, d]) => h('a', { class: 'card menuitem', href: `#${id}` }, h('div', { class: 'row' }, h('b', {}, t), id === 'inbox' && sum.unread ? chip(`${sum.unread} new`, 'ok') : null, id === 'inbox' && sum.waiting ? chip(`${sum.waiting} waiting`, 'open') : null), h('span', { class: 'muted small' }, d))));
   }
   function events() {
     const e = ei(), v = h('div', {});

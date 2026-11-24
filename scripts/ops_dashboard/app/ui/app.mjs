@@ -1,4 +1,4 @@
-import { num, fmt, gb, signed, dur, ago, clock, dayClock, shortUnit, health, metricSeries, SNAP_STALE_MS } from './model.mjs';
+import { num, fmt, gb, signed, dur, ago, clock, dayClock, shortUnit, health, metricSeries, askState, inboxSummary, listenerStatus, SNAP_STALE_MS } from './model.mjs';
 import { h, lineChart, valueTable, slotVar } from './charts.mjs';
 import { makeViews } from './views.mjs';
 import { dataView, link as dl } from './data.mjs';
@@ -16,6 +16,7 @@ const S = {
   acked: store('ops.acked') || {}, slots: store('ops.slots') || {}, tab: 'overview', sel: new Set(), selTouched: false,
   smooth: store('ops.smooth') ?? 0.3, logy: false, extra: store('ops.extra') || '', tables: new Set(), open: new Set(), showAcked: false,
   q: '', procMachine: 'all', procState: 'live', evAll: false, hold: false, sent: 0, route: '', gate: null,
+  asks: store('ops.asks') || {}, seen: store('ops.seen') || [], tick: null,
   dui: { forms: {}, taskTab: {}, file: {}, traj: { reasoning: false, context: false, results: false, ...(store('ops.traj') || {}) }, tokens: {}, cmp: [] },
 };
 const runLink = id => h('a', { class: 'btn sm', href: dl.run(id), title: 'Steps, selected groups, episodes and held evals of this run' }, 'Training data');
@@ -105,14 +106,42 @@ $('ask-cancel').onclick = () => dlg.close();
 $('ask-form').addEventListener('submit', async e => {
   e.preventDefault();
   const text = $('ask-text').value.trim(); if (!text || !askCtx) return;
-  $('ask-send').disabled = true; $('ask-status').textContent = 'Sending…';
-  try {
-    const r = await src.command('ask', { kind: askCtx.mode === 'stop' ? 'request_stop' : 'ask', subject: askCtx.subject, text });
-    $('ask-status').textContent = r.status === 'applied' ? (r.outcome === 'accepted' ? 'Recorded. The supervising agent reads it from its inbox; answers appear under Inbox.' : `Rejected: ${r.rejection || r.outcome}`) : 'Saved on this device; it is applied when the native participant is reachable.';
-    setTimeout(() => dlg.close(), 1200);
-  } catch (err) { $('ask-status').textContent = `Could not send: ${err.message || err}`; $('ask-send').disabled = false; }
+  const input = { kind: askCtx.mode === 'stop' ? 'request_stop' : 'ask', subject: askCtx.subject, text }, sentAt = now();
+  dlg.close();                       // the item itself shows "Sent … waiting for the agent" at once (this device's pending command), then the answer
+  void (async () => {
+    try {
+      const r = await src.command('ask', input);
+      if (r?.operationId) rememberAsk(r.operationId, sentAt);
+      if (r?.outcome && r.outcome !== 'accepted') notice('ask', `Your question was rejected: ${r.rejection || r.outcome}`);
+    } catch (err) { notice('ask', `Your question is saved on this device but not sent yet (${err.message || err}). It retries when the connection returns; see Inbox.`); }
+    render();
+  })();
+  setTimeout(render, 50);
 });
-const askBtn = (kind, id, title, label = 'Ask') => h('button', { class: 'btn sm', type: 'button', onclick: () => openAsk({ mode: 'ask', subject: { kind, id: String(id), title: String(title).slice(0, 160) } }) }, label);
+function rememberAsk(op, at) {
+  if (S.asks[op]) return;
+  S.asks[op] = { at }; const keys = Object.keys(S.asks); for (const k of keys.slice(0, Math.max(0, keys.length - 150))) delete S.asks[k];
+  store('ops.asks', S.asks);
+}
+const syncAskTimes = () => { for (const p of src?.pending?.get() || []) if (p.name === 'ask' && p.ts) rememberAsk(p.id, p.ts); };
+const markSeen = ids => { const add = ids.filter(i => i && !S.seen.includes(i)); if (add.length) { S.seen = [...S.seen, ...add].slice(-300); store('ops.seen', S.seen); } };
+const listener = () => listenerStatus(S.tick, now());
+/** What became of the question asked about this item: sent and waiting (with the time), or the agent's answer inline. */
+function askStatus(kind, id) {
+  const st = askState(src?.inbox.get(), src?.pending.get(), S.asks, S.seen, kind, id);
+  if (!st) return [];
+  const when = st.at ? ` ${clock(st.at)}` : '';
+  if (st.state === 'answered') return [h('span', { class: `chip ${st.unread ? 'ok' : ''}`, title: `Your question: ${st.text}` }, st.unread ? '✔ New answer' : '✔ Answered'),
+    h('div', { class: 'answer' }, h('div', { class: 'small muted' }, `You asked${when}: ${st.text}`), h('b', {}, 'Agent: '), st.answer, st.unread ? h('button', { class: 'btn sm', type: 'button', style: 'margin-left:8px', onclick: () => { markSeen([st.answerOp]); render(); } }, 'Got it') : null)];
+  const ls = listener(), quiet = ls.state !== 'live';
+  const label = st.failed ? `Saved${when}, not sent yet` : `Sent${when}; waiting for the agent${quiet && ls.state !== 'unknown' ? ' (nobody is listening now)' : ''}`;
+  return [h('span', { class: `chip ${st.failed || (quiet && ls.state !== 'unknown') ? 'warn' : 'open'}`, title: st.failed ? 'The command is stored on this device and retries.' : st.confirmed === false ? 'Not yet confirmed by the journal.' : ls.text }, label)];
+}
+const askBtn = (kind, id, title, label = 'Ask') => {
+  const frag = document.createDocumentFragment();
+  frag.append(h('button', { class: 'btn sm', type: 'button', onclick: () => openAsk({ mode: 'ask', subject: { kind, id: String(id), title: String(title).slice(0, 160) } }) }, label), ...askStatus(kind, id));
+  return frag;
+};
 async function ackAlert(id) {
   S.acked[id] = now(); store('ops.acked', S.acked); render();
   try { await src.command('ask', { kind: 'ack_alert', subject: { kind: 'alert', id: String(id).slice(0, 300) }, text: 'acknowledged on the dashboard' }); } catch { /* local acknowledgement stands */ }
@@ -175,25 +204,49 @@ function data() {
   return dataView({ src, route: S.route, render: softRender, ui: S.dui });
 }
 function inbox() {
-  const ib = src?.inbox.get() || { asks: [], answers: [] }, v = h('div', {});
-  v.append(h('div', { class: 'notice' }, 'Questions and requests you sent from this page, with the supervising agent\'s answers. Each is a signed operation in the application journal; the native participant mirrors them to ', h('span', { class: 'mono' }, 'ops/dashboard/inbox.jsonl'), ' for the agent.'));
-  if (!ib.asks.length) return v.append(h('div', { class: 'card muted' }, 'Nothing asked yet. Every alert, unit, queue item, investigation and fallow row has an Ask button.')), v;
-  for (const a of [...ib.asks].reverse()) {
-    const ans = ib.answers.filter(x => x.ask === editRef(a.operationId));
-    v.append(h('div', { class: 'card', style: 'margin-bottom:10px' }, h('header', {}, h('h2', {}, a.subject.title || a.subject.id), h('span', { class: `chip ${a.kind === 'request_stop' ? 'crit' : a.kind === 'ack_alert' ? '' : 'evidence'}` }, a.kind.replace('_', ' '))),
-      h('div', {}, a.text), ans.length ? ans.map(x => h('div', { class: 'answer' }, h('b', {}, 'Agent: '), x.text)) : h('div', { class: 'muted small' }, a.kind === 'ack_alert' ? '' : 'Not answered yet.')));
+  const ib = src?.inbox.get() || { asks: [], answers: [] }, pend = (src?.pending.get() || []).filter(p => p.name === 'ask' && p.input?.kind !== 'ack_alert'), known = new Set(ib.asks.map(a => a.operationId));
+  const v = h('div', {}), ls = listener();
+  v.append(h('div', { class: `card listener lst-${ls.state}` }, h('header', {}, h('h2', {}, 'Is the agent listening?'), h('span', { class: `chip ${ls.state === 'live' ? 'ok' : ls.state === 'unknown' ? '' : 'warn'}` }, ls.state === 'live' ? '✔ listening' : ls.state === 'unknown' ? 'unknown' : '▲ not listening')), h('div', {}, ls.text),
+    h('div', { class: 'small muted', style: 'margin-top:4px' }, 'The supervising agent runs a listener that blocks until you ask; it reports in every 10 seconds. A question you send while nobody listens is kept and is answered when the listener is re-armed.')));
+  const items = [...pend.filter(p => !known.has(p.id)).map(p => ({ pending: p })), ...ib.asks.filter(a => a.kind !== 'ack_alert').map(a => ({ ask: a }))];
+  if (!items.length) return v.append(h('div', { class: 'card muted' }, 'Nothing asked yet. Every alert, unit, open item and fallow row has an Ask button; the question and its answer show up on the item and here.')), v;
+  const unread = [];
+  for (const it of [...items].reverse()) {
+    if (it.pending) {
+      const p = it.pending;
+      v.append(h('div', { class: 'card', style: 'margin-bottom:10px' }, h('header', {}, h('h2', {}, p.input.subject.title || p.input.subject.id), h('span', { class: 'chip warn' }, p.state === 'uncertain' ? 'not sent yet' : 'sending')),
+        h('div', {}, p.input.text), h('div', { class: 'small muted' }, `Saved on this device ${ago(p.ts, now())}${p.error ? `: ${p.error}` : ''}`),
+        h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { class: 'btn sm', type: 'button', onclick: () => src.retry(p.id).then(render, e => notice('ask', `Retry failed: ${e.message}`)) }, 'Retry'), h('button', { class: 'btn sm', type: 'button', onclick: () => { src.dismiss(p.id); render(); } }, 'Discard'))));
+      continue;
+    }
+    const a = it.ask, ans = ib.answers.filter(x => x.ask === editRef(a.operationId)), at = S.asks[a.operationId]?.at;
+    for (const x of ans) if (!S.seen.includes(x.operationId)) unread.push(x.operationId);
+    const fresh = ans.some(x => !S.seen.includes(x.operationId));
+    v.append(h('div', { class: `card${fresh ? ' fresh' : ''}`, style: 'margin-bottom:10px' }, h('header', {}, h('h2', {}, a.subject.title || a.subject.id), h('span', { class: `chip ${a.kind === 'request_stop' ? 'crit' : ans.length ? 'ok' : 'open'}` }, a.kind === 'request_stop' ? 'stop request' : ans.length ? (fresh ? '✔ new answer' : '✔ answered') : 'waiting for the agent')),
+      h('div', { class: 'small muted' }, at ? `Sent ${dayClock(at)}` : 'Sent earlier'), h('div', {}, a.text),
+      ans.length ? ans.map(x => h('div', { class: 'answer' }, h('b', {}, 'Agent: '), x.text)) : h('div', { class: 'small', style: 'margin-top:4px' }, `Not answered yet. ${ls.state === 'live' ? 'The agent is listening.' : ls.text}`)));
   }
+  setTimeout(() => markSeen(unread), 1500);       // reading the inbox clears the unread badge (the cards above stay marked until the next visit)
   return v;
 }
-const V = makeViews({ S, go: (...a) => go(...a), askBtn, alertsView, now, chartPanel, machineChip, meter, section, stat, runLink, openAsk, render: () => render() });
+function inboxStrip() {
+  const sum = inboxSummary(src?.inbox.get(), src?.pending.get(), S.seen), ls = listener();
+  const tone = sum.unread ? 'fresh' : sum.waiting && ls.state !== 'live' && ls.state !== 'unknown' ? 'warn' : '';
+  const status = ls.state === 'live' ? '✔ agent listening' : ls.state === 'unknown' ? 'listener unknown' : '▲ nobody listening';
+  return h('a', { class: `card inboxstrip ${tone}`, href: '#inbox', 'aria-label': `Inbox: ${sum.waiting} waiting, ${sum.unread} new answers. ${ls.text}` },
+    h('div', {}, h('b', {}, 'Inbox'), h('div', { class: 'small muted' }, sum.total ? `${sum.waiting} waiting for the agent · ${sum.unread} new answer${sum.unread === 1 ? '' : 's'}` : 'Ask the agent from any item')),
+    h('span', { class: `chip ${ls.state === 'live' ? 'ok' : ls.state === 'unknown' ? '' : 'warn'}` }, status));
+}
+const inboxCounts = () => inboxSummary(src?.inbox.get(), src?.pending.get(), S.seen);
+const V = makeViews({ inboxStrip, inboxCounts, S, go: (...a) => go(...a), askBtn, alertsView, now, chartPanel, machineChip, meter, section, stat, runLink, openAsk, render: () => render() });
 const VIEWS = { overview: V.overview, training: V.training, flow: V.flow, held: V.held, machines: V.machines, units: V.units, teachers: V.teachers, backlog: V.backlog, more: V.more, events: V.events, data, investigations, inbox };
 function go(tab, route = '') { const hash = `#${tab}${route ? '/' + route : ''}`; if (location.hash !== hash) location.hash = hash; else { S.tab = tab; S.route = route; render(); } }
 function tabs(hv) {
   const nav = $('tabs'); nav.replaceChildren();
   const inMore = SECONDARY.some(([id]) => id === S.tab) || S.tab === 'more';
-  const badge = id => id === 'overview' && hv.open.length ? h('span', { class: 'n', title: 'open alerts' }, hv.open.length) : id === 'more' && unanswered() ? h('span', { class: 'n info', title: 'unanswered questions' }, unanswered()) : null;
+  const sum = inboxCounts(), badge = id => id === 'overview' && hv.open.length ? h('span', { class: 'n', title: 'open alerts' }, hv.open.length) : id === 'more' && sum.unread ? h('span', { class: 'n info', title: 'new answers from the agent' }, sum.unread) : null;
   for (const [id, label, icon] of PRIMARY) nav.append(h('button', { class: `tab${id === 'more' ? ' moretab' : ''}`, role: 'tab', type: 'button', 'aria-selected': id === 'more' ? inMore : S.tab === id, onclick: () => go(id) }, h('span', { class: 'ico', 'aria-hidden': 'true' }, icon), h('span', { class: 'lbl' }, label), badge(id)));
-  for (const [id, label] of SECONDARY) nav.append(h('button', { class: 'tab sec', role: 'tab', type: 'button', 'aria-selected': S.tab === id, onclick: () => go(id) }, label, id === 'inbox' && unanswered() ? h('span', { class: 'n info' }, unanswered()) : null));
+  for (const [id, label] of SECONDARY) nav.append(h('button', { class: 'tab sec', role: 'tab', type: 'button', 'aria-selected': S.tab === id, onclick: () => go(id) }, label, id === 'inbox' && sum.unread ? h('span', { class: 'n info' }, sum.unread) : null));
 }
 /** Re-render without stealing an input the person is typing in: deferred until focus leaves it. */
 let softPending = false;
@@ -203,7 +256,6 @@ function softRender() {
   render();
 }
 $('view').addEventListener('focusout', () => { if (softPending) { softPending = false; setTimeout(softRender, 0); } });
-function unanswered() { const ib = src?.inbox.get(); return ib ? ib.asks.filter(a => a.kind !== 'ack_alert' && !ib.answers.some(x => x.ask === editRef(a.operationId))).length : 0; }
 function chrome(hv) {
   const pill = $('health'), ic = pill.querySelector('.ic');
   pill.hidden = !src;
@@ -223,6 +275,7 @@ function freshness() {
     : !src ? 'connecting' : age == null ? 'waiting for data' : age < 90e3 ? 'live' : `${dur(age / 1000)} old`;
 }
 function render() {
+  syncAskTimes();
   const hv = health(S.snap, now(), S.acked);
   document.title = `${hv.level === 'ok' ? '✔' : hv.level === 'crit' ? '✖' : '▲'} natlang ops`;
   chrome(hv); tabs(hv);
@@ -330,7 +383,7 @@ export function start(source) {
     setTimeout(() => { location.href = window.tendril?.identity?.base || location.href.split('?')[0]; }, 1500);
   });
   if (src.kind === 'preview') document.querySelector('.top .brand')?.append(h('span', { class: 'chip warn previewchip', title: 'A local preview of the page over the DGX exporter files and data service. Edits made here stay in this preview server and are not applied.' }, 'local preview'));
-  src.ticks.on(t => { if (t) void pull(t); });
+  src.ticks.on(t => { if (t) { const was = listenerStatus(S.tick, now()).state; S.tick = t; if (listenerStatus(t, now()).state !== was) schedule(); void pull(t); } });
   // a phone resumes a backgrounded page: read the current state at once rather than at the next tick
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void pull(src.ticks.get()); });
   for (const c of [src.edits, src.inbox, src.pending]) c.on(() => { if (S.tab === 'data' || S.tab === 'inbox') softRender(); else schedule(); });

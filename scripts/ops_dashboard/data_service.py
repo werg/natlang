@@ -82,7 +82,8 @@ def _mtime_ms(path):
 def ops_tick(_):
     return {'ts': int(time.time() * 1000), 'snapshot': _mtime_ms(OUT + '/latest.json'),
             'metrics': _mtime_ms(OUT + '/metrics.jsonl'), 'machines': _mtime_ms(OUT + '/machines.jsonl'),
-            'events': _mtime_ms(OUT + '/events.jsonl'), 'edits': _mtime_ms(DATA + '/ops/data-edits/log.jsonl')}
+            'events': _mtime_ms(OUT + '/events.jsonl'), 'edits': _mtime_ms(DATA + '/ops/data-edits/log.jsonl'),
+            'listener': _mtime_ms(DASH + '/inbox.listener')}       # the agent's `inbox.sh wait` touches this every 10 s
 
 
 @handler('ops.paths')
