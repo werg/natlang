@@ -5,7 +5,8 @@
 # not been modified for SWEEP_AGE_MINUTES: test temp roots, natlang scratch directories in /tmp, torch inductor caches
 # and the external test scratch. Then removes experiment pins and code worktrees on the root disk that no process,
 # unit or watch/state file references and that are older than SWEEP_PIN_AGE_HOURS (prune_stale_checkouts.py;
-# SWEEP_PINS=0 opts out). Logs what it removed and the free space afterwards; below a disk floor (root
+# SWEEP_PINS=0 opts out), and moves cold expert-iteration rounds and collections to the HDD (ei_round_tier.py;
+# SWEEP_EI=0 opts out). Logs what it removed and the free space afterwards; below a disk floor (root
 # SWEEP_ROOT_FLOOR_GB, external SWEEP_EXTERNAL_FLOOR_GB) it appends a DISK FLOOR line to the ops log
 # (SWEEP_OPS_LOG) and the journal, and writes storage-low.json. The floors are checked first;
 # SWEEP_ALERTS_ONLY=1 stops there (the unit's ExecStartPre, which needs no ledger admission). Every step is bounded
@@ -72,6 +73,15 @@ while IFS= read -r path; do
   fi
 done < <(candidates)
 
+# Expert-iteration rounds: collections of policies the builds no longer read and the bulk of rounds older than the
+# previous one move to the HDD (verified, symlinked back); regenerable exports go (scripts/ei_round_tier.py).
+# SWEEP_EI=0 opts out; bounded like every step.
+if [ "${SWEEP_EI:-1}" != 0 ]; then
+  timeout -k 30 "${SWEEP_EI_TIMEOUT:-1200}" /usr/bin/python3 "$(dirname "$0")/ei_round_tier.py" --apply \
+    --max-minutes "${SWEEP_EI_MINUTES:-18}" > /dev/null 2>&1
+  [ $? = 124 ] && echo "$(date -Is) ei_round_tier timed out after ${SWEEP_EI_TIMEOUT:-1200} s" >> "$LOG"
+fi
+
 if [ "${SWEEP_PINS:-1}" != 0 ]; then
   # bounded: a pass that cannot finish in SWEEP_PIN_TIMEOUT seconds is killed and logged; the next sweep retries
   pins_out=$(mktemp)
@@ -86,6 +96,10 @@ fi
 
 free_gb=$(df -BG --output=avail / | tail -1 | tr -dc 0-9)
 echo "$(date -Is) sweep removed $((removed / 1073741824)) GiB; root free ${free_gb} GiB" >> "$LOG"
+# the target the tiers keep the root disk at when they can supply it (the floor above is the alert line)
+if [ "$free_gb" -lt "${SWEEP_ROOT_TARGET_GB:-60}" ]; then
+  echo "$(date -Is) ROOT BELOW TARGET: ${free_gb} GiB free < ${SWEEP_ROOT_TARGET_GB:-60} after the tiers (nothing more movable)" >> "$LOG"
+fi
 if [ "$free_gb" -lt "$ALERT_GB" ]; then
   echo "$(date -Is) LOW ROOT SPACE: ${free_gb} GiB free (< ${ALERT_GB})" >> "$LOG"
   echo "{\"at\": $(date +%s), \"root_free_gb\": $free_gb}" > "$HOME/.local/state/natlang/storage-low.json"

@@ -120,3 +120,16 @@ def test_rearchiving_a_restored_file_reuses_its_drive_copy(tmp_path, monkeypatch
     assert f.exists() and drive.next == 1
     m.archive(args, drive)
     assert not f.exists() and drive.next == 1          # no second upload: the restored copy is still on Drive
+
+
+def test_ei_archive_files_behind_links_are_eligible(tmp_path, monkeypatch):
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    monkeypatch.setattr(m, 'LINK_TOLERANT', {'dgx-moved-ei': -1})
+    linked = old_file(hdd / 'dgx-moved-ei' / 'aei1' / 'collect' / 'v0001-x' / 'actor' / 'blocks' / 'b.bin', b'b' * 64)
+    other = old_file(hdd / 'natlang-grpo-v1' / 'live' / 'a.bin', b'a' * 64)
+    links = {str(linked.parents[2]), str(other.parent)}
+    found = [str(p) for p, _ in m.candidates(['dgx-moved-ei', 'natlang-grpo-v1'], min_mb=0, min_age_days=-1,
+                                              exclude=[], links=links, held=set())]
+    assert found == [str(linked)]

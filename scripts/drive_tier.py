@@ -312,9 +312,14 @@ DEFAULT_ROOTS = (
     'dgx-moved-20261104', 'dgx-moved-20261107-internal', 'dgx-ops-archive-20261118', 'lfm3-rl-dgx-20261029-ops',
     'natlang-grpo-v1', 'natlang-grpo-v2', 'natlang-grpo-v2-archive', 'natlang-grpo-v3', 'natlang-grpo-v4',
     'natlang-grpo-v5', 'natlang-grpo-bench', 'natlang-lfm3-cloud-20261103', 'natlang-lfm3-cloud-corrected-20261103',
-    'natlang-diloco-smoke-20261103', 'natlang-independent-recovery-20261101', 'natlang-moved-20261028',
+    'dgx-moved-ei', 'natlang-diloco-smoke-20261103', 'natlang-independent-recovery-20261101', 'natlang-moved-20261028',
     'natlang-moved-20261029', 'natlang-fallow22-20261110', 'natlang-replay-corrected-1103',
 )
+# Archives whose NVMe symlinks lead to data no reader needs at HDD speed: ei_round_tier.py moves collections of
+# policies the builds no longer read and rounds older than the previous one there (their live readers, mix rows and
+# trained-units.json, stay on the NVMe). A file behind such a link may go to Drive (its stub says how to restore it),
+# after this many days on the HDD: an aei driver adds about 20 GB a round, faster than the default age would drain.
+LINK_TOLERANT = {'dgx-moved-ei': 0.5}
 NEVER = ('bgkit*', '*hindsight*', 'megatoken*', 'ComfyUI*', '*vibestudio*', 'claude-scratch*', 'lost+found',
          'natlang-test-tmp', 'natlang-development-data')
 
@@ -396,6 +401,8 @@ def candidates(roots, *, min_mb, min_age_days, exclude, links, held):
         top = HDD / name
         if not top.is_dir() or top.is_symlink() or any(fnmatch.fnmatch(name, n) for n in NEVER):
             continue
+        tolerant = name in LINK_TOLERANT
+        age_days = LINK_TOLERANT.get(name, min_age_days)
         for directory, children, files in os.walk(top):
             children[:] = sorted(c for c in children if not os.path.islink(os.path.join(directory, c)))
             for file in sorted(files):
@@ -406,11 +413,11 @@ def candidates(roots, *, min_mb, min_age_days, exclude, links, held):
                     st = os.stat(path)
                 except OSError:
                     continue
-                if st.st_size < min_mb * 2**20 or now - max(st.st_mtime, st.st_ctime) < min_age_days * 86400:
+                if st.st_size < min_mb * 2**20 or now - max(st.st_mtime, st.st_ctime) < age_days * 86400:
                     continue
                 if any(path == x or path.startswith(x.rstrip('/') + '/') for x in exclude):
                     continue
-                if _linked(path, links) or path in held:
+                if (not tolerant and _linked(path, links)) or path in held:
                     continue
                 yield Path(path), st
 
