@@ -11599,3 +11599,15 @@ the held-v4 measurement of round 6 holds Pop. Per-call think lengths in held epi
 tokens were compared: non-decision calls >= 8 k tokens 67/46/65 for start/r1/r5). The filled part's content (chains.pkl
 on /mnt/external) beyond its exposure counts. Whether the repetition caused round 1 -> 5's flat-to-negative point
 estimate (no experiment isolates it; the fixes are first-principles).
+
+**2026-11-24 19:25 addendum: two fits at once on the L4 (51cf1173c).** A fit on the L4 runs 2.5-2.6 min/step at 9%
+GPU and ~8 GB VRAM, one CPU core at 100%. py-spy (60 s, verdict) puts 57% of samples in autograd backward functions,
+37% in `_RowwiseNormAdjoint.backward` (`native_parameter_precision.py:160-162`), and the native graph's eager
+checkpointed forward (`shared_state._forward_graph`). The fit is Python/launch bound, not GPU bound, and that is the
+same on the A100 (2.5 min/step). `colab-fit --vram-gib` (claim override, default unchanged; `TENANT_FIT`'s only
+consumer is `colab_fit`) and `--segment-steps` (bounds the 11.5 -> 18.6 GB growth; exit 75 reruns) now let two lanes
+(`progtune-l4-fits-a`/`-b`, `l4-fits2.sh`, 10 GiB claims each) fit two programs at once. Measured: 16.4 GB, 65% GPU,
+two cores, both stepping. `progtune-l4-seq-3` only measures: it preempts the fits (they resume from state.json) and
+stops its actor after each comparison. Expected: verdict release ~21:10 CET and comparison ~22:15; tally ~23:30; then
+two programs every ~2.7 h (tree, retail, pubmed, iterate, multihop). searchqa stays on the A100 (step 19/60). Open: the
+fit's single-core hot path (the norm adjoint backward) is the real ceiling on fit throughput; not worked on yet.
