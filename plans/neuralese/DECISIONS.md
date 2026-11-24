@@ -11002,3 +11002,25 @@ episodes per campaign to its 6 slots busy; the owner is deciding that spend (`op
   result check and reuse while its unit runs (`held_measuring`).
 
 Test: `tests/neuralese/test_async_train.py` covers this sequence.
+
+## 2026-11-24 10:20 The A100 actor lost between rounds: a yielded actor's record now survives a restarted run-sft (program-tuning strand)
+
+Observation: the A100 had no actor from about 06:48 to 10:00; aei1's rebinds of r0004 (1823ce9b) at 09:43 and 09:50
+failed on 127.0.0.1:8570. Cause: r0003's first `run-sft` yielded the actor at 05:41, and `stop_colab` deleted
+`colab-actor-colab-g4.json`, keeping the serve arguments only in that process. A second `run-sft` took the round over
+at 06:21, found no record (`yielded_actor: False`) and restored nothing; the first one's restore never ran. With no
+record and no pending serve the keeper decided `ok` every cycle (it logs to `ops/ei/colab/session-keeper.log`, so the
+journal looked silent). Not a tenant fault: the program-tuning fit tenant ran outside MPS beside nothing.
+
+Fix (1b88e5d3f, default, tests in `test_colab_session_keeper.py` and `test_colab_and_profiles.py`): a yield moves the
+record to `colab-actor-<host>.yielded.json`; `restore_colab_actor` removes it only after a successful restore; a
+`run-sft` restarted mid-round adopts it; the keeper treats "yielded record, no live record, no round on the session" as
+actor down and serves it from that record (beside the earlier `pending_serve` retry and dead-actor checks). The actor
+was served at 1823ce9b at 10:00:18 through the keeper's pending-serve path; both keepers run from `/home/werg/natlang`.
+
+Seen alongside, not fixed here (aei1's driver): (1) `ensure_remote_collection` runs only at a round's start and in DGX
+SFT polls, so an actor that comes up after r0005's start (09:50) gets no collector until r0006; (2) r0005 was prepared
+at 09:59 but its SFT had not started at 10:20: the driver's main thread sits in `health_report`, reading
+`v0000-*-remote0` results that the storage sweep moved to `/mnt/external` (HDD, D state); (3) `colab-g4a-tunnel` has
+flapped every 10 s since 07:05 (restart counter 759, HTTP 429) because a client's `ControlPersist yes` master
+(pid 2427383) holds the session; the forwards work through that master.
