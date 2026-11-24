@@ -1,5 +1,7 @@
 """Admission of observed live Natlang work; effects are verified, never called portable replays."""
 import hashlib
+from contextlib import contextmanager
+from contextvars import ContextVar
 import gzip
 import json
 import math
@@ -12,6 +14,26 @@ from observed_graph_metrics import graph_metrics
 
 NATIVE_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1'
 OBSERVED_WORKSPACE = 'observed-live-workspace'
+
+# The ingestion owner can observe files already read by validation, without a
+# second parse or retaining the full transcript/episode objects.
+_artifact_reads = ContextVar('live_teacher_artifact_reads', default=None)
+
+
+@contextmanager
+def observed_artifacts():
+    paths = set()
+    token = _artifact_reads.set(paths)
+    try:
+        yield paths
+    finally:
+        _artifact_reads.reset(token)
+
+
+def observe_artifact(path):
+    paths = _artifact_reads.get()
+    if paths is not None:
+        paths.add(str(Path(path).resolve()))
 
 
 def open_goal_fingerprint(goal):
@@ -445,6 +467,7 @@ def bound_file(binding, root):
     path = Path(binding['path'])
     if not path.is_absolute():
         path = root / path
+    observe_artifact(path)
     if sha256_file_hex(path) != binding.get('sha256'):
         raise ValueError(f'live source artifact changed: {path}')
     return path
@@ -625,6 +648,7 @@ def verify_observed_child_inventory(records):
 
 def load_episode(path):
     path = Path(path).resolve()
+    observe_artifact(path)
     spec = json.loads(path.read_text())
     if spec.get('schema') != 'natlang.live-teacher-task/1':
         raise ValueError('unsupported live teacher task manifest')

@@ -10047,3 +10047,8 @@ uncapped pool instead of 30%.
   3.5 GB, and I did not preempt aei1's collection. The first real build is the coordinator's r0002/r0003 build.
 - The time model assumes steps cost in proportion to chain tokens. It was measured on one mix per GPU, and a larger
   raw-teacher share raises forward per loss token.
+
+
+### 2026-11-24 — Separate native diagnostic infrastructure from training data
+
+Actual0039 retained-state metadata contained692MB/52,364members despitezero authored teacher calls; installed runtimes and build caches dominated. Future joined diagnostic packs omit only exact managed `workspaces/*/state/{builds,native-runtime}` anchors, preserving nativeSQL/WAL/model journals/source/CAS/blobs/effects and user storage. Future dataset snapshots exclude unreferenced native infrastructure; actual verified artifact references override that exclusion. Existing immutable registered packs remain protected. After durable nativeIR extraction and fsynced ingestion, the common ingester retires only unreferenced stopped pack payloads/inventories. Admitted partial/failed goals qualify equally; unresolved/interrupted cases remain for salvage. No original trajectories are removed and no new admission/goal-success gate is imposed. Opt-outs, full mechanism inventory, scope citations and actual145test evidence: `NATIVE_CAPTURE_RETENTION_20261124.md`. This enters new producer/reader pins at their normal resume; no teacher or training hold.

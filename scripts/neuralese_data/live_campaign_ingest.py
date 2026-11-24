@@ -83,14 +83,18 @@ def holdout_registry(campaign, work):
     return copy
 
 
-def select(manifests, held_manifest, held, training, seen_keys, seen_goals, load=None):
+def select(manifests, held_manifest, held, training, seen_keys, seen_goals, load=None, dependencies=None):
     """(kept manifests, their records, drop counts) of one directory's manifests (the module's steps 1-3)."""
     from sft_sources import held_excluded_ids, open_goal_key, require_registered_open_goal
     if load is None:
         from live_teacher_sources import load_episode as load
     kept, records, dropped = [], [], collections.Counter()
     for path in manifests:
-        episode = load(path)
+        from live_teacher_sources import observed_artifacts
+        with observed_artifacts() as artifact_paths:
+            episode = load(path)
+        if dependencies is not None:
+            dependencies.update(artifact_paths)
         task = episode['task']
         goal = (task.get('interaction') or {}).get('goal')
         if held_excluded_ids(held_manifest, {episode['task_id']: task}, held):
@@ -140,11 +144,15 @@ def ingest_once(campaign, work, held_manifest=None, extract=None, *, registry_re
         seen_keys = {e['key'] for r in earlier for e in r['episodes']}
         seen_goals = {e['goal'] for r in earlier for e in r['episodes'] if e.get('task_completed', True) and e.get('decisions', 1) > 0}
         batch = []
+        observed_by_directory = {}
         for directory in committed(campaign):
             if directory.name in done:
                 continue
             manifests, dataset = verified_manifests(directory)
-            kept, records, dropped = select(manifests, held_manifest, held, training, seen_keys, seen_goals)
+            dependencies = set()
+            kept, records, dropped = select(manifests, held_manifest, held, training, seen_keys, seen_goals,
+                                            dependencies=dependencies)
+            observed_by_directory[directory.name] = sorted(dependencies)
             batch.append((directory, dataset, manifests, kept, records, dropped))
         # one extraction per scan (each registry lookup of a campaign path indexes every dataset directory: minutes
         # under HDD load), named after its first directory with episodes; a scan cut off before its lines repeats it
@@ -160,12 +168,23 @@ def ingest_once(campaign, work, held_manifest=None, extract=None, *, registry_re
             for directory, dataset, manifests, kept, records, dropped in batch:
                 record = {'schema': SCHEMA, 'directory': directory.name, 'dataset': dataset,
                           'verified': len(manifests), 'kept': len(kept), 'dropped': dict(dropped), 'episodes': records,
+                          'artifact_paths': observed_by_directory[directory.name],
                           'extraction': f'{name}.jsonl.zst' if kept else None, 'time': time.time()}
                 handle.write(json.dumps(record) + '\n')
                 print(json.dumps({k: record[k] for k in ('directory', 'verified', 'kept', 'dropped')}), flush=True)
                 new.append(record)
             handle.flush()
             os.fsync(handle.fileno())
+    # The journal and extraction are durable before any generated-state retirement.
+    from retained_state_archive import retire_ingested_native_state
+    for record in [*earlier, *new]:
+        try:
+            retire_ingested_native_state(campaign / record['directory'], record, work=work,
+                                         registry_repo=registry_repo, registry_ref=registry_ref)
+        except (OSError, ValueError) as error:
+            # Ingestion already committed. Keep recovery state and retry later;
+            # housekeeping must never hold training or discard a trajectory.
+            print(f"Native state retained for {record['directory']}: {error}", file=sys.stderr)
     return new
 
 
