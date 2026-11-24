@@ -232,15 +232,37 @@ def prerequisite_holds(cases, host):
     return holds
 
 
+ARCHIVE_SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
+                       '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3']
+ARCHIVE_RSYNC = ['rsync', '-a', '--protect-args', '--timeout=120',
+                 '--rsh=' + shlex.join(['ssh', *ARCHIVE_SSH_OPTIONS])]
+
+
+def archive_transport(command, *, capture_output=False):
+    """Retry only idempotent archive IO, never teacher calls or remote job submission."""
+    attempts = int(os.environ.get('NATLANG_ARCHIVE_TRANSPORT_ATTEMPTS', '4'))
+    if attempts < 1 or attempts > 20:
+        raise ValueError('archive transport attempts must be between 1 and 20')
+    for attempt in range(attempts):
+        try:
+            return subprocess.run(command, check=True, capture_output=capture_output, text=True)
+        except subprocess.CalledProcessError as error:
+            # 23/24 (incomplete/vanished source) and 11 (file IO) are not network failures.
+            retryable = {255} if command[0] == 'ssh' else {10, 12, 30, 35, 255}
+            if error.returncode not in retryable or attempt + 1 == attempts:
+                raise
+            time.sleep(min(30, 2 ** (attempt + 1)))
+
+
 def transfer(source, remote, destination):
-    subprocess.run(['ssh', '-o', 'BatchMode=yes', remote, shlex.join(['mkdir', '-p', str(destination)])], check=True)
+    archive_transport(['ssh', *ARCHIVE_SSH_OPTIONS, remote, shlex.join(['mkdir', '-p', str(destination)])])
     target = f'{remote}:{destination}/'
     exclusions = prepare_retained_state_packs(source)
-    common = ['rsync', '-a', '--protect-args', *[f'--exclude={name}' for name in exclusions]]
+    common = [*ARCHIVE_RSYNC, *[f'--exclude={name}' for name in exclusions]]
     flags = [*common, f'{source}/', target]
-    subprocess.run(flags, check=True)
-    comparison = subprocess.check_output([*common, '--dry-run', '--checksum', '--itemize-changes',
-                                          '--delete', f'{source}/', target], text=True)
+    archive_transport(flags)
+    comparison = archive_transport([*common, '--dry-run', '--checksum', '--itemize-changes',
+                                    '--delete', f'{source}/', target], capture_output=True).stdout
     if comparison.strip():
         raise RuntimeError(f'archive differs after transfer: {comparison[:400]}')
 
@@ -255,8 +277,8 @@ def remote_archive(args, destination, receipt, capture, *, wave=None):
     if wave is not None:
         publish_immutable(metadata / 'wave.json', wave)
         records.append(metadata / 'wave.json')
-    subprocess.run(['rsync', '-a', '--protect-args', *map(str, records),
-                    f'{args.archive_host}:{destination}/'], check=True)
+    archive_transport([*ARCHIVE_RSYNC, *map(str, records),
+                       f'{args.archive_host}:{destination}/'])
     if args.defer_export:
         return
     repo = args.archive_repo
@@ -272,7 +294,7 @@ def remote_archive(args, destination, receipt, capture, *, wave=None):
               '--reserve-gb', '15', '--wait', '1200', '--detach', '--resumable', '--priority', 'low',
               '--workdir', str(repo), '--']
     check = ['test', '-f', str(destination / 'exported.json')]
-    ssh = ['ssh', '-o', 'BatchMode=yes', args.archive_host]
+    ssh = ['ssh', *ARCHIVE_SSH_OPTIONS, args.archive_host]
     if subprocess.run([*ssh, shlex.join(check)]).returncode:
         subprocess.run([*ssh, shlex.join([*ledger, *remote_command])], check=True)
         for _ in range(130):
@@ -284,8 +306,8 @@ def remote_archive(args, destination, receipt, capture, *, wave=None):
 
 
 def sync_index(args, paths):
-    subprocess.run(['rsync', '-a', '--protect-args', *map(str, paths),
-                    f'{args.archive_host}:{args.archive}/'], check=True)
+    archive_transport([*ARCHIVE_RSYNC, *map(str, paths),
+                       f'{args.archive_host}:{args.archive}/'])
 
 
 def export_trajectories(archive, receipt, held, training):

@@ -583,3 +583,62 @@ def test_provider_transport_accounting_opt_out(monkeypatch):
     monkeypatch.setenv('NATLANG_CAMPAIGN_TRANSPORT_FAILURES_AS_GOAL_FAILURES', '1')
     assert not vibestudio_campaign.infrastructure_failure(
         {'status': 'test-failed', 'reason': 'natlang chooseScope: failed: fetch failed'}, {})
+
+
+@pytest.mark.parametrize('command,code', [(['ssh', 'host', 'mkdir'], 255), (['rsync', 'source', 'destination'], 12)])
+def test_archive_network_retries_do_not_repeat_teacher_work(monkeypatch, command, code):
+    calls = []
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(code, argv)
+        return subprocess.CompletedProcess(argv, 0, stdout='verified')
+    monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', run)
+    monkeypatch.setattr(vibestudio_campaign.time, 'sleep', lambda _: None)
+    assert vibestudio_campaign.archive_transport(command, capture_output=True).stdout == 'verified'
+    assert calls == [command, command]
+
+
+@pytest.mark.parametrize('code', [11, 23, 24])
+def test_archive_integrity_and_file_errors_are_not_retried(monkeypatch, code):
+    calls = []
+    def run(argv, **kwargs):
+        calls.append(argv)
+        raise subprocess.CalledProcessError(code, argv)
+    monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', run)
+    with pytest.raises(subprocess.CalledProcessError):
+        vibestudio_campaign.archive_transport(['rsync'])
+    assert len(calls) == 1
+
+
+def test_archive_transport_retries_are_bounded_and_can_be_disabled(monkeypatch):
+    calls = []
+    def run(argv, **kwargs):
+        calls.append(argv)
+        raise subprocess.CalledProcessError(255, argv)
+    monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', run)
+    monkeypatch.setattr(vibestudio_campaign.time, 'sleep', lambda _: None)
+    with pytest.raises(subprocess.CalledProcessError):
+        vibestudio_campaign.archive_transport(['ssh'])
+    assert len(calls) == 4
+    monkeypatch.setenv('NATLANG_ARCHIVE_TRANSPORT_ATTEMPTS', '1')
+    with pytest.raises(subprocess.CalledProcessError):
+        vibestudio_campaign.archive_transport(['ssh'])
+    assert len(calls) == 5
+
+
+def test_archive_checksum_mismatch_keeps_original_capture(monkeypatch, tmp_path):
+    source = tmp_path/'capture'
+    source.mkdir()
+    original = source/'original.json'
+    original.write_text('{"kept":true}')
+    commands = []
+    def run(argv, **kwargs):
+        commands.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout='>fcsT...... original.json' if '--dry-run' in argv else '')
+    monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', run)
+    monkeypatch.setattr(vibestudio_campaign, 'prepare_retained_state_packs', lambda _: [])
+    with pytest.raises(RuntimeError, match='archive differs after transfer'):
+        vibestudio_campaign.transfer(source, 'dgx', Path('/archive/capture'))
+    assert len(commands) == 3
+    assert original.read_text() == '{"kept":true}'

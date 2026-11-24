@@ -26,3 +26,14 @@ Default: operational transport failures do not consume goal retries and can
 trigger the existing infrastructure hold. Explicit diagnostic opt-out:
 `NATLANG_CAMPAIGN_TRANSPORT_FAILURES_AS_GOAL_FAILURES=1`. This changes derived
 accounting on receipt replay; originals are untouched.
+
+Archive transport inventory: `transfer` owns mkdir, upload, and checksum readback;
+`remote_archive` then publishes immutable receipt/wave metadata; `sync_index`
+publishes derived progress. All are idempotent SSH/rsync operations and receive
+bounded retries for SSH255 / rsync network IO, stream, and inactivity timeouts.
+Checksum differences, partial/vanished source files, local disk errors and remote
+job submission are not retried by this helper. Remote job submission is a separate
+non-idempotent operation and retains its existing named-unit check. SSH connection
+and liveness timeouts bound silent disconnections. Explicit opt-out:
+`NATLANG_ARCHIVE_TRANSPORT_ATTEMPTS=1` (default4). Existing captures remain owned
+until checksum validation and receipt publication; retries never invoke a teacher.
