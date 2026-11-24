@@ -10396,3 +10396,59 @@ The same restart also let a retried held start a second measure unit on the same
 `test_async_train.py::test_a_held_measure_unit_left_by_a_restarted_driver_keeps_pop_busy_and_is_joined_not_duplicated`.
 Effective at the next driver restart; until then the running held keeps its `pop-held.sh` alive, so the running
 driver leaves it alone unless it is restarted on old code.
+
+## 2026-11-24 04:45 aei1 r0002: the Colab VM merged with its own checkout's code, not the publisher's; fixed
+
+**Observation.** At 04:17:11 aei1 published r0002 as 7cfc4774 (pin 0076be613; factors `aei1/r0002/sft/factors`, base
+r0001 8e634a0f). The Colab rebind failed: `the merge of .../r0002/sft/factors does not hash to the published 7cfc4774`.
+It failed again at 04:20 (the driver's retry).
+
+**Cause.** The VM-side merge (`pop_rl_actor._REMOTE_MERGE`) imported `merge_factors_to_checkpoint` from the VM
+checkout. That checkout was at bdf4c8721, not 0076be613: `run-sft` had moved it to 0076be613, but the actor restored
+after the round's SFT went back to its launch commit (`colab_checkout(serve_args.commit)`, bdf4c8721). bdf4c8721 is
+older than 0462075ea, which added the FP32 master rows (`trainable_rows_fp32`) to every merged checkpoint. So the VM
+wrote the old layout. The publication is 3,457,841,117 bytes; the r0001-format files are ~49.8 KB smaller, which is
+the FP32 rows.
+- Localized on the VM: the same merge, run there from 0076be613's `training/neuralese` (git archive) over the VM's
+  8e634a0f and the VM's copy of the factors (4a0f1b31), hashes to **7cfc4774** byte for byte (59 s).
+- So the base identity, the factor files, the merge order and the numerics all agree across x86 MKL (A100 VM,
+  torch 2.14.1+cu130) and the GB10. The only difference was the code.
+- Round 1 is consistent with this. Its publisher (pin bdf4c8721) and the VM checkout were on the same commit, and its
+  rebind at 01:42 merged on the VM (`ok`, 47.8 s) and attested.
+
+**Fix** (default, opt-out `NATLANG_COLAB_REMOTE_MERGE=0` as before).
+- `publish-round` records `code` (`code_provenance()`) in `published.json`.
+- `pop_rl_actor.remote_merge_code` extracts the publisher's `training/neuralese` at that commit to
+  `ROOT/merge-code/<commit>` with `git archive` (fetching if needed; the 4 newest are kept). The serving checkout is not
+  moved. `remote_merge` runs the merge from that tree.
+- A dirty or unknown publisher tree raises (`ensure_remote_checkpoint` then ships the checkpoint). A publication
+  without `code` (r0001, r0002) merges with the checkout as before, and the hash check still decides.
+- A factor rebind given the DGX checkpoint (the driver always passes it) now goes through `ensure_remote_checkpoint`:
+  it keeps a file that hashes to its name, else merges with the publisher's code, else ships the publication. Before,
+  a mismatch raised and the actor kept the old policy.
+- Inventory: VM merge consumers are `ensure_remote_checkpoint` (serve-colab, the measure tenant, run-sft's start
+  checkpoint) and `_prepare_remote_rebind_export` (rebind); all four now go through the commit-pinned merge.
+  - Pop does not merge; it serves the published checkpoint by copy (`pop_step`).
+  - The DGX merges in `publish-round` and in `export_merged_checkpoint` run the process's own code.
+- Tests: `test_the_vm_merges_with_the_publishers_code_not_its_checkouts` (real git and bash extraction; the checkout is
+  not moved), `test_ensure_remote_checkpoint_merges_with_the_published_code_and_ships_a_dirty_one`,
+  `test_a_factor_rebind_with_its_publication_goes_through_ensure_remote_checkpoint`,
+  `test_publish_round_records_the_code_whose_merge_wrote_the_bytes`.
+
+**Restored.**
+- The verified merge was moved into the VM's `checkpoints/7cfc4774….pt`.
+- The rebind was run through the supported path (`pop_rl_actor.py rebind` from pin a034dbf9c5e4, `--checkpoint`):
+  4 routes attested at 04:30.
+- The VM export's `weights_sha256` 5a99d617 equals the DGX publication's SGLang export.
+- r0003's Colab SFT finds its start checkpoint present.
+
+**Not checked / left.**
+- The FP32 matmul in `merge_policy_state` is not made deterministic across BLAS libraries. It matched on two rounds
+  (MKL x86 against the GB10), and a future mismatch now ships the checkpoint instead of failing.
+- The restored actor's VM checkout stays at its launch commit (bdf4c8721), so the export and the front run that code.
+  The export matched byte for byte here.
+- The running driver (pin a034dbf9c5e4) keeps the old rebind path until its next pin. r0003 publishes from that pin
+  without `code`, and after r0003's SFT the actor is restored at bdf4c8721 again, so r0003's first rebind is expected
+  to fail the same way. A driver on a pin with this fix then retries through `ensure_remote_checkpoint`: the merge with
+  the checkout mismatches, so it ships the checkpoint (Drive) and rebinds. Rounds after that carry `code` and merge
+  on the VM.

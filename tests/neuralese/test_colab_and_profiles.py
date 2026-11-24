@@ -867,7 +867,7 @@ def test_ensure_remote_checkpoint_keeps_merges_or_ships_and_never_trusts_a_name(
     monkeypatch.setattr(pop_rl_actor, 'remote_merge', merge)
     monkeypatch.setattr(pop_rl_actor, 'sync_to_remote', lambda *a, **k: pytest.fail('shipped a mergeable policy'))
     assert pop_rl_actor.ensure_remote_checkpoint('g4', cfg, local, sha) == 'merged'
-    assert merges == [{'base_sha': 'b' * 64, 'factors_dir': str(tmp_path / 'f'), 'expect_sha': sha}]
+    assert merges == [{'base_sha': 'b' * 64, 'factors_dir': str(tmp_path / 'f'), 'expect_sha': sha, 'code': None}]
     target.unlink()
     shipped = []
     monkeypatch.setattr(pop_rl_actor, 'remote_merge', lambda host, cfg, **kw: False)
@@ -1004,3 +1004,108 @@ def test_serve_colab_launches_the_actor_as_its_own_statement_and_records_its_ser
     (launch,) = [c for c in sent if 'setsid nohup' in c]
     assert '&& setsid' not in launch and launch.rstrip().endswith('& echo $!') and result['pid'] == 4242
     assert result['serve_args']['port'] == 8570 and result['serve_args']['checkpoint'] == '/dgx/ckpt.pt'
+
+
+def _git(cwd, *args):
+    return subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', '-C', str(cwd), *args], check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+def test_the_vm_merges_with_the_publishers_code_not_its_checkouts(tmp_path, monkeypatch):
+    """2026-11-24: the r0002 rebind failed ('the merge ... does not hash to the published 7cfc4774'). The VM merged
+    with its checkout, which the restored actor had put at bdf4c8721, before 0462075ea added the FP32 master rows to
+    merged checkpoints; the publisher ran pin 0076be613. The merge now runs the publication's ``code`` commit,
+    extracted with git archive beside the checkout (which stays where the serving actor needs it); a dirty publisher
+    cannot be reproduced (ValueError: the caller ships); a publication without provenance uses the checkout."""
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    origin = tmp_path / 'origin'
+    (origin / 'training' / 'neuralese').mkdir(parents=True)
+    _git(tmp_path, 'init', '-q', str(origin))
+    marker = origin / 'training' / 'neuralese' / 'merge_version.py'
+    marker.write_text('VERSION = "publisher"\n')
+    _git(origin, 'add', '-A')
+    _git(origin, 'commit', '-qm', 'publisher')
+    publisher = _git(origin, 'rev-parse', 'HEAD')
+    marker.write_text('VERSION = "later"\n')
+    _git(origin, 'commit', '-qam', 'later')
+    vm = tmp_path / 'vm'
+    vm.mkdir()
+    _git(vm, 'clone', '-q', str(origin), 'natlang')
+    _git(vm / 'natlang', 'checkout', '-q', publisher + '~0')          # the VM checkout somewhere else ...
+    _git(origin, 'commit', '-q', '--allow-empty', '-m', 'unfetched')
+    unfetched = _git(origin, 'rev-parse', 'HEAD')                       # ... and a commit it has not fetched yet
+    cfg = {**pop_rl_actor.host_config('colab', host='g4'), 'root': str(vm), 'repo': str(vm / 'natlang')}
+    sent = []
+
+    def ssh_host(host, command, **kw):
+        sent.append(command)
+        return subprocess.run(['bash', '-c', command], check=True, capture_output=True, text=True).stdout
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', ssh_host)
+    root = pop_rl_actor.remote_merge_code('g4', cfg, {'git_commit': publisher, 'dirty': False})
+    assert root == f'{vm}/merge-code/{publisher}'
+    assert (Path(root) / 'training/neuralese/merge_version.py').read_text() == 'VERSION = "publisher"\n'
+    assert _git(vm / 'natlang', 'rev-parse', 'HEAD') == publisher            # the checkout was not moved
+    assert pop_rl_actor.remote_merge_code('g4', cfg, {'git_commit': publisher, 'dirty': False}) == root   # kept
+    later = pop_rl_actor.remote_merge_code('g4', cfg, {'git_commit': unfetched, 'dirty': False})
+    assert (Path(later) / 'training/neuralese/merge_version.py').read_text() == 'VERSION = "later"\n'
+    with pytest.raises(ValueError, match='dirty'):
+        pop_rl_actor.remote_merge_code('g4', cfg, {'git_commit': publisher, 'dirty': True})
+    with pytest.raises(ValueError, match='dirty'):
+        pop_rl_actor.remote_merge_code('g4', cfg, {'git_commit': publisher, 'dirty': None})
+    assert pop_rl_actor.remote_merge_code('g4', cfg, None) == cfg['repo']
+
+    # remote_merge hands the merge script the publisher's tree
+    factors = tmp_path / 'factors'
+    factors.mkdir()
+    (factors / 'policy_manifest.json').write_text(json.dumps({'base_checkpoint_sha256': 'b' * 64,
+                                                              'adapter_factors_sha256': 'f' * 64}))
+    runs = []
+
+    def fake(host, command, **kw):
+        words = shlex.split(command)
+        if words[:2] == [cfg['python'], '-c']:
+            runs.append(words[3])
+            return json.dumps({'ok': True, 'checkpoint_sha256': 'p' * 64}) + '\n'
+        if words[:1] == ['test']:
+            return 'ok'
+        return ssh_host(host, command) if command.startswith('bash -c') else ''
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', fake)
+    assert pop_rl_actor.remote_merge('g4', cfg, base_sha='b' * 64, factors_dir=factors, expect_sha='p' * 64,
+                                     code={'git_commit': publisher, 'dirty': False})
+    assert runs == [root]
+
+
+def test_ensure_remote_checkpoint_merges_with_the_published_code_and_ships_a_dirty_one(tmp_path, remote, monkeypatch):
+    import hashlib
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    cfg = pop_rl_actor.host_config('colab', host='g4')
+    local = tmp_path / 'policy' / 'checkpoint.pt'
+    local.parent.mkdir()
+    local.write_bytes(b'policy')
+    sha = hashlib.sha256(b'policy').hexdigest()
+    code = {'schema': 'natlang.code-provenance/1', 'git_commit': 'a' * 40, 'dirty': False}
+    (local.parent / 'published.json').write_text(json.dumps({
+        'checkpoint_sha256': sha, 'factors_dir': str(tmp_path / 'f'), 'merge': {'base_checkpoint_sha256': 'b' * 64},
+        'code': code}))
+    merges = []
+    monkeypatch.setattr(pop_rl_actor, 'remote_merge', lambda host, cfg, **kw: merges.append(kw) or False)
+    monkeypatch.setattr(pop_rl_actor, 'drive_enabled', lambda cfg: False)
+    assert pop_rl_actor.ensure_remote_checkpoint('g4', cfg, local, sha) == 'shipped'
+    assert merges[0]['code'] == code
+
+
+def test_a_factor_rebind_with_its_publication_goes_through_ensure_remote_checkpoint(tmp_path, monkeypatch):
+    """The rebind merged with the VM checkout and raised on a mismatch; given the DGX checkpoint it now merges with the
+    publisher's code or ships the publication (``ensure_remote_checkpoint``)."""
+    factors = tmp_path / 'factors'
+    factors.mkdir()
+    (factors / 'policy_manifest.json').write_text(json.dumps({'base_checkpoint_sha256': 'b' * 64}))
+    ensured = []
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', lambda host, command, **kw: json.dumps(
+        {'export_dir': 'x', 'weights_sha256': 'w' * 64}) if ' -c ' in command else '')
+    monkeypatch.setattr(pop_rl_actor, 'ensure_remote_checkpoint', lambda *a: ensured.append(a) or 'shipped')
+    monkeypatch.setattr(pop_rl_actor, 'remote_merge', lambda *a, **k: pytest.fail('merged with the VM checkout'))
+    cfg = pop_rl_actor.host_config('colab', host='g4')
+    pop_rl_actor._prepare_remote_rebind_export(host='g4', cfg=cfg, policy_id='p' * 64, version=3, factors_dir=factors,
+                                               checkpoint='/dgx/policy/checkpoint.pt')
+    assert ensured == [('g4', cfg, '/dgx/policy/checkpoint.pt', 'p' * 64)]

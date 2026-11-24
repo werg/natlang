@@ -2089,3 +2089,20 @@ def test_a_held_measure_unit_left_by_a_restarted_driver_keeps_pop_busy_and_is_jo
     monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: stopped.append(argv))
     assert ei.join_pop_held(out, preempt=lambda: True, poll=0) == 'preempted'
     assert stopped and stopped[0][-1] == 'popheld-policy-8e634a0f46ce-1.service'
+
+
+def test_publish_round_records_the_code_whose_merge_wrote_the_bytes(tmp_path, monkeypatch):
+    """A VM reproduces the publication's merge only with the same code (r0002 2026-11-24: a VM checkout before
+    0462075ea wrote no FP32 master rows): published.json names the publisher's commit (``code``)."""
+    import expert_iteration as ei
+    from natlang_neuralese.common.code_provenance import code_provenance
+    from natlang_neuralese.export import native_hf
+    from natlang_neuralese.train import learner_state
+    monkeypatch.setattr(learner_state, 'merge_factors_to_checkpoint',
+                        lambda base, factors, out: {'checkpoint_sha256': 'p' * 64})
+    monkeypatch.setattr(native_hf, 'publish_merged_policy', lambda ckpt, **kw: {'checkpoint_sha256': 'p' * 64})
+    (tmp_path / 'factors').mkdir()
+    ei.publish_round(SimpleNamespace(out=tmp_path / 'policy', base_checkpoint=tmp_path / 'base.pt',
+                                     factors=tmp_path / 'factors', base=None, label='aei-r0001'))
+    published = json.loads((tmp_path / 'policy' / 'published.json').read_text())
+    assert published['code'] == code_provenance() and published['code']['git_commit']

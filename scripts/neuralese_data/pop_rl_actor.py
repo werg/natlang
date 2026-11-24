@@ -32,6 +32,7 @@ import argparse
 import contextlib
 import fcntl
 import json
+import re
 import os
 import shlex
 import shutil
@@ -347,7 +348,8 @@ def colab_checkout(host, cfg, commit):
 
 # the VM-side merge of a published round policy (async-train §2.5): ``merge_factors_to_checkpoint`` into a file named
 # checkpoint.pt (torch.save names its archive after the file, so the bytes equal the DGX publication's only under
-# that name), checked against the DGX's sha256, then renamed to CHECKPOINTS/<sha>.pt; a mismatch leaves nothing
+# that name), checked against the DGX's sha256, then renamed to CHECKPOINTS/<sha>.pt; a mismatch leaves nothing.
+# It runs the publisher's code (``remote_merge_code``), never whatever commit the VM checkout was last moved to.
 _REMOTE_MERGE = (
     'import json, os, shutil, sys\n'
     'sys.path[:0] = [sys.argv[1] + "/training/neuralese", sys.argv[1]]\n'
@@ -368,10 +370,43 @@ _REMOTE_MERGE = (
     'print(json.dumps({"ok": ok, "checkpoint_sha256": rec["checkpoint_sha256"]}))\n')
 
 
-def remote_merge(host, cfg, *, base_sha, factors_dir, expect_sha):
+MERGE_CODE_KEEP = 4
+
+
+def remote_merge_code(host, cfg, code):
+    """The code tree the VM merges with: the publisher's ``training/neuralese`` at its commit (``published.json``
+    ``code``, ``code_provenance``), extracted once with ``git archive`` to ROOT/merge-code/<commit> beside the checkout
+    (which a serving actor runs from and is not moved). The merge's bytes depend on its code: on 2026-11-24 the VM
+    checkout sat at bdf4c8721 (the actor restored at its launch commit), before 0462075ea added the FP32 master rows to
+    merged checkpoints, and its merge of r0002 hashed to another sha than the DGX publication (pin 0076be613).
+    A publication without provenance merges with the checkout as it is (the hash check still decides); a publisher
+    with a dirty or unknown tree raises ValueError (no VM can reproduce it: the caller ships the checkpoint)."""
+    commit = (code or {}).get('git_commit')
+    if not commit:
+        return cfg['repo']
+    if (code or {}).get('dirty') is not False or not re.fullmatch(r'[0-9a-f]{40}', str(commit)):
+        raise ValueError(f'the publication ran from a dirty or unknown tree ({code}): its merge cannot be reproduced')
+    parent = f'{cfg["root"]}/merge-code'
+    dest = f'{parent}/{commit}'
+    repo, q = cfg['repo'], shlex.quote
+    script = (f'set -e; if ! test -f {q(dest + "/.complete")}; then '
+              f'git -C {q(repo)} cat-file -e {q(commit + "^{commit}")} 2>/dev/null || git -C {q(repo)} fetch -q origin; '
+              f'rm -rf {q(dest + ".partial")} {q(dest + ".tar")}; mkdir -p {q(dest + ".partial")}; '
+              f'git -C {q(repo)} archive -o {q(dest + ".tar")} {q(commit)} training/neuralese; '
+              f'tar -xf {q(dest + ".tar")} -C {q(dest + ".partial")}; rm -f {q(dest + ".tar")}; '
+              f'touch {q(dest + ".partial/.complete")}; rm -rf {q(dest)}; mv -T {q(dest + ".partial")} {q(dest)}; fi; '
+              f'touch {q(dest)}; cd {q(parent)}; '
+              f'ls -1t | grep -E "^[0-9a-f]{{40}}$" | tail -n +{MERGE_CODE_KEEP + 1} | xargs -r rm -rf --; echo ok')
+    if ssh_host(host, f'bash -c {q(script)}', timeout=600).strip().splitlines()[-1:] != ['ok']:
+        raise RuntimeError(f'{host}: could not extract the merge code at {commit}')
+    return dest
+
+
+def remote_merge(host, cfg, *, base_sha, factors_dir, expect_sha, code=None):
     """Merge a round's factors over its base checkpoint on ``host`` (both already there or the factors shipped,
-    ~0.5 GB instead of the 3.4 GB policy) into ``CHECKPOINTS/<expect_sha>.pt``; True when the result hashes to
-    ``expect_sha``. The factors stay on the VM under ROOT/factors/<sha> for the next merge."""
+    ~0.5 GB instead of the 3.4 GB policy) into ``CHECKPOINTS/<expect_sha>.pt`` with the publisher's code ``code``
+    (``remote_merge_code``); True when the result hashes to ``expect_sha``. The factors stay on the VM under
+    ROOT/factors/<sha> for the next merge."""
     manifest = json.loads((Path(factors_dir) / 'policy_manifest.json').read_text())
     if manifest.get('base_checkpoint_sha256') != base_sha:
         raise ValueError(f'{factors_dir} was trained from {manifest.get("base_checkpoint_sha256")}, not {base_sha}')
@@ -385,12 +420,14 @@ def remote_merge(host, cfg, *, base_sha, factors_dir, expect_sha):
         for name in ('adapter_factors_fp32.safetensors', 'policy_manifest.json'):
             sync_to_remote(str(Path(factors_dir) / name), f'{staged}/{name}', host)
         ssh_host(host, shlex.join(['mv', '-T', staged, remote_factors]))
+    code_root = remote_merge_code(host, cfg, code)
     started = time.time()
-    out = ssh_host(host, shlex.join([cfg['python'], '-c', _REMOTE_MERGE, cfg['repo'], base, remote_factors,
+    out = ssh_host(host, shlex.join([cfg['python'], '-c', _REMOTE_MERGE, code_root, base, remote_factors,
                                      f'{cfg["checkpoints"]}/.merge-{expect_sha[:16]}',
                                      f'{cfg["checkpoints"]}/{expect_sha}.pt', expect_sha]), timeout=3600)
     result = json.loads(out.strip().splitlines()[-1])
-    log(event='Colab merged policy', host=host, expect=expect_sha, seconds=round(time.time() - started, 1), **result)
+    log(event='Colab merged policy', host=host, expect=expect_sha, code=(code or {}).get('git_commit'),
+        seconds=round(time.time() - started, 1), **result)
     return bool(result.get('ok'))
 
 
@@ -410,7 +447,7 @@ def ensure_remote_checkpoint(host, cfg, local_checkpoint, sha):
             and os.environ.get('NATLANG_COLAB_REMOTE_MERGE', '1') != '0'):
         try:
             if remote_merge(host, cfg, base_sha=merge['base_checkpoint_sha256'], factors_dir=published['factors_dir'],
-                            expect_sha=sha):
+                            expect_sha=sha, code=published.get('code')):
                 return 'merged'
         except (OSError, ValueError, RuntimeError) as error:
             log(event='Colab merge failed: shipping the checkpoint', host=host, error=repr(error)[:300])
@@ -1183,7 +1220,7 @@ def _default_sglang_url(front_url):
 
 
 def _prepare_remote_rebind_export(*, host, cfg, policy_id, version, export_dir=None, factors_dir=None,
-                                  base_checkpoint=None):
+                                  base_checkpoint=None, checkpoint=None):
     """Stage a versioned HF export directory on ``host`` for in-place rebind.
     When ``factors_dir`` is given (async-train §7.1), ships only the ~130 MB / ~0.5 GB FP32 factors, merges them on
     the remote host over its copy of their base (``remote_merge``: the result must hash to ``policy_id``, the DGX
@@ -1195,8 +1232,12 @@ def _prepare_remote_rebind_export(*, host, cfg, policy_id, version, export_dir=N
         ssh_host(host, shlex.join(['mkdir', '-p', remote_export, cfg['checkpoints']]))
         if base_checkpoint:
             raise ValueError('the VM merges over CHECKPOINTS/<base sha>.pt (the round it trained from), not --base-checkpoint')
-        if not (ssh_host(host, f'test -f {shlex.quote(remote_merged)} && echo ok', check=False).strip()
-                and remote_identity(host, remote_merged)[1] == policy_id):
+        if checkpoint is not None:
+            # the DGX publication is known: merged on the VM with the publisher's code (published.json ``code``),
+            # shipped when that merge cannot reproduce its sha
+            ensure_remote_checkpoint(host, cfg, checkpoint, policy_id)
+        elif not (ssh_host(host, f'test -f {shlex.quote(remote_merged)} && echo ok', check=False).strip()
+                  and remote_identity(host, remote_merged)[1] == policy_id):
             if not remote_merge(host, cfg, base_sha=manifest['base_checkpoint_sha256'], factors_dir=factors_dir,
                                 expect_sha=policy_id):
                 raise RuntimeError(f'{host}: the merge of {factors_dir} does not hash to the published {policy_id}')
@@ -1247,7 +1288,7 @@ def rebind_actor(*, front_url, policy_id, version, sglang_url=None, weights_sha2
         cfg = host_config(host_profile, host=host)
         target_dir, measured_sha = _prepare_remote_rebind_export(
             host=host, cfg=cfg, policy_id=policy_id, version=version,
-            export_dir=export_dir, factors_dir=factors_dir, base_checkpoint=base_checkpoint)
+            export_dir=export_dir, factors_dir=factors_dir, base_checkpoint=base_checkpoint, checkpoint=checkpoint)
         weights_sha256 = weights_sha256 or measured_sha
     else:
         if target_dir is None:

@@ -4022,8 +4022,10 @@ def publish_round(args):
                                       label=args.label, why=f'async round {args.label}')
     (out / 'sha256.txt').write_text(merged['checkpoint_sha256'] + '\n')
     # factors_dir: a Colab learner merges the next round's start from it on the VM instead of receiving 3.4 GB
-    # (pop_rl_actor.ensure_remote_checkpoint)
-    write_json_durable(out / 'published.json', {**published, 'merge': merged,
+    # (pop_rl_actor.ensure_remote_checkpoint); code: the commit whose merge wrote these bytes, which the VM merges
+    # with (pop_rl_actor.remote_merge_code: a VM checkout at another commit wrote other bytes, r0002 2026-11-24)
+    from natlang_neuralese.common.code_provenance import code_provenance
+    write_json_durable(out / 'published.json', {**published, 'merge': merged, 'code': code_provenance(),
                                                 'factors_dir': str(Path(args.factors).resolve())})
     log({'event': 'round published', 'checkpoint_sha256': merged['checkpoint_sha256'], 'out': str(out)})
 
