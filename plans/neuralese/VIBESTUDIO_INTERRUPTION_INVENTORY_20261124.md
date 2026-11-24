@@ -39,3 +39,9 @@ Historical evidence is never rewritten or discarded. Reassessment records bind
 the original receipt, manifest, verification and actual outcome hashes; only
 completion indexing/scheduling changes. An interrupted case with valid partial
 IR remains exportable; an unfinished/cancelled case is not a failed user goal.
+
+Review authority is shared by the producer's `verification.requirements.semantic_review`
+and the exact whole-goal proof's `semanticReviewRequired` (SST
+`open-goal-product-owned-managed.ts:169` is one direct producer). The reader
+honors either required declaration; absent/false metadata cannot waive a native
+proof's required semantic review. This does not change IR or review input formats.
