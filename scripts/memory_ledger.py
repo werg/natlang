@@ -427,6 +427,20 @@ def ledger():
         os.replace(tmp, STATE)
 
 
+def read_snapshot(state_path=None):
+    """One committed observational snapshot, without allocator locking or writes.
+
+    Writers publish via os.replace under ledger(); an open descriptor sees one
+    complete version even if a later admission replaces the pathname. Missing is
+    empty, but malformed/unreadable existing state must remain an error.
+    """
+    try:
+        with open(state_path or STATE) as stream:
+            return json.load(stream)
+    except FileNotFoundError:
+        return {'schema': 'natlang.memory-ledger/1', 'claims': {}, 'events': []}
+
+
 def claimed_budget(unit, state_path=None):
     """The current budget (bytes) of ``unit``'s claim, read without modifying the ledger (the guard may have raised it
     since admission); None when the ledger or the claim is absent. Jobs read their own claim with this
@@ -434,8 +448,7 @@ def claimed_budget(unit, state_path=None):
     path = state_path or STATE
     unit = unit if unit.endswith('.service') else unit + '.service'
     try:  # no lock: writers replace the file atomically, and the guard may hold the lock for seconds
-        with open(path) as stream:
-            state = json.load(stream)
+        state = read_snapshot(path)
     except (OSError, ValueError):
         return None
     claim = state.get('claims', {}).get(unit)
@@ -452,11 +465,7 @@ def owned_units(state_path=None, now=None):
     duplicate launch. Existing waiting-order policy decides transient expiration.
     """
     path = state_path or STATE
-    try:
-        with open(path) as stream:
-            state = json.load(stream)
-    except FileNotFoundError:
-        return set()
+    state = read_snapshot(path)
     if state.get('schema') != 'natlang.memory-ledger/1':
         raise ValueError('unsupported ledger ownership snapshot')
     return set(state.get('claims', {})) | {unit for unit, _ in waiting_order(state, now=now)}
@@ -1032,30 +1041,31 @@ def adopt(args):
 
 
 def status(args):
-    with ledger() as state:
-        gpu = gpu_usage()
-        free, live = headroom(state, gpu)
-        driver_cuda_free = cuda_free_bytes()
-        cuda_free = cuda_headroom(live, gpu) if driver_cuda_free is not None else None
-        queue = waiting_order(state)
-        graces = {}
-        plans = {}
-        for position, (name, wait) in enumerate(queue):
-            plans[name] = preemption_plan(live, free, wait, graces, head=name)
-        claims = {u: {'class': c['class'], 'priority': PRIORITY_NAMES[priority_of(c)],
-                      'budget_gb': round(c['budget'] / GIB, 1), 'used_gb': round(c['used'] / GIB, 1),
-                      'peak_gb': round(c.get('peak', 0) / GIB, 1), 'reserved_gb': round(outstanding(c) / GIB, 1),
-                      'resumable': resumable(c), 'gpu': bool(c.get('gpu')),
-                      **({'cuda_budget_gb': round(c['cuda_budget'] / GIB, 1)} if c.get('cuda_budget') else {}),
-                      **({'fixed_claim': True} if fixed_claim(c) else {}),
-                      **({'backfilled_behind': c['backfilled_behind'], 'backfill': c.get('backfill') or 'legacy'}
-                         if c.get('backfilled_behind') else {}),
-                      'command': shlex.join(c['command'])[:160]} for u, c in live.items()}
-        head_lending = {}
-        if queue and conservative_backfill() and head_blocked(live, free, queue[0][1], queue[0][0], cuda_free):
-            name, wait = queue[0]
-            head_lending = {'lent_gb': round(sum(c['budget'] for c in lent_to_backfill(live, name, wait).values()) / GIB, 1),
-                            'backfill_allowance_gb': round(max(0, backfill_allowance(live, free, name, wait)) / GIB, 1)}
+    # Probes may wait on drivers/systemd; they must never hold the allocator lock.
+    state = read_snapshot()
+    gpu = gpu_usage()
+    free, live = headroom(state, gpu)
+    driver_cuda_free = cuda_free_bytes()
+    cuda_free = cuda_headroom(live, gpu) if driver_cuda_free is not None else None
+    queue = waiting_order(state)
+    graces = {}
+    plans = {}
+    for position, (name, wait) in enumerate(queue):
+        plans[name] = preemption_plan(live, free, wait, graces, head=name)
+    claims = {u: {'class': c['class'], 'priority': PRIORITY_NAMES[priority_of(c)],
+                  'budget_gb': round(c['budget'] / GIB, 1), 'used_gb': round(c['used'] / GIB, 1),
+                  'peak_gb': round(c.get('peak', 0) / GIB, 1), 'reserved_gb': round(outstanding(c) / GIB, 1),
+                  'resumable': resumable(c), 'gpu': bool(c.get('gpu')),
+                  **({'cuda_budget_gb': round(c['cuda_budget'] / GIB, 1)} if c.get('cuda_budget') else {}),
+                  **({'fixed_claim': True} if fixed_claim(c) else {}),
+                  **({'backfilled_behind': c['backfilled_behind'], 'backfill': c.get('backfill') or 'legacy'}
+                     if c.get('backfilled_behind') else {}),
+                  'command': shlex.join(c['command'])[:160]} for u, c in live.items()}
+    head_lending = {}
+    if queue and conservative_backfill() and head_blocked(live, free, queue[0][1], queue[0][0], cuda_free):
+        name, wait = queue[0]
+        head_lending = {'lent_gb': round(sum(c['budget'] for c in lent_to_backfill(live, name, wait).values()) / GIB, 1),
+                        'backfill_allowance_gb': round(max(0, backfill_allowance(live, free, name, wait)) / GIB, 1)}
     print(json.dumps({'available_gb': round(mem_available() / GIB, 1), 'headroom_gb': round(free / GIB, 1),
                       'orphans_gb': {str(pid): round(size / GIB, 1) for pid, size in orphans(live, gpu).items()},
                       **({'driver_cuda_free_gb': round(driver_cuda_free / GIB, 1),
@@ -1074,7 +1084,6 @@ def status(args):
                                   for n, (name, w) in enumerate(queue)],
                       'backfill_mode': 'conservative' if conservative_backfill() else 'legacy',
                       'backfilled': sorted(u for u, c in live.items() if c.get('backfilled_behind'))}, indent=2))
-
 
 def cancel(args):
     """Drop a waiting or requeued entry from the queue (a stale bench, test or duplicate waiter)."""
