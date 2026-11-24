@@ -621,6 +621,10 @@ def build(args):
         'weighted_target_tokens': int(sum(r['weighted_target_tokens'] for r in calls)),
         'lead_weighted_target_tokens': int(sum(r['weighted_target_tokens'] for r in calls if r['invocation'] == 'lead')),
         'too_long_calls': sum(r['too_long'] for r in calls),
+        # what the chains train: calls over the learner's 32k limit are not in them (the per-call sums above count them)
+        'chain_calls': sum(len(c['segs']) for c in chains),
+        'chain_weighted_target_tokens': int(sum(float(row['weight'].sum()) if 'weight' in row else float(length)
+                                                for c in chains for _, length, row in c['segs'])),
         'distinct_questions': len(questions), 'answer_types': dict(answer_types),
     }
     (out / 'build.json').write_text(json.dumps(report, indent=1) + '\n')

@@ -111,3 +111,30 @@ complete.
   day for program files and task rows, 1 day for qualification (reference/negative replays and the CJK oracle
   check), and half a day for registry, exposure and pool promotion. D01 adds the upstream-gold acquisition and a
   table checker (+1-2 days). D10 has no lead and an incomplete evidence record: not worth converting.
+
+## Results (2026-11-24)
+
+**D01 WideSeek-R1** (`/home/werg/data/sa2nl-20261124/wideseek-splice`, registry
+`sft-rows-sa2nl-20261124-wideseek-splice`, splice mode):
+- Funnel: 3,806 trajectories -> 2,806 admitted. Dropped: 850 unverified (width item_f1 < 0.9), 125 without a
+  handoff, 25 whose result message did not parse. Held: 0 by id/group, 0 by content.
+- Contents: 8,955 chains (2,806 importing). 25,655 calls: 7,553 lead calls (4,747 of them consumers) and 18,102
+  subagent calls.
+- Neuralese: 42,143 reads over all calls (19,075 per chain, since a chain reads each state once), 18,932 distinct
+  report states.
+- Tokens: 46.7M forward, of which 3.1M are producer documents; 17.9M targets, 4.0M weighted (2.0M on lead calls; the
+  teacher reasoning is masked). No call over the 32k limit.
+- Quality (`quality.py` on chains.pkl): 25,563 distinct trained targets of 25,655; 0.8% of weighted tokens in exact
+  duplicate targets; no marker token in any target. The most frequent trained 8-grams are the tool-call frames
+  (`<function=search>`, `<function=create_sub_agents>`). Sampled targets are subagent reports and search calls.
+- `held_eval verify` on held-v3 and held-v4 with the 2,806 ids and groups: no overlap.
+
+**D02 SearchSwarm** (`/home/werg/data/sa2nl-20261124/searchswarm-splice-s{0..3}`, 4 disjoint shards by question,
+registry `sft-rows-sa2nl-20261124-searchswarm-splice-s{k}`): see each shard's build.json. A single 500M-token file
+was too large to build in a 14 GB claim and to load per round.
+- On the first 16 bundles: 98 dispatches, 73 of them with a kept subagent conversation, and 15-142 handoffs per lead.
+- Lead calls reach 61k tokens, so calls beyond the 32k limit are dropped (`too_long_calls`). They are mostly the late
+  synthesis turns.
+
+**D10 evidence-subagent:** not built. Its rows are child-only conversations with no lead, so there is no handoff to
+make Neuralese.
