@@ -1228,3 +1228,25 @@ def test_capture_after_an_imported_state_matches_the_native_engine(tmp_path):
         for key in a:
             if key != 'kind':
                 torch.testing.assert_close(a[key], b[key], rtol=1e-5, atol=1e-6, msg=f'layer {index} {key}')
+
+
+def test_adapted_requests_get_their_own_sglang_prefix_namespace(monkeypatch):
+    """SGLang reuses a cached prefix on token ids + extra_key only: each adapter stack names its own extra_key, so a
+    prompt state computed under one stack (or none) never serves a request with another; base requests keep none."""
+    import io
+    from natlang_neuralese.serve import sglang_actor as S
+    base = {'input_ids': [1, 2], 'sampling_params': {'custom_params': {'natlang_top_k': 1}}}
+    assert S.adapter_cache_key(base) is base
+    adapted = {'input_ids': [1, 2], 'sampling_params': {'custom_params': {S.ADAPTER_KEY: {'slot': 1, 'id': 'abc', 'path': 'p'}}}}
+    assert S.adapter_cache_key(adapted)['extra_key'] == 'natlang-adapter:abc'
+    assert S.adapter_cache_key({**adapted, 'extra_key': 'x'})['extra_key'] == 'x|natlang-adapter:abc'
+    monkeypatch.setenv('NATLANG_SGLANG_ADAPTER_CACHE_KEY', '0')
+    assert 'extra_key' not in S.adapter_cache_key(adapted)
+    monkeypatch.delenv('NATLANG_SGLANG_ADAPTER_CACHE_KEY')
+    sent = []
+    monkeypatch.setattr(S.urllib.request, 'urlopen', lambda request, timeout=None: (
+        sent.append(json.loads(request.data)), io.BytesIO(b'{"meta_info": {}}'))[1])
+    front = S.SglangEngine.__new__(S.SglangEngine)
+    front.sglang_url = 'http://x'
+    front._sglang_post(adapted)
+    assert sent[0]['extra_key'] == 'natlang-adapter:abc'

@@ -47,6 +47,21 @@ TOP_K_MASS_KEY = 'natlang_top_k_mass'
 CAPTURE_KEY = 'natlang_capture'
 IMPORT_KEY = 'natlang_import'
 ADAPTER_KEY = 'natlang_adapter'
+
+
+def adapter_cache_key(body):
+    """``body`` with SGLang's radix-cache ``extra_key`` naming its adapter stack. SGLang matches a cached prefix (KV and
+    the conv/recurrent states) on the token ids and ``extra_key`` only, and the fork's slot adapters
+    (``custom_params.natlang_adapter``) are not in it: a prompt state computed under one stack (or none) was reused by a
+    request with another, so adapted and base requests on one prompt read each other's prefix (T3, 2026-11-24:
+    base turns of a program prompt 0.70 nats from the native engine, adapted 2.6). Each stack gets its own prefix
+    namespace; base requests keep the empty one. ``NATLANG_SGLANG_ADAPTER_CACHE_KEY=0`` opts out."""
+    adapter = ((body.get('sampling_params') or {}).get('custom_params') or {}).get(ADAPTER_KEY)
+    if not adapter or os.environ.get('NATLANG_SGLANG_ADAPTER_CACHE_KEY', '1') == '0':
+        return body
+    key = f"natlang-adapter:{adapter['id']}"
+    extra = body.get('extra_key')
+    return {**body, 'extra_key': f'{extra}|{key}' if extra else key}
 TRACK_INPUT_END_KEY = 'natlang_track_input_end'
 # The reply tokens a request's input already holds, which its grammar takes first (fork NATLANG_GRAMMAR_PREFIX).
 GRAMMAR_PREFIX_KEY = 'natlang_grammar_prefix'
@@ -1005,6 +1020,7 @@ class SglangEngine(Engine):
         return result
 
     def _sglang_post(self, body):
+        body = adapter_cache_key(body)
         try:
             with urllib.request.urlopen(urllib.request.Request(self.sglang_url + '/generate',
                     data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'}),
@@ -1730,7 +1746,7 @@ class SglangEngine(Engine):
 
     def _sglang_stream(self, body):
         """SGLang /generate as a stream of incremental chunks."""
-        request = urllib.request.Request(self.sglang_url + '/generate', data=json.dumps({**body, 'stream': True}).encode(),
+        request = urllib.request.Request(self.sglang_url + '/generate', data=json.dumps({**adapter_cache_key(body), 'stream': True}).encode(),
                                          headers={'Content-Type': 'application/json'})
         meta = None
         try:

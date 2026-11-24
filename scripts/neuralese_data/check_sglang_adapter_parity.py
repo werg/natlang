@@ -42,6 +42,7 @@ cli.add_argument('--tokens', type=int, default=48)
 cli.add_argument('--adapter-rank', type=int, help="slot rank (default: serve_native_checkpoint.py's, from the release)")
 cli.add_argument('--kv-gb', type=float, default=2.0)
 cli.add_argument('--max-running', type=int, default=8)
+cli.add_argument('--sglang-python', help="the fork's Python (default: training/neuralese/sglang-fork.json's)")
 cli.add_argument('--phase', choices=('both', 'collect', 'reference'), default='both',
                  help='with --release: collect runs SGLang alone (the front releases its native model once exported, as '
                       'serve_native_checkpoint.py serves) and saves the captures; reference loads the native engine in '
@@ -67,6 +68,7 @@ if opts.phase != 'reference':
                    '--store-dir', str(work), '--hf-export-dir', str(work / 'export'), '--sglang-kv-gb', str(opts.kv_gb),
                    '--sglang-max-running', str(opts.max_running), '--sglang-context', '16384', '--sglang-adapter-slots', '2',
                    *(['--adapter-release', str(opts.release)] if opts.release else []),  # sizes the slot rank as served
+                   *(['--sglang-python', opts.sglang_python] if opts.sglang_python else []),
                    *(['--sglang-adapter-rank', str(opts.adapter_rank)] if opts.adapter_rank else [])]
     args = build_parser().parse_args(server_argv)
     # collect: the front releases its native model once exported (serve_native_checkpoint.py's serving); a turn SGLang
@@ -126,22 +128,24 @@ if opts.phase != 'reference':
         raise SystemExit(0)
 
 
-def full(ids, stack):
-    """log-softmax rows of every position of ids under the stack (the native engine's exact application)."""
+def full(ids, stack, first=1):
+    """log-softmax rows predicting ids[first:] and the token after ids, under the stack (the native engine's exact
+    application); only those rows go through the head (a long prompt's full logits are GBs at LFM3's vocabulary)."""
     with torch.no_grad():
-        out = front._native_run(lambda: front.shared_model.logits(native_step(front.shared_model, torch.tensor([ids], device='cuda'))['h_final'])[0].float(),
-                                stack if stack else [])
+        out = front._native_run(lambda: front.shared_model.logits(
+            native_step(front.shared_model, torch.tensor([ids], device='cuda'))['h_final'][:, first - 1:])[0].float(),
+            stack if stack else [])
     return torch.log_softmax(out, -1)
 
 
 def reference(ids, stack, first):
-    return full(ids, stack)[first - 1:-1]
+    return full(ids, stack, first)[:-1]
 
 
 def native_greedy(ids, stack, steps):
     ids = list(ids)
     for _ in range(steps):
-        ids.append(int(full(ids, stack)[-1].argmax()))
+        ids.append(int(full(ids, stack, len(ids))[-1].argmax()))
     return ids
 
 
