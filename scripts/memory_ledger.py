@@ -1240,13 +1240,14 @@ def stop_containers(containers, seconds=10):
                              stdout=subprocess.DEVNULL)
 
 
-def terminate(unit, container):
+def terminate(unit, container, *, all_processes=False):
     """Ask a unit's job to checkpoint and exit: SIGTERM to the container's main process (``docker kill -s TERM``
-    does not stop the container itself) and to the unit."""
+    does not stop the container itself) and to the unit's owner. Its children must remain alive for checkpointing."""
     for name in as_list(container):
         subprocess.Popen(['docker', 'kill', '--signal', 'SIGTERM', name], stderr=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL)
-    subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM', unit])
+    subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM',
+                    '--kill-whom=all' if all_processes else '--kill-whom=main', unit])
 
 
 def process_start(pid):
@@ -1313,7 +1314,7 @@ def forget_failure(unit):
 def kill(unit, container):
     for name in as_list(container):
         subprocess.Popen(['docker', 'kill', name], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-    subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGKILL', unit])
+    subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGKILL', '--kill-whom=all', unit])
     subprocess.Popen(['systemctl', '--user', 'stop', unit], stderr=subprocess.DEVNULL)
 
 
@@ -1511,7 +1512,10 @@ def guard(args):
             # Killing a `docker start -a NAME` unit only detaches its client; the container keeps running and keeps
             # its memory. Signal the job inside, then give it its grace to write its full state.
             container = containers
-            terminate(unit, container)
+            if getattr(args, 'terminate_cgroup', False):
+                terminate(unit, container, all_processes=True)
+            else:
+                terminate(unit, container)
             pending[unit] = {'deadline': time.time() + grace, 'container': container, 'requeued': requeued,
                              'pids': unit_processes(unit)}
             stopped[unit] = time.time()
@@ -1601,6 +1605,8 @@ def main():
     rp.add_argument('--to-gb', type=float, default=None)
     sub.add_parser('release-cache', help='drop clean page cache of large files under the data roots')
     g = sub.add_parser('guard', help='enforce budgets and the free-memory floor')
+    g.add_argument('--terminate-cgroup', action='store_true',
+                   help='diagnostic opt-out: send graceful TERM to all children instead of only the checkpoint owner')
     g.add_argument('--cuda-cache-reclaim', action=argparse.BooleanOptionalAction, default=None,
                    help='release cache when physical memory is low (default: GB10 only)')
     g.add_argument('--floor-gb', type=float, default=8)

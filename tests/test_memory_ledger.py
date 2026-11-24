@@ -345,6 +345,26 @@ def test_container_names_come_from_attached_and_named_runs():
     assert ledger.container_name(['python3', 'train.py']) is None
 
 
+@pytest.mark.parametrize('all_processes', [False, True])
+def test_graceful_termination_keeps_checkpoint_dependencies_alive(monkeypatch, all_processes):
+    calls = []
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda argv, **kwargs: calls.append(argv))
+    monkeypatch.setattr(ledger.subprocess, 'Popen', lambda argv, **kwargs: calls.append(argv))
+    ledger.terminate('learner.service', ['actor'], all_processes=all_processes)
+    assert calls == [
+        ['docker', 'kill', '--signal', 'SIGTERM', 'actor'],
+        ['systemctl', '--user', 'kill', '--signal=SIGTERM',
+         '--kill-whom=all' if all_processes else '--kill-whom=main', 'learner.service'],
+    ]
+    calls.clear()
+    ledger.kill('learner.service', ['actor'])
+    assert calls == [
+        ['docker', 'kill', 'actor'],
+        ['systemctl', '--user', 'kill', '--signal=SIGKILL', '--kill-whom=all', 'learner.service'],
+        ['systemctl', '--user', 'stop', 'learner.service'],
+    ]
+
+
 def test_cgroup_usage_leaves_out_reclaimable_page_cache_but_keeps_shared_memory(tmp_path):
     (tmp_path / 'memory.current').write_text(str(30 * GIB))
     (tmp_path / 'cgroup.procs').write_text('7\n')
