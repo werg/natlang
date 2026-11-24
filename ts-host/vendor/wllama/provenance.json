@@ -2,8 +2,8 @@
  "schema": "natlang.wllama-vendor/2",
  "llama_cpp": {
   "repository": "werg/llama.cpp-neuralese",
-  "release": "natlang-b12092",
-  "commit": "1a7f5015f"
+  "release": "natlang-b12093",
+  "commit": "89026ef24"
  },
  "wllama": {
   "repository": "werg/wllama",
@@ -12,11 +12,11 @@
  },
  "build": "werg/llama.cpp-neuralese .github/workflows/natlang-runtime.yml job wllama (werg/wllama scripts/build_wasm.sh; npm run build)",
  "sha256": {
-  "wllama/esm/index.js": "2df37fe714db79640ebd8ddf73c1d81e4803c877d650b82f433d60eaac61c82a",
-  "wllama/esm/wasm/wllama.wasm": "6c4eabe708416cd0be1806cb5b2fcaec850593310971a9151a046f85a3ce8126",
+  "wllama/esm/index.js": "4671c17842bb0424abac4cc5fadd4b63ea50b02f3b9c62e5828ea7a7ba880d21",
+  "wllama/esm/wasm/wllama.wasm": "2a85d104c971e11082eb5b74d31ba79f00f7dfebbf658dbbcd8f38544c7e1aba",
   "wllama-compat/index.js": "230a2796112eae62a3b75b46ff7e34218ce206ead88fd584ae68868102a8d244",
-  "wllama-compat/wasm/wllama.js": "061c0b004b0a3c0d683750d6221eb111698f9ac9d9524909ae6b95c7b078e911",
-  "wllama-compat/wasm/wllama.wasm": "f658a87160278e164599d6abd101d544c82a73ea079a41aa42da521a6f7791b1"
+  "wllama-compat/wasm/wllama.js": "b729509e26fccfc77332e5cd2c406b78c69c8a69a5a9c4990ef84b871731d40c",
+  "wllama-compat/wasm/wllama.wasm": "1e61f238e0c3c63c0a01f56671a0a126dfce414b84fa04feb454895f91e89532"
  },
  "verify": "node scripts/wllama_smoke.mjs --model <LFM3 gguf> --server <this release's llama-server> (docs/ENGINE_PARITY.md)"
 }
