@@ -571,7 +571,7 @@ def test_cycle_collect_on_colab_runs_the_same_command_with_variants_and_stops_it
     (cycle.collect_dir / 'collect.json').write_text(json.dumps({'stopped': False, 'groups_done_this_run': 3}))
     cycle.collect_stage()
     unit, budget, command, detach = units[0]
-    assert detach and budget == round(256 * ei.COLLECTOR_SLOT_GB) + 4
+    assert detach and budget == round(256 * ei.REMOTE_COLLECTOR_SLOT_GB) + 4
     assert command[command.index('--neuralese-variants') + 1].endswith('cases.jsonl')          # one command builder
     assert [command[i + 1] for i, a in enumerate(command) if a == '--actor'] == ['http://g4-1:18531=128',
                                                                                  'http://g4-2:18531=128']

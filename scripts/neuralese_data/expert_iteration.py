@@ -96,6 +96,10 @@ FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill p
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
 COLLECTOR_SLOT_GB = 0.3
+# A collector beside a remote actor holds no engine: aei1-collect-v0004/v0005-remote0 (64 slots) peaked at 6.5-7.0 GB, and
+# 0.3/slot (23 GB) kept the 74 GB DGX collection out of the ledger for 30+ min (2026-11-24 13:51). NATLANG_REMOTE_COLLECTOR_SLOT_GB
+# opts back to the shared rate.
+REMOTE_COLLECTOR_SLOT_GB = float(os.environ.get('NATLANG_REMOTE_COLLECTOR_SLOT_GB', '0.12'))
 # Collection defaults (async-train §3 FP8 collection weights, §8 JOLT+ guided attempts; every collection path, cycle
 # and async driver, reads them). FP8: fork ec27f0809a runs online FP8 weights in LFM3's natlang projections and reloads
 # them in place; an actor on an older fork checkout or a GPU below sm_89 serves BF16 and logs
@@ -1438,7 +1442,7 @@ class Cycle:
             if served:
                 endpoints = [ep for _, ep in served]
                 slots = len(endpoints) * profile.collect_slots
-                budget = max(8, round(slots * COLLECTOR_SLOT_GB) + 4)
+                budget = max(8, round(slots * REMOTE_COLLECTOR_SLOT_GB) + 4)
                 self.ledger(unit, budget, COLLECTION_PRIORITY,
                             self.collect_command(unit, start, sha, profile.collect_slots, endpoints),
                             self.dir / 'collect.log', detach=True)
@@ -3009,7 +3013,7 @@ class AsyncRoundDriver:
             argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], target['slots'],
                                           endpoints=[f'{endpoint}={target["slots"]}'])
         argv[argv.index('--tasks') + 1] = str(self.collect_dir(policy) / 'tasks.json')
-        return unit, work, argv, max(8, round(target['slots'] * COLLECTOR_SLOT_GB) + 4)
+        return unit, work, argv, max(8, round(target['slots'] * REMOTE_COLLECTOR_SLOT_GB) + 4)
 
     def start_remote_collector(self, policy, target):
         """``target``'s collector of ``policy`` (``collect --actor``) once its actor serves ``policy``."""
