@@ -446,6 +446,11 @@ def semantic_goal_completed(interaction, workspace_proofs, verification, *, work
     if len(exact) != 1 or exact[0].get('passed') is not True:
         return False
     proof = exact[0]
+    declared_review = proof.get('semanticReviewRequired')
+    if declared_review is not None and type(declared_review) is not bool:
+        return False
+    if declared_review is True and (len(reviews) != 1 or not accepted_review(reviews[0])):
+        return False
     required_checks = proof.get('checks') or {}
     if not required_checks or any(value is not True for value in required_checks.values()):
         return False

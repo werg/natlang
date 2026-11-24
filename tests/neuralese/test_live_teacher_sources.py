@@ -153,6 +153,23 @@ def test_goal_completion_requires_exact_whole_semantic_authority(mutation):
     assert live.semantic_goal_completed(interaction, proofs, verification, workspace_evidence=evidence) is False
 
 
+
+@pytest.mark.parametrize('metadata_flag', [None, False, True])
+@pytest.mark.parametrize('review_accepted', [None, False, True])
+def test_authoritative_goal_proof_cannot_lose_its_required_review(metadata_flag, review_accepted):
+    interaction = {'goal': 'Correct the actual note'}
+    verification = {'task_id': 'workspace:open-goal-correct-note', 'status': 'passed',
+                    'checks': {'ownedReadback': True}, 'world': {'context_id': 'owned'}, 'root_call_ids': ['root']}
+    if metadata_flag is not None:
+        verification['requirements'] = {'semantic_review': metadata_flag}
+    proof = {'goal': interaction['goal'], 'contextId': 'owned', 'caseId': 'correct-note',
+             'passed': True, 'checks': {'actualDocumentReadback': True}, 'semanticReviewRequired': True}
+    evidence = [] if review_accepted is None else [{'semanticReview': {
+        'schema': 'natlang.live-workflow-review/1', 'model': 'actual-luna', 'input': {'actual': 'retained note'},
+        'verdict': {'accepted': review_accepted}, 'exchange': {'request': {}, 'reply': {}}}}]
+    assert live.semantic_goal_completed(interaction, [proof], verification, workspace_evidence=evidence) is (review_accepted is True)
+
+
 def test_legacy_whole_proof_keeps_canonical_task_context_binding_without_new_fields():
     interaction = {'goal': 'Correct the actual note'}
     verification = {'task_id': 'workspace:open-goal-correct-note', 'status': 'passed',
