@@ -11652,3 +11652,69 @@ trainable-gain path's per-block Python sum of gain parts (`_sum_norm_gain_parts`
 order). The small-input forward's per-128-row loop (`rowwise_norm_forward` below 4,096 rows). What dominates the
 remaining ~60 s/step: py-spy is not permitted on the DGX, and a cProfile run (`progtune-prof-cp1`) was queued
 behind the collection.
+
+## 2026-11-24 21:40 SGLang adapter slots: the adapted decode graph read a freed attention plan (CUDA illegal memory access); fixed in fork 7a29eff9ee (adapter-serving strand)
+
+**Observations.** The route adapter arm (Colab L4, one slot, every request adapted) died at its first batch of 27
+running with a CUDA illegal memory access, reported in xgrammar's bitmask kernel (a sticky error). T3 (05:10) had
+recorded the same fault at 4 running. The base arm runs with `--sglang-adapter-slots 0` and never faulted.
+
+**Inventory.** The mechanism is a per-request adapter stack applied at serving. Below are every engine and consumer of
+it, and where the defect lives: decode CUDA graphs captured per variant.
+
+| Component | Role | Status |
+| --- | --- | --- |
+| Python native engine (`native_adapters.run_native`, `engine.py` `_native_run`) | reference, eager | reference; captures no graph variants |
+| SGLang actor + fork (`sglang_actor._sglang_adapter_file` / `_adapter_acquire` / `adapter_cache_key`; fork `lfm3.py` `NatlangAdapters`, `decode_cuda_graph_runner` lora/nolora capture, `flashinfer_backend._prepare_cuda_graph_metadata`) | slots | defect found and fixed (below); scores not yet re-measured |
+| Managed llama-server (fork `build_lora_mm`, ts-host `llama/server.ts` `--lora-per-sequence`, `model/lora-scales.ts`) | GGUF LoRA, per-request scales | T3: 288/288 serial (`-np 1`); shared batches (`-np 4`) not run (harness `--parallel` added) |
+| In-page wllama (vendored natlang-b12092) | same fork code, wasm CPU | T3: 144/144; no device graphs |
+| Upstream SGLang LoRA (`triton_v2` `skip_inactive_dense_lora`) | the same dual capture | fixed by the same backend change (shared code) |
+| Other attention backends' per-bs capture metadata | trtllm_mla decode reused like its verify tiers (fixed); hpc_ops and xpu build metadata as views of shared buffers (no orphan); flashinfer_mla (`flashinfer_mla_backend.py:376-397`) still builds a wrapper per capture | left out: no model the fork serves uses MLA, and its plan patching (`fast_mla_decode_plan` installed after the first `begin_forward`) needs its own reuse path that no available model can test |
+| serve_native_checkpoint (slot rank, slots per actor), pop_rl_actor `serve_colab_tenant_actor` (1 slot for adapter arms), pop_actor_driver `adapter_args` | launch | new gate: no slots on a fork without the fix |
+| program_tune (`colab-measure --arm adapter`, merged arm becad4efb), LoRA mixtures (`tune/learned`: composed stacks on the same slot path), held_eval (`policy_id_of`: identity only), ts-host `neuralese-server.ts` / `rollout-episodes.mjs` / `s7_decode_probe.py` (wire only) | consumers | no adapter result measured on slots exists to invalidate (route `adapter-dev64-l4` scored 0) |
+
+**Root cause.** The fork captures each decode batch size twice when adapter slots exist: "lora" first, then
+"nolora" (`_lora_backend_skips_inactive`). FlashInfer's `_prepare_cuda_graph_metadata` created new decode wrappers
+for every capture and overwrote `decode_cuda_graph_metadata[bs]`. The "lora" graph therefore baked in the first
+wrapper set's buffers: the int workspace holding the plan, and qo_indptr. A replay plans only the stored set. Every
+adapted decode step thus ran kernels over a plan that no replay writes, from wrappers that were garbage-collected
+after capture. Where that memory was unmapped or reused, the result was an illegal memory access. Where it stayed
+mapped, attention ran on a stale capture-time plan.
+
+This predicts the observations. Base-only batches replay the correctly planned "nolora" graph, so the base arm (0
+slots) and all collection are unaffected. Adapted serving faults or drifts in decode only. Whether it faults depends
+on where the freed buffers land: it faulted on the L4 at 27 running and in T3 at 4 running, while a GB10 run at 2
+running completed. T3's pre-fix adapted turns sat 2.6 nats from native (top-1 0.34), and this defect predicts wrong
+adapted decode on top of the prefix-cache defect fixed there. A static investigator found the mechanism and
+independently cited the code: `flashinfer_backend.py:765`, `:1328-1332`; `decode.py` workspace and qo_indptr
+allocation; replay planning at `decode_cuda_graph_runner.py:1881`.
+
+**Reproduction (GB10, ledger units of 15-20 GB).** On 17e3458c2e, with 32 running, BF16 KV, 8192-token chunks and
+mixed requests, the run did not fault. With 64 running, FP8 KV and 4096-token chunks (the L4 tenant's settings), all
+adapted, it faulted at the first decode after the prefills (`adslot-repro-6`). On 7a29eff9ee, with the same settings
+and adapted and base requests at once, it served 192 requests at up to 64 running with 0 native fallbacks and no fault
+(`adslot-fix-3`). The captures are in `/mnt/external/adapter-slots-20261124/runs/f3-l4like/captures.json`.
+
+**Fix (defaults, opt-outs, tests).**
+- Fork 7a29eff9ee (doc 6c4a42b624, branch natlang). The graphs of one batch size share its FlashInfer decode, verify
+  and draft-extend wrappers; they are rebuilt only when the token width or verify kind changes. TRT-LLM MLA decode
+  metadata is reused the way its verify tiers already were. Opt-out: `NATLANG_SHARE_GRAPH_WRAPPERS=0`. Marker:
+  `NATLANG_SHARED_GRAPH_WRAPPERS`. CPU tests: `test/natlang/test_graph_variant_wrappers.py` (4 passed).
+- natlang 63a71cd9d: `serve_native_checkpoint.adapter_slots_on_fork` serves 0 slots on a fork without the marker, so
+  adapted turns run on the native engine. Opt-out: `NATLANG_SGLANG_ADAPTER_SLOTS_ANY_FORK=1`. Test added in
+  `test_sglang_source_attestation.py`. `sglang-fork.json` now points to the fork head. Harnesses gained
+  `check_sglang_adapter_parity.py --concurrency/--adapted-only/--server-arg/--merged` and
+  `check_tuned_lora_llama_parity.py --parallel N`.
+- **Rollout.** The DGX checkout `/home/werg/sglang-natlang`, which live actors import and Colab bootstraps from, stays
+  at 17e3458c2e. Moving it changes the attested engine, and held pairs stay within one fork commit, so it moves at the
+  next experiment boundary. Until then, adapter arms on Colab run their adapted turns on the native engine (the gate),
+  and the merged arm (becad4efb) stays the way program tuning serves fits.
+
+**Not done / not checked.**
+- Scores and greedy tokens on 7a29eff9ee against the native stack and against the merged checkpoint (8ceb7cd8) have
+  not been measured. The reference runs were stopped after a few minutes, at the coordinator's request, to readmit the
+  aei1 collection. They need Pop idle (it was serving aei1's held actor) or a ~20 GB DGX slot: `repro.sh f3-l4like ''
+  64 64 48 --phase reference` and `--merged`.
+- llama-server with adapted and base sequences in one batch (`--parallel 4`) has not run (CPU, 22 GB peak).
+- Not checked: ggml CUDA graphs on a GPU llama-server; flashinfer_mla (left out, above); the held-task outcome of an
+  adapter served on slots; Colab L4/A100 runs of the fix (only the GB10 was run).
