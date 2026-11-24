@@ -510,7 +510,11 @@ def _work(bundle):
               'target_tokens': int(len(r['sample'])),
               'weighted_target_tokens': float(r['weight'].sum()) if 'weight' in r else float(len(r['sample'])),
               'too_long': len(r['prompt']) + len(r['sample']) > MAX_LEN} for r in episode['rows']]
-    return chains_of([episode]), calls, stats
+    chains = chains_of([episode])
+    for chain in chains:   # the learner reads a segment's sample, weight and identity; prompts and sources live in the chain
+        chain['segs'] = [(start, length, {k: v for k, v in row.items() if k not in ('prompt', 'sources')})
+                         for start, length, row in chain['segs']]
+    return chains, calls, stats
 
 
 def task_id(bundle):
