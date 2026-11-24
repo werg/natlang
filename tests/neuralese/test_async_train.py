@@ -1832,3 +1832,183 @@ def test_pop_held_processes_are_found_and_the_serve_lock_marks_pop_busy(tmp_path
         assert 'serve lock' in pop_rl_actor.pop_busy()
     monkeypatch.setattr(pop_rl_actor, 'pop_held_running', lambda: [11])
     assert 'held measurement' in pop_rl_actor.pop_busy()
+
+
+def test_the_standing_teacher_campaign_relaunches_from_the_newest_frontier_whenever_idle(tmp_path, monkeypatch):
+    """2026-11-24: the campaign was relaunched only when a round was prepared; it ended about 01:00 and a restarted
+    driver joining the already-prepared r0002 left it idle until a hand launch at 02:10. Now whenever the unit is
+    idle the newest frontier's campaign runs (teacher-r0002), from the main loop, the waits and a standing thread;
+    a campaign of that frontier that ran resumes at most hourly and not after a relaunch that scored nothing."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    for rid in ('r0001', 'r0002'):
+        (d.root / rid).mkdir(parents=True)
+        (d.root / rid / 'frontier.json').write_text('{}')
+    old = d.root / 'teacher-r0001'
+    old.mkdir()
+    (old / 'launches.jsonl').write_text('{}\n')
+    (old / 'manifest.jsonl').write_text('{}\n' * 40)
+    present, launched = {'teacher': True}, []
+    monkeypatch.setattr(d.c, 'present', lambda unit: unit == 'aei-teacher' and present['teacher'])
+
+    def launch(runner, work, frontier, groups, unit, covered_extra=()):
+        launched.append((Path(work).name, Path(frontier).parent.name, unit))
+        Path(work).mkdir(parents=True, exist_ok=True)
+        with (Path(work) / 'launches.jsonl').open('a') as handle:
+            handle.write('{}\n')
+        return 7
+    monkeypatch.setattr(ei, 'launch_teacher', launch)
+    assert d.ensure_teacher() is None and launched == []            # running: nothing
+    present['teacher'] = False
+    assert d.ensure_teacher() == d.root / 'teacher-r0002'
+    assert launched == [('teacher-r0002', 'r0002', 'aei-teacher')]
+    assert d.ensure_teacher() is None and len(launched) == 1        # just launched (and it scored nothing since)
+    (d.root / 'teacher-r0002' / 'manifest.jsonl').write_text('{}\n' * 3)
+    assert d.ensure_teacher() is None and len(launched) == 1        # scored, but within the hour
+    now = time.time()
+    monkeypatch.setattr(ei.time, 'time', lambda: now + 3700)
+    assert d.ensure_teacher() == d.root / 'teacher-r0002' and len(launched) == 2    # resumes
+    monkeypatch.setattr(ei.time, 'time', lambda: now + 9000)
+    assert d.ensure_teacher() is None and len(launched) == 2        # that resume scored nothing new: done
+    (d.root / 'r0003').mkdir()
+    (d.root / 'r0003' / 'frontier.json').write_text('{}')
+    (d.root / 'r0003' / 'discarded.json').write_text('{}')          # a discarded round's frontier is not the newest
+    assert d.newest_frontier() == d.root / 'r0002' / 'frontier.json'
+    (d.root / 'r0004').mkdir()
+    (d.root / 'r0004' / 'frontier.json').write_text('{}')
+    assert d.ensure_teacher() == d.root / 'teacher-r0004' and launched[-1][:2] == ('teacher-r0004', 'r0004')
+    d.a.no_teacher_campaign = True
+    (d.root / 'r0005').mkdir()
+    (d.root / 'r0005' / 'frontier.json').write_text('{}')
+    assert d.ensure_teacher() is None and len(launched) == 3
+    # the hooks: every DGX SFT poll and the standing thread check it (a failure is a note, never the caller's end)
+    calls = []
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: calls.append('teacher'))
+    monkeypatch.setattr(d, 'ensure_remote_collection', lambda policy: None)
+    monkeypatch.setattr(d, 'sft_handback', lambda *a: calls.append('handback'))
+    d.dgx_sft_between(d.root / 'r0002', d.controller.current, 'aei-r0002-sft')
+    assert calls == ['teacher', 'handback']
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) > 2:
+            raise StopIteration
+    monkeypatch.setattr(ei.time, 'sleep', sleep)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: (_ for _ in ()).throw(RuntimeError('ssh')))
+    with pytest.raises(StopIteration):
+        d.teacher_loop()
+    assert sleeps == [600.0] * 3 and 'teacher_check_failed' in (d.root / 'drive.log').read_text()
+
+
+def _prepared_round(tmp_path, monkeypatch, argv=()):
+    ei, d = _driver(tmp_path, monkeypatch, argv=list(argv))
+    (tmp_path / 'pin' / '.natlang-pin.json').write_text(json.dumps({'commit': 'b' * 40}))
+    monkeypatch.setattr(d.c, 'data_repo', lambda: tmp_path / 'pin')     # the build code's pin
+    rd = d.root / 'r0002'
+    (rd / 'stages').mkdir(parents=True)
+    (rd / 'mix').mkdir()
+    (rd / 'mix' / 'chains.pkl').write_bytes(b'old chains')
+    (rd / 'mix' / 'build.json').write_text('{}')
+    cur = d.controller.current
+    size = {'placement': 'colab', 'teacher_budget': 1000, 'max_target_tokens': 5, 'max_forward_tokens': 9}
+    ei.write_round_manifest(rd, round_id='r0002', base_policy_sha=cur['sha256'], previous_policy_sha=None,
+                            chains_path=rd / 'mix' / 'chains.pkl', episode_ids=['e-old'], prefer_unseen=['/x/mix'],
+                            profile_changes=[{'from_profile': 'colab', 'to_profile': 'dgx', 'reason': 'r'}],
+                            extra={'frontier_policy': cur['sha256'], 'size': size, 'manual_rebuild': {'by': 'hand'},
+                                   'recap': {'at': 1}, 'mix_dir': str(rd / 'mix-dgx'), 'collections': ['/c']})
+    for stage in ('frontier', 'data', 'build', 'prepared'):
+        (rd / 'stages' / f'{stage}.done').write_text('{}')
+    plans, units = [], []
+    monkeypatch.setattr(d, 'prepare_plan', lambda rd_, pols, size_=None, prefer_unseen=None: plans.append(
+        (rd_, [p['sha256'] for p in pols], size_, prefer_unseen)) or (['frontier'], [['data']], ['build', 'argv']))
+    monkeypatch.setattr(d, 'expected_hours', lambda report: {'dgx': 1.0})
+
+    def ledger(unit, budget, priority, command, log, **kw):
+        units.append((unit, command))
+        (rd / 'mix').mkdir()
+        (rd / 'mix' / 'chains.pkl').write_bytes(b'new chains')
+        (rd / 'mix' / 'build.json').write_text(json.dumps({'admitted_episode_keys': ['e-new', 'e2']}))
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    return ei, d, rd, cur, plans, units, size
+
+
+def test_a_prepared_rounds_mix_rebuilds_alone_from_its_recorded_inputs(tmp_path, monkeypatch):
+    """2026-11-24: removing build.done and prepared.done to take new build code reran all of prepare, which first
+    waits --snapshot-min-hours (r0002 would have stalled ~2 h). --rebuild-round (or stages/rebuild.request) reruns
+    only the build, with the round's recorded size, previous policy and prefer-unseen list, keeps the old mix aside,
+    and refreshes chains.sha256 and round.json (every recorded field kept, the DGX recap dropped), once per build
+    commit; a failed build restores the old mix; a round whose SFT started is not rebuilt."""
+    import hashlib as _h
+    ei, d, rd, cur, plans, units, size = _prepared_round(tmp_path, monkeypatch, argv=['--rebuild-round', 'r0002'])
+    monkeypatch.setattr(d, 'prepare', lambda *a: (_ for _ in ()).throw(AssertionError('prepare reran')))
+    assert d.rebuild_requested(rd) == f'--rebuild-round under build code {"b" * 40}'
+    assert d.rebuild_round(rd, d.lineage_policies(), d.rebuild_requested(rd))
+    assert plans == [(rd, [cur['sha256']], size, ['/x/mix'])]
+    (unit, command), = units
+    assert unit.startswith('aei-r0002-rebuild-') and command == ['build', 'argv']
+    m = json.loads((rd / 'round.json').read_text())
+    new_sha = _h.sha256(b'new chains').hexdigest()
+    assert m['chains_sha256'] == new_sha and (rd / 'chains.sha256').read_text().split()[0] == new_sha
+    assert m['episode_ids'] == ['e-new', 'e2'] and m['mix_dir'] == str(rd / 'mix') and 'recap' not in m
+    assert m['manual_rebuild'] == {'by': 'hand'} and m['profile_changes'][0]['to_profile'] == 'dgx'
+    assert m['prefer_unseen'] == ['/x/mix'] and m['size'] == size and m['collections'] == ['/c']
+    (old,) = rd.glob('mix.pre-rebuild-*')
+    assert (old / 'chains.pkl').read_bytes() == b'old chains'
+    assert m['rebuilds'][-1]['build_code'] == 'b' * 40 and m['rebuilds'][-1]['old_mix'] == str(old)
+    assert m['rebuilds'][-1]['old_chains_sha256'] == _h.sha256(b'old chains').hexdigest()
+    assert d.rebuild_requested(rd) is None                    # a restart with the same argv does not rebuild again
+    (rd / 'stages' / 'rebuild.request').write_text('')          # a running driver's request
+    assert d.rebuild_requested(rd) == 'stages/rebuild.request'
+
+    def failing(unit, budget, priority, command, log, **kw):
+        (rd / 'mix').mkdir()
+        (rd / 'mix' / 'chains.pkl').write_bytes(b'partial')
+        raise SystemExit('aei-r0002-rebuild failed')
+    monkeypatch.setattr(d.c, 'ledger', failing)
+    before = (rd / 'round.json').read_text()
+    with pytest.raises(SystemExit, match='rebuild failed'):
+        d.rebuild_round(rd, d.lineage_policies(), 'stages/rebuild.request')
+    assert (rd / 'mix' / 'chains.pkl').read_bytes() == b'new chains' and (rd / 'round.json').read_text() == before
+    assert (rd / 'chains.sha256').read_text().split()[0] == new_sha
+    # its SFT started: refused, the request consumed, nothing moved
+    (rd / 'sft' / 'learner-state').mkdir(parents=True)
+    (rd / 'sft' / 'learner-state' / 'learner_manifest.json').write_text('{}')
+    monkeypatch.setattr(d.c, 'ledger', lambda *a, **k: (_ for _ in ()).throw(AssertionError('rebuilt')))
+    assert not d.rebuild_round(rd, d.lineage_policies(), 'stages/rebuild.request')
+    assert not (rd / 'stages' / 'rebuild.request').exists() and (rd / 'round.json').read_text() == before
+    assert 'rebuild_refused' in (d.root / 'drive.log').read_text()
+
+
+def test_the_round_loop_rebuilds_a_requested_round_before_it_trains(tmp_path, monkeypatch):
+    ei, d, rd, cur, plans, units, size = _prepared_round(tmp_path, monkeypatch,
+                                                         argv=['--rebuild-round', 'r0001', '--max-rounds', '1'])
+    rd = d.root / 'r0001'
+    calls = []
+    monkeypatch.setattr(d.c, 'pin_stage', lambda: None)
+    monkeypatch.setattr(d.c, 'require_data_readers', lambda: None)
+    monkeypatch.setattr(d, 'record_reader_sources', lambda: None)
+    monkeypatch.setattr(d, 'held_loop', lambda: None)
+    monkeypatch.setattr(d, 'teacher_loop', lambda: None)
+    monkeypatch.setattr(d, 'ensure_teacher', lambda round_dir=None: calls.append('teacher'))
+    monkeypatch.setattr(d, 'ensure_collection', lambda p: None)
+    monkeypatch.setattr(d, 'ensure_remote_collection', lambda p: None)
+    monkeypatch.setattr(d, 'prepare_ahead', lambda rd_, pols: None)
+    monkeypatch.setattr(d, 'health_report', lambda rd_, pols: None)
+
+    def prepare(rd_, pols):
+        if not (rd_ / 'round.json').exists():
+            (rd_ / 'mix').mkdir(parents=True, exist_ok=True)
+            (rd_ / 'mix' / 'chains.pkl').write_bytes(b'old')
+            ei.write_round_manifest(rd_, round_id=rd_.name, base_policy_sha=pols[-1]['sha256'], previous_policy_sha=None,
+                                    chains_path=rd_ / 'mix' / 'chains.pkl', episode_ids=[], extra={'size': size})
+        calls.append('prepare')
+    monkeypatch.setattr(d, 'prepare', prepare)
+    monkeypatch.setattr(d, 'rebuild_round', lambda rd_, pols, reason: calls.append(('rebuild', rd_.name, reason)))
+    monkeypatch.setattr(d, 'train_sft', lambda rd_, p: calls.append('sft') or rd_ / 'sft' / 'factors')
+    monkeypatch.setattr(d, 'publish', lambda rd_, p, f: {'checkpoint': str(rd_ / 'policy' / 'checkpoint.pt'),
+                                                          'checkpoint_sha256': 'e' * 64})
+    monkeypatch.setattr(d, 'rebind_remote', lambda *a: None)
+    assert d.run() == 0
+    assert calls.index('prepare') < calls.index(('rebuild', 'r0001', f'--rebuild-round under build code {"b" * 40}')) \
+        < calls.index('sft') and 'teacher' in calls

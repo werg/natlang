@@ -10303,3 +10303,36 @@ old immutable registered packs were not silently modified.
 - **Next.** After r0002 the actor is restored by the older pin at mem fraction 0.88. The keeper's oversized rule
   re-serves it at 34 GiB within 10 min, and the tenants resume: the dev64 base arm on 9 programs, then the searchqa
   fit.
+
+## 2026-11-24 02:30 async-drive: the standing teacher campaign relaunches whenever idle; a supported mix rebuild
+
+**Teacher campaign.** `ensure_teacher` ran only at the end of `prepare`. The campaign ended about 01:00, and a
+restarted driver joining the already-prepared r0002 never relaunched it; the coordinator launched it by hand at 02:10
+(`aei1-teacher`, `r0002/frontier.json`, `teacher-r0002`). Now, whenever the `<name>-teacher` unit is idle, the
+campaign of the newest frontier (the highest `rNNNN/frontier.json` not discarded) runs in `teacher-rNNNN`.
+- Checked: at the top of each loop iteration, after a round's preparation, in every DGX SFT poll
+  (`dgx_sft_between`), in each Colab SFT iteration and the snapshot wait, and by a standing thread every
+  `--teacher-check-minutes` (10). The thread covers the long blocking waits: `run-sft`, ledger stages, publication.
+- A campaign of that frontier that already ran resumes (teacher_gen skips finished tasks) at most once an hour, and
+  not after a driver relaunch that scored nothing new (`teacher-rNNNN/driver-launch.json`); the next frontier starts
+  the next campaign. `--no-teacher-campaign` still opts out.
+- With the hand-launched r0002 campaign running, the driver leaves it alone (unit present). When it ends, the driver
+  resumes it once, an hour later at the earliest. After that, r0002's campaign is done until r0003's frontier.
+
+**Rebuild.** Removing `build.done` and `prepared.done` reran all of `prepare`, including the
+`--snapshot-min-hours` wait (about 2 h for r0002).
+- `--rebuild-round rNNNN` (repeatable) or a `stages/rebuild.request` file reruns only the build step when the round
+  starts. A running driver picks the file up at the round start; the option applies once per build-code commit (the
+  data repo's pin record), so a restart with the same argv does not rebuild again.
+- Inputs are the recorded ones: frontier, data outputs, `size`, previous policy and the `prefer_unseen` list from
+  `round.json`, with the lineage the round was prepared from.
+- The old mix is kept as `mix.pre-rebuild-<time>`, and a failed build puts it back. The new mix is committed blob
+  first (`chains.sha256`, then `round.json`); every other recorded field is kept, including `manual_rebuild` and
+  `profile_changes`. A DGX recap is dropped (it reruns from the new mix if the round starts on the DGX). Each rebuild
+  is appended to `round.json` `rebuilds` (time, reason, build code, old mix and chains sha) and to
+  `stages/build.done`.
+- Refused (noted, request consumed) once the round's SFT started, or when it was prepared from another lineage.
+
+Tests: `tests/neuralese/test_async_train.py` (relaunch from the newest frontier when idle, resume rate limit and
+done rule, discarded frontiers, hooks and standing thread; rebuild from recorded inputs, once per build commit, the
+request file, failure restore, refusal after SFT start, the round loop rebuilding before it trains).

@@ -2288,6 +2288,7 @@ def write_round_manifest(round_dir, *, round_id, base_policy_sha, previous_polic
     return manifest
 
 
+TEACHER_RELAUNCH_MINUTES = 60   # an idle campaign of the same frontier resumes at most this often
 SFT_HANDBACK_MAX = 2          # moves of one round from the DGX back to a session (no ping-pong between two hosts)
 
 
@@ -2594,6 +2595,7 @@ class AsyncRoundDriver:
         self.held_done = set()          # held-v3 candidates the held thread finished
         self.held_v4_cadence = parse_held_v4_cadence(getattr(args, 'held_v4_cadence', HELD_V4_CADENCE))
         self.held_v4 = HeldV4Queue(self.root / 'held-v4' / 'queue.json')
+        self.teacher_lock = threading.Lock()   # one campaign launch at a time (main loop, waits, the standing thread)
         self.handback_next = {}         # round -> when its DGX SFT is next checked for a move to a session
         self.handback_blocked = set()   # rounds whose Colab learner failed: they stay on the DGX
         self.handed_back = None         # the round a hand-back just moved (ends the DGX wait)
@@ -2823,16 +2825,158 @@ class AsyncRoundDriver:
                 if self.c.present(u):          # a requeued one too, or the ledger relaunches it beside the learner
                     self.c.stop_unit(u)
 
-    def ensure_teacher(self, round_dir):
-        """The teacher campaign stands: when its unit is idle, the newest frontier's rare tasks start the next one."""
+    def standing_teacher(self):
+        """``ensure_teacher`` from a wait or the loop: a failure is logged, never the caller's end."""
+        try:
+            self.ensure_teacher()
+        except Exception as error:
+            self.note(teacher_check_failed=repr(error)[:300])
+
+    def build_code(self):
+        """The commit of the build code (``--data-repo``, else the pin): its pin record, else git; what a rebuild is
+        recorded under."""
+        repo = self.c.data_repo()
+        marker = repo / '.natlang-pin.json'
+        if marker.exists():
+            return json.loads(marker.read_text()).get('commit')
+        try:
+            return subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True,
+                                           stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+    def rebuild_requested(self, round_dir):
+        """Why the prepared round's mix is rebuilt before it trains, or None: ``stages/rebuild.request`` (written by
+        hand: picked up at the round's start by a running driver), or ``--rebuild-round RNNNN`` while round.json
+        records no rebuild under the current build code (so a restart with the same argv does not rebuild again)."""
+        if (round_dir / 'stages' / 'rebuild.request').exists():
+            return 'stages/rebuild.request'
+        if round_dir.name in (getattr(self.a, 'rebuild_round', None) or ()):
+            manifest = json.loads((round_dir / 'round.json').read_text())
+            code = self.build_code()
+            if not any(r.get('build_code') == code for r in manifest.get('rebuilds') or ()):
+                return f'--rebuild-round under build code {code}'
+        return None
+
+    def rebuild_round(self, round_dir, policies, reason):
+        """Rerun only a prepared round's mix build, under the current build code, from its recorded inputs: the round's
+        frontier, data outputs (filled, own Neuralese graph, extractions in --sft-work), size, previous policy and
+        prefer-unseen list (round.json), with the lineage it was prepared from (refused when that is no longer the
+        lineage, or once its SFT started). The old mix stays as ``mix.pre-rebuild-<time>``; a failed build puts it
+        back. ``chains.sha256`` and round.json (blob first, every other recorded field kept, a DGX recap dropped:
+        the recap reruns from the new mix when the round starts on the DGX) follow the new mix; round.json
+        ``rebuilds`` records each one. Returns True when it rebuilt."""
+        from natlang_neuralese.common.jsonio import write_json_durable
+        manifest = json.loads((round_dir / 'round.json').read_text())
+        marker = round_dir / 'stages' / 'rebuild.request'
+        run = round_dir / 'sft'
+        started = ((run / 'learner-state' / 'learner_manifest.json').exists() or (run / 'factors').exists()
+                   or dgx_sft_progress(run / 'train.jsonl') is not None
+                   or self.dgx_sft_running(round_dir, f'{self.a.name}-{round_dir.name}-sft'))
+        cur, prev = policies[-1], (policies[-2] if len(policies) > 1 else None)
+        lineage_ok = (manifest.get('base_policy_sha') == cur['sha256']
+                      and manifest.get('previous_policy_sha') == (prev['sha256'] if prev else None))
+        if started or not lineage_ok:
+            why = 'its SFT started' if started else 'it was prepared from another lineage'
+            self.note(round=round_dir.name, rebuild_refused=why, reason=reason)
+            marker.unlink(missing_ok=True)
+            return False
+        size = manifest.get('size') or json.loads((round_dir / 'size.json').read_text())
+        _, _, build = self.prepare_plan(round_dir, policies, size, prefer_unseen=manifest.get('prefer_unseen') or [])
+        mix = round_dir / 'mix'
+        stamp = time.strftime('%Y%m%dT%H%M%S')
+        n = 0
+        while (round_dir / f'mix.pre-rebuild-{stamp}{f"-{n}" if n else ""}').exists():
+            n += 1
+        stamp = f'{stamp}-{n}' if n else stamp
+        old = round_dir / f'mix.pre-rebuild-{stamp}'
+        code = self.build_code()
+        self.note(round=round_dir.name, rebuild=reason, build_code=code, old_mix=str(old))
+        if mix.exists():
+            os.replace(mix, old)
+        t = time.time()
+        try:
+            self.c.ledger(f'{self.a.name}-{round_dir.name}-rebuild-{stamp}', 32, STAGE_PRIORITY, build,
+                          round_dir / 'rebuild.log', repo=self.c.data_repo())
+            report = json.loads((mix / 'build.json').read_text())
+            if not (mix / 'chains.pkl').is_file():
+                raise SystemExit(f'round {round_dir.name}: the rebuild wrote no chains.pkl ({round_dir}/rebuild.log)')
+        except BaseException:
+            if old.exists():
+                shutil.rmtree(mix, ignore_errors=True)
+                os.replace(old, mix)
+            self.note(round=round_dir.name, rebuild_failed=f'{round_dir}/rebuild.log', restored=str(mix))
+            raise
+        core = {'schema', 'round_id', 'base_policy_sha', 'previous_policy_sha', 'chains_path', 'chains_sha256',
+                'chains_bytes', 'episode_ids', 'prefer_unseen', 'profile', 'profile_changes', 'committed_at'}
+        entry = {'at': round(time.time(), 1), 'reason': reason, 'build_code': code, 'seconds': round(time.time() - t, 1),
+                 'old_mix': str(old) if old.exists() else None, 'old_chains_sha256': manifest.get('chains_sha256')}
+        extra = {**{k: v for k, v in manifest.items() if k not in core and k != 'recap'},
+                 'mix_dir': str(mix), 'expected_hours': self.expected_hours(report),
+                 'rebuilds': [*(manifest.get('rebuilds') or []), entry]}
+        new = write_round_manifest(
+            round_dir, round_id=manifest.get('round_id', round_dir.name), base_policy_sha=manifest['base_policy_sha'],
+            previous_policy_sha=manifest.get('previous_policy_sha'), chains_path=mix / 'chains.pkl',
+            episode_ids=report.get('admitted_episode_keys') or [], prefer_unseen=manifest.get('prefer_unseen') or [],
+            profile=manifest.get('profile', self.a.sft_profile), profile_changes=manifest.get('profile_changes') or [],
+            extra=extra)
+        write_json_durable(round_dir / 'stages' / 'build.done', {'time': time.time(), 'rebuild': entry})
+        marker.unlink(missing_ok=True)
+        self.note(round=round_dir.name, rebuilt=new['chains_sha256'], old_chains=entry['old_chains_sha256'],
+                  episodes=len(new['episode_ids']))
+        return True
+
+    def newest_frontier(self):
+        """The newest round's measured frontier (``rNNNN/frontier.json`` of the highest round not discarded), or None."""
+        found = [f for f in sorted(self.root.glob('r[0-9]*/frontier.json'))
+                 if not (f.parent / 'discarded.json').exists()]
+        return found[-1] if found else None
+
+    def ensure_teacher(self, round_dir=None):
+        """The teacher campaign stands: whenever its unit is idle, the newest frontier's campaign runs
+        (``teacher-rNNNN``). Called from the main loop, the end of a round's preparation, the SFT and preparation
+        waits and a standing thread every ``--teacher-check-minutes`` (2026-11-24: called only when a round was
+        prepared, the campaign stayed idle from 01:00 until a hand launch at 02:10 under a restarted driver joining an
+        already-prepared round). A campaign of that frontier which already ran resumes (teacher_gen skips finished
+        tasks) at most once per ``TEACHER_RELAUNCH_MINUTES``, and not after a relaunch that scored nothing new (its
+        tasks are done: the next frontier starts the next one). ``round_dir`` is ignored (the newest frontier
+        decides)."""
         unit = f'{self.a.name}-teacher'
-        if self.a.no_teacher_campaign or self.c.active(unit) or not (round_dir / 'frontier.json').exists():
-            return
-        work = self.root / f'teacher-{round_dir.name}'
-        n = launch_teacher(self.c, work, round_dir / 'frontier.json',
-                           [self.collect_dir(p) / 'groups' / 'g*' for p in self.lineage_policies()], unit,
-                           covered_extra=sorted(self.root.glob('teacher-*')))
-        self.note(teacher=unit, frontier_tasks=n, work=str(work))
+        if self.a.no_teacher_campaign:
+            return None
+        with self.teacher_lock:
+            frontier = self.newest_frontier()
+            if frontier is None or self.c.present(unit):
+                return None
+            work = self.root / f'teacher-{frontier.parent.name}'
+            record_path = work / 'driver-launch.json'
+            scored = sum(1 for line in (work / 'manifest.jsonl').open() if line.strip()) \
+                if (work / 'manifest.jsonl').exists() else 0
+            last = json.loads(record_path.read_text()) if record_path.exists() else None
+            launched = (work / 'launches.jsonl').exists()
+            if launched and last is not None:
+                if scored <= int(last.get('scored_at_launch', -1)):
+                    return None                 # the last relaunch scored nothing: this frontier's campaign is done
+                if time.time() - float(last.get('at', 0)) < 60 * TEACHER_RELAUNCH_MINUTES:
+                    return None
+            n = launch_teacher(self.c, work, frontier,
+                               [self.collect_dir(p) / 'groups' / 'g*' for p in self.lineage_policies()], unit,
+                               covered_extra=sorted(self.root.glob('teacher-*')))
+            if n:
+                from natlang_neuralese.common.jsonio import write_json_durable
+                write_json_durable(record_path, {'at': round(time.time(), 1), 'frontier': str(frontier),
+                                                 'scored_at_launch': scored, 'resume': launched, 'tasks': n})
+            self.note(teacher=unit, frontier=str(frontier), frontier_tasks=n, work=str(work), resume=launched)
+            return work
+
+    def teacher_loop(self):
+        """The standing campaign's check, beside every wait the main loop makes (run-sft, ledger units, held)."""
+        while True:
+            time.sleep(60 * self.a.teacher_check_minutes)
+            try:
+                self.ensure_teacher()
+            except Exception as error:
+                self.note(teacher_check_failed=repr(error)[:300])
 
     def lineage_policies(self):
         """The policies whose collections a round reads: the current and the previous published policy."""
@@ -2910,7 +3054,7 @@ class AsyncRoundDriver:
                 builds.append(str(mix))
         return builds
 
-    def prepare_plan(self, round_dir, policies, size=None):
+    def prepare_plan(self, round_dir, policies, size=None, prefer_unseen=None):
         """(frontier argv, data script lines, build argv) of a round's preparation from ``policies``' collections,
         sized by ``size`` (``round_size``; the DGX round without one)."""
         size = size or self.dgx_round_size()
@@ -2940,7 +3084,8 @@ class AsyncRoundDriver:
         aux.append(f'own-neuralese-graph={round_dir / "neuralese-graph-own" / "chains.pkl"},'
                    f'share={self.a.own_neuralese_graph_share},task_tokens=40000')
         build = mix_build_command(self.c.data_repo(), work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
-                                  aux=aux, prefer_unseen=self.prefer_unseen_for(round_dir),
+                                  aux=aux, prefer_unseen=(self.prefer_unseen_for(round_dir) if prefer_unseen is None
+                                                          else prefer_unseen),
                                   teacher_budget=size['teacher_budget'], own_share=self.a.own_share,
                                   previous_policy=prev['sha256'] if prev else None,
                                   live_registry=live_holdout_registry(self.a.live_work),
@@ -2981,6 +3126,7 @@ class AsyncRoundDriver:
                 if runs:
                     break                   # stopped early (a rollback, a phase switch): what it scored is the snapshot
                 raise SystemExit(f'round {round_dir.name}: no collection of {cur["sha256"][:12]} ({self.collect_dir(cur)})')
+            self.standing_teacher()
             time.sleep(60)
         for d in self.collections_of(policies):
             record_collection(d, closed=False)       # the snapshot the extraction reads (the collection grows on)
@@ -3142,6 +3288,7 @@ class AsyncRoundDriver:
         profile = resolve_profile('colab', hosts=self.colab_hosts)
         away_since, failures = None, 0
         while not (factors / 'policy_manifest.json').exists():
+            self.standing_teacher()
             up = pop_rl_actor.reachable_hosts('colab', self.colab_hosts) if self.colab_hosts else []
             fit = {h: pop_rl_actor.colab_sft_fit(h) for h in up}
             if up and not any(ok for ok, _ in fit.values()):
@@ -3191,6 +3338,7 @@ class AsyncRoundDriver:
             self.ensure_remote_collection(policy)
         except Exception as error:
             self.note(stage='wait', unit=unit, between_failed=repr(error)[:300])
+        self.standing_teacher()
         self.sft_handback(round_dir, policy, unit)
 
     def expected_hours(self, report):
@@ -3698,8 +3846,10 @@ class AsyncRoundDriver:
             threading.Thread(target=self.pop_loop, daemon=True).start()
         if getattr(self.a, 'resume_after_hunt', False):
             self.controller.resume_after_hunt()
+        threading.Thread(target=self.teacher_loop, daemon=True).start()
         completed = 0
         while self.a.max_rounds <= 0 or completed < self.a.max_rounds:
+            self.standing_teacher()
             with self.lock:
                 self.apply_verdicts()
             if self.controller.state.get('halted'):
@@ -3721,6 +3871,10 @@ class AsyncRoundDriver:
                     shutil.rmtree(round_dir)                # prepared ahead from a lineage a rollback discarded
                     (round_dir / 'stages').mkdir(parents=True)
                 self.prepare(round_dir, self.lineage_policies())
+                reason = self.rebuild_requested(round_dir)
+                if reason:
+                    self.rebuild_round(round_dir, self.lineage_policies(), reason)
+                self.standing_teacher()
                 self.health_report(round_dir, self.lineage_policies())
                 nxt = f'r{int(self.controller.state["round_counter"]) + 1:04d}'
                 self.prepare_ahead(self.round_dir(nxt), self.lineage_policies())
@@ -4161,6 +4315,13 @@ def main():
     ad.add_argument('--fill-repo', help='immutable fill-reader checkout (default: --data-repo or controller source); use --pin path to opt out')
     ad.add_argument('--fill-inflight', type=int, default=32)
     ad.add_argument('--no-teacher-campaign', action='store_true')
+    ad.add_argument('--teacher-check-minutes', type=float, default=10.0,
+                    help='how often the standing teacher campaign is checked (relaunched from the newest frontier when '
+                         'its unit is idle) beside the waits')
+    ad.add_argument('--rebuild-round', action='append', default=[], metavar='RNNNN',
+                    help='rebuild this prepared round\'s mix (only the build step, its recorded inputs) under the '
+                         'current build code when it starts, once per build commit; stages/rebuild.request in the '
+                         'round does the same for a running driver',)
     ad.add_argument('--grpo-steps', type=int, default=20, help='GRPO steps per round in the polish phase')
     ad.add_argument('--grpo-budget', type=int, default=100, help='GRPO ledger GB (learner + its actor)')
     ad.add_argument('--grpo-extra', default='')
