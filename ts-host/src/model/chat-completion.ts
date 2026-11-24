@@ -223,6 +223,21 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
   return { ...head, object: 'chat.completion', choices: [{ index: 0, message, finish_reason: finish }], ...extra };
 }
 
+/** A reply whose text opens with a <think>...</think> block (Gemini's thought summary under `include_thoughts`; Gemma's
+ * own thinking comes as <thought>...</thought>): the block
+ * becomes `reasoning_content` (after any reasoning the server already split off) and the rest is the reply text. */
+export function thoughtsFromContent(message: Json | undefined): Json | undefined {
+  const content = message?.content;
+  if (typeof content !== 'string') return message;
+  const match = /^\s*<(think|thought)>([\s\S]*?)<\/\1>\s*/.exec(content);
+  if (!match) return message;
+  const earlier = message!.reasoning_content ?? message!.reasoning;
+  const thought = match[2].trim();
+  const { reasoning: _drop, ...rest } = message!;
+  return { ...rest, content: content.slice(match[0].length),
+    reasoning_content: typeof earlier === 'string' && earlier.trim() ? `${earlier}\n\n${thought}` : thought };
+}
+
 function contentText(value: unknown): string {
   if (typeof value === 'string') return value;
   if (Array.isArray(value) && value.every(part => part && typeof part === 'object' &&
@@ -365,6 +380,14 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       delete wireRequest.x_natlang_omit_seed;
       delete wireRequest.x_natlang_host_call_fields;
       delete wireRequest.x_natlang_history_reasoning;
+      // Gemini on Vertex/AI Studio returns its thought *summaries* only when asked (`include_thoughts`), and then inside
+      // the reply text as a leading <think>...</think>: `x_natlang_include_thoughts` asks, and the reply's block moves
+      // to `reasoning_content` (thoughtsFromContent) so it is the turn's reasoning, never its answer.
+      const includeThoughts = wireRequest.x_natlang_include_thoughts === true;
+      delete wireRequest.x_natlang_include_thoughts;
+      if (includeThoughts) wireRequest.extra_body = { ...(wireRequest.extra_body as Json | undefined),
+        google: { ...((wireRequest.extra_body as Json | undefined)?.google as Json | undefined),
+          thinking_config: { include_thoughts: true } } };
       if (request.seed !== null && !omitSeed) wireRequest.seed = request.seed;
       // The configured collection cap and the runtime's remaining allowance
       // both apply. A per-turn allowance must not erase a smaller explicit cap.
@@ -383,7 +406,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       const body = isStream(reply) ? await assembleChatCompletion(reply, onDelta) : reply;
       if (options.onExchange) await options.onExchange(structuredClone({ request: recordedRequest!, wireRequest, wireResponse: body }));
       const choice = (body.choices as Json[] | undefined)?.[0];
-      const message = choice?.message as Json | undefined;
+      const message = options.request?.x_natlang_include_thoughts === true
+        ? thoughtsFromContent(choice?.message as Json | undefined) : choice?.message as Json | undefined;
       const rawCalls = message?.tool_calls as Json[] | undefined;
       const usage = body.usage as Json | undefined;
       if (typeof usage?.prompt_tokens === 'number') { promptTokens += usage.prompt_tokens; hasPrompt = true; }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
-import { assembleChatCompletion, chatCompletionModelTurn, httpChatTransport, openAIEndpointRoot, SECOND_THINK_CLOSE } from '../dist/model/chat-completion.js';
+import { assembleChatCompletion, chatCompletionModelTurn, httpChatTransport, openAIEndpointRoot, SECOND_THINK_CLOSE, thoughtsFromContent } from '../dist/model/chat-completion.js';
 
 test('HTTP endpoints accept server roots and API bases without duplicating v1', async () => {
   const paths = [];
@@ -131,6 +131,32 @@ test('x_natlang_host_call_fields go on the calls the runtime wrote, not on sampl
     assert.equal(sent.messages[3].tool_calls[0].extra_content.google.thought_signature, 'real');
     assert.equal('x_natlang_host_call_fields' in sent, false); assert.equal('natlang_host_generated' in sent.messages[1], false);
   } finally { await model.close(); }
+});
+
+test('x_natlang_include_thoughts asks for Gemini thought summaries and moves the reply text <think> block to the reasoning', async () => {
+  const model = await server(() => [delta({ role: 'assistant', content: '<think>\n**Plan**\nmultiply\n</think>\n\n' }),
+    delta({ tool_calls: [{ index: 0, id: 'x', type: 'function', function: { name: 'eval', arguments: '{"code":"return 391"}' } }] }, 'tool_calls')]);
+  try {
+    const turn = await chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }),
+      { request: { x_natlang_include_thoughts: true } })(request());
+    assert.equal(turn.reasoning, '**Plan**\nmultiply'); assert.equal(turn.text, '');
+    assert.deepEqual(turn.calls, [['eval', { code: 'return 391' }]]);
+    const sent = model.bodies[0];
+    assert.deepEqual(sent.extra_body, { google: { thinking_config: { include_thoughts: true } } });
+    assert.equal('x_natlang_include_thoughts' in sent, false);
+    const plain = await chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }), {})(request());
+    assert.equal(plain.reasoning, undefined); assert.match(plain.text, /^<think>/);
+    assert.equal('extra_body' in model.bodies[1], false);
+  } finally { await model.close(); }
+});
+
+test('thoughtsFromContent keeps a reply without a leading think block and joins server-split reasoning', () => {
+  const plain = { role: 'assistant', content: 'answer <think>x</think>' };
+  assert.equal(thoughtsFromContent(plain), plain);
+  assert.deepEqual(thoughtsFromContent({ role: 'assistant', content: '<think>b</think>rest', reasoning: 'a' }),
+    { role: 'assistant', content: 'rest', reasoning_content: 'a\n\nb' });
+  assert.deepEqual(thoughtsFromContent({ role: 'assistant', content: '<thought>gemma thinks</thought>\nanswer' }),
+    { role: 'assistant', content: 'answer', reasoning_content: 'gemma thinks' });
 });
 
 test('x_natlang_history_reasoning sends one reasoning alias in history (servers that reject the pair) and stays off the wire', async () => {

@@ -234,14 +234,21 @@ GEMINI_HOST_CALL_FIELDS = {'extra_content': {'google': {'thought_signature': 'sk
 GEMINI_HOSTS = ('generativelanguage.googleapis.com', 'aiplatform.googleapis.com')
 
 
-def default_chat_config(url):
-    """Request controls when none are given: top-p; for Gemini's OpenAI endpoints also no `seed` field (it rejects it) and
-    Google's documented bypass signature on the function calls the runtime wrote itself (it rejects unsigned ones)."""
-    gemini = any(host in url for host in GEMINI_HOSTS)
+def default_chat_config(url, model_id=None):
+    """Request controls when none are given: top-p; for Gemini's OpenAI endpoints also no `seed` field (it rejects it),
+    Google's documented bypass signature on the function calls the runtime wrote itself (it rejects unsigned ones), and
+    its thought summaries (`x_natlang_include_thoughts`: the turn's reasoning, not sent back: the signatures carry the
+    state). Vertex also serves open models (`publisher/model-maas`): those take the plain controls; DeepSeek's thinking
+    is off unless asked for (`chat_template_kwargs.thinking`)."""
+    vertex_open = 'aiplatform.googleapis.com' in url and model_id is not None and not model_id.startswith('google/')
+    gemini = any(host in url for host in GEMINI_HOSTS) and not vertex_open
+    if vertex_open:
+        return {'top_p': 0.95, **({'chat_template_kwargs': {'thinking': True}} if model_id.startswith('deepseek-ai/') else {})}
     # NIM serves several models behind a parser that reads `reasoning` and `reasoning_content` as one field and rejects
     # the pair the runtime sends by default (Mistral Large 4, MiniMax M3.1: "duplicate field"); one alias suits all of them
     nim = 'integrate.api.nvidia.com' in url
-    return {'top_p': 0.95, **({'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': GEMINI_HOST_CALL_FIELDS} if gemini else {}),
+    return {'top_p': 0.95, **({'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': GEMINI_HOST_CALL_FIELDS,
+                               'x_natlang_include_thoughts': True, 'x_natlang_history_reasoning': 'none'} if gemini else {}),
             **({'x_natlang_history_reasoning': 'reasoning_content'} if nim else {})}
 
 
@@ -284,12 +291,12 @@ ENDPOINT_PROVIDERS = {'integrate.api.nvidia.com': 'nvidia-nim', 'openrouter.ai':
 
 # What a teacher's recorded think block is (owner 2026-11-24: teacher reasoning stays in SFT data as zero-weight
 # context; a summary is never presented as a raw trace): `raw` the model's own reasoning tokens (open-weight reasoning
-# models' `reasoning_content` on NIM, OpenRouter, Groq, Z.ai, a local server), `summary` a provider-written summary of
-# hidden reasoning (Codex reasoning summaries, Claude's summarized thinking), `hidden` none returned (Gemini without
-# include_thoughts). A spec's "reasoning" overrides the provider's default.
+# models' `reasoning_content` on NIM, OpenRouter, Groq, Z.ai, Vertex's open models, a local server), `summary` a
+# provider-written summary of hidden reasoning (Codex reasoning summaries, Claude's summarized thinking, Gemini's thought
+# summaries under x_natlang_include_thoughts), `hidden` none returned (Gemini without it). A spec's "reasoning" overrides the provider's default.
 REASONING_KINDS = ('raw', 'summary', 'hidden')
 PROVIDER_REASONING = {'openai-codex': 'summary', 'anthropic': 'summary', 'nvidia-nim': 'raw', 'openrouter': 'raw',
-                      'groq': 'raw', 'zai': 'raw', 'google-gemini': 'hidden', 'google-vertex': 'hidden'}
+                      'groq': 'raw', 'zai': 'raw', 'google-gemini': 'summary', 'google-vertex': 'summary'}
 
 
 def reasoning_kind(teacher):
@@ -297,6 +304,13 @@ def reasoning_kind(teacher):
     if getattr(teacher, 'reasoning', None):
         return teacher.reasoning
     provider = teacher.provider or endpoint_provider(teacher.endpoint)
+    if provider == 'google-vertex' and not teacher.model_id.startswith('google/'):
+        return 'raw'   # an open model served on Vertex (DeepSeek, GLM, gpt-oss): its own reasoning tokens
+    if provider in ('google-gemini', 'google-vertex') and 'gemma' in teacher.model_id:
+        return 'raw'   # Gemma (open weights) writes its own thinking as <thought>...</thought>
+    config = getattr(teacher, 'chat_config', None) or {}
+    if provider in ('google-gemini', 'google-vertex') and not config.get('x_natlang_include_thoughts'):
+        return 'hidden'
     return PROVIDER_REASONING.get(provider, 'raw' if str(provider).startswith('local') else 'unknown')
 
 
@@ -365,7 +379,7 @@ def make_teacher(spec):
     url = spec.get('chat_completions_url') or completions_url(spec['endpoint'])
     return SimpleNamespace(model_id=spec['model_id'], provider=None, endpoint=spec['endpoint'].rstrip('/'),
                            chat_completions_url=url, api_key_env=spec.get('api_key_env'), slots=int(spec.get('slots', 2)),
-                           chat_config=default_chat_config(url) if spec.get('chat_config') is None else spec['chat_config'],
+                           chat_config=default_chat_config(url, spec['model_id']) if spec.get('chat_config') is None else spec['chat_config'],
                            reasoning=spec.get('reasoning'), api_key_command=spec.get('api_key_command'),
                            min_failed=int(spec.get('min_failed', 0)), cool_until=0., failures=0, enabled=True)
 

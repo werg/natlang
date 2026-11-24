@@ -11,7 +11,8 @@ import teacher_gen  # noqa: E402
 def test_gemini_default_omits_the_seed_field():
     gemini = 'https://generativelanguage.googleapis.com/v1beta/openai/v1/chat/completions'
     assert teacher_gen.default_chat_config(gemini) == {
-        'top_p': 0.95, 'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': teacher_gen.GEMINI_HOST_CALL_FIELDS}
+        'top_p': 0.95, 'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': teacher_gen.GEMINI_HOST_CALL_FIELDS,
+        'x_natlang_include_thoughts': True, 'x_natlang_history_reasoning': 'none'}
     assert teacher_gen.default_chat_config('https://openrouter.ai/api/v1/chat/completions') == {'top_p': 0.95}
 
 
@@ -119,7 +120,7 @@ def test_every_teacher_identity_names_its_provider():
         assert identity['provider'] == provider and identity['model_id'] == 'm' and identity['endpoint'] == endpoint
 
 
-def test_vertex_gemini_teacher_mints_its_token_per_episode_and_records_hidden_reasoning():
+def test_vertex_gemini_teacher_mints_its_token_per_episode_and_records_summary_reasoning():
     import sys
     import pytest
     vertex = 'https://aiplatform.googleapis.com/v1/projects/p/locations/global/endpoints/openapi'
@@ -129,7 +130,10 @@ def test_vertex_gemini_teacher_mints_its_token_per_episode_and_records_hidden_re
     assert teacher.chat_config == teacher_gen.default_chat_config(vertex)
     assert teacher.chat_config['x_natlang_omit_seed'] is True
     identity = teacher_gen.teacher_identity(teacher)
-    assert (identity['provider'], identity['reasoning']) == ('google-vertex', 'hidden')
+    assert (identity['provider'], identity['reasoning']) == ('google-vertex', 'summary')
+    lite = teacher_gen.make_teacher({'model_id': 'google/gemini-3.5-flash-lite', 'endpoint': vertex,
+                                     'chat_config': {'top_p': 0.95, 'x_natlang_omit_seed': True}})
+    assert teacher_gen.teacher_identity(lite)['reasoning'] == 'hidden'
     env = teacher_gen.episode_env(teacher, {'A': '1'})
     assert env == {'A': '1', 'VERTEX_ACCESS_TOKEN': 'tok-1'}
     plain = teacher_gen.make_teacher({'model_id': 'm', 'endpoint': 'https://integrate.api.nvidia.com/v1'})
@@ -165,3 +169,20 @@ def test_completion_urls_keep_the_api_base_path_and_nim_sends_one_reasoning_alia
     assert url(vertex) == vertex + '/chat/completions'
     assert teacher_gen.default_chat_config(url('https://integrate.api.nvidia.com/v1')) == {
         'top_p': 0.95, 'x_natlang_history_reasoning': 'reasoning_content'}
+
+
+def test_vertex_open_models_take_plain_controls_and_record_raw_reasoning():
+    vertex = 'https://aiplatform.googleapis.com/v1/projects/p/locations/global/endpoints/openapi'
+    deepseek = teacher_gen.make_teacher({'model_id': 'deepseek-ai/deepseek-v4.1-flash-maas', 'endpoint': vertex})
+    assert deepseek.chat_config == {'top_p': 0.95, 'chat_template_kwargs': {'thinking': True}}
+    glm = teacher_gen.make_teacher({'model_id': 'zai-org/glm-5.2-maas', 'endpoint': vertex})
+    assert glm.chat_config == {'top_p': 0.95}
+    for teacher in (deepseek, glm):
+        assert teacher_gen.teacher_identity(teacher)['reasoning'] == 'raw'
+
+
+def test_gemma_on_ai_studio_records_raw_reasoning():
+    gemma = teacher_gen.make_teacher({'model_id': 'gemma-4-26b-a4b-it',
+                                      'endpoint': 'https://generativelanguage.googleapis.com/v1beta/openai'})
+    assert gemma.chat_config['x_natlang_include_thoughts'] is True
+    assert teacher_gen.teacher_identity(gemma)['reasoning'] == 'raw'
