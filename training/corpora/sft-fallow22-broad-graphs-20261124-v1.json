@@ -1,0 +1,61 @@
+{
+  "id": "sft-fallow22-broad-graphs-20261124-v1",
+  "owner": "dgx",
+  "path": "data_nvme:sft-fallow22-broad-graphs-20261124-v1",
+  "kind": "sft-rows",
+  "format": "natlang.sft-sources-build/1: chains.pkl (exp0_sft --chains), rows.jsonl.zst, cases.jsonl, build.json",
+  "rows": 11259,
+  "license": "derived: each input keeps its registered license (teacher providers, own rollouts, task sources)",
+  "protected": false,
+  "inputs": [
+    {
+      "id": "fallow22-sources",
+      "manifest_sha256": "26c5b5e069428d2ac907ffbae7cdc6208b92f072a983b6ea4d95aea155d3a41b",
+      "path": "data_nvme:fallow22-sources"
+    },
+    {
+      "id": "held-v3",
+      "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-v3/manifest.json",
+      "sha256": "4547106069df540d32b250782651143eb3e7ae60fc64e2b4ffef4e2b30fc3d11"
+    },
+    {
+      "id": "exp1-rft-base-pass-rates",
+      "path": "data_nvme:lfm3-rl-dgx-20261029/ops/exp1-rft/base-pass-rates.json",
+      "sha256": "f5fd10c97a0c5a42d9ba5ebb761113e873e39a6698603ccb4016ef0a0e55b863"
+    }
+  ],
+  "producer": {
+    "script": "sft_sources.py",
+    "argv": [
+      "build",
+      "--work",
+      "/home/werg/data/fallow22-sources",
+      "--out",
+      "/home/werg/data/sft-fallow22-broad-graphs-20261124-v1",
+      "--tokenizer",
+      "/home/werg/data/fallow22-sources/tokenizer",
+      "--no-default-teacher-pool",
+      "--own-loss-share",
+      "0",
+      "--october-share",
+      "0",
+      "--max-family-share",
+      "1",
+      "--wrapper-share",
+      "1",
+      "--max-per-task",
+      "1",
+      "--rich-max-per-task",
+      "1",
+      "--val-episodes",
+      "40",
+      "--workers",
+      "8"
+    ],
+    "git_commit": "27e785bd5d3228c7f0bdb6191a9db01adfc3bdf0",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "99de83650aff7190d26f098040422dff21cd12eea96d3dd18e12b5e32680475b",
+  "training_admission": "registry-recorded"
+}
