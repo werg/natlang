@@ -179,41 +179,68 @@ def tree_inventory(root: Path) -> dict[str, tuple]:
     return found
 
 
+FLUSH_BYTES = 64 << 20  # written bytes between a data sync and dropping them from the cache
+
+
+def _copy_bounded(src: Path, out: Path) -> str:
+    """SRC to OUT, hashing SRC; every FLUSH_BYTES written are synced and dropped from the page cache, so dirty pages
+    bound for the slow HDD never pile up in the unit's memory cgroup (the sweep was OOM-killed at 1 GB)."""
+    digest = hashlib.sha256()
+    with open(src, 'rb') as reader, open(out, 'wb') as writer:
+        pending = 0
+        for block in iter(lambda: reader.read(8 << 20), b''):
+            digest.update(block)
+            writer.write(block)
+            pending += len(block)
+            if pending >= FLUSH_BYTES:
+                writer.flush()
+                os.fdatasync(writer.fileno())
+                os.posix_fadvise(writer.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                pending = 0
+        writer.flush()
+        os.fdatasync(writer.fileno())
+        os.posix_fadvise(writer.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+    shutil.copystat(src, out)
+    return digest.hexdigest()
+
+
 def copy_tree_verified(src: Path, dest: Path) -> int:
-    """SRC's tree to DEST (which must not exist): hashing while copying, one sync, then every file re-read from
-    disk and compared. Returns the bytes copied; raises (removing DEST) on any mismatch or a changed source."""
+    """SRC's tree to DEST (which must not exist): hashing while copying, then every file re-read from disk and
+    compared. An interrupted copy resumes: DEST.partial is kept, and a file there whose size and mtime equal the
+    source's is reused (its digest taken from the source; the re-read below still checks it). Returns the bytes
+    copied; raises on a mismatch (dropping that file) or a changed source (dropping DEST.partial)."""
     before = tree_inventory(src)
     partial = dest.with_name(dest.name + '.partial')
-    shutil.rmtree(partial, ignore_errors=True)
-    partial.mkdir(parents=True)
+    partial.mkdir(parents=True, exist_ok=True)
     digests, total = {}, 0
-    try:
-        for rel, (kind, size, _mtime, target) in sorted(before.items()):
-            out = partial / rel
-            if kind == 'dir':
-                out.mkdir(exist_ok=True)
-            elif kind == 'link':
-                os.symlink(target, out)
-            else:
-                digest = hashlib.sha256()
-                with open(src / rel, 'rb') as reader, open(out, 'wb') as writer:
-                    for block in iter(lambda: reader.read(8 << 20), b''):
-                        digest.update(block)
-                        writer.write(block)
-                shutil.copystat(src / rel, out)
-                digests[rel] = digest.hexdigest()
-                total += size
-        os.sync()
-        for rel, digest in digests.items():
-            _drop_cache(partial / rel)
-            if (partial / rel).stat().st_size != before[rel][1] or _sha(partial / rel) != digest:
-                raise RuntimeError(f'copy of {src / rel} does not verify')
-        if tree_inventory(src) != before:
-            raise RuntimeError(f'{src} changed during the copy')
-        os.replace(partial, dest)
-    except BaseException:
+    for rel, (kind, size, mtime, target) in sorted(before.items()):
+        out = partial / rel
+        if kind == 'dir':
+            out.mkdir(exist_ok=True)
+        elif kind == 'link':
+            if out.is_symlink() and os.readlink(out) == target:
+                continue
+            if out.is_symlink() or out.exists():
+                out.unlink()
+            os.symlink(target, out)
+        else:
+            try:
+                st = out.lstat()
+                reuse = st.st_size == size and st.st_mtime_ns == mtime and not out.is_symlink()
+            except FileNotFoundError:
+                reuse = False
+            digests[rel] = _sha(src / rel) if reuse else _copy_bounded(src / rel, out)
+            total += size
+    os.sync()
+    for rel, digest in digests.items():
+        _drop_cache(partial / rel)
+        if (partial / rel).stat().st_size != before[rel][1] or _sha(partial / rel) != digest:
+            (partial / rel).unlink(missing_ok=True)
+            raise RuntimeError(f'copy of {src / rel} does not verify')
+    if tree_inventory(src) != before:
         shutil.rmtree(partial, ignore_errors=True)
-        raise
+        raise RuntimeError(f'{src} changed during the copy')
+    os.replace(partial, dest)
     return total
 
 

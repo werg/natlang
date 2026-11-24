@@ -13,6 +13,7 @@ ExecCondition=/bin/sh -c '! systemctl --user -q is-active natlang-storage-sweep-
 ExecStartPre=/usr/bin/env SWEEP_ALERTS_ONLY=1 /home/werg/natlang/scripts/storage_sweep.sh
 # The sweep itself under the memory ledger; it waits up to 25 minutes for admission (the timer runs every 30) and
 # runs at most 45 minutes (timeout kills it and the ledger unit ends, which releases its claim; a timer start while
-# it runs is skipped).
-ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-storage-sweep-run --budget-gb 1 --priority low --class service --resumable --wait 1500 -- /usr/bin/timeout -k 60 2700 /home/werg/natlang/scripts/storage_sweep.sh
+# it runs is skipped). Medium and not preemptible, 3 GB: a preempted or OOM-killed pass (1 GB, HDD writeback) left
+# the expert-iteration tier unable to finish a 13 GB collection move (2026-11-24).
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-storage-sweep-run --budget-gb 3 --priority medium --class service --no-resumable --wait 1500 -- /usr/bin/timeout -k 60 2700 /home/werg/natlang/scripts/storage_sweep.sh
 TimeoutStartSec=1h

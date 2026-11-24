@@ -11189,3 +11189,14 @@ Four defects seen between 09:50 and 10:35:
   - Fix: the unit now runs at medium priority and is not preemptible (1 GB budget). A file starts only if it can
     finish at 3 MiB/s before `--hard-minutes` (54, under the 55-minute timeout); otherwise smaller files fill the
     pass. Test added.
+- **EI round tier stalled (2026-11-24 11:30): fixed.** After 09:48 the tier moved nothing while root fell from 102 to
+  65 GB.
+  - Cause: its first move, `collect/v0002` (13.25 GB), never finished. One pass was OOM-killed in the sweep's 1 GB
+    cgroup (dirty HDD writeback counts against it), one was preempted, and one hit the 1200 s step timeout. Each
+    retry started by deleting `.partial`.
+  - Fix in `copy_tree_verified`:
+    - it resumes from `.partial`, reusing files whose size and mtime_ns equal the source's (digest from the NVMe
+      source; every file is still re-read from disk and compared);
+    - it syncs and drops each 64 MB written;
+    - a file that fails verification is removed.
+  - The sweep unit is now medium, not preemptible, at 3 GB. Tests added.
