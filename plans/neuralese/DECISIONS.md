@@ -10452,3 +10452,80 @@ the FP32 rows.
   to fail the same way. A driver on a pin with this fix then retries through `ensure_remote_checkpoint`: the merge with
   the checkout mismatches, so it ships the checkpoint (Drive) and rebinds. Rounds after that carry `code` and merge
   on the VM.
+
+## 2026-11-24 05:10 T3: LFM3 adapter serving parity (program-tuning strand)
+
+Question: does the first real LFM3-1.7B program fit (`ext_decisions_route`, free LoRA rank 16 over q/k/v/o_proj, the
+attention gate, conv in/out_proj and w1/w2/w3; base 5ff07638) serve as the native engine computes it on every engine?
+Prompts: 6 of the program's rows, rendered with the serving template (`target_items`), 4.9-6.9k tokens each, greedy
+24 tokens, adapter off and on. Each engine's tokens are scored by the native engine on that engine's own path, at BF16:
+the release binds the identity it was fit at, and a float32 engine refuses it as another live checkpoint.
+
+**Inventory (mechanism: a tuned adapter stack applied to the base weights at serving; every component that
+implements or consumes it).**
+
+| Component | Role | Where | In scope |
+| --- | --- | --- | --- |
+| Python native engine | reference: exact native application (torch.func weight substitution) | `model/native_adapters.run_native` (`:771`), `serve/engine.py` `_native_run` (`:589-600`), `serve/http.py:579` (`x_natlang_adapters`), `serve_native_checkpoint.py` `bind_adapter_release` (default stack) | measured (reference) |
+| SGLang actor slots | the front sums a stack into rank-padded per-module factors; the fork adds `((x A^T) * mask) B^T` | `serve/sglang_actor.py` `_sglang_reason` / `_sglang_adapter_file` (`:813-865`), `export/native_hf.py` `ADAPTER_MODULES` / `adapter_targets` (`:63-87`), fork `python/sglang/srt/models/lfm3.py` `NatlangAdapters` (`:1175-1270`), `serve_native_checkpoint.py` slot flags, `pop_actor_driver.adapter_args` | measured; defect fixed |
+| Managed llama-server (fork) | GGUF LoRA via `build_lora_mm` per matrix, per-request scales | fork `src/models/lfm3.cpp` (q/k/v via `build_qkv`, `attn_gate`, `wo`), `src/models/lfm-base.cpp` (conv in/out_proj, `build_ffn`), `src/llama-graph.cpp:1784`; ts-host `llama/server.ts:238-268` (`--lora-init-without-apply --lora-per-sequence --lora`), `model/lora-scales.ts`, `model/local-server.ts:148-153` | measured |
+| In-page wllama | the same fork sources compiled to wasm; adapters as blobs at scale 0, per-request scales | `ts-host/vendor/wllama` (natlang-b12092), `browser/tuned-release.ts` `loadBrowserRelease`, `browser/local-model.ts:124,237,262` | measured |
+| PEFT export | native factors -> PEFT safetensors (r/alpha folded into B) | `tune/export.py` `export_peft` / `load_peft_dense` | measured (dense check) |
+| GGUF LoRA export | PEFT -> GGUF via the vendored converter | `tune/export.py` `export_gguf`; `vendor/llama.cpp` = fork a6401bbd converter (`convert_lora_to_gguf.py`, `conversion/lfm3.py`; identical to the pinned 1a7f5015f for these files) | measured |
+| Native->HF module map | which HF module a native target is | `tune/targets.py` `TABLES['lfm3']` | exercised (all 153 targets exported) |
+| Release export drivers | per-node / family GGUF exports of a fit | `tune/build.py` `_export_gguf`, `export_nodes`, `export_families`, `export_release_nodes` (`tune/learned/apply.py`); `program_tune.py plan --gguf-base-sha256`; ts-host `tune/pipeline.ts:360-370` | same functions as measured (not re-run through `tune.build`) |
+| Stack reader | release artifacts -> stack members without an engine | `tune/stack_export.py` | measured (the harness uses it) |
+| Base GGUF | the base the LoRA binds to | `export/native_gguf.py` `export` | measured (f32 export, q8_0 by llama-quantize) |
+| ts-host native-server client | `x_natlang_adapters` to the native/SGLang server | `model/neuralese-server.ts:592-627`, `model/chat-completion.ts:339` | wire only: carries ids and scales; numerics are the engine's |
+| Held eval | adapted policy id | `rl/held_eval.py` `policy_id_of` (`:1221`) | identity only, no numerics |
+
+Results (`docs/ENGINE_PARITY.md` "Tuned adapters (LoRA) on LFM3"):
+
+- Export: all 153 targets reach the GGUF LoRA (attn_q/k/v, attn_output, attn_gate, shortconv in/out_proj,
+  ffn_gate/up/down). The PEFT dense deltas equal the native low-rank deltas exactly (max relative gap 0.0). llama.cpp's
+  LoRA loader applies o_proj and the attention gate: the fork's LFM3 graph routes both through `build_lora_mm`, and
+  the measured continuations match. That closes the question in TUNING_RESTORE §5.
+- Managed llama-server, natlang-b12088 CPU, f32 GGUF (the pinned b12092 has identical `src/` and `ggml/` trees):
+  greedy agreement 288/288, mean / max |Δlogprob| 0.004 / 0.21. The adapter changes 6/6 continuations, and the native
+  logprob of these tokens moves by 1.90 nats on average.
+- In-page wllama, vendored natlang-b12092, Q8_0: 144/144, 0.006 / 0.11; adapter changes 3/3 (1.69 nats). The text
+  prompts tokenize to the prompt ids. The tokens equal the managed server's f32 tokens.
+- Native reference: the fit targets' mean NLL goes from 1.49 to 0.32 nats with the adapter.
+- SGLang slots, first run on the GB10 before the fixes: base turns 0.70 nats from native (top-1 0.78), adapted turns
+  2.6 nats (top-1 0.34), against a control (native base vs native adapted on the same tokens) of 1.79. With slot rank
+  32, 12 of 24 requests reached SGLang and none of them were adapted.
+
+Defects fixed (default on, with opt-outs and tests):
+
+1. SGLang slot rank. q|k|v pack into one module, so a rank-r all-family fit needs 3r (48 here). The default 32, and
+   the fit's rank passed by `pop_actor_driver` / `pop_rl_actor.serve_colab_tenant_actor`, sent every adapted turn to
+   the native engine (on Pop, the CPU front). Now `serve_native_checkpoint.adapter_slot_rank` sizes the slot from
+   `--adapter-release` (`native_hf.packed_slot_rank`), and the Pop job and the Colab measurement actor pass the packed
+   rank, computed on the DGX (18e158961).
+2. SGLang prefix cache across adapters. The radix cache keyed on token ids and `extra_key` only, and the fork's slot
+   adapter was not in the key, so a prompt state computed under one stack (or none) served another. This mechanism
+   predicts both observations: base and adapted turns on the same prompt read each other's prefix, so both sides
+   diverge. Now `sglang_actor.adapter_cache_key` puts the stack id into `extra_key`, as SGLang does with `lora_id`
+   (`NATLANG_SGLANG_ADAPTER_CACHE_KEY=0` opts out; 9cf56138e). The other engines already key their caches by adapters:
+   the llama fork's `--lora-per-sequence` never reuses a prompt computed with other adapters, wllama is the same code,
+   and the Python prefix cache digests `execution_binding`.
+3. Harness and test fixes: `check_sglang_adapter_parity.py` was stale against `serve_native_checkpoint`'s flags (it
+   now uses `build_parser`) and had a greedy indexing bug. The `test_program_tune` cyclic-garbage check depended on
+   test order (667 objects when it ran first) and now measures the second step.
+
+Open, not closed:
+
+- After fix 2 the SGLang re-measurement crashed in the fork: CUDA illegal memory access in the decode step after a
+  prefill batch that mixed adapted and base requests, at --sglang-max-running 4. The same crash happened earlier on
+  the GB10 before fix 2. A GB10 run at 2 running completed. Cause not localized. A tenant job is queued on the A100
+  (`runs/t3-score/sglang-keyed`): first a CUDA_LAUNCH_BLOCKING collect at 4 running (`sglang-debug/collect.log`), then
+  the keyed measurement at 2 running and its native reference. It waits for the session's actor; at 05:00 none was
+  served. Until that is read and the crash is fixed, adapted SGLang serving at more than 2 concurrent requests is
+  suspect.
+- Not checked: llama-server Q8_0 candidates (the f32 run plus the page's Q8 run stand in); the page on WebGPU; mixed
+  stacks in one llama batch; soft states; `tune.build` with `exports: ['gguf']` end to end (the same export functions
+  were exercised); held-task outcomes of the adapter.
+
+Resources: DGX ledger units of 3-20 GB, then of at most 8 GB after the coordinator's rule; native scoring ran on the
+A100 as a preemptible tenant. NVMe: up to 16 GB under `parity-t3`. I deleted 3.9 GB (sglang-r32) and moved 12 GB
+(sglang export, base GGUFs) to `/mnt/external/program-tune-20261117/ext_decisions_route/parity-t3`.
