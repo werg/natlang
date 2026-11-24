@@ -156,6 +156,17 @@ Brief E covered only the Neuralese-free capabilities. Open:
 
 ## Operations
 
+- **Fresh on-policy data is the bottleneck (coordinator, 2026-11-24 16:45).**
+  - **What a round trains on:** about 4,300 episodes. Only 43 come from the newest collection (v0005) and about 130 from v0004. Of the 3,471 teacher episodes kept, 2,986 were trained in an earlier round.
+  - **DGX collection rate:** about 200–270 episodes per hour.
+  - **Engine:** at its cap of 160 running requests, with 5–10 queued and 61% of the KV cache in use.
+  - **Idle time:** the round-prep steps (data 12 GB, build 32 GB) preempt the 74 GB collection for about an hour of each 2 h round.
+  - **In progress:** an agent is keeping the collection running during prep and raising concurrency to 192 slots / 224 running (commit to come; it rolls in at a round restart).
+- **Program tuning starved (coordinator, 2026-11-24 16:45; orphaned 16 h, taken over by an agent).**
+  - **L4:** the `ext_decisions_verdict` fit has waited 8.7 h at VRAM admission behind the base-arm measurement actor (18 of the L4's 22.5 GiB).
+  - **A100:** fits there are evicted by round SFT after up to 2.3 h.
+  - **Result so far:** no adapter-vs-base comparison yet.
+
 - **Data inclusion schedule (coordinator, 2026-11-24; owner: be circumspect about time, have the next round ready promptly):**
   - **T1, about 01:50 (round 1 publish).** Restart the driver on the newest pin, carrying the Vibestudio session's added arguments (`--data-repo`, `--fill-repo`, `--minimum-data-reader-commit`). It takes:
     - the read-back, marker-row, produce-span and duplicate-learner fixes;
