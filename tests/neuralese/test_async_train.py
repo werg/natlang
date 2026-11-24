@@ -2191,13 +2191,14 @@ def test_a_held_measure_unit_left_by_a_restarted_driver_keeps_pop_busy_and_is_jo
     # a restarted held step waits for the running unit, then resumes with one pop-held.sh
     out = tmp_path / 'held' / 'policy-8e634a0f46ce'
     out.mkdir(parents=True)
-    polls = {'n': 0}
+    alive = {'polls': 0}
 
     def held_units(pattern='*popheld*'):
-        polls['n'] += 1
-        return ['popheld-policy-8e634a0f46ce-1795481950'] if pattern == f'popheld-{out.name}-*' and polls['n'] < 3 \
-            else []
+        alive['polls'] += 1
+        return ['popheld-policy-8e634a0f46ce-1795481950'] if pattern == f'popheld-{out.name}-*' and \
+            alive['polls'] < 4 else []
     monkeypatch.setattr(pop_rl_actor, 'pop_held_units', held_units)
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: True))     # running, not only queued
     monkeypatch.setattr(pop_rl_actor, 'stop_pop_fills', lambda: None)
     monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
     started = []
@@ -2206,14 +2207,83 @@ def test_a_held_measure_unit_left_by_a_restarted_driver_keeps_pop_busy_and_is_jo
         pid = 1
         def poll(self):
             return 0
-    monkeypatch.setattr(ei.subprocess, 'Popen', lambda argv, **kw: started.append(polls['n']) or Done())
+    monkeypatch.setattr(ei.subprocess, 'Popen', lambda argv, **kw: started.append(alive['polls']) or Done())
     assert ei.pop_held_measure(out, '/c.pt', pin='/pin', samples=4, manifest='/m.json', poll=0) == 'incomplete'
-    assert started == [3]                       # launched only after the old unit ended
+    assert len(started) == 1 and started[0] >= 4          # launched only after the old unit ended
     stopped = []
     monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': ['popheld-policy-8e634a0f46ce-1'])
     monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: stopped.append(argv))
     assert ei.join_pop_held(out, preempt=lambda: True, poll=0) == 'preempted'
-    assert stopped and stopped[0][-1] == 'popheld-policy-8e634a0f46ce-1.service'
+    assert stopped[0][-3:] == ['cancel', '--unit', 'popheld-policy-8e634a0f46ce-1']    # its requeue first
+    assert ['systemctl', '--user', 'stop', 'popheld-policy-8e634a0f46ce-1.service'] in stopped
+
+
+def test_one_pop_measurement_per_directory_across_driver_restarts_and_ledger_requeues(tmp_path, monkeypatch):
+    """2026-11-24: popheld-hv4-85e61f04241e-1795538339 was preempted at 18:52 and requeued by the ledger; pop-held.sh
+    saw its unit inactive and ended, a restarted driver started -1795543981 at 19:13:02 and the ledger relaunched the
+    old one (old pin) at 19:13:16: two measurements on one directory. A unit the ledger only holds (requeued, or
+    waiting for a pop-held.sh that is gone) is cancelled before a measurement starts, a preempted measure unit counts
+    as preempted (not a failed attempt), and a second process measuring the same directory is refused."""
+    import expert_iteration as ei
+    import pop_rl_actor
+    out = tmp_path / 'held-v4' / 'hv4-85e61f04241e'
+    out.mkdir(parents=True)
+    queue = {'popheld-hv4-85e61f04241e-1795538339'}
+    monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': sorted(queue))
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: False))
+    monkeypatch.setattr(ei.Cycle, 'stop_unit', staticmethod(lambda unit: queue.discard(unit)))
+    monkeypatch.setattr(pop_rl_actor, 'stop_pop_fills', lambda: None)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    launched = []
+
+    class Preempted:
+        pid = 1
+        def poll(self):          # its measure unit was preempted and requeued by the ledger: pop-held.sh ends
+            queue.add('popheld-hv4-85e61f04241e-1795543981')
+            return 0
+    monkeypatch.setattr(ei.subprocess, 'Popen', lambda argv, **kw: launched.append(set(queue)) or Preempted())
+    assert ei.pop_held_measure(out, '/c.pt', pin='/pin', samples=2, manifest='/m.json', poll=0) == 'preempted'
+    assert launched == [set()] and not queue        # the stale requeue cancelled first, its own requeue after
+    # another process measures this directory: refused, nothing launched
+    import fcntl
+    with open(out / '.measure.lock', 'a') as other:
+        fcntl.flock(other, fcntl.LOCK_EX)       # flock is per open file: another open() here is refused too
+        with ei.measure_lock(out) as mine:
+            assert mine is False
+        assert ei.pop_held_measure(out, '/c.pt', pin='/pin', samples=2, manifest='/m.json', poll=0) == 'busy'
+        assert len(launched) == 1
+    assert ei.pop_held_measure(out, '/c.pt', pin='/pin', samples=2, manifest='/m.json', poll=0) == 'preempted'
+
+
+def test_pop_held_units_include_the_ledgers_requeued_and_waiting_ones(monkeypatch):
+    import pop_rl_actor
+    import scripts.memory_ledger as ml
+    monkeypatch.setattr(pop_rl_actor.subprocess, 'run', lambda argv, **kw: SimpleNamespace(
+        stdout='popheld-hv4-aaaaaaaaaaaa-2.service loaded active running x\n'))
+    monkeypatch.setattr(ml, 'owned_units', lambda *a, **kw: {
+        'popheld-hv4-aaaaaaaaaaaa-1.service', 'popheld-hv4-aaaaaaaaaaaa-2.service',
+        'popheld-hv4-aaaaaaaaaaaa-3-waiter.service', 'aei-collect-v0001.service'})
+    assert pop_rl_actor.pop_held_units('popheld-hv4-aaaaaaaaaaaa-*') == \
+        ['popheld-hv4-aaaaaaaaaaaa-2', 'popheld-hv4-aaaaaaaaaaaa-1']
+    assert pop_rl_actor.pop_held_units('popheld-hv4-aaaaaaaaaaaa-*', queued=False) == ['popheld-hv4-aaaaaaaaaaaa-2']
+    monkeypatch.setattr(ml, 'owned_units', lambda *a, **kw: (_ for _ in ()).throw(ValueError('corrupt')))
+    assert pop_rl_actor.pop_held_units('popheld-hv4-aaaaaaaaaaaa-*') == ['popheld-hv4-aaaaaaaaaaaa-2']
+
+
+def test_stopping_a_dropped_measurement_stops_the_pop_actor_serving_its_policy(tmp_path, monkeypatch):
+    """2026-11-24: Pop's held-actor-85e61f04241e (driver.py and its SGLang server) served a dropped policy after its
+    DGX measure units were stopped: the actor is a Pop unit of its own. It stops with the measurement; an actor serving
+    another policy (the lineage head's collection) is left alone; its unit gets the time its engine needs to stop."""
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'STATE', tmp_path / 'rl-actor.json')
+    monkeypatch.setattr(pop_rl_actor, 'SERVE_LOCK', tmp_path / 'pop-serve.lock')
+    (tmp_path / 'rl-actor.json').write_text(json.dumps({'policy_id': 'b' * 64, 'unit': 'popheld-bbbbbbbbbbbb-1',
+                                                        'container': 'popheld-bbbbbbbbbbbb', 'work': '/w'}))
+    stops = []
+    monkeypatch.setattr(pop_rl_actor, 'stop', lambda args=None: stops.append(1))
+    assert pop_rl_actor.stop_pop_actor_serving('a' * 64) is False and not stops
+    assert pop_rl_actor.stop_pop_actor_serving('b' * 64) is True and stops == [1]
+    assert pop_rl_actor.POP_ACTOR_STOP_SECONDS > 90       # pop_actor_driver waits 90 s for its engine
 
 
 def test_publish_round_records_the_code_whose_merge_wrote_the_bytes(tmp_path, monkeypatch):
@@ -2500,11 +2570,12 @@ def test_set_aside_held_results_are_never_reused_and_running_measurements_are_jo
 
     def units(pattern):
         polls.append(pattern)
-        if len(polls) < 3:
+        if len(polls) < 5:
             return ['popheld-policy-eeeeeeeeeeee-1795502476']
         (out / 'result.json').write_text(result(series={'key': 'mine'}, fresh=True))
         return []
     monkeypatch.setattr(pop_rl_actor, 'pop_held_units', units)
+    monkeypatch.setattr(ei.Cycle, 'active', staticmethod(lambda unit: True))
     monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
     monkeypatch.setattr(d.c, 'reuse_held', lambda *a: (_ for _ in ()).throw(AssertionError('reused around a unit')))
     assert d.c.pop_held('policy-eeeeeeeeeeee', '/p/e.pt') == out
@@ -2662,3 +2733,26 @@ def test_a_collection_launched_during_round_preparation_starts_shrunk_and_prepar
     assert d.collection_pending()                              # the driver's hook: queued, not running
     monkeypatch.setattr(d.c, 'active', lambda unit: True)
     assert not d.collection_pending()
+
+
+def test_a_round_whose_colab_session_was_replaced_moves_to_the_dgx_at_once(tmp_path, monkeypatch):
+    """2026-11-24 18:15: the A100 session went away mid-round and run-sft waited until a replacement answered at
+    18:27. run-sft now answers SESSION_LOST_RC as soon as the session is known to be replaced, and the round moves to
+    the DGX then (recorded in round.json), without another run-sft on the session or the fallback wait."""
+    ei, d = _colab_driver(tmp_path, monkeypatch)
+    import pop_rl_actor
+    rd = d.root / 'r0001'
+    (rd / 'stages').mkdir(parents=True)
+    (rd / 'round.json').write_text('{}')
+    runs = []
+    monkeypatch.setattr(d, 'launch_sft', lambda *a, **kw: None)
+    monkeypatch.setattr(d, 'record_colab_placement', lambda *a: None)
+    monkeypatch.setattr(d, 'dgx_sft_running', lambda *a: False)
+    monkeypatch.setattr(d, 'standing_teacher', lambda: None)
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: runs.append(argv) or
+                        SimpleNamespace(returncode=pop_rl_actor.SESSION_LOST_RC))
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: (_ for _ in ()).throw(AssertionError('waited for a session')))
+    d.colab_sft(rd, d.controller.current)
+    assert len(runs) == 1 and 'run-sft' in runs[0]
+    change = json.loads((rd / 'round.json').read_text())['profile_changes'][-1]
+    assert change['to_profile'] == 'dgx' and 'replaced mid-round' in change['reason']

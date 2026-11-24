@@ -923,6 +923,7 @@ def test_run_detached_survives_the_link_and_never_starts_a_second_learner(monkey
     host returns None after the away time; a learner gone without a status is a failure."""
     monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
     monkeypatch.setattr(pop_rl_actor.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(pop_rl_actor, 'keeper_replaced_since', lambda host, since: None)
     cfg = pop_rl_actor.host_config('colab', host='g4')
 
     def fake(states):
@@ -961,6 +962,69 @@ def test_run_detached_survives_the_link_and_never_starts_a_second_learner(monkey
     (launch,) = [c for c in sent if 'setsid nohup' in c]
     # the launch is its own statement: `rm && setsid ... &` backgrounded a subshell that held the SSH channel open
     assert ' && setsid' not in launch and launch.startswith('rm -f /r/learner.rc; setsid nohup ')
+
+
+
+def test_run_detached_ends_at_once_when_the_session_is_replaced(tmp_path, monkeypatch):
+    """2026-11-24: the A100 session vanished at ~18:15 (the keeper requested a new one at 18:16, a CPU VM then
+    answered under the alias with another host key); run-sft polled until the L4 answered at 18:27. The wait now ends
+    with SESSION_LOST_RC as soon as the keeper requested a new session, the host key changed, or another VM (boot id)
+    answers; run-sft then skips the post-run pull from the gone VM."""
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    monkeypatch.setattr(pop_rl_actor.time, 'sleep', lambda s: None)
+    cfg = pop_rl_actor.host_config('colab', host='colab-g4')
+
+    def fake(answers):
+        def ssh_host(host, command, **kw):
+            if 'setsid nohup' in command:
+                return ''
+            answer = answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        return ssh_host
+    lost = pop_rl_actor.SESSION_LOST_RC
+    monkeypatch.setattr(pop_rl_actor, 'keeper_replaced_since', lambda host, since: None)
+    # another VM answers as the host: its boot id differs
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', fake(['running\nboot-a\n', 'running\nboot-a\n', 'none\nboot-b\n']))
+    assert pop_rl_actor.run_detached('colab-g4', cfg, '/r', ['python', 'x.py']) == lost
+    # the host key changed (the replacement's sshd answers the alias)
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', fake(['running\nboot-a\n', RuntimeError(
+        'Remote command on colab-g4 failed (255): @ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @')]))
+    assert pop_rl_actor.run_detached('colab-g4', cfg, '/r', ['python', 'x.py']) == lost
+    # the session keeper requested a new session after the wait began (its state file names the alias)
+    root = tmp_path / 'colab'
+    root.mkdir()
+    monkeypatch.undo()
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    monkeypatch.setattr(pop_rl_actor.time, 'sleep', lambda s: None)
+    (root / 'session-keeper.json').write_text(json.dumps({'last_request_try': 100.0}))          # default alias
+    (root / 'session-keeper-g4b.json').write_text(json.dumps({'alias': 'colab-g4b', 'last_request_try': 5e9}))
+    assert pop_rl_actor.keeper_replaced_since('colab-g4', 50.0, root)
+    assert pop_rl_actor.keeper_replaced_since('colab-g4', 200.0, root) is None
+    assert pop_rl_actor.keeper_replaced_since('colab-g4b', 200.0, root)
+    assert pop_rl_actor.keeper_replaced_since('colab-g4c', 0.0, root) is None
+    monkeypatch.setattr(pop_rl_actor, 'W', tmp_path)
+    (tmp_path / 'ops' / 'ei').mkdir(parents=True)
+    root.rename(tmp_path / 'ops' / 'ei' / 'colab')
+    polls = []
+
+    def keeper_requests_after_two_polls(host, command, **kw):
+        if 'setsid nohup' in command:
+            return ''
+        polls.append(1)
+        if len(polls) == 2:
+            (tmp_path / 'ops/ei/colab/session-keeper.json').write_text(json.dumps({'last_request_try': 9e9}))
+        return 'running\nboot-a\n'
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', keeper_requests_after_two_polls)
+    assert pop_rl_actor.run_detached('colab-g4', cfg, '/r', ['python', 'x.py']) == lost and len(polls) == 2
+    # the keeper records its alias in its state
+    import types
+    sys.path.insert(0, str(Path(pop_rl_actor.__file__).resolve().parents[1] / 'colab'))
+    import session_keeper as sk
+    k = sk.Keeper(types.SimpleNamespace(alias='colab-g4b', session='g4b', order='L4', state=str(tmp_path / 'k.json')))
+    k.save({'last_request_try': 1.0})
+    assert json.loads((tmp_path / 'k.json').read_text())['alias'] == 'colab-g4b'
 
 
 def test_run_sft_yields_an_actor_served_alone_and_serves_it_again(tmp_path, remote, monkeypatch):
