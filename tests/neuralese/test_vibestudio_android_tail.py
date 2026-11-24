@@ -4,8 +4,10 @@ from types import SimpleNamespace
 import json
 import tempfile
 import unittest
+import sys
 
 MODULE = Path(__file__).resolve().parents[2] / 'scripts/neuralese_data/vibestudio_android_tail.py'
+sys.path.insert(0, str(MODULE.parents[2] / 'training/neuralese'))
 spec = importlib.util.spec_from_file_location('android_tail', MODULE)
 tail = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tail)

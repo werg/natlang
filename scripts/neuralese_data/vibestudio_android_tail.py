@@ -18,6 +18,7 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 
+from natlang_neuralese.common.hashing import sha256_file_hex as sha
 
 def read(path):
     return json.loads(Path(path).read_text())
@@ -28,10 +29,6 @@ def save(path, value):
     temporary = path.with_suffix(path.suffix + '.partial')
     temporary.write_text(json.dumps(value, indent=2) + '\n')
     temporary.replace(path)
-
-
-def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def output(argv):
@@ -109,6 +106,7 @@ def main():
     parser.add_argument('campaign', type=Path)
     parser.add_argument('--native-support', type=Path, required=True)
     parser.add_argument('--bulk-unit', required=True)
+    parser.add_argument('--held', type=Path, required=True)
     parser.add_argument('--prepare-only', action='store_true')
     args = parser.parse_args()
     root = args.campaign.resolve()
@@ -124,7 +122,7 @@ def main():
     sys.path[:0] = [str(support), str(driver / 'scripts/neuralese_data'), str(driver / 'training/neuralese'), str(driver)]
     fixture_module = importlib.import_module('android_fixtures')
     from vibestudio_campaign import campaign_scope, attempt_context
-    held = Path('/home/werg/data/lfm3-rl-dgx-20261029/ops/held-v3/manifest.json')
+    held = args.held
     _, _, cases = campaign_scope(root / 'catalog.jsonl', held)
     metadata = fixture_module.load_metadata()
     goals = selected_goals(cases, metadata['fixtures'])
