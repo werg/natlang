@@ -1398,7 +1398,12 @@ def serve_colab_tenant_actor(*, host, checkpoint, sha, commit, release=None, por
              '--hf-export-dir', f'{work}/sglang-hf', '--actor-export-format', sglang_format]
     if release:
         remote_release = ship_release(host, cfg, release, f'{work}/adapter-{adapters[:16]}')
-        serve += ['--adapter-release', remote_release, '--sglang-adapter-slots', '1', '--sglang-adapter-rank', str(rank)]
+        # the slot holds the stack as the front packs it (q|k|v in one module: 3x a fit's rank over every LFM3 family);
+        # the fit's own rank sent every adapted turn to the native engine (T3, 2026-11-24). Explicit, so a session
+        # checkout that predates the server deriving it serves the same slot
+        from serve_native_checkpoint import DEFAULT_ADAPTER_RANK, release_slot_rank
+        slot_rank = max(DEFAULT_ADAPTER_RANK, release_slot_rank(release))
+        serve += ['--adapter-release', remote_release, '--sglang-adapter-slots', '1', '--sglang-adapter-rank', str(slot_rank)]
     else:
         serve += ['--sglang-adapter-slots', '0']
     # the front's own code is the session checkout's (cfg); only the admission wrapper is the tenant checkout's
