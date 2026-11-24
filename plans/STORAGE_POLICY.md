@@ -103,6 +103,10 @@ from apparent size. Long scans run outside publication/retention locks.
   Every step is time-bounded and a timer start while a run is in flight is skipped,
   so a slow disk cannot wedge the timer; the archive and retention units carry
   start timeouts for the same reason.
+- `scripts/ei_round_tier.py` (in the sweep) is the standing rule for expert-iteration drivers. Collections of
+  policies the builds no longer read, and the bulk of rounds older than the previous one, move to
+  `data_hdd/dgx-moved-ei` (verified, symlinked back). Regenerable exports are deleted. Protected policies keep their
+  checkpoint and factors on the NVMe. The Drive tier drains `dgx-moved-ei` after half a day.
 - `scripts/recall_to_nvme.py LINK --cold GLOB ...` is the inverse of an archive
   move: an archived directory that is a hot input again comes back onto the NVMe at
   its path (hot files copied and SHA-256 verified, cold paths left on the HDD as

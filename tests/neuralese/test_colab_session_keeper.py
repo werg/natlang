@@ -209,3 +209,20 @@ def test_a_recorded_actor_whose_process_is_gone_is_served_again(tmp_path, monkey
     assert k.step().action == 'serve' and served == [('p' * 64, 'c' * 40)]
     monkeypatch.setattr(k, 'actor_dead', lambda: False)
     assert k.step().action == 'ok'
+
+
+def test_a_sibling_session_is_not_a_stray_and_an_unnamed_gpu_is_never_unassigned(tmp_path, monkeypatch):
+    """Program tuning's L4 'g4b' beside aei1's A100 'g4a' (2026-11-24): each keeper names the other as a sibling, so a
+    lost g4a is still replaced; and the L4 keeper (order L4 alone) never takes an unnamed A100 for a CPU orphan."""
+    lost = [{'name': 'g4b', 'endpoint': 'e2', 'hardware': 'L4', 'shape': 'Standard', 'variant': 'GPU'}]
+    obs = sk.Observation(sessions=lost, ssh_ok=False, now=10_000.0)
+    assert sk.decide(obs, {}, session='g4a').action == 'wait'                       # an unknown GPU session blocks
+    assert sk.decide(obs, {}, session='g4a', siblings=('g4b',)).action == 'replace'
+    fake = FakeColab({})
+    k, _ = keeper(tmp_path, fake, monkeypatch)
+    k.a.order, k.order = 'L4', sk.parse_order('L4')
+    monkeypatch.undo()          # the real unassign_orphans
+    k.run = lambda cmd, timeout=None, env=None, check=False: fake.calls.append(('unassign', tuple(cmd[3:]))) or (0, '')
+    k.unassign_orphans([{'name': '?', 'endpoint': 'a100-ep', 'hardware': 'A100'},
+                        {'name': '?', 'endpoint': 'cpu-ep', 'hardware': 'CPU'}])
+    assert [c for c in fake.calls if c[0] == 'unassign'] == [('unassign', ('cpu-ep',))]

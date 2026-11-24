@@ -120,3 +120,33 @@ def test_rearchiving_a_restored_file_reuses_its_drive_copy(tmp_path, monkeypatch
     assert f.exists() and drive.next == 1
     m.archive(args, drive)
     assert not f.exists() and drive.next == 1          # no second upload: the restored copy is still on Drive
+
+
+def test_ei_archive_files_behind_links_are_eligible(tmp_path, monkeypatch):
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    monkeypatch.setattr(m, 'LINK_TOLERANT', {'dgx-moved-ei': -1})
+    linked = old_file(hdd / 'dgx-moved-ei' / 'aei1' / 'collect' / 'v0001-x' / 'actor' / 'blocks' / 'b.bin', b'b' * 64)
+    other = old_file(hdd / 'natlang-grpo-v1' / 'live' / 'a.bin', b'a' * 64)
+    links = {str(linked.parents[2]), str(other.parent)}
+    found = [str(p) for p, _ in m.candidates(['dgx-moved-ei', 'natlang-grpo-v1'], min_mb=0, min_age_days=-1,
+                                              exclude=[], links=links, held=set())]
+    assert found == [str(linked)]
+
+
+def test_round_inflow_drains_first_and_native_pins_stay(tmp_path, monkeypatch):
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    for name in ('natlang-grpo-v1', 'dgx-moved-20261124', 'dgx-moved-ei', 'dgx-moved-20261123', 'bgkit-data'):
+        (hdd / name).mkdir(parents=True)
+    roots = m.default_roots()
+    assert roots[:3] == ['dgx-moved-ei', 'dgx-moved-20261123', 'dgx-moved-20261124']
+    assert 'bgkit-data' not in roots and roots.index('natlang-grpo-v1') > 2
+    monkeypatch.setattr(m, 'LINK_TOLERANT', {'dgx-moved-2026112*': -1})
+    pin = old_file(hdd / 'dgx-moved-20261123' / 'native-pins' / 'base.pt', b'p' * 64)
+    blocks = old_file(hdd / 'dgx-moved-20261124' / 'aei1-collect' / 'v0000' / 'b.bin', b'b' * 64)
+    found = [str(p) for p, _ in m.candidates(['dgx-moved-20261123', 'dgx-moved-20261124'], min_mb=0,
+                                              min_age_days=99, exclude=[], links={str(blocks.parent)}, held=set())]
+    assert found == [str(blocks)] and str(pin) not in found

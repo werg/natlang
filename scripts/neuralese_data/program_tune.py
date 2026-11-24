@@ -598,6 +598,12 @@ def colab_fit(args):
     family = json.loads((directory / 'split.json').read_text())['family']
     cfg = A.host_config('colab', host=args.host)
     host = cfg['host']
+    # one host per program: another session's claim stands unless --take-over (two Colab sessions, 2026-11-24)
+    claim_file = fit / 'colab-claim.json'
+    if claim_file.exists() and not args.take_over:
+        other = json.loads(claim_file.read_text()).get('host')
+        if other and other != host:
+            raise SystemExit(f'{directory.name} is claimed by {other} (--take-over to fit it here)')
     # the DGX fit chain (fit-seq.sh) skips a program with this marker: one program is never fitted twice at once
     (fit / 'colab-claim.json').write_text(json.dumps({'host': host, 'commit': args.commit, 'at': time.time()}) + '\n')
     tcfg = A.colab_tenant_checkout(host, cfg, args.commit)
@@ -619,7 +625,7 @@ def colab_fit(args):
     command = A.colab_tenant_command(cfg, tcfg, claim, f'fit-{family[:40]}',
                                      [cfg['python'], '-m', 'natlang_neuralese.tune.build', '--plan',
                                       f'{remote}/fit/plan.json', '--out', f'{remote}/fit/build'],
-                                     mps_percent=args.mps_percent)
+                                     mps_percent=args.mps_percent, beside=args.beside or None)
     shipped = time.time()
     rc = A.run_detached(host, cfg, remote, command)
     trained = time.time()
@@ -692,7 +698,8 @@ def colab_bank(args):
     A.ssh_host(host, shlex.join(['mkdir', '-p', f'{remote}/scratch']))
     claim = {'vram_gib': args.vram_gib, 'host_ram_gib': args.host_ram_gib}
     started = time.time()
-    rc = A.run_detached(host, cfg, remote, A.colab_tenant_command(cfg, tcfg, claim, f'bank-{out.name[:30]}', command))
+    rc = A.run_detached(host, cfg, remote, A.colab_tenant_command(cfg, tcfg, claim, f'bank-{out.name[:30]}', command,
+                                                                  beside=args.beside or None))
     A.log(event='Colab tenant bank ended', host=host, returncode=rc, seconds=round(time.time() - started, 1))
     if rc != 0:
         return rc if rc else 1
@@ -735,7 +742,8 @@ def colab_measure(args):
     release = (Path(args.release) if args.arm == 'bank' else
                dirs[0] / 'fit' / 'release' if args.arm == 'adapter' else None)
     record = A.serve_colab_tenant_actor(host=args.host, checkpoint=plan['engine']['checkpoint'], sha=sha,
-                                        commit=args.commit, release=str(release) if release else None)
+                                        commit=args.commit, release=str(release) if release else None,
+                                        beside=args.beside or None)
     pin = Path(args.pin).resolve()
     sys.path.insert(0, str(pin / 'training/neuralese'))
     from natlang_neuralese.rl.held_eval import policy_id_of
@@ -866,6 +874,8 @@ def main(argv=None):
     cf = sub.add_parser('colab-fit', help='a fit as a tenant of the Colab session (yields to rounds; resumable)')
     cf.add_argument('--dir', required=True)
     cf.add_argument('--host', default=None)
+    cf.add_argument('--beside', default='actor-',
+                        help='tenant stands beside a live claim with this label prefix; \'\' on a session of its own (the L4)')
     cf.add_argument('--commit', required=True, help='the tenant checkout commit (pushed to origin)')
     cf.add_argument('--mps-percent', type=int, help='join MPS with this SM share (default: outside MPS, its own context)')
     cf.add_argument('--take-over', action='store_true', help='fit on Colab although a local fit state exists')
@@ -874,6 +884,8 @@ def main(argv=None):
     cm.add_argument('--arm', choices=('base', 'adapter', 'bank'), required=True)
     cm.add_argument('--release', help='--arm bank: the bank-adapted release directory')
     cm.add_argument('--host', default=None)
+    cm.add_argument('--beside', default='actor-',
+                        help='tenant stands beside a live claim with this label prefix; \'\' on a session of its own (the L4)')
     cm.add_argument('--commit', required=True)
     cm.add_argument('--pin', required=True, help='experiment pin (scripts/pin_checkout.py) the episodes run from')
     cm.add_argument('--split', default='dev', help='the manifest directory measured (dev, or a subset such as dev64)')
@@ -883,6 +895,8 @@ def main(argv=None):
     cb.add_argument('--held', nargs='+', required=True)
     cb.add_argument('--out', required=True)
     cb.add_argument('--host', default=None)
+    cb.add_argument('--beside', default='actor-',
+                        help='tenant stands beside a live claim with this label prefix; \'\' on a session of its own (the L4)')
     cb.add_argument('--commit', required=True)
     cb.add_argument('--steps', type=int, default=0)
     cb.add_argument('--max-worlds', type=int, default=64)
