@@ -336,6 +336,7 @@ def test_colab_fit_runs_as_a_preemptible_tenant_and_brings_the_release_home(tmp_
     def ssh_host(host, command, *, input=None, timeout=600, check=True):
         if input is not None and 'plan.json' in command:
             plans['plan'] = json.loads(input)
+            assert f'{json.loads(input)["engine"]["store_scratch"]}' in command   # created before the fit runs
         if command.startswith('ls '):
             return 'nnt1_abc.nnt\n'
         return ''

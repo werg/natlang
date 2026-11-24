@@ -611,7 +611,9 @@ def colab_fit(args):
         A.ship_file(plan['rows'], remote_rows, host, cfg, rows_sha)
     body = remote_plan(plan, checkpoint=f'{cfg["checkpoints"]}/{sha}.pt', base=cfg['base'], rows=remote_rows,
                        scratch=f'{remote}/fit-scratch')
-    A.ssh_host(host, f'mkdir -p {shlex.quote(remote)}/fit && cat > {shlex.quote(remote)}/fit/plan.json',
+    # the fit store's scratch directory must exist (tempfile.mkdtemp under it; the DGX plans' existed already)
+    A.ssh_host(host, f'mkdir -p {shlex.quote(remote)}/fit {shlex.quote(remote)}/fit-scratch && '
+                     f'cat > {shlex.quote(remote)}/fit/plan.json',
                input=json.dumps(body, indent=1) + '\n', timeout=60)
     claim = A.colab_layout(A.colab_hardware(host))['tenants']['fit']
     command = A.colab_tenant_command(cfg, tcfg, claim, f'fit-{family[:40]}',
