@@ -24,13 +24,14 @@ def test_provider_teacher_runs_the_pi_transport_without_http_controls(tmp_path):
     assert command[command.index('--model-id') + 1] == 'gpt-6-luna'
     assert command[command.index('--reasoning-effort') + 1] == 'low'
     assert not {'--server', '--chat-completions-url', '--api-key-env', '--chat-request-config'} & set(command)
-    assert teacher_gen.teacher_identity(luna) == {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'low'}
+    assert teacher_gen.teacher_identity(luna) == {'model_id': 'gpt-6-luna', 'provider': 'openai-codex', 'reasoning_effort': 'low',
+                                                  'reasoning': 'summary'}
     http = teacher_gen.make_teacher({'model_id': 'm', 'endpoint': 'https://openrouter.ai/api/v1/', 'api_key_env': 'K'})
     command = teacher_gen.queue_command(http, tmp_path, tmp_path / 'q.jsonl', tmp_path / 'j.jsonl')
     assert command[command.index('--chat-completions-url') + 1] == 'https://openrouter.ai/api/v1/chat/completions'
     assert command[command.index('--api-key-env') + 1] == 'K' and '--provider' not in command
     assert teacher_gen.teacher_identity(http) == {'model_id': 'm', 'provider': 'openrouter',
-                                                  'endpoint': 'https://openrouter.ai/api/v1'}
+                                                  'endpoint': 'https://openrouter.ai/api/v1', 'reasoning': 'raw'}
     for bad in ({'model_id': 'm'}, {'model_id': 'm', 'endpoint': 'http://x', 'provider': 'openai-codex'},
                 {'model_id': 'm', 'provider': 'openai-codex', 'api_key_env': 'K'}):
         with pytest.raises(ValueError):
@@ -97,3 +98,51 @@ def test_every_teacher_identity_names_its_provider():
         teacher = teacher_gen.make_teacher({'model_id': 'm', 'endpoint': endpoint})
         identity = teacher_gen.teacher_identity(teacher)
         assert identity['provider'] == provider and identity['model_id'] == 'm' and identity['endpoint'] == endpoint
+
+
+def test_vertex_gemini_teacher_mints_its_token_per_episode_and_records_hidden_reasoning():
+    import sys
+    import pytest
+    vertex = 'https://aiplatform.googleapis.com/v1/projects/p/locations/global/endpoints/openapi'
+    teacher = teacher_gen.make_teacher({'model_id': 'google/gemini-3.1-pro-preview', 'endpoint': vertex,
+                                        'api_key_env': 'VERTEX_ACCESS_TOKEN',
+                                        'api_key_command': [sys.executable, '-c', 'print("tok-1")']})
+    assert teacher.chat_config == teacher_gen.default_chat_config(vertex)
+    assert teacher.chat_config['x_natlang_omit_seed'] is True
+    identity = teacher_gen.teacher_identity(teacher)
+    assert (identity['provider'], identity['reasoning']) == ('google-vertex', 'hidden')
+    env = teacher_gen.episode_env(teacher, {'A': '1'})
+    assert env == {'A': '1', 'VERTEX_ACCESS_TOKEN': 'tok-1'}
+    plain = teacher_gen.make_teacher({'model_id': 'm', 'endpoint': 'https://integrate.api.nvidia.com/v1'})
+    assert teacher_gen.episode_env(plain, {'A': '1'}) == {'A': '1'}
+    assert teacher_gen.teacher_identity(plain)['reasoning'] == 'raw'
+    override = teacher_gen.make_teacher({'model_id': 'm', 'endpoint': vertex, 'reasoning': 'summary'})
+    assert teacher_gen.teacher_identity(override)['reasoning'] == 'summary'
+    for bad in ({'model_id': 'm', 'endpoint': vertex, 'reasoning': 'thoughts'},
+                {'model_id': 'm', 'endpoint': vertex, 'api_key_command': ['gcloud']},       # no api_key_env
+                {'model_id': 'm', 'provider': 'openai-codex', 'api_key_command': ['x'], 'api_key_env': 'K'}):
+        with pytest.raises(ValueError):
+            teacher_gen.make_teacher(bad)
+    empty = teacher_gen.make_teacher({'model_id': 'm', 'endpoint': vertex, 'api_key_env': 'K',
+                                      'api_key_command': [sys.executable, '-c', 'pass']})
+    with pytest.raises(RuntimeError):
+        teacher_gen.episode_env(empty, {})
+
+
+def test_an_account_without_balance_retires_its_teacher():
+    assert any(m in '{"error":{"code":"1113","message":"Insufficient balance or no resource package."}}'
+               for m in teacher_gen.PERMANENT_PROVIDER_FAILURES)
+
+
+def test_completion_urls_keep_the_api_base_path_and_nim_sends_one_reasoning_alias():
+    url = teacher_gen.completions_url
+    assert url('http://127.0.0.1:8082') == 'http://127.0.0.1:8082/v1/chat/completions'
+    assert url('https://integrate.api.nvidia.com/v1/') == 'https://integrate.api.nvidia.com/v1/chat/completions'
+    assert url('https://openrouter.ai/api/v1') == 'https://openrouter.ai/api/v1/chat/completions'
+    assert url('https://api.z.ai/api/paas/v4') == 'https://api.z.ai/api/paas/v4/chat/completions'
+    assert url('https://generativelanguage.googleapis.com/v1beta/openai') == \
+        'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+    vertex = 'https://aiplatform.googleapis.com/v1/projects/p/locations/global/endpoints/openapi'
+    assert url(vertex) == vertex + '/chat/completions'
+    assert teacher_gen.default_chat_config(url('https://integrate.api.nvidia.com/v1')) == {
+        'top_p': 0.95, 'x_natlang_history_reasoning': 'reasoning_content'}

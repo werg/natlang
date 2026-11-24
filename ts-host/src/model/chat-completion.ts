@@ -291,14 +291,20 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       delete message.natlang_host_generated;
     }
     // Modern vLLM reads `reasoning`; older compatible servers use `reasoning_content`.
-    // Carry both exact aliases so interleaved history is retained by either parser.
+    // Carry both exact aliases so interleaved history is retained by either parser. Servers that parse the two as one
+    // field reject the pair as a duplicate (NIM's Mistral Large 4 and MiniMax M3.1): the `x_natlang_history_reasoning`
+    // collection control sends only the one they read (or none).
+    const historyReasoning = options.request?.x_natlang_history_reasoning ?? 'both';
     for (const message of messages) {
       if (message.role !== 'assistant') continue;
       const legacy = message.reasoning_content, current = message.reasoning;
       if (typeof legacy === 'string' && typeof current === 'string' && legacy !== current)
         throw new Error('conflicting reasoning history aliases');
       const reasoning = typeof legacy === 'string' ? legacy : current;
-      if (typeof reasoning === 'string') message.reasoning = message.reasoning_content = reasoning;
+      if (typeof reasoning !== 'string') continue;
+      delete message.reasoning; delete message.reasoning_content;
+      if (historyReasoning === 'both' || historyReasoning === 'reasoning') message.reasoning = reasoning;
+      if (historyReasoning === 'both' || historyReasoning === 'reasoning_content') message.reasoning_content = reasoning;
     }
     for (const message of messages) for (const call of message.tool_calls ?? [])
       if (call.function?.name && forward[call.function.name]) call.function.name = forward[call.function.name];
@@ -358,6 +364,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       const omitSeed = wireRequest.x_natlang_omit_seed === true;
       delete wireRequest.x_natlang_omit_seed;
       delete wireRequest.x_natlang_host_call_fields;
+      delete wireRequest.x_natlang_history_reasoning;
       if (request.seed !== null && !omitSeed) wireRequest.seed = request.seed;
       // The configured collection cap and the runtime's remaining allowance
       // both apply. A per-turn allowance must not erase a smaller explicit cap.

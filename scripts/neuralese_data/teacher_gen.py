@@ -193,11 +193,19 @@ def order_tasks(rows, rank, seed):
 GEMINI_HOST_CALL_FIELDS = {'extra_content': {'google': {'thought_signature': 'skip_thought_signature_validator'}}}
 
 
+# Gemini's OpenAI-compatible endpoints: AI Studio (API key) and Vertex AI (the GCP project's billing and credits)
+GEMINI_HOSTS = ('generativelanguage.googleapis.com', 'aiplatform.googleapis.com')
+
+
 def default_chat_config(url):
-    """Request controls when none are given: top-p; for Gemini's OpenAI endpoint also no `seed` field (it rejects it) and
+    """Request controls when none are given: top-p; for Gemini's OpenAI endpoints also no `seed` field (it rejects it) and
     Google's documented bypass signature on the function calls the runtime wrote itself (it rejects unsigned ones)."""
-    gemini = 'generativelanguage.googleapis.com' in url
-    return {'top_p': 0.95, **({'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': GEMINI_HOST_CALL_FIELDS} if gemini else {})}
+    gemini = any(host in url for host in GEMINI_HOSTS)
+    # NIM serves several models behind a parser that reads `reasoning` and `reasoning_content` as one field and rejects
+    # the pair the runtime sends by default (Mistral Large 4, MiniMax M3.1: "duplicate field"); one alias suits all of them
+    nim = 'integrate.api.nvidia.com' in url
+    return {'top_p': 0.95, **({'x_natlang_omit_seed': True, 'x_natlang_host_call_fields': GEMINI_HOST_CALL_FIELDS} if gemini else {}),
+            **({'x_natlang_history_reasoning': 'reasoning_content'} if nim else {})}
 
 
 def mem_available_gb():
@@ -209,8 +217,11 @@ def mem_available_gb():
 
 
 def completions_url(endpoint):
+    """A bare server (`http://host:port`) serves `/v1/chat/completions`; an endpoint with a path is the API's base
+    (`.../v1`, Gemini's `/v1beta/openai`, Vertex's `.../endpoints/openapi`, Z.ai's `/api/paas/v4`): `/chat/completions`."""
+    from urllib.parse import urlparse
     endpoint = endpoint.rstrip('/')
-    return endpoint + ('/chat/completions' if endpoint.endswith('/v1') else '/v1/chat/completions')
+    return endpoint + ('/chat/completions' if urlparse(endpoint).path.strip('/') else '/v1/chat/completions')
 
 
 def chat_config_path(work, model_id):
@@ -222,7 +233,8 @@ def chat_config_path(work, model_id):
 PROVIDER_FAILURE = 'provider request retry exhausted'
 # a provider refusing the account itself (credits or quota spent): every further request fails the same way, so the
 # teacher is retired for this launch instead of deferring task after task (an hour-long cooldown still wakes 8 slots)
-PERMANENT_PROVIDER_FAILURES = ('credit balance is too low', 'insufficient_quota', 'exceeded your current quota')
+PERMANENT_PROVIDER_FAILURES = ('credit balance is too low', 'insufficient_quota', 'exceeded your current quota',
+                               'Insufficient balance')   # the last: Z.ai code 1113, OpenCode Zen 402
 # decide() collection needs the actor's exact native capture, which a hosted teacher endpoint does not give
 UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 
@@ -230,7 +242,25 @@ UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 # HTTP teacher endpoints by host -> the provider that served them (manifest records name a provider for every teacher)
 ENDPOINT_PROVIDERS = {'integrate.api.nvidia.com': 'nvidia-nim', 'openrouter.ai': 'openrouter',
                       'generativelanguage.googleapis.com': 'google-gemini', 'api.z.ai': 'zai',
-                      'api.anthropic.com': 'anthropic', 'api.openai.com': 'openai'}
+                      'api.anthropic.com': 'anthropic', 'api.openai.com': 'openai',
+                      'aiplatform.googleapis.com': 'google-vertex', 'api.groq.com': 'groq', 'opencode.ai': 'opencode-zen'}
+
+# What a teacher's recorded think block is (owner 2026-11-24: teacher reasoning stays in SFT data as zero-weight
+# context; a summary is never presented as a raw trace): `raw` the model's own reasoning tokens (open-weight reasoning
+# models' `reasoning_content` on NIM, OpenRouter, Groq, Z.ai, a local server), `summary` a provider-written summary of
+# hidden reasoning (Codex reasoning summaries, Claude's summarized thinking), `hidden` none returned (Gemini without
+# include_thoughts). A spec's "reasoning" overrides the provider's default.
+REASONING_KINDS = ('raw', 'summary', 'hidden')
+PROVIDER_REASONING = {'openai-codex': 'summary', 'anthropic': 'summary', 'nvidia-nim': 'raw', 'openrouter': 'raw',
+                      'groq': 'raw', 'zai': 'raw', 'google-gemini': 'hidden', 'google-vertex': 'hidden'}
+
+
+def reasoning_kind(teacher):
+    """The teacher's recorded reasoning kind: its spec's, else its provider's, else raw for a local server."""
+    if getattr(teacher, 'reasoning', None):
+        return teacher.reasoning
+    provider = teacher.provider or endpoint_provider(teacher.endpoint)
+    return PROVIDER_REASONING.get(provider, 'raw' if str(provider).startswith('local') else 'unknown')
 
 
 def endpoint_provider(endpoint):
@@ -248,8 +278,23 @@ def teacher_identity(teacher):
     """What a manifest record names as its teacher: the model, the provider that served it, and its transport (a natlang
     Pi provider with its reasoning effort, or an HTTP endpoint)."""
     if teacher.provider:
-        return {'model_id': teacher.model_id, 'provider': teacher.provider, 'reasoning_effort': teacher.reasoning_effort}
-    return {'model_id': teacher.model_id, 'provider': endpoint_provider(teacher.endpoint), 'endpoint': teacher.endpoint}
+        return {'model_id': teacher.model_id, 'provider': teacher.provider, 'reasoning_effort': teacher.reasoning_effort,
+                'reasoning': reasoning_kind(teacher)}
+    return {'model_id': teacher.model_id, 'provider': endpoint_provider(teacher.endpoint), 'endpoint': teacher.endpoint,
+            'reasoning': reasoning_kind(teacher)}
+
+
+def episode_env(teacher, env):
+    """The environment of one episode's collector: a teacher with `api_key_command` (a short-lived bearer token, e.g.
+    Vertex AI's `gcloud auth application-default print-access-token`) gets a freshly minted key in `api_key_env`, so a
+    campaign outlives the token's hour."""
+    command = getattr(teacher, 'api_key_command', None)
+    if not command:
+        return env
+    token = subprocess.run(command, capture_output=True, text=True, timeout=60, check=True).stdout.strip()
+    if not token:
+        raise RuntimeError(f'api_key_command of {teacher.model_id} printed no key')
+    return {**env, teacher.api_key_env: token}
 
 
 def queue_command(teacher, work, queue_file, journal):
@@ -267,17 +312,24 @@ def make_teacher(spec):
     """A teacher from its --teacher spec: an OpenAI-compatible endpoint, or a natlang Pi provider (`provider`)."""
     if not spec.get('model_id') or bool(spec.get('endpoint')) == bool(spec.get('provider')):
         raise ValueError('each teacher needs model_id and exactly one of endpoint or provider')
+    if spec.get('reasoning') is not None and spec['reasoning'] not in REASONING_KINDS:
+        raise ValueError(f'reasoning must be one of {REASONING_KINDS}')
+    if spec.get('api_key_command') is not None and not (isinstance(spec['api_key_command'], list) and spec['api_key_command']
+                                                        and spec.get('api_key_env')):
+        raise ValueError('api_key_command is an argv list and needs api_key_env')
     if spec.get('provider'):
-        extra = set(spec) & {'chat_completions_url', 'api_key_env', 'chat_config'}
+        extra = set(spec) & {'chat_completions_url', 'api_key_env', 'chat_config', 'api_key_command'}
         if extra:
             raise ValueError(f'a provider teacher takes no HTTP controls: {sorted(extra)}')
         return SimpleNamespace(model_id=spec['model_id'], provider=spec['provider'], endpoint=None,
                                reasoning_effort=spec.get('reasoning_effort', 'low'), slots=int(spec.get('slots', 2)),
+                               reasoning=spec.get('reasoning'),
                                min_failed=int(spec.get('min_failed', 0)), cool_until=0., failures=0, enabled=True)
     url = spec.get('chat_completions_url') or completions_url(spec['endpoint'])
     return SimpleNamespace(model_id=spec['model_id'], provider=None, endpoint=spec['endpoint'].rstrip('/'),
                            chat_completions_url=url, api_key_env=spec.get('api_key_env'), slots=int(spec.get('slots', 2)),
                            chat_config=default_chat_config(url) if spec.get('chat_config') is None else spec['chat_config'],
+                           reasoning=spec.get('reasoning'), api_key_command=spec.get('api_key_command'),
                            min_failed=int(spec.get('min_failed', 0)), cool_until=0., failures=0, enabled=True)
 
 
@@ -503,7 +555,12 @@ class Generator:
             queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
             command = queue_command(teacher, self.work, queue_file, directory / f'{key}.journal.jsonl')
             with (directory / f'{key}.log').open('a') as handle:
-                process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
+                try:
+                    env = episode_env(teacher, self.env)
+                except Exception as error:   # no key: the request fails as a provider failure (deferred, no verdict)
+                    handle.write(json.dumps({'event': 'api key command failed', 'error': repr(error)[:300]}) + '\n')
+                    env = self.env
+                process = subprocess.Popen(command, cwd=REPO, env=env, stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
                 while process.poll() is None:
                     if self.stop.wait(2):

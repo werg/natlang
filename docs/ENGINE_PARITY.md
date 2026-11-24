@@ -11,6 +11,13 @@ the next action, and the row leaves when the gap closes.
 | Python native engine | `training/neuralese/natlang_neuralese/serve/` | training, exact reference, gradients | one repository with the client |
 | SGLang actor | `serve/sglang_actor.py` in front of werg/sglang-natlang | RL collection, held eval | one repository with the client; experiments adopt it at their next pin |
 
+SGLang hosts each keep their own fork checkout (an editable install: `training/neuralese/sglang-fork.json` names the
+commit, the actor attests the one it imports as `serving_engine.fork`). Pop's stayed at dbc51ddb72 (no tool grammar, no
+FP8 weights: its actors sampled tool calls unconstrained) until 2026-11-24, when it moved to 17e3458c2e for its standing
+collection actor; that actor's `/v1/neuralese/info` then matched the DGX collection actor's capabilities, routes and
+prompt rendering identity, differing only in `max_running`. Check `serving_engine.fork.commit` on every host when the
+pin moves.
+
 Mechanical guards:
 
 - The client builds score items and reads score results in one place (`ts-host/src/model/decision-scoring.ts`), for the

@@ -10052,3 +10052,139 @@ uncapped pool instead of 30%.
 ### 2026-11-24 — Separate native diagnostic infrastructure from training data
 
 Actual0039 retained-state metadata contained692MB/52,364members despitezero authored teacher calls; installed runtimes and build caches dominated. Future joined diagnostic packs omit only exact managed `workspaces/*/state/{builds,native-runtime}` anchors, preserving nativeSQL/WAL/model journals/source/CAS/blobs/effects and user storage. Future dataset snapshots exclude unreferenced native infrastructure; actual verified artifact references override that exclusion. Existing immutable registered packs remain protected. After durable nativeIR extraction and fsynced ingestion, the common ingester retires only unreferenced stopped pack payloads/inventories. Admitted partial/failed goals qualify equally; unresolved/interrupted cases remain for salvage. No original trajectories are removed and no new admission/goal-success gate is imposed. Opt-outs, full mechanism inventory, scope citations and actual145test evidence: `NATIVE_CAPTURE_RETENTION_20261124.md`. This enters new producer/reader pins at their normal resume; no teacher or training hold.
+## 2026-11-24 00:30 Pop is a standing aei1 collection actor whenever no held measurement holds it
+
+Pop's GPU had been idle for hours (held moved to the DGX series; an idle held server was stopped at 00:05). It now
+collects aei1 episodes for the lineage head.
+
+**Engine.** SGLang through `pop_rl_actor serve-checkpoint` (Pop's supported path), front code at the aei1 runtime commit
+bdf4c8721350 (read-back fixes d16437be8 and f109bedfd on by default), collection law: FP8 weights, FP8 KV, hybrid SWA,
+overlap scheduler, 32 running (KV pool 493k tokens, 0.97 GB GPU headroom after graph capture). Ready in 63-108 s.
+Its `/v1/neuralese/info` equals the DGX collection actor's in capabilities (`decide`, `score`, `native.capture`,
+`native.text-write`, ...), routes, prompt rendering identity, dialects and context; the serving engine differs only in
+`max_running` (32 vs 160).
+
+**Fixed on the way.**
+- Pop's fork checkout was at dbc51ddb72: no tool grammar (tool calls sampled unconstrained) and no FP8 weights. Moved to
+  17e3458c2e (the DGX's head, `sglang-fork.json`) by bundle, with no live Pop actor. Pop's held-v4 series changes engine
+  identity with it (telemetry only; it re-measures on the new engine). ENGINE_PARITY notes the per-host checkout check.
+- `pop_rl_actor serve-checkpoint --weight-dtype fp8` on Pop was dropped twice: `serve_checkpoint` did not pass it to
+  `pop_sglang` and `pop_actor_driver.serve_sglang` never sent `--sglang-weight-dtype`. Both pass it now, so an actor
+  attesting `-w-fp8` serves FP8.
+- `--overlap-schedule` for remote serves (Pop driver; held settings carry no key, so held engines are unchanged).
+- Pop serves are serialized across processes (`pop_serve_lock`): a collection serve and a held serve stopped each
+  other's actors when they overlapped.
+- `test_held_dispatch::test_pop_actor_start_reuses...` ran the real `stop_pop_fills` and stopped live units on the
+  host (it stopped this collector at 00:17); it is mocked now.
+
+**Driver** (`expert_iteration async-drive`, takes effect at a driver restart):
+- `--rebind-actor HOST@FRONT_URL[=SLOTS]`: per-actor collector slots (default `--remote-slots`).
+- A target on Pop's host is a standing Pop actor. `pop_step` (every 2 min, SFT phase only) serves the lineage head with
+  the collection law and starts its collector `<collection unit>-pop`. At a new policy it serves the published
+  checkpoint (copied, not rebound in place: Pop's driver relaunches a dead engine from the checkpoint it was served, so
+  an in-place rebind would revert there). The publication's `rebind_remote` skips Pop.
+- **Yield:** every Pop serve stops `*-collect-*-pop` collectors with the fills (`stop_pop_fills`), so a held
+  measurement from any entry point (driver held-v4 via `pop_held_measure`, `pop-held.sh`, grpo `--held-remote pop`)
+  takes the GPU. `pop_step` serves Pop again only when `pop_busy()` is clear: no `pop-held.sh base|ckpt` or
+  `pop_rl_actor held-eval` process on the DGX, no other serve holding the lock, and not held-v4 here (`POP_LOCK`).
+  The collection runs 32 running, not the held engine's 20, so `pop-held.sh` never reuses it.
+
+Tests: `test_async_train.py` (target parsing and slots, Pop unit naming, Colab-only rebind, yield and re-serve,
+GRPO-phase stop, held process detection and serve lock, collection law passed to the driver).
+
+**Throughput** (measurement collector `aei1-collect-v0000-pop`, 32 slots, collecting sft-v9 e15b20a8 into
+`collect/v0000-e15b20a86f1c-pop`, which the round prepare reads with the policy's other collections): 46 finished
+episodes/h over 00:30-01:01 (24 episodes; 33 since 00:20). Pop is not the limit: 5.8 requests in flight on average
+(of 32), 372 generated tok/s, the GPU 25-96% busy; episodes spend most of their time between model calls. Episodes
+scale with slots until Pop saturates (decode ~26 ms a step at 20 running), so the driver argument is 64 slots
+(collector claim 23 GB, measured use 3.5 GB at 32 slots):
+`--rebind-actor pop-os@http://100.73.236.5:18531=64` beside the Colab target (`--remote-slots 64` stays its default).
+## 2026-11-24 01:00 Teacher providers for aei1's campaign: Gemini on Vertex (credits), Nemotron 3.5 Super, ERNIE free; Nemotron 0/48 explained; three harness fixes (teacher-providers strand)
+
+**Nemotron 3 Ultra's 0/48 in `aei1/teacher-r0001`.** 45 of its 48 episodes were third attempts (`-a2`) on tasks Luna and
+Sol had both failed (Sol got 1/3 on that tier); with 1 slot behind 3-attempt routing it only ever saw that tail. Its
+records are well formed (tool calls on 549/549 targets, raw `reasoning_content` on all, 10 tool errors in 181 tool
+results). Its 0-turn `budget_exhaustion` records (12) are 40-call budget stops whose turns were not exported, not
+stalls. Inside the tail two oracle defects that every teacher hit: bAbI task 15 golds the singular species ("wolf" for
+"Sheep are afraid of wolves": Luna, Sol and Nemotron all answered "wolves"), task 19 golds direction letters ("s,e")
+the instruction never asks for (19 + 31 such tasks in the campaign's queue). Fixed in the scorer (below). Not a
+Nemotron harness bug; no harness bug found in its records.
+
+**Providers probed (2026-11-24 00:05-00:45, keys from `~/.config/natlang/*.env`; licenses and terms as facts):**
+- **Google Vertex AI**, project `awareness-481308` via the ADC user credentials (`gcloud auth application-default`):
+  Gemini 3.1 Pro Preview and Gemini 4 Argon serve (`trafficType ON_DEMAND`, billed to the project: the owner's
+  generation credits). Credit balance not readable here (Cloud Billing API disabled on the project; ADC is an
+  `authorized_user`, no `gcloud auth login` account). Reasoning **hidden** (no thoughts without `include_thoughts`;
+  with it Vertex's OpenAI endpoint puts a *thought summary* inside `content` as `<think>...</think>`, which the
+  runtime would treat as the answer text, so it stays off). Thought signatures round-trip (`extra_content`).
+  Gemini API terms (paid tier: prompts not used for product improvement).
+- **Google AI Studio key** (`GEMINI_API_KEY`): **free tier only** — every Pro and Gemini 4 model is `limit: 0`
+  (`generate_content_free_tier_*`, `RESOURCE_EXHAUSTED`); Flash models answer. The credits are on Vertex, not this key.
+- **NVIDIA NIM** (free API credits): Nemotron 3.5 Super VL 120B-A12B, Nemotron 3 Ultra, Mistral Large 4, MiniMax M3.1
+  Flash, Kimi K3.1 Pro, Step 5 Preview, GLM 5.3 Flash answer tool calls with raw `reasoning_content`. One
+  account-wide rate limit (429 "Too Many Requests" with ~12 qualification slots plus production): few slots in total.
+  Kimi K3.1 Pro, Step 5 and GLM 5.3 Flash took 74-180 s for a one-line tool call. Terms: NVIDIA API Catalog trial
+  credits; each model's weight license is on its card (not re-read here; all licenses are acceptable).
+- **OpenRouter**: credit $15.15 bought, $15.15 used ($0 left); free models 1,000 requests/day (the key bought >= $10)
+  and 20 requests/min. An episode uses ~38 requests: ~26 free episodes a day across all free models. ERNIE 5.5 Flash
+  Preview, Ling 3.2 Flash, dots 3 note, Nemotron 3 Ultra `:free` answer with raw reasoning.
+- **Groq** (free tier): gpt-oss-120b (raw reasoning) and Qwen 3.8 27B answer, but 8,000 tokens/min per model: below
+  one of our prompts (80-140k tokens per episode). Not usable. (A Python client needs a User-Agent: Cloudflare 1010.)
+- **Z.ai**: `1113 Insufficient balance or no resource package` on every GLM (5.4, 5.3, 5.3 Flash; general and coding
+  endpoints). **OpenCode Zen**: paid models 402 "Insufficient balance"; its free models are restricted to the official
+  OpenCode client (plans/OPENCODE_GENERATION.md), not a direct API. **Mistral** and **OpenAI platform** keys: invalid.
+- **Codex (Luna, Sol)**: no 429 or usage-limit error in the campaign's 300 Codex episodes at 4 + 2 slots; the
+  subscription's window usage was not readable.
+
+**Qualification** (`ops/ei/teacher-qual-20261124/`, pin 1c177e3fc609 for the first runs, 19459324d after the fixes):
+20 pool tasks of `aei1/teacher-r0001` (10 Luna first-attempt successes, 10 failures, one per family, bAbI 15/19 left
+out; none in the held-v2/v3/v4 closure by `held_eval.training_exclusion_ids`), one episode each, 40-call budget.
+
+| Teacher | Luna-solved half | Luna-failed half | Total | s/episode | Reasoning |
+|---|---|---|---|---|---|
+| Gemini 3.1 Pro Preview (Vertex) | 10/10 | 3/10 | 13/20 | 142 | hidden |
+| Gemini 4 Argon (Vertex) | 10/10 | 7/10 | 17/20 | 182 | hidden |
+| Nemotron 3.5 Super VL 120B-A12B (NIM) | 5/10 | 4/10 | 9/20 | 109 | raw (253/253 targets) |
+| ERNIE 5.5 Flash Preview (OpenRouter free) | 4/10 | 3/10 | 7/20 | 128 | raw (273/384) |
+| Nemotron 3 Ultra (NIM) | 0/2 | | 0/2 (stopped: 1,400 s/episode under NIM throttling) | | raw |
+| Mistral Large 4, MiniMax M3.1, Kimi K3.1 (NIM, after fix 2) | | | 0 finished after 25 min (NIM throttled) | | raw |
+
+Gemini episodes use ~16 calls, ~100k prompt tokens (estimate from rendered messages) and ~2k visible output tokens
+plus hidden thinking: roughly $0.2-0.4 per episode at list price before Vertex's implicit prefix caching (not read
+from billing). Open: Gemini answers some `decide()` calls with 400 "Expected a valid JSON object in the request"
+(259 failed nested calls over 35 episodes, mostly Argon); Vertex returns exactly this for a history function call whose
+`arguments` is not a JSON object (reproduced). The recorded histories hold no such call, so the request that decide()
+builds for a hosted endpoint is the suspect; not yet traced. Ruled out on Vertex (each answers 200): unknown top-level
+fields (`guidance`, `foo`), `tool_choice: required`, a non-object tool `parameters` schema, a non-object
+`response_format` schema, a history with host-written calls and no `tools` (the decision readout's shape), tool
+content as a parts array.
+
+**Specs (`expert_iteration.TEACHERS`, also `ops/ei/teachers.json`):** Haiku 4 (retired while the account is empty),
+Luna 6 and Sol 4 (`min_failed` 1) (were 4 and 2; no Codex limit errors), Nemotron 3.5 Super 2 + Nemotron 3 Ultra 1 (NIM:
+one account limit), ERNIE 5.5 Flash 1 (OpenRouter free quota), Gemini 4 Argon 4 + Gemini 3.1 Pro 2 (`min_failed` 1:
+paid tokens go to tasks another teacher failed). The campaign reads `ops/ei/teachers.json` at each launch from the
+first driver restart on a pin with these commits; until then the running `aei1-teacher` keeps its launch's specs.
+
+**Harness fixes (default on, tests):**
+1. `teacher_gen.completions_url`: an endpoint with a path is the API base. Vertex (`.../endpoints/openapi`), Z.ai
+   (`/api/paas/v4`) and AI Studio (`/v1beta/openai`) got `/v1/chat/completions` appended: 404 on every request.
+2. ts-host `x_natlang_history_reasoning` (`both` default, `reasoning_content`, `reasoning`, `none`): NIM's Mistral
+   Large 4, MiniMax M3.1 and Kimi K3.1 reject the `reasoning` + `reasoning_content` pair the runtime sends on history
+   turns ("duplicate field reasoning_content"): every second turn failed, the task deferred. teacher_gen's NIM default
+   sends `reasoning_content` only. Inventory: the only sender of reasoning history to an OpenAI-compatible server is
+   `ts-host/src/model/chat-completion.ts` (the HTTP transport); the Pi provider path (`pi-translation.ts`) speaks the
+   providers' own formats; engines (managed llama-server, wllama, native, SGLang) are receivers, unchanged.
+3. `task_packet`: bAbI task 15 plural species and task 19 spelled-out directions in gold order are accepted (classifier
+   `babi-alias/4`, `NATLANG_BABI_ALIAS_REPAIR=0` restores `babi-article/3`). **New scoring series** for held tasks of
+   those two families. Not changed: the generator's alias lists (`scripts/rl_tasks/sources/reading.py`).
+4. teacher spec `api_key_command` (a fresh Vertex token per episode; ADC tokens last an hour), `reasoning` recorded per
+   teacher in the manifest (`raw | summary | hidden`; Codex and Claude: summary, NIM/OpenRouter/Groq/Z.ai: raw, Gemini:
+   hidden), Vertex/Groq/OpenCode hosts named, "Insufficient balance" retires a teacher.
+5. `expert_iteration`: the campaign reads `ops/ei/teachers.json` at each launch (else `TEACHERS`), and its launch
+   script sources `openrouter.env`.
+
+**Reasoning path checked end to end** (owner 2026-11-24: teacher reasoning may stay as zero-weight context): a real
+Nemotron episode turn rendered by `sft_sources.call_row` with the round's tokenizer gives 144 zero-weight tokens
+(its raw reasoning through `</think>`) and 25 target tokens (the tool call); round r0001's mix holds 22,312 teacher
+chains (`--teacher-think context`, think treatment default `context`; a filled-reasoning unit replaces an episode only
+where it exists).

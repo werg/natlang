@@ -170,7 +170,8 @@ def test_bank_from_program_fits_adapts_a_held_program_into_a_servable_release(tm
     args = argparse.Namespace(programs=[str(p) for p in programs], held=[str(held)], out=str(tmp_path / 'bank'),
                               checkpoint=str(tmp_path / 'native.pt'), checkpoint_sha256=None, base=None, device=engine.device,
                               dtype=None, store_scratch=None, steps=1, rows_per_world=8, seed=0, recipe=json.dumps(recipe),
-                              target_pattern=r'self_attn\.(q_proj|k_proj|v_proj|out_proj)|conv\.(in_proj|out_proj)')
+                              target_pattern=r'self_attn\.(q_proj|k_proj|v_proj|out_proj)|conv\.(in_proj|out_proj)',
+                              max_worlds=6, held_support_rows=4)
     P.bank(args)
     bank = tmp_path / 'bank'
     pool = json.loads((bank / 'pool' / 'pool.json').read_text())
@@ -178,6 +179,7 @@ def test_bank_from_program_fits_adapts_a_held_program_into_a_servable_release(tm
                                                                          'fam2': 'meta-train', 'held': 'held'}
     assert json.loads((bank / 'learner' / 'state.json').read_text())['step'] == 1
     assert (bank / 'bank-manifest.json').exists()
+    assert json.loads((bank / 'adapt' / 'held' / 'result.json').read_text())['receipt']['support_rows'] == 4
     served = load_native_engine(str(tmp_path / 'native.pt'), device=engine.device)
     entries = bind_adapter_release(served, bank / 'adapt' / 'held')
     assert served.rl_policy_binding['adapters']['stack'] == entries
@@ -320,3 +322,20 @@ def test_colab_fit_runs_as_a_preemptible_tenant_and_brings_the_release_home(tmp_
         raise AssertionError('a local fit state must not be taken over silently')
     except SystemExit as stop:
         assert 'local fit' in str(stop)
+
+
+def test_a_subset_is_a_stable_pinned_manifest_of_the_split(tmp_path):
+    from natlang_neuralese.rl.held_eval import write_manifest, MANIFEST_SCHEMA
+    prog = tmp_path / 'prog'
+    rows = [{'id': f't{i}', 'family': 'fam'} for i in range(10)]
+    write_manifest(prog / 'dev', {'schema': MANIFEST_SCHEMA, 'program': {'family': 'fam', 'split': 'dev'},
+                                  'tasks': [{'id': r['id']} for r in rows], 'excluded_split_groups': ['g']}, rows)
+    (prog / 'dev' / 'engine.json').write_text('{"e": 1}')
+    P.main(['subset', '--dir', str(prog), '--tasks', '4'])
+    sub = json.loads((prog / 'dev4' / 'manifest.json').read_text())
+    cases = [json.loads(line) for line in (prog / 'dev4' / 'cases.jsonl').read_text().splitlines()]
+    assert len(sub['tasks']) == len(cases) == 4 and {t['id'] for t in sub['tasks']} == {c['id'] for c in cases}
+    assert sub['subset_of']['tasks'] == 4 and (prog / 'dev4' / 'engine.json').read_text() == '{"e": 1}'
+    P.main(['subset', '--dir', str(prog), '--tasks', '6', '--name', 'dev6'])
+    six = {t['id'] for t in json.loads((prog / 'dev6' / 'manifest.json').read_text())['tasks']}
+    assert {t['id'] for t in sub['tasks']} < six                                # stable order: a larger subset extends it
