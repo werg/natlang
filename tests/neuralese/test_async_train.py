@@ -1730,6 +1730,54 @@ def test_the_round_cap_binds_on_forward_tokens_and_prefers_unseen_aux_units(tmp_
     assert sft_sources.trained_units([legacy, new]) == {('t1', 'filled:a'), ('op1', '0')}
 
 
+def test_an_episode_the_lineage_trained_often_is_not_trained_again_and_repeats_go_least_trained_first(tmp_path):
+    # aei1 rounds 2-8 re-trained the fixed teacher pool every round (98% of round 5's filled episodes had trained before)
+    import numpy as np
+    import sft_sources
+
+    def chain(part, task, round_, n=100):
+        return {'part': part, 'task': task, 'round': round_, 'ids': np.zeros(n + 4, dtype=np.int32),
+                'segs': [(4, n, {'sample': np.zeros(n)})]}
+    builds = []
+    for i, (keys, units) in enumerate([({'teacher:1', 'teacher:2'}, [chain('filled', 't5', 'f:5')]),
+                                       ({'teacher:1'}, [chain('filled', 't5', 'f:5'), chain('filled', 't6', 'f:6')]),
+                                       (set(), [])]):
+        out = tmp_path / f'b{i}'
+        out.mkdir()
+        w = sft_sources.ZstdWriter(out / 'rows.jsonl.zst')
+        for k in sorted(keys):
+            w.write({'episode': k, 'task_id': 't' + k[-1]})
+        w.close()
+        sft_sources.write_trained_units(out, units)
+        builds.append(out)
+    exposure = sft_sources.trained_exposures(builds)
+    assert [exposure(('teacher', 't1', 'teacher:1')), exposure(('teacher', 't2', 'teacher:2')),
+            exposure(('teacher', 't3', 'teacher:3')), exposure(('filled', 't5', 'f:5')),
+            exposure(('filled', 't6', 'f:6'))] == [2, 1, 0, 2, 1]
+    assert exposure.keys == {'teacher:1', 'teacher:2'} and exposure.tasks == {'t1', 't2'}
+    assert exposure.units == {('t5', 'f:5'), ('t6', 'f:6')}
+    chains = [chain('teacher', 't1', 'teacher:1'), chain('teacher', 't2', 'teacher:2'),
+              chain('teacher', 't3', 'teacher:3'), chain('filled', 't5', 'f:5'), chain('filled', 't6', 'f:6'),
+              chain('filled', 't7', 'f:7')]
+    kept, report = sft_sources.drop_overexposed(chains, exposure, 2)
+    assert [c['round'] for c in kept] == ['teacher:2', 'teacher:3', 'f:6', 'f:7']
+    assert report['parts'] == {'filled': {'dropped_episodes': 1, 'dropped_weighted_target_tokens': 100},
+                               'teacher': {'dropped_episodes': 1, 'dropped_weighted_target_tokens': 100}}
+    assert sft_sources.drop_overexposed(chains, exposure, 0)[0] is chains        # opt-out: --max-prior-exposures 0
+    # the default (owner 2026-11-24, aei1 rounds): nothing an earlier build trained trains again
+    assert sft_sources.MAX_PRIOR_EXPOSURES == 1
+    kept, _ = sft_sources.drop_overexposed(chains, exposure, sft_sources.MAX_PRIOR_EXPOSURES)
+    assert [c['round'] for c in kept] == ['teacher:3', 'f:7']
+    assert sft_sources.drop_overexposed([chains[0]], exposure, 1)[0] == []       # an all-trained pool leaves nothing
+    # at the round cap the trained units go least trained first: teacher:1 (twice) after teacher:2 (once)
+    capped, _ = sft_sources.cap_target_tokens([chains[1], chains[0], chains[2]], 200, exposure.keys, exposure.units,
+                                              exposure=exposure)
+    assert [c['round'] for c in capped] == ['teacher:2', 'teacher:3']
+    capped, _ = sft_sources.cap_target_tokens([chains[0], chains[1]], 100, exposure.keys, exposure.units,
+                                              exposure=exposure)
+    assert [c['round'] for c in capped] == ['teacher:2']
+
+
 def test_recap_bounds_a_built_mix_and_records_what_it_left_out(tmp_path, monkeypatch):
     import numpy as np
     import pickle

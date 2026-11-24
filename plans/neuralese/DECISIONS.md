@@ -11526,3 +11526,76 @@ SharedWorker in the background; a skew beyond 10 s (it fails the same way).
 regression: recorded as no gain. Headroom is small (base 88%) and the fit drove its targets' NLL from 1.49 to 0.32
 nats (T3) on 480 rows, so overfitting the support rows is a candidate; not diagnosed yet. Next: verdict (base 0.727)
 fits on the L4 now, then tally, tree, retail, pubmed, iterate, multihop.
+
+## 2026-11-24 19:00 aei1 ran-out rise from round 1 to round 5: a measurement artefact; two mix defects fixed
+
+**Observation (brief).** Held-v3 on Pop: round 1 (8e634a0f) ran-out 0.0742, loop 0.0742; round 5 (3eb3f435) ran-out
+0.0977, loop 0.0898, 4 timeouts; the driver's verdict for round 5 vs round 1: +2.15 pts (p 0.39), ran-out +2.35 pts,
+so `neutral`, not adopted (the ran-out gate is +2). The two results come from different commits and series
+(0076be613/f0195216786c vs b63c35c54/5e44e8e2c585).
+
+**Cause of the ran-out rise: the reference's 52 lost episodes.** Round 1's result.json predates the `infra_lost`
+field. Read as recorded, only its 18 `infrastructure_error` episodes leave the pairs; its 34 `unresolved` episodes
+(result-less, 0 model calls, the 01:56 actor stop and the two engine deaths at 02:52 and 05:47, DECISIONS "Held
+episodes lost to infrastructure") stay in as failures that never run out, and all 52 sit in its ran-out denominator.
+Round 5 ran out on 9 of those 52 (task, sample) slots. `compare`'s `ran_out_rate_delta`, which the verdict's gate
+reads, was the difference of the two sides' unpaired rates. Relabelled (`held_eval relabel`, 56 lost: the 52 and four
+budget stops spent on resends) and paired:
+- round 5 vs round 1: -2.44 pts (p 0.36, CI [-6.9, +2.2]); ran-out 34 -> 41 of 456 pairs (+1.5 pts, McNemar 16:23,
+  p 0.34); tasks 32 up, 43 down;
+- round 5 vs start (sft-v9 e15b20a8, same scoring sources, ts-host tree differs): +2.54 pts (p 0.29); ran-out 60 -> 50
+  of 512 (-1.95 pts, p 0.26);
+- round 1 vs start: +5.49 pts (p 0.025); ran-out 51 -> 34 of 456 (-3.7 pts, p 0.02).
+On the 460 episodes round 1 measured: ran out start 51, round 1 38, round 5 41; budget stops with 0 recorded calls
+11/9/8 (no new mode); newly run-out slots 23 in round 5 vs 20 in round 1, spread over families (no task cluster); per
+episode model calls +0.74 (p 0.31), completion tokens +1,393 (p 0.017) vs round 1 but +447 (p 0.45) vs start, which
+shares round 5's scoring sources. So the rise is not shown to be real: round 5 sits between round 1 and the start on
+both measures, none of the round 5 vs round 1 differences is significant, and the token difference may be round 1's
+series. The 4 timeouts were 3600 s wall-clock stops (counted as ran out); round 5's 16,273 s elapsed against round
+1's 5,965 s is not a speed difference: round 1's elapsed covers only its last resumed session (233 episodes).
+
+**What rounds 2-8 trained on (mix build.json and rows.jsonl.zst, offline).** No drift towards long or budget-ending
+trajectories: rl-own 8.3-8.8 calls per episode, 1-4 episodes per round at >= 38 calls, think mean 3.1-3.6 k chars and
+10-12% of calls >= 8 k chars in every round; teacher episodes with consecutive identical actions 2.8% (r2), else
+5.9-6.6%.
+Two defects instead:
+1. **Repetition across rounds.** Each round re-trained the fixed teacher pool from the previous round's policy: kept
+   filled-reasoning episodes trained before 78% (r2), 83% (r3), 91% (r4), 98% (r5), 96% (r7); teacher 7% (r2) to 93%
+   (r5). Admitted episodes with 5-7 earlier exposures: 1,372 by round 8. `prefer-unseen` only puts unseen first; the
+   round size then fills with repeats, and which repeats is arbitrary (one subset every round).
+2. **Own share from old policies.** The per-task cap in `student_selection` picked own producers at random, so the
+   step-4 priority's frontier-policy preference (async-train §3) never applied under it. Round 7 kept 834 own
+   episodes: 383 from aei1 collections (43 from v0005, the trained policy's), 451 from grpo-v3/v4/v5 and sft-v7..v9
+   collections, which carry 55% of the own target tokens.
+
+**Fixes (default on, opt-outs, targeted tests).**
+- `held_eval`: `compare` (CLI) relabels a result written before `infra_lost` from its directory (`load_result`;
+  `--no-relabel`, `NATLANG_HELD_RELABEL=0`); `ran_out_rate` leaves lost episodes out of its denominator;
+  `ran_out_rate_delta` is the change over the matched pairs the primary uses (`ran_out_rate_delta_unpaired` kept;
+  `NATLANG_HELD_RAN_OUT_DELTA=unpaired` restores both). Consumers: the driver's `judge`/`verdict_stage` (through the
+  compare CLI), the dashboard (reads `ran_out_rate` as recorded; left out: it does not import held_eval and a
+  relabelled result is not written back, so round 1's dashboard row keeps 0.0742).
+- `sft_sources build`: no repetition, **the owner's decision for the current aei1 rounds (2026-11-24: "I don't want
+  to train on repetition at all"; not a standing rule)**: `--max-prior-exposures 1` (default; 0: off, the old rule;
+  N: an episode may train N times) drops every core episode (teacher, October, rl-own, jolt-guided) and every aux unit
+  (filled, operators, neuralese-graph, own-neuralese-graph, fallow22, live) that any `--prefer-unseen` build trained:
+  candidates before admission, aux units in `take_unit`, and all chains again before the round cap (reported in
+  `target_cap.exposure_cap` and the funnel's `over_exposed`). Trained units go least-trained first at the round cap
+  and in share-bounded aux parts (`Exposures`, also in `recap`), which matters only with the opt-out. A round with
+  little unseen data is smaller, never padded; a mix whose live goals all trained before skips the open-goal
+  distinctness check instead of failing. Round 8's mix under the rule would have kept ~1,270 of its ~9,170 episodes
+  (teacher 385 of 3,295, filled 232 of 5,005, own 655 of 867).
+  - Lineage: aei1's `prefer_unseen` holds sft-v7..v9 and r0001..r0007 but not `runs/sft-mix-20261120-v2`, sft-v6's
+    data (sft-v6 started from the base 5ff07638; sft-v7 from sft-v6): it belongs in the lineage. The GRPO runs
+    (grpo-v3..v6) are no ancestors (they trained from the base, not into this lineage); their episodes are repeats
+    only where a lineage build trained them, which the rows of sft-v7..v9 and the rounds already record.
+- `sft_sources build`: `--own-cap-order recent` (default; `any`: old rule) ranks the frontier policy's and its
+  previous policy's own successes before older policies' under the per-task, family and wrapper caps.
+Round 5's verdict under the fixed compare: -2.44 pts, neutral, not adopted (unchanged outcome).
+
+**Not checked.** Re-measuring round 1 on the current series (Pop, ~1.5-4.5 h at 2 samples) to separate the series
+from training in the token-length difference: it changes no verdict here (no significant difference either way) and
+the held-v4 measurement of round 6 holds Pop. Per-call think lengths in held episodes (only per-request completion
+tokens were compared: non-decision calls >= 8 k tokens 67/46/65 for start/r1/r5). The filled part's content (chains.pkl
+on /mnt/external) beyond its exposure counts. Whether the repetition caused round 1 -> 5's flat-to-negative point
+estimate (no experiment isolates it; the fixes are first-principles).
