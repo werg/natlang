@@ -742,6 +742,9 @@ def run_kind(path):
 def held_section(st, run, lin, log_st, phase, now):
     hc = st.setdefault('held', {})
     paths = set(glob.glob(EI_ROOT + '/*/held/*/result.json')) | set(glob.glob(run + '/held/*/result.json'))
+    # a measurement set aside (aside.json: a partial, refused or unpaired copy) is no result: a 9-episode partial
+    # plotted as an 89% point on 2026-11-24
+    paths = {p for p in paths if not os.path.exists(os.path.join(os.path.dirname(p), 'aside.json'))}
     for p in paths:
         s = sig(p)
         if hc.get(p, [None])[0] != s:
@@ -782,7 +785,7 @@ def held_section(st, run, lin, log_st, phase, now):
     # in-progress measurements (Pop's held log)
     inprog = []
     for d in glob.glob(run + '/held/policy-*'):
-        if os.path.exists(d + '/result.json') or 'unpaired' in d:
+        if os.path.exists(d + '/result.json') or 'unpaired' in d or os.path.exists(d + '/aside.json'):
             continue
         log = d + '/pop-held.log'
         t = mtime(log)
