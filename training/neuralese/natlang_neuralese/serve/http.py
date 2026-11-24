@@ -12,6 +12,7 @@ import json
 import os
 import queue
 import re
+import sys
 import time
 import traceback
 import uuid
@@ -27,6 +28,9 @@ _NATIVE_STATE = re.compile(r"^/v1/neuralese/native-states/(nzs1_[a-z2-7]+)(/meta
 _NATIVE_TENSOR = re.compile(r"^/v1/neuralese/native-tensor-artifacts/(nnt1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
 _BLOCK_ID = re.compile(r"^(?:nzs1_|nnt1_)[a-z2-7]+$")
 OWNER_HEADER = "x-natlang-owner"
+
+# A client that closed its connection: a broken write or read, answered by closing ours (no traceback, no error body).
+_CLIENT_GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 
 
 def block_ids(value) -> set[str]:
@@ -146,6 +150,11 @@ def make_handler(engine: Engine):
                 return handler()
             except RequestError as error:
                 self._error(400, error.code, str(error))
+            except _CLIENT_GONE:
+                # The client hung up (a poller's timeout): nothing to answer, nothing to log. Printing two tracebacks per
+                # dropped poll from hundreds of threads held the GIL and the log's lock and slowed the front further,
+                # so more polls timed out (aei1 DGX collection stall, 2026-11-24).
+                self.close_connection = True
             except Exception as error:  # noqa: BLE001
                 traceback.print_exc()   # the client sees only the message; the log keeps where it failed
                 self._error(500, "internal", f"{type(error).__name__}: {error}")
@@ -743,6 +752,13 @@ class _Server(ThreadingHTTPServer):
     # The socketserver default backlog (5) resets connections when an RL collector opens more concurrent requests.
     request_queue_size = 1024
     daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        """A connection its client closed is no server error: socketserver's default prints its traceback (see
+        ``_guarded``); every other failure is still reported."""
+        if isinstance(sys.exc_info()[1], _CLIENT_GONE):
+            return
+        super().handle_error(request, client_address)
 
 
 def serve(engine: Engine, host: str = "127.0.0.1", port: int = 0) -> ThreadingHTTPServer:

@@ -456,6 +456,10 @@ def test_local_decode_metrics_are_finite_and_parse_failures_are_ignored(monkeypa
         monkeypatch.setattr('urllib.request.urlopen', lambda *args, **kwargs: io.BytesIO(
             ('# metric\nllamacpp:n_decode_total ' + value + '\n').encode()))
         assert read_local_decode_progress() == expected
+    # the SGLang front: its native counter stays 0 and its generated-token counter is the decode progress
+    monkeypatch.setattr('urllib.request.urlopen', lambda *args, **kwargs: io.BytesIO(
+        b'natlang_native_decode_tokens_total 0\nnatlang_sglang_generated_tokens_total 736409\n'))
+    assert read_local_decode_progress() == 736409
 
 
 @pytest.mark.parametrize('decoding', [True, False])

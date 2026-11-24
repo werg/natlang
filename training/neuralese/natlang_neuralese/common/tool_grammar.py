@@ -217,7 +217,9 @@ class Matcher:
     def accept(self, token: int) -> bool:
         if self.failed:
             return False
-        if self.matcher.is_terminated() or not self.matcher.accept_token(int(token)):
+        # accept_token refuses a token after termination itself; each matcher call releases and retakes the GIL, which
+        # the SGLang front pays per streamed token on ~100 request threads (one call per token, not two)
+        if not self.matcher.accept_token(int(token)):
             self.failed = True
             return False
         self.tokens.append(int(token))
