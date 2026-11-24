@@ -11468,3 +11468,21 @@ SharedWorker in the background; a skew beyond 10 s (it fails the same way).
   `test_wait_for_room_is_bounded_and_skipped_when_opted_out` (test_async_train.py). Telemetry: `held priority` and
   `ledger claim` events in the collection's `collect.log`, `prep yield` notes in `drive.log`, `claim yield`/`claim
   restore` ledger events.
+
+## 2026-11-24 18:00 A DGX collection launched during round preparation starts shrunk; preparation lets it in first
+
+- **Observation (coordinator, pin-1a8157454419).** At the r0007 publish (17:18) `aei1-collect-v0007` (192 slots,
+  70 GB) launched while `aei1-r0008-build` (old driver, 32 GB) ran: it waited with need 85 vs 82.4 obtainable, GPU at
+  0% for 11 min, until the build was adopted down to 24 GB. The yield lowered a claim only once a collection ran; a
+  collection launched under a live prep claim asked for its full size although its collector starts at the share.
+- **Fix.** `Cycle.collection_budget(slots)`: with a live round-preparation claim (`prep_share`: the smallest `share`
+  of the claims; held claims carry none) a DGX collection launches at `dgx_collection_budget_gb(kv, slots x share)`
+  (51 GB at 192 x 0.5) and passes its full size (`collect --ledger-full-gb`, 70); when the claim ends the collector
+  restores to it (`memory_ledger resize restore --budget-gb`: the largest of the current, pre-yield and full budget).
+  Every DGX launch site uses it (async `ensure_collection`, cycle `collect_stage`, `halt` recollect). The driver's own
+  collection goes first: `Cycle.wait_for_room` also waits while `AsyncRoundDriver.collection_pending()` (its newest
+  policy's collection queued in the ledger, not running), within the same 10 min bound, so a prep step queued at high
+  priority never holds the relaunch after a publish out. A step already admitted is not touched; the shrunk launch
+  is what lets the collection in beside it. Opt-out unchanged (`--prep-yield-share 1` launches at full size).
+- **Test.** `test_a_collection_launched_during_round_preparation_starts_shrunk_and_preparation_lets_it_in_first`
+  (test_async_train.py), restore-to-full cases in test_memory_ledger.py and test_colab_and_profiles.py.

@@ -2572,3 +2572,44 @@ def test_the_dgx_collection_runs_192_slots_and_claims_its_measured_size(tmp_path
     unit = d.ensure_collection(d.controller.current)
     _, budget, argv = launched[-1]
     assert budget == 70 and argv[argv.index('--slots') + 1] == '192' and '--actor-arg=224' in argv
+
+
+def test_a_collection_launched_during_round_preparation_starts_shrunk_and_preparation_lets_it_in_first(tmp_path,
+                                                                                                    monkeypatch):
+    """2026-11-24 17:18: v0007 (70 GB, 192 slots) launched at its full claim beside r0008's build and waited 11 min
+    (need 85 vs 82.4 obtainable), GPU idle. Launched while a prep claim is live it claims the prepared share's budget
+    (its collector starts at that share) and restores its full claim afterwards (--ledger-full-gb); a preparation step
+    waits (bounded) while the driver's own collection waits in the ledger."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')
+    monkeypatch.setattr(d.c, 'present', lambda unit: False)
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(start=lambda: None))
+    launched = []
+
+    def ledger(unit, budget, priority, command, log, **kw):
+        launched.append((unit, budget, command))
+        if unit.endswith('-select'):
+            Path(command[command.index('--out') + 1]).write_text('[]')
+    monkeypatch.setattr(d.c, 'ledger', ledger)
+    with ei.yield_claim(tmp_path / 'prio', 'aei-r0002-prep', 0.5):
+        assert ei.prep_share(tmp_path / 'prio') == 0.5 and d.c.collection_budget(192) == (51, 70)
+        d.ensure_collection(d.controller.current)
+    _, budget, argv = launched[-1]
+    assert budget == 51 and argv[argv.index('--ledger-full-gb') + 1] == '70' and argv[argv.index('--slots') + 1] == '192'
+    held = tmp_path / 'prio' / 'aei-held-v0001.json'          # a held claim (no share) does not shrink the launch
+    held.write_text(json.dumps({'pid': __import__('os').getpid()}))
+    assert d.c.collection_budget(192) == (70, 70)
+    d.c.a.prep_yield_share = 1.0                               # the opt-out launches at full size
+    with ei.yield_claim(tmp_path / 'prio', 'aei-r0003-prep', 0.5):
+        assert d.c.collection_budget(192) == (70, 70)
+    d.c.a.prep_yield_share = 0.5
+    pending = iter([True, True, False])
+    monkeypatch.setattr(d.c, 'collection_pending', lambda: next(pending))
+    monkeypatch.setattr(ei, 'ledger_admissible', lambda gb: True)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    assert d.c.wait_for_room('aei-r0002-build', 24, poll=0)
+    monkeypatch.setattr(ei, 'ledger_queued', lambda unit: True)
+    monkeypatch.setattr(d.c, 'active', lambda unit: False)
+    assert d.collection_pending()                              # the driver's hook: queued, not running
+    monkeypatch.setattr(d.c, 'active', lambda unit: True)
+    assert not d.collection_pending()

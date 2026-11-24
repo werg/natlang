@@ -1746,4 +1746,9 @@ def test_a_yielding_collection_lowers_its_claim_so_a_waiting_stage_fits_beside_i
     assert held['budget'] == 80 * GIB and 'unyielded_budget' not in held
     c = {'budget': 10 * GIB}
     assert ledger.yield_claim(c, 0) == GIB and ledger.restore_claim(c) == 10 * GIB          # at least 1 GiB
+    launched_shrunk = {'budget': 51 * GIB}                    # a collection launched during round preparation
+    assert ledger.restore_claim(launched_shrunk, 70 * GIB) == 70 * GIB
+    ledger.resize(type('Args', (), {'unit': 'aei1-collect-v0006', 'mode': 'restore', 'budget_gb': 90})())
+    with ledger.ledger() as state:
+        assert state['claims']['aei1-collect-v0006.service']['budget'] == 90 * GIB
     assert ledger.resize(type('Args', (), {'unit': 'gone', 'mode': 'yield'})()) == 1
