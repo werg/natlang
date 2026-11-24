@@ -3621,6 +3621,25 @@ def extract_rl_specs(work):
     return specs
 
 
+class NativeOrRun:
+    """``all_episodes`` keep (picklable): an episode with Neuralese state, or one of a run matching ``patterns`` (the
+    current-surface window, whose calls' surfaces are current by construction)."""
+
+    def __init__(self, patterns=()):
+        self.patterns = list(patterns)
+
+    def __call__(self, episode):
+        return has_native_state(episode) or any(re.search(p, episode.get('run') or '') for p in self.patterns)
+
+
+def window_current(surfaces, turns):
+    """Every call of an episode on a surface (system prompt, tool schemas) the current runtime renders: ``surfaces`` is
+    the exact replays' surfaces plus those of the current-surface window's own episodes (``neuralese-graph``), so an
+    older collection's episode on an unchanged surface counts as current. The window alone named only the round's two
+    newest collections: aei1 r0004-r0008 dropped every older own Neuralese success as unseen (634 in r0008)."""
+    return all(surface_key(t) in surfaces for t in turns if t.get('messages'))
+
+
 def import_gate(calls, require_import=False):
     """The funnel entry of a lowered Neuralese episode: 'imports' (a spliced read), 'in_context_reads' (every read was
     the state's tokens inline, ``engine.reads_in_context``, the engines' default since 2026-11-23: the capture holds the
@@ -3663,7 +3682,17 @@ def neuralese_graph(args):
         run_dir, archive_dir = spec.split(':')
         archives['rl:' + '/'.join(Path(run_dir).parts[-2:])] = (run_dir, archive_dir)
     excluded_runs = [re.compile(pattern) for pattern in getattr(args, 'exclude_run', None) or ()]
-    episodes = [e for e in all_episodes(work, workers, keep=has_native_state) if e.get('source') in OWN_SOURCES]
+    window = [] if getattr(args, 'no_window_surfaces', False) else list(getattr(args, 'current_surface_run', None) or ())
+    episodes, window_surfaces = [], set()
+    for e in all_episodes(work, workers, keep=NativeOrRun(window)):
+        if e.get('source') not in OWN_SOURCES:
+            continue
+        if window and current_surface_run(args, e):
+            window_surfaces.update(surface_key(t) for t in e['turns'] if t.get('messages'))
+        if has_native_state(e):
+            episodes.append(e)
+    funnel['window_surfaces_added'] = len(window_surfaces - surfaces)
+    surfaces |= window_surfaces
     funnel['native_state_episodes'] = len(episodes)
     funnel['excluded_run'] = sum(1 for e in episodes if any(p.search(e.get('run') or '') for p in excluded_runs))
     episodes = [e for e in episodes if not any(p.search(e.get('run') or '') for p in excluded_runs)]
@@ -3701,7 +3730,7 @@ def neuralese_graph(args):
                             call.pop(field, None)
                     lowered_of[samples[row['sample']]['key']] = (
                         current_surface_run(args, samples[row['sample']]) or
-                        all(surface_key(t) in surfaces for t in row['turns'] if t.get('messages')), counters, calls)
+                        window_current(surfaces, row['turns']), counters, calls)
                 del row
     per_task = collections.Counter()
     stats = collections.Counter()
@@ -3954,6 +3983,9 @@ def main():
     g.add_argument('--max-per-task', type=int, default=2)
     g.add_argument('--current-surface-run', action='append', default=[], metavar='REGEX',
                    help='own runs on the current runtime (episode run label): their calls count as on a current surface')
+    g.add_argument('--no-window-surfaces', action='store_true',
+                   help="count only the exact replays' surfaces as current, not also the surfaces of the "
+                        "--current-surface-run episodes (an older run's episode on such a surface was dropped as unseen)")
     g.add_argument('--require-import', action='store_true',
                    help='drop episodes whose Neuralese reads were all in context (no lowered import; the gate before 2026-11-24)')
     g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
