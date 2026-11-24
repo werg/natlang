@@ -643,7 +643,9 @@ def colab_fit(args):
     record = {'schema': 'natlang.program-fit-colab/1', 'host': host, 'tenant_commit': tcfg['commit'], 'remote': remote,
               'gpu': A.colab_hardware(host).get('gpu_name'), 'ship_seconds': round(shipped - started, 1),
               'fit_seconds': round(trained - shipped, 1), 'pull_seconds': round(time.time() - trained, 1),
-              'mps_percent': args.mps_percent if args.mps_percent is not None else A.COLAB_TENANT_MPS_PERCENT}
+              'mps': bool(A.COLAB_TENANT_MPS or args.mps_percent is not None),
+              'mps_percent': args.mps_percent if args.mps_percent is not None else
+              (A.COLAB_TENANT_MPS_PERCENT if A.COLAB_TENANT_MPS else None)}
     (fit / 'colab.json').write_text(json.dumps(record, indent=1) + '\n')
     print(json.dumps({'event': 'release home', 'dir': str(directory), **record}))
     return 0
@@ -798,7 +800,7 @@ def main(argv=None):
     cf.add_argument('--dir', required=True)
     cf.add_argument('--host', default=None)
     cf.add_argument('--commit', required=True, help='the tenant checkout commit (pushed to origin)')
-    cf.add_argument('--mps-percent', type=int, help='MPS SM share of the fit (default NATLANG_COLAB_TENANT_MPS_PERCENT, 50)')
+    cf.add_argument('--mps-percent', type=int, help='join MPS with this SM share (default: outside MPS, its own context)')
     cf.add_argument('--take-over', action='store_true', help='fit on Colab although a local fit state exists')
     cm = sub.add_parser('colab-measure', help='one dev arm against a Colab tenant actor (held_eval on the DGX)')
     cm.add_argument('--dir', action='append', required=True)

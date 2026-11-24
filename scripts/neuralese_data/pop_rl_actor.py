@@ -1413,6 +1413,11 @@ def serve_colab(args):
 # a live actor claim, so a round never waits on it. Its code is a separate checkout at the tenant's commit (the
 # session's own checkout belongs to the round's commit and a tenant never moves it); the session's venv runs it.
 COLAB_TENANT_MPS_PERCENT = int(os.environ.get('NATLANG_COLAB_TENANT_MPS_PERCENT', '50'))
+# Tenants run outside MPS by default: under MPS a fatal GPU fault in any client ends every client of the server, and on
+# 2026-11-24 03:47 a tenant's SGLang illegal memory access (Xid 31) killed aei1's actor beside it. A tenant in its own
+# context (compute mode Default) time-slices with the actor and fails alone. NATLANG_COLAB_TENANT_MPS=1 joins MPS
+# (with the SM share above).
+COLAB_TENANT_MPS = os.environ.get('NATLANG_COLAB_TENANT_MPS') == '1'
 COLAB_MEASURE_PORT = 8571
 
 
@@ -1437,8 +1442,13 @@ def colab_tenant_command(cfg, tcfg, claim, label, command, *, mps_percent=None, 
     """``command`` (run with the tenant checkout on PYTHONPATH and an MPS SM share) under a preemptible admission
     claim of ``claim`` beside the session's actor."""
     percent = COLAB_TENANT_MPS_PERCENT if mps_percent is None else mps_percent
-    env = ['/usr/bin/env', f'PYTHONPATH={tcfg["repo"]}/training/neuralese:{tcfg["repo"]}:{tcfg["repo"]}/scripts/neuralese_data',
-           f'NATLANG_REPO={tcfg["repo"]}', f'CUDA_MPS_ACTIVE_THREAD_PERCENTAGE={int(percent)}']
+    paths = [f'PYTHONPATH={tcfg["repo"]}/training/neuralese:{tcfg["repo"]}:{tcfg["repo"]}/scripts/neuralese_data',
+             f'NATLANG_REPO={tcfg["repo"]}']
+    if COLAB_TENANT_MPS or mps_percent is not None:
+        env = ['/usr/bin/env', *paths, f'CUDA_MPS_ACTIVE_THREAD_PERCENTAGE={int(percent)}']
+    else:     # a pipe directory with no daemon: the CUDA client creates its own context
+        env = ['/usr/bin/env', '-u', 'CUDA_MPS_ACTIVE_THREAD_PERCENTAGE',
+               f'CUDA_MPS_PIPE_DIRECTORY={tcfg["root"]}/mps/tenant-no-mps', *paths]
     return [cfg['python'], tcfg['admission'], 'run', '--preemptible', '--beside-label', 'actor-',
             '--vram-gib', str(claim['vram_gib']), '--host-ram-gib', str(claim['host_ram_gib']), '--label', label,
             '--wait', str(int(wait)), '--workdir', tcfg['repo'], '--', *env, *command]

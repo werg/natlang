@@ -131,7 +131,7 @@ def decide(obs: Observation, state: dict, *, session: str, order=DEFAULT_ORDER, 
                         f'SSH to {session} fails' + (f' ({obs.tunnel_429s} HTTP 429s)' if obs.tunnel_429s else ''))
     if (obs.actor_down or obs.actor_oversized) and not obs.sft_active \
             and obs.now - state.get('last_serve_try', 0) >= 60 * serve_minutes:
-        return Decision('serve', 'the actor is down (a serve failed)' if obs.actor_down else
+        return Decision('serve', 'the actor is down (a serve failed or its process is gone)' if obs.actor_down else
                         'the actor alone claims more than the session layout gives it')
     if rank and not obs.sft_active and not others \
             and obs.now - state.get('last_upgrade_try', 0) >= 60 * upgrade_minutes:
@@ -348,6 +348,16 @@ class Keeper:
             self.save(state)
         return rc == 0
 
+    def actor_dead(self) -> bool:
+        """The recorded actor's admission process is gone from the VM (2026-11-24 03:47: the actor's engine died with
+        a tenant's GPU fault and its record still named it, so the keeper answered 'serves' for 25 min)."""
+        record = self.actor_record()
+        if not record.get('pid') or not record.get('serve_args'):
+            return False
+        rc, out = self.run(['ssh', '-o', 'BatchMode=yes', self.a.alias,
+                            f'kill -0 {int(record["pid"])} 2>/dev/null && echo alive || echo gone'], timeout=60)
+        return rc == 0 and out.strip().endswith('gone')
+
     def actor_oversized(self) -> bool:
         """The recorded actor (alone, not beside a learner) claims more VRAM than ``colab_layout`` gives an actor alone
         on this session now."""
@@ -384,7 +394,8 @@ class Keeper:
         sft = self.sft_active()
         due = ok and not sft and now - state.get('last_serve_try', 0) >= 60 * self.a.serve_minutes
         obs = Observation(sessions=sessions, ssh_ok=ok, tunnel_429s=0 if ok else self.tunnel_429s(),
-                          sft_active=sft, now=now, actor_down=bool(state.get('pending_serve')),
+                          sft_active=sft, now=now,
+                          actor_down=bool(state.get('pending_serve') or (due and self.actor_dead())),
                           actor_oversized=bool(due and not state.get('pending_serve') and self.actor_oversized()))
         d = decide(obs, state, session=self.a.session, order=self.order,
                    tunnel_fail_minutes=self.a.tunnel_fail_minutes, upgrade_minutes=self.a.upgrade_minutes,
