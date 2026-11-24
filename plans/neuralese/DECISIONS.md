@@ -10188,3 +10188,23 @@ Nemotron episode turn rendered by `sft_sources.call_row` with the round's tokeni
 (its raw reasoning through `</think>`) and 25 target tokens (the tool call); round r0001's mix holds 22,312 teacher
 chains (`--teacher-think context`, think treatment default `context`; a filled-reasoning unit replaces an episode only
 where it exists).
+
+## 2026-11-24 01:20 The A100 actor was down for hours: the keeper never retried a failed serve (program-tuning strand)
+
+- **Finding.** The keeper upgraded L4 -> A100 at 22:15. Its actor serve failed at 22:37 (an `npm ci` error during the
+  serve's checkout). From then on it decided "ok: A100 serves" every minute, because `decide` checks the hardware and
+  not the actor. It had also moved the lost VM's actor record aside, so nothing held the serve arguments any more.
+  aei1's remote collector (`aei1-collect-v0000-remote0`, `--actor 127.0.0.1:18731`) had no A100 actor from 22:37.
+  r0001's `run-sft` found no actor to yield or restore.
+- **Fix (default; 91a253a2a; tests).**
+  - A serve's arguments stay in the keeper state as `pending_serve` until it succeeds. The `serve` decision retries
+    every `--serve-minutes` (10) while no round's learner targets the session.
+  - An actor alone whose recorded claim exceeds the current `colab_layout` actor-alone claim is re-served at the
+    layout's size. An older pin's `run-sft` restores the actor at mem fraction 0.88 (70.5 GiB). The current layout
+    caps the KV at 24 GB (34 GiB), which leaves 43 GiB for tenants.
+- **Deployment.** The shared checkout is 141 commits behind with other strands' uncommitted edits in files upstream
+  changed, so it cannot be fast-forwarded. The keeper (`colab-g4a-keeper`, same name, log and arguments) now runs from
+  pin `program-tune-20261117/pin-91a253a2a6e0`. Move it back to `/home/werg/natlang` once that checkout is synced.
+- The state was seeded with `pending_serve` from the lost record (policy e15b20a8; commit bdf4c872, the session
+  checkout's own commit, so the serve does not move the round's checkout). aei1's driver rebinds the actor to the
+  newest publication.
