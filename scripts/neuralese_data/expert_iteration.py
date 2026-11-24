@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import contextlib
 import json
 import os
 import random
@@ -100,6 +101,24 @@ COLLECTOR_SLOT_GB = 0.3
 # 0.3/slot (23 GB) kept the 74 GB DGX collection out of the ledger for 30+ min (2026-11-24 13:51). NATLANG_REMOTE_COLLECTOR_SLOT_GB
 # opts back to the shared rate.
 REMOTE_COLLECTOR_SLOT_GB = float(os.environ.get('NATLANG_REMOTE_COLLECTOR_SLOT_GB', '0.12'))
+# The standing DGX collection (DECISIONS 2026-11-24 "the DGX collection yields to round preparation"). Concurrency:
+# v0006's engine ran at its cap (160 running = 128 slots + 32 fill, 5-10 queued, KV 0.61, mamba 0.49, 1.75-1.94k tok/s,
+# ~200-270 own episodes/h); decode is bandwidth-bound and the KV pool has room, so 192 slots (224 running with the fill).
+# Opt-out: --slots 128. Budget, measured on v0006 at 128 slots: the engine and its host processes ~31 GiB at 12 GB KV
+# (CUDA 19.8, scheduler 4.4, front 2.0, collect 2.5, detokenizer/launcher 1.8: kv + 19, +1 margin) plus the per-slot
+# collector part (run_bonsai_queue + shared node servers), which grows with the collection's age: ~0.07 GiB/slot fresh,
+# ~0.14 at 1 h, ~0.27 at 2 h (v0004 64.8 GiB). 0.2/slot claims the ~1.5 h level; the guard raises an over-budget claim
+# while memory is plentiful, and a yield (round preparation, held) lowers it to the use. The old kv + 24 + 0.3/slot
+# (74 GiB at 128, 94 at 192) reserved half its unspent budget beside every other job and needed 89 (109) GiB free to
+# be readmitted after a preemption.
+DGX_COLLECT_SLOTS = 192
+DGX_ENGINE_GB = 20
+DGX_COLLECTOR_SLOT_GB = 0.2
+
+
+def dgx_collection_budget_gb(kv_gb, slots):
+    """Ledger GB of a DGX collection unit: its SGLang engine (KV pool + DGX_ENGINE_GB) and its collector slots."""
+    return round(kv_gb + DGX_ENGINE_GB + slots * DGX_COLLECTOR_SLOT_GB)
 # Collection defaults (async-train §3 FP8 collection weights, §8 JOLT+ guided attempts; every collection path, cycle
 # and async driver, reads them). FP8: fork ec27f0809a runs online FP8 weights in LFM3's natlang projections and reloads
 # them in place; an actor on an older fork checkout or a GPU below sm_89 serves BF16 and logs
@@ -130,8 +149,19 @@ COLLECTION_PRIORITY = os.environ.get('NATLANG_EI_COLLECTION_PRIORITY', 'medium')
 HELD_PRIORITY_DIR = OPS / 'ei' / 'held-priority'
 HELD_PRIORITY_SHARE = 0.75    # the collection yields a quarter of its slots (~ the held actor's running cap)
 HELD_PRIORITY_STALE = 300     # seconds without a heartbeat after which a claim is ignored
+# Round preparation beside the standing DGX collection (DECISIONS 2026-11-24 "the DGX collection yields to round
+# preparation"): the ledger preempted the 74 GB collection for each round's data (12 GB) and build steps, and its
+# relaunch needs budget + 15 GB reserve = 89 GB free, which the prep and ~40 GB of standing claims never leave: the GPU
+# sat idle ~1 h 15 min of each ~2 h round. Instead, while a round prepares, the driver writes a claim (``share``) in
+# HELD_PRIORITY_DIR: every DGX collection runs PREP_YIELD_SHARE of its slots (their node servers drain and exit; at 2 h
+# the collector part is ~0.2 GB per slot) and lowers its ledger claim to what it uses (``memory_ledger resize``), so
+# the steps are admitted beside it. A step that still does not fit after PREP_YIELD_WAIT seconds is launched anyway (it
+# preempts the collection as before). The collection takes its full slots and claim back when the claim is gone.
+# Opt-out: --prep-yield-share 1 (or NATLANG_EI_PREP_YIELD_SHARE=1 in the driver's environment).
+PREP_YIELD_SHARE = float(os.environ.get('NATLANG_EI_PREP_YIELD_SHARE', '0.5'))
+PREP_YIELD_WAIT = 600
 # The DGX held actor is sized to fit beside a collection (121 GB ledger - 74 GB collection - 15 GB diagnostic headroom
-# = 32 GB): the pinned engine (engine.json serve_args: its attested arithmetic, overlap off) with a 3 GB FP8 KV pool
+# = 32 GB; the 192-slot collection claims 70 and lowers its claim while it yields to the held claim): the pinned engine (engine.json serve_args: its attested arithmetic, overlap off) with a 3 GB FP8 KV pool
 # (~450k tokens with the hybrid SWA layout, 16 x 28k) and 16 running; ledger budget = KV + 24 (actor rule) + 16 client
 # slots x 0.3. KV size is not attested and the running cap is the same for every DGX-series result, so the series
 # stays one engine. The collection actor cannot measure: it runs the overlap scheduler and 160 running, and the held
@@ -267,8 +297,47 @@ def held_priority_claims(directory, now=None, alive=None):
 
 
 def priority_slots(slots, claims, share=HELD_PRIORITY_SHARE):
-    """A collection's active slots: all of them, or ``share`` of them (at least 1) while a held measurement runs."""
-    return slots if not claims or share >= 1 else max(1, int(round(slots * share)))
+    """A collection's active slots: all of them, or the smallest share (at least 1 slot) the live claims ask for: a
+    claim's own ``share`` (round preparation), else ``share`` (a held measurement)."""
+    share = min((float(c.get('share', share)) for c in claims), default=1.)
+    return slots if share >= 1 else max(1, int(round(slots * share)))
+
+
+@contextlib.contextmanager
+def yield_claim(directory, name, share, extra=None):
+    """While the block runs, every DGX collection reading ``directory`` runs ``share`` of its slots
+    (``priority_slots``) and lowers its ledger claim (``FrontierCollector._priority``): ``<name>.json`` with this
+    process's pid and ``share``, its mtime refreshed every minute (a claim older than HELD_PRIORITY_STALE or of a dead
+    process is ignored). Nothing when ``share`` >= 1 (the opt-out). A claim already held under ``name`` (a nested
+    block) is left to its owner."""
+    path = Path(directory) / f'{name}.json'
+    if share >= 1 or path.exists():
+        yield None
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({'pid': os.getpid(), 'unit': name, 'share': share, 'started': time.time(),
+                                **(extra or {})}) + '\n')
+    beat = threading.Event()
+
+    def heartbeat():
+        while not beat.wait(60):
+            with contextlib.suppress(OSError):
+                os.utime(path)
+    threading.Thread(target=heartbeat, daemon=True).start()
+    try:
+        yield path
+    finally:
+        beat.set()
+        path.unlink(missing_ok=True)
+
+
+def ledger_admissible(budget_gb):
+    """Whether the ledger would admit a ``budget_gb`` job now (``memory_ledger.admissible``); False when unknown."""
+    try:
+        from scripts.memory_ledger import admissible
+        return admissible(budget_gb)
+    except Exception:
+        return False
 
 
 def held_budget_gb(slots=HELD_SLOTS):
@@ -347,7 +416,7 @@ def frontier_collector(base):
         ``priority_share``."""
 
         def setup(self, order, deadline, endpoints=None, priority_dir=None, priority_share=HELD_PRIORITY_SHARE,
-                  verify=None):
+                  verify=None, ledger_unit=None):
             self.order = collections.deque(t for t in order if t in self.by_id and t not in self.own)
             self.deadline = deadline
             self.endpoints = list(endpoints) if endpoints else [(getattr(self.args, 'actor', None),
@@ -357,6 +426,7 @@ def frontier_collector(base):
             self.verify = len(self.endpoints) > 1 if verify is None else bool(verify)
             self.dead, self.dead_checked = set(), {}
             self.priority_dir, self.priority_share, self.priority_read = priority_dir, priority_share, 0.
+            self.ledger_unit = ledger_unit      # this collection's ledger unit: its claim follows a yield
             self.full_slots = sum(count for _, count in self.endpoints)
             self._learnable()
 
@@ -368,7 +438,21 @@ def frontier_collector(base):
             active = priority_slots(self.full_slots, held_priority_claims(self.priority_dir), self.priority_share)
             if active != self.active_slots:
                 print(json.dumps({'event': 'held priority', 'active_slots': active, 'slots': self.full_slots}), flush=True)
+                if self.ledger_unit and (active < self.full_slots) != (self.active_slots < self.full_slots):
+                    threading.Thread(target=self._resize_claim, args=('yield' if active < self.full_slots else 'restore',),
+                                     daemon=True).start()
                 self.active_slots = active
+
+        def _resize_claim(self, mode):
+            """Yielding slots, the collection lowers its ledger claim to its use (the memory its idle slots release
+            is not held back from the job it yields to); taking them back, it restores the claim
+            (``memory_ledger resize``)."""
+            try:
+                out = subprocess.run([*LEDGER, 'resize', '--unit', self.ledger_unit, mode], capture_output=True,
+                                     text=True, timeout=120)
+                print(json.dumps({'event': 'ledger claim', 'mode': mode, 'result': out.stdout.strip()[-300:]}), flush=True)
+            except (OSError, subprocess.SubprocessError) as error:
+                print(json.dumps({'event': 'ledger claim', 'mode': mode, 'error': repr(error)[:300]}), flush=True)
 
         def _pick(self):
             return self.by_id[self.order.popleft()]
@@ -553,7 +637,8 @@ def collect(args):
     # a DGX held measurement takes slots of the DGX actor; a remote actor's collection keeps its own
     collector.setup(order, time.time() + args.hours * 3600, endpoints=endpoints,
                     priority_dir=None if args.no_held_priority or actor is None else Path(args.held_priority_dir),
-                    priority_share=args.held_priority_share, verify=actor is None)
+                    priority_share=args.held_priority_share, verify=actor is None,
+                    ledger_unit=None if actor is None else args.unit_prefix)
     log({'event': 'collect start', 'tasks': len(collector.order), 'already_scored': len(collector.own), 'k': args.k,
          'slots': total_slots, 'actor': url, 'endpoints': endpoints})
     stop = threading.Event()
@@ -1157,10 +1242,34 @@ class Cycle:
         if subprocess.run(['systemctl', '--user', 'is-failed', '-q', f'{unit}.service']).returncode == 0:
             raise SystemExit(f'{unit} failed: see its log; rerun the cycle to resume')
 
-    def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None):
+    def prep_yield(self, name):
+        """The DGX collections yield slots while a preparation stage runs (``yield_claim``; ``--prep-yield-share``)."""
+        return yield_claim(HELD_PRIORITY_DIR, f'{name}-prep', float(getattr(self.a, 'prep_yield_share', PREP_YIELD_SHARE)),
+                           extra={'reason': 'round preparation'})
+
+    def wait_for_room(self, unit, budget, seconds=PREP_YIELD_WAIT, poll=20):
+        """Before launching a stage beside a yielding collection: until the ledger would admit ``budget`` GB (the
+        collection lowers its claim within ~30 s and frees its idle slots as their episodes end), at most ``seconds``;
+        then the stage is launched either way (preempting the collection if it still does not fit)."""
+        if self.present(unit) or float(getattr(self.a, 'prep_yield_share', PREP_YIELD_SHARE)) >= 1:
+            return True
+        deadline, started = time.time() + seconds, time.time()
+        while not ledger_admissible(budget):
+            if time.time() >= deadline:
+                self.note(stage='prep yield', unit=unit, budget_gb=budget, room=False, waited=round(time.time() - started))
+                return False
+            time.sleep(poll)
+        if time.time() - started > 1:
+            self.note(stage='prep yield', unit=unit, budget_gb=budget, room=True, waited=round(time.time() - started))
+        return True
+
+    def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None, room=False):
         """``command`` (argv) as ledger unit ``unit``; waits for it unless ``detach``; a running unit is joined.
         ``repo``: the checkout on NATLANG_REPO/PYTHONPATH (default the pin). A unit the ledger holds requeued (preempted,
-        awaiting its relaunch) is joined too, never launched a second time."""
+        awaiting its relaunch) is joined too, never launched a second time. ``room``: first ``wait_for_room`` (a
+        preparation stage beside a yielding collection)."""
+        if room:
+            self.wait_for_room(unit, budget)
         if not self.present(unit):
             subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}.service'], stderr=subprocess.DEVNULL)
             shell =' '.join(map(_quote, command)) + f' >> {_quote(str(log_path))} 2>&1'
@@ -1447,7 +1556,7 @@ class Cycle:
                             self.collect_command(unit, start, sha, profile.collect_slots, endpoints),
                             self.dir / 'collect.log', detach=True)
             else:
-                budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
+                budget = dgx_collection_budget_gb(self.a.kv_gb, self.a.slots)
                 self.ledger(unit, budget, COLLECTION_PRIORITY, self.collect_command(unit, start, sha, self.a.slots),
                             self.dir / 'collect.log', detach=True)
                 if self.a.fill:         # filled reasoning draws on the DGX actor (a remote one exposes no SGLang port)
@@ -1786,9 +1895,10 @@ class Cycle:
         _, sha = self.collect_policy()
         _, train_sha, _ = self.train_policy()
         measured = self.dir / ('frontier.json' if sha == train_sha else 'frontier-sibling.json')
-        self.ledger(f'{self.a.name}-frontier', 4, STAGE_PRIORITY,
-                    self.py('expert_iteration.py', 'frontier', '--out', measured,
-                            '--collect', self.collect_dir, '--policy', sha), self.dir / 'frontier.log')
+        with self.prep_yield(self.a.name):
+            self.ledger(f'{self.a.name}-frontier', 4, STAGE_PRIORITY,
+                        self.py('expert_iteration.py', 'frontier', '--out', measured,
+                                '--collect', self.collect_dir, '--policy', sha), self.dir / 'frontier.log', room=True)
         data = json.loads(measured.read_text())
         if sha != train_sha:      # a kept sibling collection: the trained policy's own frontier (its cycle's) wins
             own = Path(self.a.speculative_after) / 'frontier.json'
@@ -1849,7 +1959,9 @@ class Cycle:
             tmp.write_text('set -e\n' + ''.join(line + '\n' for line in lines))
             os.replace(tmp, script)
         # 12 GB: neuralese-graph's reader processes (sft_sources --workers, ~0.15 GB each) beside its ~7 GB parent
-        self.ledger(f'{self.a.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log', repo=self.data_repo())
+        with self.prep_yield(self.a.name):
+            self.ledger(f'{self.a.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log',
+                        repo=self.data_repo(), room=True)
         self.mark('data')
 
     def failed_policies(self):
@@ -1893,7 +2005,8 @@ class Cycle:
 
     def build_stage(self):
         repo, command = self.build_command()
-        self.ledger(f'{self.a.name}-build', 24, STAGE_PRIORITY, command, self.dir / 'build.log', repo=repo)
+        with self.prep_yield(self.a.name):
+            self.ledger(f'{self.a.name}-build', 24, STAGE_PRIORITY, command, self.dir / 'build.log', repo=repo, room=True)
         sha = subprocess.check_output(['sha256sum', str(self.mix / 'chains.pkl')], text=True).split()[0]
         (self.mix / 'chains.sha256').write_text(sha + '\n')
         build = json.loads((self.mix / 'build.json').read_text())
@@ -2065,7 +2178,7 @@ class Cycle:
             sha = self.previous_start_sha(reference)
             self.set_collect_aside(sha)
             unit = f'{self.a.name}-recollect'
-            budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
+            budget = dgx_collection_budget_gb(self.a.kv_gb, self.a.slots)
             self.ledger(unit, budget, COLLECTION_PRIORITY, self.collect_command(unit, reference, sha, self.a.slots),
                         self.dir / 'collect.log', detach=True)
             record['collecting'] = unit
@@ -2853,7 +2966,8 @@ class AsyncRoundDriver:
         return argparse.Namespace(
             dir=str(self.root), name=a.name, start=a.start, start_sha=a.start_sha or BASE_SHA, commit=a.commit,
             pin=a.pin, sft_work=a.sft_work, seed_work=a.seed_work, live_work=a.live_work, k=a.k, collect_hours=a.collect_hours, slots=a.slots,
-            kv_gb=a.kv_gb, fill=a.fill, fill_inflight=a.fill_inflight, neuralese_variants=a.neuralese_variants,
+            kv_gb=a.kv_gb, prep_yield_share=getattr(a, 'prep_yield_share', PREP_YIELD_SHARE),
+            fill=a.fill, fill_inflight=a.fill_inflight, neuralese_variants=a.neuralese_variants,
             neuralese_variant_share=a.neuralese_variant_share, no_neuralese_variants=a.no_neuralese_variants,
             collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts,
             memetic_share=getattr(a, 'memetic_share', MEMETIC_SHARE),
@@ -2925,7 +3039,7 @@ class AsyncRoundDriver:
             self.c.collect_dir = work
             argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots)
         argv[argv.index('--tasks') + 1] = str(tasks)
-        budget = self.a.kv_gb + 24 + round(self.a.slots * COLLECTOR_SLOT_GB)
+        budget = dgx_collection_budget_gb(self.a.kv_gb, self.a.slots)
         self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
         self.note(collection_started=unit, policy=policy['sha256'], work=str(work))
         if self.a.fill:
@@ -3535,20 +3649,25 @@ class AsyncRoundDriver:
                     return
                 (round_dir / 'stages' / f'{name}.exit').unlink(missing_ok=True)
             self.c.ledger(unit, budget, STAGE_PRIORITY, step_command(argv, round_dir / 'stages' / f'{name}.exit'),
-                          round_dir / f'{name}.log', repo=repo)
+                          round_dir / f'{name}.log', repo=repo, room=True)
             done.write_text(json.dumps({'time': time.time()}) + '\n')
-        step('frontier', 4, frontier)
-        self.c.work_tokenizer()
-        script = round_dir / 'data.sh'
-        # Preserve an admitted/requeued plan and atomically replace inactive plans.
-        if not (round_dir / 'stages' / 'data.done').exists() and not self.c.present(f'{self.a.name}-{round_dir.name}-data'):
-            tmp = script.with_name(script.name + '.tmp')
-            tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
-            os.replace(tmp, script)
-        step('data', 12, ['/bin/sh', str(script)], repo=self.c.data_repo())
-        # 32 GB: r0001/r0002 peaked at 21.2/17.1 GB under 24; the aux parts now load before the teacher admission and
-        # --prefer-unseen reads older mixes' chains.pkl for their trained units (DECISIONS 2026-11-24)
-        step('build', 32, build, repo=self.c.data_repo())
+        # the standing DGX collection yields slots (and its claim) from the frontier to the end of the build, instead
+        # of being preempted for the data and build steps (Cycle.prep_yield, PREP_YIELD_SHARE)
+        with self.c.prep_yield(f'{self.a.name}-{round_dir.name}'):
+            step('frontier', 4, frontier)
+            self.c.work_tokenizer()
+            script = round_dir / 'data.sh'
+            # Preserve an admitted/requeued plan and atomically replace inactive plans.
+            if not (round_dir / 'stages' / 'data.done').exists() and \
+                    not self.c.present(f'{self.a.name}-{round_dir.name}-data'):
+                tmp = script.with_name(script.name + '.tmp')
+                tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
+                os.replace(tmp, script)
+            step('data', 12, ['/bin/sh', str(script)], repo=self.c.data_repo())
+            # 24 GB: r0004-r0007 peaked at 17.0-17.5 GiB (18.7 GB) with the aux parts loaded before the teacher
+            # admission and --prefer-unseen reading older mixes (the 32 GB of 2026-11-24 morning anticipated them);
+            # r0001's 21.2 GB was before. The guard raises an over-budget unit while memory is plentiful.
+            step('build', 24, build, repo=self.c.data_repo())
         report = json.loads((round_dir / 'mix' / 'build.json').read_text())
         manifest = write_round_manifest(
             round_dir, round_id=round_dir.name, base_policy_sha=cur['sha256'],
@@ -4519,7 +4638,7 @@ def main():
     c.add_argument('--tasks', required=True, help='JSON list of task ids in collection order (select)')
     c.add_argument('--k', type=int, default=4, help='samples per task (one group)')
     c.add_argument('--hours', type=float, default=6., help='no new group after this many hours (running ones finish)')
-    c.add_argument('--slots', type=int, default=128)
+    c.add_argument('--slots', type=int, default=DGX_COLLECT_SLOTS)
     c.add_argument('--dynamic-sampling-max-spread', type=float, default=0.1,
                    help="grpo's early stop of a group whose first wave agrees (0: all k samples always)")
     c.add_argument('--actor-port', type=int, default=8470)
@@ -4580,8 +4699,11 @@ def main():
     y.add_argument('--teacher-attempts', type=int, default=TEACHER_ATTEMPTS,
                    help='JOLT+ guided attempts for failing groups in collection (default TEACHER_ATTEMPTS; 0: none)')
     memetic_flags(y)
-    y.add_argument('--slots', type=int, default=128)
+    y.add_argument('--slots', type=int, default=DGX_COLLECT_SLOTS)
     y.add_argument('--kv-gb', type=int, default=12)
+    y.add_argument('--prep-yield-share', type=float, default=PREP_YIELD_SHARE,
+                   help='share of its slots a DGX collection keeps while a round prepares beside it (it also lowers its ledger '
+                        'claim instead of being preempted; 1 opts out; env NATLANG_EI_PREP_YIELD_SHARE)')
     y.add_argument('--fill', help='filled_reasoning.py OUT directory: generate on the collect actor, build into the mix')
     y.add_argument('--fill-inflight', type=int, default=32,
                    help='filled-reasoning draws kept in flight on the collect actor, which runs this many requests '
@@ -4767,8 +4889,11 @@ def main():
     ad.add_argument('--own-neuralese-graph-share', type=float, default=0.05)
     ad.add_argument('--replay-workers', type=int, default=8)
     ad.add_argument('--k', type=int, default=4)
-    ad.add_argument('--slots', type=int, default=128)
+    ad.add_argument('--slots', type=int, default=DGX_COLLECT_SLOTS)
     ad.add_argument('--kv-gb', type=int, default=12)
+    ad.add_argument('--prep-yield-share', type=float, default=PREP_YIELD_SHARE,
+                   help='share of its slots a DGX collection keeps while a round prepares beside it (it also lowers its ledger '
+                        'claim instead of being preempted; 1 opts out; env NATLANG_EI_PREP_YIELD_SHARE)')
     ad.add_argument('--collect-hours', type=float, default=72.,
                     help="a standing collection's horizon (the next publication stops it first)")
     ad.add_argument('--snapshot-min-hours', type=float, default=1.0,

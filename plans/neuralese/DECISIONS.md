@@ -11399,3 +11399,67 @@ The stale alert now fires only after a read: "No connection to the DGX" (warn) w
 succeeded but returned old data; a held snapshot shows "refreshing". A skipped owner-replaced reload is retried after the minute
 instead of leaving a dead page. Not checked: the page-side runtime (no access to the phone); whether Firefox Android freezes the
 SharedWorker in the background; a skew beyond 10 s (it fails the same way).
+
+## 2026-11-24 17:00 The DGX collection yields to round preparation instead of being preempted
+
+- **Observation.** Each aei1 round prepares the next one on the DGX while the Colab A100 trains: `frontier` (4 GB),
+  `data` (12 GB, ~1 h), `build` (32 GB, ~15 min), all high. The standing collection (`aei1-collect-vNNNN`, medium,
+  budget `kv_gb + 24 + slots x 0.3` = 74 GiB) was preempted for `data` (16:06: 48.9 GiB used, 46.2 available) and
+  `build`, and its relaunch needs budget + 15 GiB reserve = 89 GiB free, which the running step and ~40 GB of
+  standing claims never leave. It stayed out until the build ended (13:51-14:23 only by a manual claim trim; 16:06-16:19
+  until the teacher ended): the GPU idle ~1 h 15 min of a ~2 h round.
+- **Cause.** Accounting, then growth. At 16:06 the data step fit physically (46 GiB available - 11 GiB peak leaves
+  35 > 15), but the collection's unspent budget reserved half of 25 GiB and other claims ~8: free < 27. The build
+  (17.0-17.5 GiB peaks r0004-r0007) comes ~2 h into the collection, when it uses 60-66 GiB: collection + build + 15
+  reserve is at the machine's edge, so something must shrink. The collection grows with its age, not round over round
+  (claim peaks 41.5-52.5 GiB at ~1 h, 64.8 at 2 h for v0004; restarts reset it). Sampled on v0006 (16:28-16:37, fresh):
+  CUDA flat at 19.8 GiB, scheduler/front/collect flat, the 16 shared node collector servers 5.1 -> 6.6 GB in 9 min
+  (they recycle only at 1.5 GB RSS each, `cli.ts --recycle-rss-mb`): the growth is in the per-slot part. A full 2 h
+  attribution was not measured.
+- **Decision: shrink, not stop.** While a round prepares (frontier through build), the driver writes a claim with
+  `share` in `ops/ei/held-priority/` (`yield_claim`, heartbeat like a held claim). Every DGX collection then runs
+  `PREP_YIELD_SHARE` = 0.5 of its slots (`priority_slots`: the smallest live share; held claims keep 0.75), so its idle
+  node servers drain and exit, and lowers its ledger claim to its measured use x 1.1 (`memory_ledger resize yield`;
+  `restore` when no claim is left gives back the earlier budget or the guard's raise). Each step first waits until the
+  ledger would admit it (`memory_ledger.admissible`, at most `PREP_YIELD_WAIT` = 600 s) and then launches either way,
+  so the old preemption is the fallback and prep never waits more than 10 min a step (data fits at once by the numbers
+  above; the build comes after an hour of yielding). The build budget goes back to 24 GB (measured 17.5 GiB; the guard
+  raises an over-budget unit while memory is plentiful). The 15 GiB reserve is unchanged. Half the slots at full KV
+  still decode; a stopped collection decodes nothing.
+- **Concurrency and the collection's claim (coordinator, same day).** v0006's engine ran at its cap (`#running-req`
+  160 = 128 slots + 32 fill, 5-10 queued, KV 0.61, mamba 0.49, 1.75-1.94k tok/s, ~200-270 own episodes/h); decode is
+  bandwidth-bound and KV has room: `DGX_COLLECT_SLOTS` = 192 (224 running with the fill), opt-out `--slots 128`. Its
+  claim is now measured, one function for every DGX collection site (`dgx_collection_budget_gb`: async standing,
+  cycle collect, halt recollect): engine kv + 20 (v0006: CUDA 19.8 + host 10.7 GiB at 12 GB KV) + 0.2 GiB per slot
+  (per-slot part ~0.07 fresh, ~0.14 at 1 h, ~0.27 at 2 h): 70 GiB at 192 slots (58 at 128) instead of
+  kv + 24 + 0.3/slot (94 at 192: unreadmittable, and 74 at 128). Past it the guard raises the claim while memory is
+  plentiful. Expected at 192: ~83 GiB at 2 h at the 2 h rate; yielding to prep (96 slots) ~57, leaving ~20 GiB over the
+  build's 17.5 beside it. Risk: if the per-slot part keeps growing at 192 the floor guard (available < 20) may stop
+  the collection late in a round; watch `aei1-collect-v*` peaks after the restart. The throughput change is read from
+  `actor.log` after the next restart.
+- **Rejected.** Smaller collection all the time (costs throughput in the other ~45 min); prep at medium priority (waits
+  without bound behind the collection, on the critical path: r0007's SFT waited 14 min for its prep); a lower node
+  recycle threshold (shared collector mechanism of GRPO and held too; not needed once the prep steps fit).
+- **Inventory** (sizes, starts, requeues or preempts the DGX collection or a prep step):
+  `expert_iteration.py`: `COLLECTOR_SLOT_GB`/`REMOTE_COLLECTOR_SLOT_GB`, `STAGE_PRIORITY`/`COLLECTION_PRIORITY`,
+  `priority_slots`/`held_priority_claims` and `FrontierCollector._priority` (the in-place shrink, now also the ledger
+  resize), `collect` (actor KV and running cap, `--unit-prefix` = ledger unit), `Cycle.ledger`/`present`/`wait`,
+  `Cycle.collect_stage`, `halt` recollect, `_fill_window` actor, cycle `frontier_stage`/`data_stage`/`build_stage`
+  (now under the same yield: a speculative next cycle's collection may run beside them), `rebuild` (32 GB, left: it
+  runs only on a rebuild request), `AsyncRoundDriver.ensure_collection`, `remote_collect_argv`/`start_remote_collector`
+  (remote collectors hold no engine and are not shrunk: `priority_dir=None` for `--actor`), `prepare` (changed),
+  `train_sft` (stops the collection for a DGX SFT: unchanged, the learner needs the memory), `recap`/GRPO/`publish`
+  (high stages at a round's end, when the collection is replaced anyway: unchanged), `dgx_held` (claims held priority:
+  unchanged, now also lowers the claim). `memory_ledger.py`: `outstanding`, `headroom`, `preemption_plan`,
+  `requeue_spec`, `plan_launch`, `default_reserve`, `learned_budget`/`family`, guard budget raise and `victim`
+  (unchanged; `resize`, `yield_claim`, `restore_claim`, `admissible` added). grpo's own collector (GRPO rounds) does
+  not read the claims: a GRPO round is itself a high stage and stops the collection.
+- **Rollout.** Opt-out `--prep-yield-share 1` (async-drive and cycle; or `NATLANG_EI_PREP_YIELD_SHARE=1`). The running
+  driver takes it at its next restart on a new pin; a collection still running from the old pin reads the claim as a
+  held claim (0.75 of its slots, no ledger resize), so each step falls back to the preemption after its 10 min wait.
+  Tests: `test_a_yielding_collection_lowers_its_claim_so_a_waiting_stage_fits_beside_it_and_restores_it`
+  (test_memory_ledger.py), `test_round_preparation_claim_shrinks_the_dgx_collection_further_and_its_ledger_claim_follows`
+  (test_colab_and_profiles.py), `test_round_preparation_runs_beside_a_yielding_collection_instead_of_preempting_it` and
+  `test_wait_for_room_is_bounded_and_skipped_when_opted_out` (test_async_train.py). Telemetry: `held priority` and
+  `ledger claim` events in the collection's `collect.log`, `prep yield` notes in `drive.log`, `claim yield`/`claim
+  restore` ledger events.
