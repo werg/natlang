@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import contextlib
 import hashlib
 import json
 import math
@@ -1440,7 +1441,28 @@ def _read_info(client, attempts=None, wait=20.0):
             time.sleep(wait)
 
 
-def measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
+@contextlib.contextmanager
+def _writer_lock(out):
+    """An exclusive lock on ``out/.writer.lock`` for one ``measure``: one measurement writes a directory at a time
+    (2026-11-24: a ledger-requeued measure unit was relaunched beside a restarted driver's new one on the same held-v4
+    episodes). Raises when another measurement holds it; the lock goes with its process."""
+    import fcntl
+    Path(out).mkdir(parents=True, exist_ok=True)
+    with open(Path(out) / '.writer.lock', 'a') as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError(f'another held_eval measure writes {out}: one measurement per directory') from None
+        yield
+
+
+def measure(out, *args, **kwargs):
+    """``_measure`` (its arguments and docs) while this process alone writes ``out`` (``_writer_lock``)."""
+    with _writer_lock(out):
+        return _measure(out, *args, **kwargs)
+
+
+def _measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_BASE, case_seconds=3600,
             max_model_requests=EPISODE_MODEL_CALLS, max_turns=128, context_tokens=CONTEXT_TOKENS, label=None, allow_other_engine=False, log=print,
             top_p=None, order='longest-first', duration_priors=()):
     """Measure the policy served at ``endpoints`` ([(url, slots)]) on every task of ``manifest`` x ``samples`` into

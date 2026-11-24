@@ -465,9 +465,16 @@ def test_held_pin_measures_on_its_harness_and_is_carried_to_the_next_cycle(tmp_p
     stopped = []
     monkeypatch.setattr(pop_rl_actor, 'stop_pop_fills', lambda: stopped.append(1))
     monkeypatch.setattr(pop_rl_actor, 'pop_held_units', lambda pattern='*popheld*': [])   # no unit left to join
+    popen = []
+
+    class Done:
+        pid = 1
+        def poll(self):
+            return 0
+    monkeypatch.setattr(ei.subprocess, 'Popen', lambda argv, **kw: popen.append((argv, kw['env'])) or Done())
     cycle.pop_held('candidate', tmp_path / 'c.pt')
     assert stopped                     # a measurement first stops any Pop fill
-    assert calls[-1][0][2] == '/pin-held' and calls[-1][1] is None
+    assert popen[-1][0][2] == '/pin-held' and 'HELD_MANIFEST' not in popen[-1][1]     # pop-held.sh's held-v3 default
     assert cycle.held_env['NATLANG_REPO'] == '/pin-held' and cycle.env['NATLANG_REPO'] == '/pin-new'
     out = ei.next_cycle_argv(argv, directory='/sft-v9', name='sft-v9', start='/v8.pt', start_sha='ccc', commit='d' * 40,
                              previous='/sft-v8', prefer_unseen=[], fallback_prefer_unseen=[])

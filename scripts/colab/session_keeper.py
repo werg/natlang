@@ -172,6 +172,9 @@ class Keeper:
             return {}
 
     def save(self, state: dict) -> None:
+        # alias and session name: run-sft (pop_rl_actor.keeper_replaced_since) finds the keeper of its host by them
+        # and ends a wait on a session this keeper replaced (``last_request_try``)
+        state = {**state, 'alias': self.a.alias, 'session': getattr(self.a, 'session', None)}
         tmp = self.state_path.with_suffix('.partial')
         tmp.write_text(json.dumps(state, indent=1, sort_keys=True) + '\n')
         os.replace(tmp, self.state_path)

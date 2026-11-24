@@ -155,7 +155,7 @@ def test_start_and_serve_checkpoint_claim_one_admissible_pop_budget(monkeypatch)
     assert float(pop_rl_actor.pop_sglang_budget_gb()) + pop_rl_actor.POP_RESERVE_GB <= 10.2
     monkeypatch.setenv('NATLANG_POP_HELD_BUDGET_GB', '9.0')
     assert pop_rl_actor.pop_sglang_budget_gb() == '9.0'
-    for path in (pop_rl_actor.start, pop_rl_actor.serve_checkpoint):
+    for path in (pop_rl_actor.start, pop_rl_actor._serve_pop):     # serve_checkpoint serves Pop through _serve_pop
         assert 'pop_sglang_budget_gb()' in inspect.getsource(path)
 
 
