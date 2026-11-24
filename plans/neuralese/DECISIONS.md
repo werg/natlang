@@ -10088,6 +10088,14 @@ Its `/v1/neuralese/info` equals the DGX collection actor's in capabilities (`dec
 
 Tests: `test_async_train.py` (target parsing and slots, Pop unit naming, Colab-only rebind, yield and re-serve,
 GRPO-phase stop, held process detection and serve lock, collection law passed to the driver).
+
+**Throughput** (measurement collector `aei1-collect-v0000-pop`, 32 slots, collecting sft-v9 e15b20a8 into
+`collect/v0000-e15b20a86f1c-pop`, which the round prepare reads with the policy's other collections): 46 finished
+episodes/h over 00:30-01:01 (24 episodes; 33 since 00:20). Pop is not the limit: 5.8 requests in flight on average
+(of 32), 372 generated tok/s, the GPU 25-96% busy; episodes spend most of their time between model calls. Episodes
+scale with slots until Pop saturates (decode ~26 ms a step at 20 running), so the driver argument is 64 slots
+(collector claim 23 GB, measured use 3.5 GB at 32 slots):
+`--rebind-actor pop-os@http://100.73.236.5:18531=64` beside the Colab target (`--remote-slots 64` stays its default).
 ## 2026-11-24 01:00 Teacher providers for aei1's campaign: Gemini on Vertex (credits), Nemotron 3.5 Super, ERNIE free; Nemotron 0/48 explained; three harness fixes (teacher-providers strand)
 
 **Nemotron 3 Ultra's 0/48 in `aei1/teacher-r0001`.** 45 of its 48 episodes were third attempts (`-a2`) on tasks Luna and
