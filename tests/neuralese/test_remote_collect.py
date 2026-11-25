@@ -69,6 +69,16 @@ def test_mirror_roots_reject_relative_or_empty_configuration(monkeypatch):
             rc.mirror_roots()
 
 
+def test_standalone_vm_wrapper_keeps_coordinator_roots_without_common_import(tmp_path):
+    script = tmp_path / 'standalone.py'
+    script.write_text(Path(rc.__file__).read_text())
+    environment = {**os.environ, 'PYTHONPATH': '',
+                   'NATLANG_COLLECT_MIRROR_ROOTS': json.dumps(['/coordinator/data/'])}
+    result = subprocess.run([sys.executable, str(script), '--help'], cwd=tmp_path,
+                            env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_pull_end_to_end_with_a_local_vm(tmp_path, monkeypatch):
     vm = tmp_path / 'vm'
     work = tmp_path / 'data' / 'W'

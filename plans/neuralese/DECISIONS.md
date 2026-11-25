@@ -12260,7 +12260,7 @@ small files) — not exercised; memetic family seconds seed only from the collec
 Normal integration of newer origin/main exposed a failing machine-path ratchet
 in the new `remote_collect.py`. The shared mechanism was the hardcoded mirror
 root set, its independently hardcoded byte regex, and the standalone VM audit
-using those roots. Resolve coordinator home and logical data/model roots through
+using those roots. Resolve the canonical checkout and logical data/model roots through
 `common.paths`, derive the regex from that set, and pass the exact coordinator
 roots into the VM wrapper through `NATLANG_COLLECT_MIRROR_ROOTS` (also the explicit
 operator override). The standalone wrapper therefore needs no machine-config

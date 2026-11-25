@@ -56,6 +56,7 @@ if (REPO / 'training' / 'neuralese').is_dir():     # not the VM wrapper's copy i
 REMOTE_SYNC_GB = 3          # the DGX unit: this process and its rsyncs (file lists of ~100k files), no episodes
 SYNC_SECONDS = 60
 def mirror_roots():
+    """Logical coordinator roots, preserved when the standalone wrapper runs on its VM."""
     configured = os.environ.get('NATLANG_COLLECT_MIRROR_ROOTS')
     if configured is not None:
         roots = json.loads(configured)
@@ -63,7 +64,9 @@ def mirror_roots():
             raise ValueError('NATLANG_COLLECT_MIRROR_ROOTS must be a nonempty JSON list of absolute paths')
     else:
         from natlang_neuralese.common import paths
-        roots = [Path.home(), *(paths.root(name) for name in ('data_nvme', 'data_hdd', 'models'))]
+        roots = [paths.root(name) for name in ('data_nvme', 'data_hdd', 'models')]
+        # Use the configured canonical checkout, not a pin NATLANG_REPO may name.
+        roots.append(Path(paths._profile().get('repo') or paths.DEFAULTS['repo']).expanduser())
     return tuple(sorted({str(root).rstrip('/') + '/' for root in roots}))
 
 
@@ -78,9 +81,8 @@ PUSH_EXCLUDE = ('rollouts.jsonl', 'journal.jsonl', 'row-*/', '*.log', 'actor/', 
 MISSING_RELAUNCHES = 3
 LOST_SECONDS = 1800         # a VM that answers no ssh this long is gone: the unit ends (rc 75) and the driver restarts it
 SESSION_LOST_RC = 75
-PATH_RE = re.compile(rb'(?:' + b'|'.join(re.escape(root.rstrip('/').encode()) for root in MIRROR_ROOTS) +
-                     rb')/[A-Za-z0-9._+\-/]+')
-MIN_DIR_DEPTH = 5           # a scanned directory reference this shallow is never mirrored
+PATH_RE = re.compile(rb'(?:' + b'|'.join(re.escape(r.rstrip('/').encode()) for r in MIRROR_ROOTS) + rb')/[A-Za-z0-9._+\-/]+')
+MIN_DIR_DEPTH = 5           # a scanned directory reference this shallow (e.g. the checkout's runs/) is never mirrored
 
 
 def log(**event):
@@ -95,7 +97,7 @@ def mirrored(path):
 def mirror_plan(paths):
     """(links, files): every symlink on the way to each of ``paths`` (``[(link path, its target as written)]``, outermost
     first) and the real files or directories to copy, so the VM resolves each lexical path as the DGX does (a registry
-    role path ``data_nvme:x`` reaches the archive through a link; a pin's ``runs`` is a link to the checkout's)."""
+    role path ``data_nvme:x`` reaches the HDD root through a link; a pin's ``runs`` is a link to the checkout's)."""
     links, files = {}, set()
 
     def walk(path, depth=0):
