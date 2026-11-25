@@ -523,7 +523,79 @@ def verify_application_return(binding, records, roots, entry=None):
         raise ValueError('selected domain return differs from actual application result')
 
 
-def verified_training_scope(verification, records, root):
+def verify_native_invocation_certificate(invocation, records, scope, root, details=None):
+    """Bind an automatic native oracle to original bytes, not an assertion of call success."""
+    if 'certificate' not in invocation:
+        return  # Existing explicitly assessed partial scopes retain their own evidence contract.
+    certificate = json.loads(bound_file(invocation['certificate'], root).read_text())
+    raw = bound_file(certificate['originalPacket'], root).read_bytes()
+    packet = json.loads(gzip.decompress(raw) if raw[:2] == b'\x1f\x8b' else raw)
+    original = json.loads(bound_file(scope['original_outcome'], root).read_text())
+    exercise = packet.get('execution', {}).get('diagnostics', {}).get('natlangTeacher', {})
+    proof = packet.get('execution', {}).get('diagnostics', {}).get('openGoalVerification', {})
+    captured = {item['callId']: item['record'] for item in exercise.get('calls', [])}
+    if details is not None and {item['callId']: item for item in exercise.get('calls', [])} != {detail['callId']: detail for _, detail in details}:
+        raise ValueError('native invocation packet differs from original events or call metadata')
+    record = records[invocation['call_id']]
+    if (certificate.get('schema') != 'natlang.independent-native-return/1' or original != packet.get('result') or
+            original.get('passed') is not False or captured != records or record.get('outcome') != 'done' or
+            certificate.get('definition') != record.get('definition') or certificate.get('inputs') != record.get('inputs') or
+            certificate.get('output') != record.get('output')):
+        raise ValueError('native invocation certificate differs from original failed capture')
+    if not scope.get('assessor'):
+        raise ValueError('automatic native scope lacks its source-bound assessor')
+    bound_file(scope['assessor'], root)
+    source = bound_file(certificate['checker'], root).read_text()
+    match = re.match(r'\A---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)\Z', source)
+    def matches(ref, text):
+        if not isinstance(text, str):
+            return False
+        data = text.encode('utf-8')
+        return ref and ref.get('complete') is True and ref.get('bytes') == len(data) and ref.get('hash') == hashlib.sha256(data).hexdigest()
+    instructions = certificate.get('instructionsJson')
+    if not match or json.loads(instructions) != match[2] or not matches(record['definition'].get('instructions'), instructions):
+        raise ValueError('native invocation contract differs from actual authored instructions')
+    def project(value, parts):
+        if not isinstance(parts, list) or not parts:
+            raise ValueError('native invocation needs explicit evidence paths')
+        for part in parts:
+            value = value[part]
+        return value
+    contracts = {
+        'gad-question-judgment/1': ('reviewDurableQuestion/reviewQuestion/interpretQuestion.nl', 'DurableQuestionJudgment',
+            {'returnPath': ['actualResult', 'question'], 'inputPaths': {'goal': ['goal'], 'history': ['diagnostics', 'history']},
+             'checkNames': ['exactIndividualPublications', 'exactQuestionDisposition']}),
+        'gad-participant-judgment/1': ('reviewDurableQuestion/reviewParticipant/evaluateRoster.nl', 'DurableParticipantJudgment',
+            {'returnPath': ['actualResult', 'participant'], 'inputPaths': {'goal': ['goal'], 'question': ['actualResult', 'question'], 'roster': ['diagnostics', 'roster']},
+             'checkNames': ['exactIndividualPublications', 'exactRetainedRoster', 'exactParticipantDisposition']}),
+    }
+    contract = contracts.get(certificate.get('contract'))
+    binding = certificate.get('nativeBinding') or {}
+    if (not contract or record['definition'].get('id') != 'nl:' + contract[0] or record['definition'].get('source') != contract[0] or
+            record['definition'].get('returns') != contract[1] or binding != contract[2]):
+        raise ValueError('native invocation has an unregistered or mismatched complete-result contract')
+    checks = binding.get('checkNames')
+    observed = proof.get('observedChecks', proof.get('checks', {}))
+    if not isinstance(checks, list) or not checks or any(observed.get(name) is not True for name in checks):
+        raise ValueError('native invocation cites absent or failed independent checks')
+    input_paths = binding.get('inputPaths') or {}
+    inputs = certificate.get('expectedInputs') or {}
+    texts = certificate.get('expectedInputJson') or {}
+    if (set(input_paths) != set(record.get('inputs', {})) or set(inputs) != set(input_paths) or set(texts) != set(input_paths) or
+            any(not same_json_value(project(proof, input_paths[name]), inputs[name]) or
+                not same_json_value(json.loads(texts[name]), inputs[name]) or not matches(record['inputs'][name], texts[name]) for name in inputs) or
+            not same_json_value(project(proof, binding.get('returnPath')), certificate.get('expectedReturn')) or
+            not same_json_value(json.loads(certificate['expectedReturnJson']), certificate.get('expectedReturn')) or
+            not matches(record.get('output'), certificate['expectedReturnJson'])):
+        raise ValueError('native invocation value differs from its independent input/return evidence')
+    descendants = {record['call_id']}
+    while additions := {key for key, value in records.items() if value['parent_call_id'] in descendants} - descendants:
+        descendants.update(additions)
+    if any(records[key].get('effects') for key in descendants):
+        raise ValueError('native pure-return certificate contains authority-bearing effects')
+
+
+def verified_training_scope(verification, records, root, details=None):
     """Admit independently attested invocations while retaining the complete original graph."""
     scope = verification.get('training_scope')
     if scope is None:
@@ -531,10 +603,13 @@ def verified_training_scope(verification, records, root):
             raise ValueError('partial live verification needs an explicit training scope')
         return None
     if (verification['status'] != 'partial' or not isinstance(scope, dict) or
-            scope.get('schema') != 'natlang.training-scope/1'):
+            scope.get('schema') not in {'natlang.training-scope/1', 'natlang.training-scope/2'}):
         raise ValueError('invalid partial live training scope')
     if scope.get('assessor'):
         bound_file(scope['assessor'], root)
+    certified = scope['schema'] == 'natlang.training-scope/2'
+    if certified and not scope.get('assessor') or any(('certificate' in invocation) != certified for invocation in scope.get('invocations') or []):
+        raise ValueError('native certificates require training-scope/2 and its source-bound assessor')
     original = json.loads(bound_file(scope['original_outcome'], root).read_text())
     if original.get('passed') is not False:
         raise ValueError('partial recovery must preserve the original failed outcome')
@@ -551,7 +626,18 @@ def verified_training_scope(verification, records, root):
         for binding in evidence:
             if binding.get('kind') not in {'workspace', 'cdp'}:
                 raise ValueError('recovered invocation needs workspace or CDP evidence')
-            bound_file(binding, root)
+            witness = bound_file(binding, root)
+            if not certified:
+                try:
+                    payload = json.loads(witness.read_text())
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    payload = None
+                if isinstance(payload, dict) and payload.get('schema') == 'natlang.independent-native-return/1':
+                    raise ValueError('native return evidence cannot downgrade to training-scope/1')
+        try:
+            verify_native_invocation_certificate(invocation, records, scope, root, details)
+        except (KeyError, TypeError, IndexError) as error:
+            raise ValueError("Malformed native invocation certificate") from error
         ordinals = invocation.get('ordinals')
         if ordinals is not None:
             exchanges = records[call_id].get('model_turns') or []
@@ -855,7 +941,7 @@ def load_episode(path):
         details.append((binding, detail))
     if seen != set(scopes):
         raise ValueError('workflow call coverage incomplete')
-    training_scope = verified_training_scope(verification, records, path.parent)
+    training_scope = verified_training_scope(verification, records, path.parent, details)
     roots = {call_id for call_id, record in records.items() if record['parent_call_id'] is None}
     attested_roots = verification.get('root_call_ids')
     if (not isinstance(attested_roots, list) or not attested_roots or
