@@ -15,7 +15,8 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   model call is (exact actor prompt ids, sampled ids) (``lower_rollout_turns.episode_turns``; calls of one invocation chain
   into one sequence as in ``exp0_sft.chains_of``). A consumer call's imported Neuralese state is a differentiable
   pass-through: computed in the consumer's own forward from the producer document the episode recorded (the text write's
-  ``[produce_open] + text ids``, ``lfm3_fast_train.passthrough_plan``), so the consumer's loss reaches the weights that
+  producing call, ``produce_open`` and the text ids; before 2026-11-25 ``[produce_open] + text ids`` alone;
+  ``lfm3_fast_train.passthrough_plan``), so the consumer's loss reaches the weights that
   computed the state (``--no-neuralese-passthrough``: the same state detached; a block without a recorded document is the
   actor's stored state, ``lfm3_fast_train.import_tensors``). The producer's own sampled tokens train as its own calls. Loss on sampled tokens only:
   ``-min(rho, C) * A * logp + beta * k2(ref || policy)``, ``rho = exp(logp_learner - logp_actor)`` (truncated importance

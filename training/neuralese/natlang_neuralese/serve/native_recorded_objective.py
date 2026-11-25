@@ -28,8 +28,15 @@ def _prompt_items(engine,turn):
         if segment['kind']=='tokens':
             actual.extend(('token',token,producing) for token,producing in zip(segment['token_ids'],segment['producing']))
         else:actual.append(('state',segment['id'],segment.get('stop_gradient',False),segment.get('source_occurrence')))
+    # A decision's capture prompt also holds the tokens every option shares (native_learning._shared_into_prompt).
+    if (turn['native']['kind']!='generation' and actual[:len(expected)]==expected
+            and all(item[0]=='token' and not item[2] for item in actual[len(expected):])):
+        return
     if expected!=actual:
-        raise ValueError('native recorded prompt differs from its exact rendered messages/tools/import roles')
+        at=next((i for i,(a,b) in enumerate(zip(expected,actual)) if a!=b),min(len(expected),len(actual)))
+        raise ValueError('native recorded prompt differs from its exact rendered messages/tools/import roles '
+                         f'(item {at}: rendered {expected[at:at+3]}, recorded {actual[at:at+3]}; '
+                         f'{len(expected)} vs {len(actual)} items)')
 
 
 def lower_recorded_objective(engine,turns,events,terms,*,owner=None):

@@ -47,7 +47,7 @@ def block_ids(value) -> set[str]:
 # paths by this list and fail a request that needs an unlisted capability before sending it
 # (`neuralese-<capability>-unavailable`); this server serves every capability it lists.
 NATIVE_CAPABILITIES = sorted([
-    "chat", "chat.stream", "decide", "score", "grad", "grad.order2", "optim", "native.adapters", "native.capture", "adapters.create", "guidance", "guidance.check", "training-guidance", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
+    "chat", "chat.stream", "decide", "score", "grad", "grad.order2", "optim", "native.adapters", "native.capture", "adapters.create", "guidance", "guidance.check", "training-guidance", "native.text-write", "native.text-write.context", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
     "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view", "view.budget/1"])
 
 
@@ -322,7 +322,11 @@ def make_handler(engine: Engine):
             try:
                 if self.path == "/v1/neuralese/native-states/write-text":
                     body = self._object()
-                    return self._json(201, engine.native_write_text(body.get("text"), value_type=body.get("type"), adapters=body.get('adapters')))
+                    # the producing call the text is written at the end of (Engine.write_context); none: its own frame
+                    context = {key: body[key] for key in ("messages", "tools", "prompt_token_ids", "prompt_segments",
+                                                          "reply_token_ids") if key in body}
+                    return self._json(201, engine.native_write_text(body.get("text"), value_type=body.get("type"),
+                                                                    adapters=body.get('adapters'), context=context or None))
                 if self.path == "/v1/neuralese/native-states/capture":
                     body = self._object()
                     return self._json(201, engine.native_capture(body.get("prompt_token_ids"), body.get("reply_token_ids"),

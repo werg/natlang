@@ -37,10 +37,15 @@ the spliced read of a context-free write at 0/12 read-backs. This set is the tra
 number. Whether the runtime goes back to splicing is a separate decision.
 
 **Not done, and why.**
-- *Producer state computed in the subagent's own context.* The subagent's whole conversation would be the source
-  document, and its report would be a produce span inside it. That adds 5-30k tokens of source per handoff, and the
-  D01 leads read up to 22 handoffs. Nothing serves this form today: a produce span read by another call is read in
-  context since d6b3218e7.
+- *Producer state computed in the subagent's own context:* **done 2026-11-25** (DECISIONS 2026-11-25 "Neuralese
+  states are written in their producing context"; the owner called the context-free write "a massive bug"). Each
+  report's producer document is now the subagent's final call (its rendered conversation), the reasoning of its
+  final reply, `produce_open` and the report (`Lowering.producer_document`). A conversation over
+  `--max-producer-tokens` (8192) is compacted like the runtime compacts a long call: the opening and the latest
+  exchange, then the opening alone. A lead's documents together stay within `--max-lead-producer-tokens` (49152).
+  A subagent the source did not keep writes its report at the end of its opening: a recorded sibling's system prompt
+  and tools, with its own brief. Rebuilt as `sa2nl-20261125/{wideseek-ctx,searchswarm-ctx-s0..s3}`; the splice
+  builds of 2026-11-24 are superseded.
 - *Producer markers as subagent targets* (`produce_open … produce_close` sampled around the report). No engine samples
   a produce span (FALLOW C6), and training markers as targets in plain-format chats would be model-facing.
 

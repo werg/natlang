@@ -12077,3 +12077,71 @@ different programs that differ only in abstracted identifiers merge. Held-set ef
 driver pin; aei1's driver runs pin 21d7c5a050c6 and was not restarted). Teacher campaign order (`teacher_gen` over the
 frontier's rare tasks), filled-reasoning ordering and the SFT mix build are not capped: they consume the collection's
 own outcomes, and training-side exposure is a separate decision. Authored/procedural rows stay in the pool (owner).
+
+## 2026-11-25 Neuralese states are written in their producing context; the context-free text write is gone (neuralese-write strand)
+
+Owner, 2026-11-25: "The whole idea with Neuralese is to write it out in such a way that it attends to the text that
+precedes it, but then that preceding text, of course, doesn't propagate to wherever the Neuralese embeddings get used.
+… the compression function is you take some sort of text and have it return a model-generated summary, and the span
+of the summary is where the Neuralese handover happens." About the text write: "That context-free write, if I
+understand it correctly, sounds like a massive bug."
+
+**Inventory: where a state is created from text, and whether its producing context was there.**
+
+| Component | Before | Now |
+|---|---|---|
+| Python native engine `native_write_text` (`serve/engine.py`) | context-free: `[produce_open] + text` from position 0 | the span after its producing call (`write_context`, `capture_plan(text=)`) |
+| SGLang actor `_sglang_write_text` | context-free | the same plan, one fork capture request |
+| Managed llama-server | no text writer (typed `Neuralese<T>` from text failed) | `grammarWritePort`: `grammarCapture` in write mode |
+| In-page wllama | no text writer, no capture | unchanged: gap row in ENGINE_PARITY with its blocker |
+| `native.capture` / grammar capture (operators, compact_history) | in context (the reply in its own call) | unchanged |
+| `native.init-body` (soft states, guidance primed in the call) | in context (its real position in the call) | unchanged; its placeholder is now an in-context write |
+| Produce spans sampled in generation (template write readout) | in context | unchanged |
+| ts-host typed result / typed JSON result / result field (`runtime.ts writeNeuraleseText`) | `port.write(text)`, no context | the call's latest turn (`noteProducingCall`, `callContext`: exact prompt and reply ids from the RL capture, else messages and tools) |
+| ts-host literals `<|neuralese|>…` (`decodeNeuralese` → `writeLiterals`) | no context | the turn that wrote them |
+| ts-host typed argument (`materializeSoftStringArguments`) | no context | the caller's latest turn; none for an outside input |
+| writeGuidance / writeHint (`training-guidance.ts`) | no context | the writer call's turn |
+| Guidance with `guidancePriming: 'text'`, library values (`combinators.ts`), text-init placeholders, memetic guidance (`memetic_workspace.py`), `tune/soft.py`, `tune/learned/growth.py` | context-free | no producing call: the engine's producer call (`text_producer_messages`: the text as the user's message, the span as the answer) |
+| Learner pass-through (`lower_rollout_turns.write_sources`, `exp0_sft`, `grpo`, `lfm3_fast.passthrough_plan`) | computed whatever document was recorded | unchanged code path: new rollouts record the in-context document; SFT (`sft_sources neuralese-graph`) rewrites legacy context-free typed-result writes to the span after their producing turn (`write_sources(in_context=…)`, opt-out `--recorded-write-documents`); GRPO keeps the recorded document (exact replay) |
+| Whole-graph replay (`rl/native_replay.py`) | refused any writer document but the standalone one | accepts a token document with context; still refuses a producing prompt that imported a spliced state |
+| `subagent_neuralese.py` (D01, D02) | `[produce_open] + report` | the report at the end of the subagent's own call (below) |
+| `operator_ablation.py` `standalone` arm | context-free on purpose (an ablation) | unchanged |
+| Read side: `in-context-text` bypass (`engine.reads_in_context`, fork `native_state_registry::resolve`) | text writes and spans read as tokens | unchanged default (see the probe); legacy `text` kind keeps its own opt-out |
+
+**Decision: what produces a plain text value with no producing call.** A call that receives the value and writes it
+back as its answer: the text as the user's message, then the span after the generation prompt (an empty thought
+closed). The span attends to the value and to a real call frame (BOS, turn markers). The engine owns this frame, so
+every caller of `write-text` without a context (memetic guidance, library values, placeholders) gets it from one
+place. A sampled model-generated summary was not chosen: a `Neuralese<string>` value must hold its text exactly, and
+the learned compaction operators (`view`, `compact_history`) are the summary path and already capture in context.
+
+**Fix.** `native.text-write` takes the producing call (`prompt_token_ids` | `prompt_segments`, `reply_token_ids`, or
+`messages`/`tools`; `/v1/neuralese/info` lists `native.text-write.context`); the state is
+`prompt + reply up to its end of turn (+ </think> if open) + produce_open + text`, header `producer_kind: "span"`.
+The consumer still receives only the span's rows.
+A producing context that no longer fits the model's context with the text falls back to the producer call above
+(`Engine.write_in_context`). An empty text writes an empty state, as before.
+
+**Read side: the in-context-text bypass stays the default.** Probe (`neuralese_readback_probe.py`, the aei1 r0001
+policy `8e634a0f`, native engine BF16 on the DGX, `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0 NATLANG_NEURALESE_TEXT_IN_CONTEXT=0`
+so every state is spliced, 24 synthetic texts, greedy, the runtime's `natlang.read` prompt, exact `return_result`):
+
+| Arm | Read back | Receipt |
+|---|---|---|
+| state: write-text with no producing call (the engine's producer call) | 0/24 | exact-native-state 24 |
+| context: write-text after a producer call's messages | 0/24 | exact-native-state 24 |
+| captured: the text captured in place in a producer reply (`select`) | 0/24 | exact-native-state 24 |
+| inline: the text in the reader's own prompt | 19/24 | none |
+| shuffled: another text's state | 0/24 | exact-native-state 24 |
+
+Every spliced reply was the same text-independent opening ("We need to understand the task. The user says: …"):
+the policy ignores a spliced state, wherever it was written. Writing in context is the precondition for a readable
+handover, not sufficient for an untrained reader; the rebuilt subagent data (below) trains spliced reads of
+in-context states through the learner pass-through. Until the probe passes spliced on a trained policy, engines keep
+reading text writes and spans as their tokens (`NATLANG_NEURALESE_SPAN_IN_CONTEXT`, default on), so serving
+behaviour does not change. Flipping the default is an OPEN_ITEMS row.
+
+**Also fixed on the way** (test failures seen in this work): `test_native_typed_harness` counted split-tokenization
+alternative nodes (716a9d0fc) as invocations and compared raw option scores with the logsumexp readout; the recorded
+objective's prompt check refused a decision capture whose prompt holds the options' shared prefix
+(`native_learning._shared_into_prompt`). Its error now names the first differing item.

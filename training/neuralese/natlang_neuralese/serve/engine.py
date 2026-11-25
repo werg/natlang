@@ -764,13 +764,14 @@ class Engine:
     def reads_in_context(self, block_id, block):
         """Whether an import of `block_id` is fed as its exact tokens, inline, in the consumer's own context (`in-context-text`).
 
-        A state whose tensors are the plain forward of its own tokens in some other context: a text write (`native_write_text`:
-        the text at positions 0.. with nothing before it, no BOS, no call) or a produce span in its producer's call
-        (`native.capture`, a produce span sampled in generation). Spliced into a reader's call, the reader could not use
-        that KV (2026-11-23: 1 of 87 held read-backs returned the producer's text; the same text in the reader's own
-        context reads back exactly, and a span captured in a producer call read back like the context-free write,
-        DECISIONS 2026-11-23 "marker rows"). The text-primed state of a value is therefore its tokens computed where the
-        consumer reads them; with the identity producer adapter this is the inline text. The kind is the state header's
+        A state whose tensors are the plain forward of its own tokens in some other context: a produce span at the end
+        of its producing call (`native_write_text` since 2026-11-25, `native.capture`, a produce span sampled in
+        generation) or a legacy context-free text write (the text at positions 0.. with nothing before it). Spliced into
+        a reader's call, the untrained reader could not use that KV (2026-11-23: 1 of 87 held read-backs returned the
+        producer's text; a span captured in a producer call read back like the context-free write, DECISIONS 2026-11-23
+        "marker rows"; the probe of states written in context, DECISIONS 2026-11-25). Until readers are trained on spliced
+        reads, the value is read as its tokens computed where the consumer reads them; with the identity producer
+        adapter this is the inline text. The kind is the state header's
         `producer_kind` (so a state carried to another engine's store reads the same); a text write stored before that
         field existed is known from this store's `text-writes` marks. States with an adapter binding or a derivation,
         and contextual bodies, optimized or soft states, still splice exactly. NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices
@@ -1283,15 +1284,41 @@ class Engine:
         segments.append({"kind": "tokens", "token_ids": list(prefix[last:]), "producing": [False] * (len(prefix) - last)})
         return segments
 
-    def capture_plan(self, prompt_token_ids, reply_token_ids, select=None, imports=()):
+    def written_tokens(self, text):
+        """The token ids of a value's text written as a span: its escaped template tokens (no special token from the text)."""
+        if not isinstance(text, str):
+            raise RequestError("neuralese-native-state-text", "native text writes require text")
+        from .chat import escape_specials
+        nonce = hashlib.sha256((text + str(time.time_ns())).encode()).hexdigest()
+        return self._template_tokens(escape_specials(text, self.specials, nonce), nonce)
+
+    def capture_plan(self, prompt_token_ids, reply_token_ids, select=None, imports=(), text=None):
         """(prefix ids through produce_open, span ids) of a reply captured in place; RequestError when it has no content.
-        ``imports`` (``capture_prompt``): the consume markers around those positions are the only markers allowed."""
+        ``imports`` (``capture_prompt``): the consume markers around those positions are the only markers allowed.
+
+        ``text`` (a text write in its producing call, ``native_write_text``): the span is that text's written tokens,
+        placed after the whole reply up to its end of turn (the reply is context: the call that produced the value, its
+        reasoning and its tool call). A reply still inside its reasoning (an empty reply after a prompt that opens it)
+        gets ``</think>`` first, as the chat template writes an empty thought, so the value stands as the call's answer."""
         ids = [prompt_token_ids, reply_token_ids]
         if not all(isinstance(part, list) and all(type(t) is int and t >= 0 for t in part) for part in ids):
             raise RequestError("neuralese-native-capture", "capture needs the prompt and reply token ids")
         reply = list(reply_token_ids)
         end = next((i for i, token in enumerate(reply) if token in self.stop_ids), len(reply))
-        if select is not None:
+        if text is not None:
+            if select is not None:
+                raise RequestError("neuralese-native-capture", "a capture selects reply text or writes text, not both")
+            span = self.written_tokens(text)
+            reply = reply[:end]
+            think_open = self.tokenizer.convert_tokens_to_ids("<think>")
+            think_close = self.tokenizer.convert_tokens_to_ids("</think>")
+            opened = (bool(prompt_token_ids) and prompt_token_ids[-1] == think_open) or think_open in reply
+            if opened and think_close not in reply and isinstance(think_close, int) and think_close >= 0:
+                reply.append(think_close)
+            start = end = len(reply)
+            reply = reply + span
+            end = len(reply)
+        elif select is not None:
             start, end = selected_span(lambda part: self.tokenizer.decode(part, skip_special_tokens=False), reply[:end], select)
         else:
             think_close = self.tokenizer.convert_tokens_to_ids("</think>")
@@ -1303,7 +1330,8 @@ class Engine:
         span = reply[start:end]
         markers = set(self.role_tokens.ids)
         bounds = {position for at, _ in imports for position in (at - 1, at)}
-        if (not span or markers.intersection(span)
+        # an empty text writes an empty state (no rows); an empty captured reply has no content
+        if ((not span and text is None) or markers.intersection(span) or (text is not None and markers.intersection(reply[:start]))
                 or any(token in markers for index, token in enumerate(prompt_token_ids) if index not in bounds)):
             raise RequestError("neuralese-native-capture", "the reply has no content to capture, or carries role markers")
         prefix = [*prompt_token_ids, *reply[:start], self.role_tokens.produce_open]
@@ -1311,8 +1339,9 @@ class Engine:
             raise RequestError("context-length", "captured reply and its context exceed this model context")
         return prefix, span
 
-    def _capture_result(self, block, record, prefix, span, value_type, imports=(), blocks=()):
-        text = self.tokenizer.decode(span, skip_special_tokens=False)
+    def _capture_result(self, block, record, prefix, span, value_type, imports=(), blocks=(), text=None):
+        if text is None:
+            text = self.tokenizer.decode(span, skip_special_tokens=False)
         meta = record.meta()
         if value_type is not None:
             meta["type"] = value_type
@@ -1342,13 +1371,14 @@ class Engine:
             blocks.append(block)
         return blocks
 
-    def _native_capture_impl(self, prompt_token_ids, reply_token_ids, *, prompt_segments=None, select=None, value_type=None):
+    def _native_capture_impl(self, prompt_token_ids, reply_token_ids, *, prompt_segments=None, select=None, value_type=None,
+                             text=None):
         if not getattr(self, "native_state_enabled", False):
             raise RequestError("neuralese-native-state-unavailable", "native captures require shared-state serving")
         prompt, imports = self.capture_prompt(prompt_token_ids, prompt_segments)
         blocks = self._capture_blocks(imports)
         self._capture_import_tokens = sum(len(block.token_ids) for block in blocks)
-        prefix, span = self.capture_plan(prompt, reply_token_ids, select, imports)
+        prefix, span = self.capture_plan(prompt, reply_token_ids, select, imports, text=text)
         from ..model.shared_state import native_step, splice_block
         tensor = lambda ids: torch.tensor([ids], dtype=torch.long, device=self.device)
         with torch.inference_mode():
@@ -1363,15 +1393,74 @@ class Engine:
                 last = at
             opened = native_step(self.shared_model, tensor(prefix[last:]), cache)
             capture = native_step(self.shared_model, tensor(span), opened["cache"], producing=True)
-        text = self.tokenizer.decode(span, skip_special_tokens=False)
+        if text is None:
+            text = self.tokenizer.decode(span, skip_special_tokens=False)
         block, record = self._native_store_capture(span, [capture], text=text, producer_kind='span')
-        return self._capture_result(block, record, prefix, span, value_type, imports, blocks)
+        return self._capture_result(block, record, prefix, span, value_type, imports, blocks, text=text)
 
-    def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
-        result = self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)
-        if not adapters:   # a state written under adapters is read only as stored
-            self._note_text_write(result['id'])
-        return result
+    @staticmethod
+    def text_producer_messages(text):
+        """The producer call of a value handed over as plain text with no producing call of its own (a program input,
+        a library value, guidance written by crisp code): one call that receives the text as its message and writes it
+        back as its answer. The span is the text written at the end of that call, so its rows attend to the text and to
+        a real call frame (BOS, the turn markers) instead of to nothing (DECISIONS 2026-11-25 "Neuralese states are
+        written in their producing context")."""
+        return [{"role": "user", "content": text}]
+
+    def write_context(self, text, context):
+        """(prompt ids, prompt segments, reply ids) of the producing call a text write ends: ``context`` is the producer
+        call's exact prompt (``prompt_token_ids`` or its RL capture's ``prompt_segments``) and sampled reply
+        (``reply_token_ids``), or its ``messages`` and ``tools`` rendered here (no reply), or None for
+        ``text_producer_messages``."""
+        if context is None:
+            context = {}
+        if not isinstance(context, dict):
+            raise RequestError("neuralese-native-state-text", "a text write's context is an object")
+        prompt, segments = context.get("prompt_token_ids"), context.get("prompt_segments")
+        reply = context.get("reply_token_ids") or []
+        if prompt is None and segments is None:
+            messages = context.get("messages")
+            if messages is None:
+                messages, reply = self.text_producer_messages(text), []
+            elif not isinstance(messages, list) or not messages:
+                raise RequestError("neuralese-native-state-text", "a text write's context messages are a nonempty list")
+            segments = self.rendered_prompt_segments(messages, context.get("tools"))
+        return prompt, segments, list(reply)
+
+    def _capture_exact(self, block):
+        return self._native_exact(block)
+
+    def rendered_prompt_segments(self, messages, tools):
+        """A call's rendered prompt as capture segments (``capture_prompt``): a state the call reads in context
+        (``reads_in_context``) stands as its tokens, as generation feeds it; another exact state is imported between
+        the consume markers; a foreign state as its retokenized text (generation's best-effort fallback)."""
+        segments = []
+        for kind, value in self._prompt_plan(messages, tools):
+            if kind == "tokens":
+                segments.append({"kind": "tokens", "token_ids": [int(t) for t in value]})
+                continue
+            ident = value["id"] if isinstance(value, dict) else value
+            record = self.stored_native_state(ident)
+            if record is None:
+                raise RequestError("neuralese-unknown-native-state", f"{ident} is not in this server store; restore it first")
+            block = record.block
+            if not self._capture_exact(block):
+                segments.append({"kind": "tokens", "token_ids": [int(t) for t in self._tokens(block.text)]})
+            elif self.reads_in_context(ident, block):
+                segments.append({"kind": "tokens", "token_ids": [int(t) for t in block.token_ids.tolist()]})
+            else:
+                segments += [{"kind": "tokens", "token_ids": [int(self.role_tokens.consume_open)]},
+                             {"kind": "native_state", "id": ident},
+                             {"kind": "tokens", "token_ids": [int(self.role_tokens.consume_close)]}]
+        return segments
+
+    def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None, context=None):
+        """A value's text written as a Neuralese state at the end of its producing call (``write_context``): the
+        producer's prompt, its reply, then the text as a produce span. The consumer that imports the state receives
+        only the span's rows (KV and conv inputs), never the context they attended to. Before 2026-11-25 the text was
+        written from position 0 with nothing before it, a state no reader could use (DECISIONS 2026-11-23)."""
+        return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type, context=context),
+                                adapters)
 
     def _forced_message_plan(self,forced,tools,*,opening):
         """Render an exact assistant response against its actual prompt, forcing text spans through native roles."""
@@ -1550,38 +1639,26 @@ class Engine:
             raise RequestError('forced-message','native teacher text marker does not resolve to one exact token aligned occurrence')
         return plan
 
-    def _native_write_text_impl(self, text: str, *, value_type: str | None = None):
-        """Force supplied text through this model's actual producer transform and archive its native state."""
+    def _native_write_text_impl(self, text: str, *, value_type: str | None = None, context=None):
+        """Force supplied text through this model's producer transform at the end of its producing call and archive the
+        state (``native_write_text``)."""
         if not getattr(self, "native_state_enabled", False):
             raise RequestError("neuralese-native-state-unavailable", "native text writes require shared-state serving")
         if not isinstance(text, str):
             raise RequestError("neuralese-native-state-text", "native text writes require text")
-        from .chat import escape_specials
-        nonce = hashlib.sha256((text + str(time.time_ns())).encode()).hexdigest()
-        ids = self._template_tokens(escape_specials(text, self.specials, nonce), nonce)
-        if len(ids) + 2 >= self.context:
-            raise RequestError("context-length", "forced native text and producer markers exceed this model context")
-        from ..model.shared_state import native_step
-        with torch.inference_mode():
-            opened = native_step(self.shared_model, torch.tensor([[self.role_tokens.produce_open]],
-                dtype=torch.long, device=self.device))
-            capture = native_step(self.shared_model, torch.tensor([ids], dtype=torch.long, device=self.device),
-                                  opened["cache"], producing=True)
-            native_step(self.shared_model, torch.tensor([[self.role_tokens.produce_close]],
-                dtype=torch.long, device=self.device), capture["cache"])
-        block, record = self._native_store_capture(ids, [capture], text=text, producer_kind='text')
-        meta = record.meta()
-        if value_type is not None:
-            meta["type"] = value_type
-        result = {"id": record.id, "native_state": meta}
-        result["source_capture"] = {"policy": self._native_block_identity(block), "segments": [
-            {"kind": "tokens", "token_ids": [self.role_tokens.produce_open], "producing": [False]},
-            {"kind": "tokens", "token_ids": ids, "producing": [True] * len(ids)},
-            {"kind": "tokens", "token_ids": [self.role_tokens.produce_close], "producing": [False]}],
-            "payload_start": 1, "payload_stop": len(ids) + 1,
-            "adapter_binding": block.adapter_binding}
-        result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        return result
+        return self.write_in_context(text, context, lambda prompt, segments, reply: self._native_capture_impl(
+            prompt, reply, prompt_segments=segments, text=text, value_type=value_type))
+
+    def write_in_context(self, text, context, capture):
+        """``capture(prompt, segments, reply)`` of a text write at the end of its producing call (``write_context``). A
+        producing call whose context with the text no longer fits this model's context (a call served elsewhere, a
+        context filled to its end) writes the text in ``text_producer_messages``' call instead."""
+        try:
+            return capture(*self.write_context(text, context))
+        except RequestError as error:
+            if context is None or getattr(error, 'code', None) != 'context-length':
+                raise
+        return capture(*self.write_context(text, None))
 
     def native_init_body(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None, adapters=None, native_state_modes=None):
         return self._native_run(lambda: self._native_init_body_impl(messages, tools, placeholder, text,

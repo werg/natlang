@@ -2,7 +2,7 @@
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore, requestNativeStateIds, restoreNativeArtifacts, restoreNativeStates } from '../model/neuralese-server.js';
 import { archiveNativeTensorFrom, archiveNativeArtifactFrom, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
-  type NeuralesePort, type NeuraleseStore, type NativeAdapterStateConsumption, type NativeAdapterBinding, validateNativeAdapterStateConsumption, nativeCanonicalJson } from '../native/neuralese-store.js';
+  type NeuralesePort, type NeuraleseStore, type NativeWriteContext, type NativeAdapterStateConsumption, type NativeAdapterBinding, validateNativeAdapterStateConsumption, nativeCanonicalJson } from '../native/neuralese-store.js';
 import { hexDigest } from '../native/hash.js';
 import { neuraleseServerInfo, serves, type NeuraleseServerInfo } from '../model/neuralese-info.js';
 import { nativeStateConsumerFromInfo, type NeuraleseRuntimeOptions } from '../native/neuralese.js';
@@ -38,15 +38,19 @@ export async function nativeStateRuntimeOptions(options: NativeClientOptions, se
   if (typeof dialect !== 'string' || !dialect)
     return failure('neuralese-native-state-unavailable', 'the server must declare its native value dialect');
   const canWrite = serves(info, 'native.text-write');
-  if (settings.write !== 'available' && !canWrite)
+  // An engine that writes states only from produce spans it samples (the managed llama-server, the page) writes text
+  // through the grammar capture: the text forced as a produce span at the end of its producing call.
+  const production = (native as { production?: boolean }).production === true;
+  if (settings.write !== 'available' && !canWrite && !production)
     return failure('neuralese-native-text-write-unavailable', 'the server must explicitly advertise native.text-write');
-  const port = canWrite ? await nativeStateWritePort({ ...options, info }) : undefined;
   const nativeStateConsumer = nativeStateConsumerFromInfo(info);
   if (!nativeStateConsumer)
     return failure('neuralese-native-state-unavailable', 'the server must declare native identity and consumption modes');
-  const { grammarCapture } = await import('./native-operator.js');
+  const { grammarCapture, grammarWritePort } = await import('./native-operator.js');
+  const port = canWrite ? await nativeStateWritePort({ ...options, info }) :
+    production ? grammarWritePort({ ...options, info }) : undefined;
   const capture = serves(info, 'native.capture') ? serverCapture({ ...options, info }) :
-    (native as { production?: boolean }).production ? grammarCapture({ ...options, info }) : undefined;
+    production ? grammarCapture({ ...options, info }) : undefined;
   const { materializeNativeStateSentinels } = await import('./neuralese-server.js');
   const prime = serves(info, 'native.init-body') ? async (call: { messages: unknown[]; tools: unknown[] }, placeholder: string,
       text: string, type: string) => (await nativeTextOperation({ ...options, info }, 'init-body', {
@@ -221,6 +225,19 @@ export async function nativeStateWritePort(options: NativeClientOptions): Promis
     return failure('neuralese-native-text-write-unavailable', 'configure a native server with forced text producer support');
   const dialect = `native-state/${native.architecture}`;
   return { dialect, forcedText: true, async write(text, extra = {}) {
-    return (await nativeTextOperation({ ...options, info }, 'write-text', { text, ...extra })).meta;
+    const { context, ...rest } = extra;
+    return (await nativeTextOperation({ ...options, info }, 'write-text', { text, ...rest, ...await writeContextBody(context) })).meta;
   } };
+}
+
+/**
+ * The write-text request fields of a text write's producing call (`serve/engine.py` `write_context`): its exact prompt
+ * and sampled reply ids, else its messages and tools for the server to render; none: the server's own producer call.
+ */
+export async function writeContextBody(context: NativeWriteContext | undefined): Promise<Record<string, unknown>> {
+  if (!context) return {};
+  if (context.promptSegments?.length) return { prompt_segments: context.promptSegments, reply_token_ids: context.reply ?? [] };
+  if (context.prompt?.length) return { prompt_token_ids: context.prompt, reply_token_ids: context.reply ?? [] };
+  const { materializeNativeStateSentinels } = await import('./neuralese-server.js');
+  return { messages: materializeNativeStateSentinels(context.messages), tools: context.tools };
 }

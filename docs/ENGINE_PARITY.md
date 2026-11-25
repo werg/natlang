@@ -152,7 +152,8 @@ encodes a value's text from position 0 with nothing before it (no BOS, no call),
 producer's call; a reader that splices either cannot use it: 1 of 87 held read-backs returned the producer's text, and on
 the probe a spliced span read back 0 of 8 on the native engine and on SGLang where the same text inline read 6 of 8
 (DECISIONS 2026-11-23 "Neuralese read-back" and "marker rows, produce spans, producer kind"). The native-state header
-therefore records how a state was produced: `producer_kind` 'text' (a text write) or 'span' (a produce span from
+therefore records how a state was produced: `producer_kind` 'text' (a legacy context-free text write) or 'span' (a
+text write in its producing call since 2026-11-25, or a produce span from
 `native.capture`, the grammar capture or generation), optional and part of the content id, absent for every other
 state. Every engine applies one rule: a state exact for the engine, with no `adapter_binding` and no `derivation`, whose
 header has a producer kind and for which the request declares no state mode, is consumed as its exact token ids inline
@@ -169,6 +170,29 @@ still splice exactly on every engine. ts-host accepts the receipt for write-sour
 read occurrences and native-gradient bindings (an in-context read binds no native input).
 `scripts/neuralese_data/neuralese_readback_probe.py` is the acceptance probe (a text-written state, a captured span,
 the same text inline, a shuffled state) against any front.
+
+**A text write is written at the end of its producing call (2026-11-25).** A Neuralese state written from text is the
+span written after the call that produced the value: that call's prompt (its rendered messages and preceding turns),
+its reply up to its end of turn (an unfinished thought closed with `</think>`), then `produce_open` and the text as the
+producing span. The consumer that imports the state receives only the span's rows (KV, conv inputs), never the context
+they attended to (owner 2026-11-25: "write it out in such a way that it attends to the text that precedes it, but then
+that preceding text … doesn't propagate to wherever the Neuralese embeddings get used"). Before, `native.text-write`
+encoded the text from position 0 with nothing before it, a state no reader could use (DECISIONS 2026-11-23). The
+runtime passes the producing call (`NeuralesePort.write`'s `context`): for a typed result or a literal, the latest turn
+of the call that returned or wrote it; for a typed argument, the caller's latest turn; for writeGuidance, the writer
+call's turn (`operator-frames.ts` `callContext`, `noteProducingCall`). A value with no producing call (a program
+input, a library value, memetic guidance written by crisp code, a soft-state placeholder) is written as the answer of
+the engine's own producer call: the text as the user's message (`engine.py` `text_producer_messages`). The state is a
+produce span (`producer_kind: "span"`), so the read rule above applies to it (read in context by default, spliced
+with `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0`).
+
+| Engine | How it writes a text in its producing call |
+|---|---|
+| Python native engine | `native_write_text(text, context=…)` (`write-text` with `prompt_token_ids` or `prompt_segments` and `reply_token_ids`, or `messages`/`tools` rendered by the engine; none: `text_producer_messages`) runs `capture_plan(..., text=)`: the producer's prompt, its reply, `produce_open`, the text's escaped template tokens; `/v1/neuralese/info` lists `native.text-write.context` |
+| SGLang actor | the same plan (`Engine.write_context`, `capture_plan`) exported by one fork capture request (`_sglang_write_text` → `_sglang_native_capture`) |
+| Managed llama-server | no `native.text-write`: the runtime's write port is `grammarWritePort` (`model/native-operator.ts`, chosen by `nativeStateRuntimeOptions` for a `native_state.production` server), `grammarCapture` in write mode: the call's messages again with a grammar forcing its reply ids, `produce_open`, the text's tokens, `produce_close`; the fork writes the forced span as it writes any produce span (`producer_kind: "span"`). Before 2026-11-25 it had no text writer, so a typed `Neuralese<T>` result from text failed on it |
+| In-page wllama | **gap**: no text writer and no capture (`browser/local-model.ts` `neuraleseRuntime` returns neither a port nor a capture, before and after this change). Blocker: `grammarCapture` needs the server's `/tokenize`, `/apply-template` and a grammar-forced `/v1/chat/completions`, and `BrowserLocalModel` exposes no forced-span completion of the in-page engine; no page smoke runs in the agents' environment to check one |
+| Learners | the recorded `source_capture` is the producer document (`lower_rollout_turns.write_sources`, the pass-through); the SFT lowering rewrites a legacy context-free typed-result write to the span after its producing turn (`write_sources(in_context=…)`, `sft_sources neuralese-graph`); GRPO keeps the recorded document; whole-graph replay accepts a document with context (`rl/native_replay.py`) but not yet one whose producing prompt imported a spliced state |
 
 **Replies never sample a consume marker (2026-11-23).** The engine places `<|neuralese_consume|>` and
 `<|/neuralese_consume|>` around an imported state; a sampled one is the protocol error

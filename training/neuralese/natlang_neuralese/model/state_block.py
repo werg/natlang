@@ -40,12 +40,14 @@ def layer_fields(kind) -> tuple[str, ...]:
 
 
 # How a state's tensors came about, when they are the plain forward of its own tokens (`producer_kind`, optional, part of
-# the content id): 'text' = `native.text-write` (the text forced as a produce span from position 0, nothing before it);
-# 'span' = a produce span in its producer's call (`native.capture`, the grammar capture, a produce span sampled in
-# generation). Every engine reads such a state, when it is exact and carries no adapter binding or derivation, as its
-# token ids inline in the reader's own context (`in-context-text`): a 1.7B reader could not read the KV of a context it
-# never saw (DECISIONS 2026-11-23 "Neuralese read-back"; ENGINE_PARITY). Other states (contextual bodies, optimized,
-# derived and soft states) carry no kind and splice as stored. States written before the field existed keep their ids.
+# the content id): 'span' = a produce span at the end of its producing call (`native.text-write` since 2026-11-25, which
+# writes a value's text after its producer's prompt and reply; `native.capture`, the grammar capture, a produce span
+# sampled in generation); 'text' = a legacy `native.text-write` from before 2026-11-25 (the text from position 0 with
+# nothing before it; no engine writes it any more). Every engine reads such a state, when it is exact and carries no
+# adapter binding or derivation, as its token ids inline in the reader's own context (`in-context-text`) until readers
+# are trained to read the spliced span (DECISIONS 2026-11-23 "Neuralese read-back", 2026-11-25; ENGINE_PARITY). Other
+# states (contextual bodies, optimized, derived and soft states) carry no kind and splice as stored. States written
+# before the field existed keep their ids.
 PRODUCER_KINDS = ('text', 'span')
 
 

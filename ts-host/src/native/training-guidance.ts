@@ -279,7 +279,7 @@ export class TrainingGuidance {
         const turn = own[0]![1].node;
         const ref = await session.runtime.writeNeuraleseText(written, parseType('Neuralese<string>'), {
           sourceKind: 'typed-text-result', source: 'return_result', markerContext: 'return-result',
-          inputs: [{ node: turn, port: 'result-source' }] });
+          inputs: [{ node: turn, port: 'result-source' }], producerCallId: own[0]![0] });
         if (isNeuraleseRef(ref)) state = { id: ref.$neuralese.id,
           ...(ref.$neuralese.source_occurrence ? { source_occurrence: ref.$neuralese.source_occurrence } : {}) };
         else failure = 'the configured writer returned no native state';

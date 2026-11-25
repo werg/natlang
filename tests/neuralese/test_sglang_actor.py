@@ -32,7 +32,7 @@ def test_direct_native_endpoint_metrics_include_failures(monkeypatch):
     front.native_endpoint_metrics = {}
     monkeypatch.setattr(Engine, 'native_write_text', lambda self, text, **kw: (text, kw))
     assert front.native_write_text('hello', value_type='string', adapters=[]) == (
-        'hello', {'value_type': 'string', 'adapters': []})
+        'hello', {'value_type': 'string', 'adapters': [], 'context': None})
     def fail(*args, **kwargs):
         raise ValueError('bad input')
     monkeypatch.setattr(Engine, 'native_init_body', fail)
@@ -382,10 +382,11 @@ def test_imported_native_state_is_recorded_like_the_native_engine(tmp_path):
 
 
 def test_text_written_state_is_read_as_its_tokens_in_the_readers_context(tmp_path, monkeypatch):
-    """A state written from text (write-text) is consumed as its exact tokens inline in the reader's own context on
-    both engines (`in-context-text`, no consume markers): the out-of-context write was unreadable (2026-11-23, 1 of 87
-    held read-backs). The reader's logits equal those of the same tokens inline; NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 splices the stored
-    state as before, and states not written from text still splice exactly."""
+    """A state written from text (write-text) is a produce span at the end of its producing call (here, with no call
+    given, `Engine.text_producer_messages`), the same on both engines. It is consumed as its exact tokens inline in the
+    reader's own context (`in-context-text`, no consume markers) until readers read spliced states (DECISIONS
+    2026-11-25). The reader's logits equal those of the same tokens inline; NATLANG_NEURALESE_SPAN_IN_CONTEXT=0 splices
+    the stored state. A legacy context-free text write (no producer kind) reads in context only where its store marked it."""
     import torch
     from natlang_neuralese.model.shared_state import native_step
     native, front, roles, word, stored = _span_fixture(tmp_path)
@@ -395,6 +396,15 @@ def test_text_written_state_is_read_as_its_tokens_in_the_readers_context(tmp_pat
     written = front.native_write_text(text, value_type='Neuralese<string>')
     assert native.native_write_text(text, value_type='Neuralese<string>')['id'] == written['id']
     block_id = written['id']
+    # Written at the end of its producer call: the rendered call, its (empty) answer opened, produce_open, the text.
+    source = written['source_capture']
+    document = [token for segment in source['segments'] for token in segment['token_ids']]
+    frame = [token for segment in native.rendered_prompt_segments(native.text_producer_messages(text), None)
+             for token in segment['token_ids']]
+    start, stop = source['payload_start'], source['payload_stop']
+    assert document[:len(frame)] == frame and document[start - 1] == roles.produce_open and start > len(frame)
+    assert document[start:stop] == native.store.get_native_state(block_id).block.token_ids.tolist()
+    assert document[stop:] == [roles.produce_close]
     tokens = list(native.store.get_native_state(block_id).block.token_ids.tolist())
     messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': block_id},
                                              {'type': 'text', 'text': ' t5'}]}]
@@ -427,26 +437,27 @@ def test_text_written_state_is_read_as_its_tokens_in_the_readers_context(tmp_pat
     from natlang_neuralese.serve.engine import role_bans
     inline[..., sorted(role_bans(roles))] = float('-inf')   # the draw's logits carry the consume-marker bans
     assert torch.allclose(seen[0].float(), inline.float(), atol=1e-4)
-    # Opt-out: the stored state is spliced (the old path); a state not written from text is spliced too.
-    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
+    # Opt-out: the stored state is spliced.
+    monkeypatch.setenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '0')
     script = iter(reply)
     assert native.generate(later())['native_state']['imports'][0]['mode'] == 'exact-native-state'
-    monkeypatch.delenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT')
-    # The state's header says it was written from text: an engine with no memory of the write and no store marks (a
-    # restarted front, another engine's store the file was carried to) still reads it in context.
+    monkeypatch.delenv('NATLANG_NEURALESE_SPAN_IN_CONTEXT')
+    # The state's header says it is a produce span: an engine with no memory of the write (a restarted front, another
+    # engine's store the file was carried to) still reads it in context.
     import dataclasses
-    import shutil
     stored_block = native.store.get_native_state(block_id).block
-    assert stored_block.producer_kind == 'text' and front.stored_native_state(block_id).producer_kind == 'text'
-    front._text_written_states.clear()
-    native._text_written_states.clear()
-    for engine in (native, front):
-        if engine._text_write_marks() is not None:
-            shutil.rmtree(engine._text_write_marks(), ignore_errors=True)
+    assert stored_block.producer_kind == 'span' and front.stored_native_state(block_id).producer_kind == 'span'
+    assert not native.__dict__.get('_text_written_states') and not front.__dict__.get('_text_written_states')
     script = iter(reply)
     assert native.generate(later())['native_state']['imports'][0]['mode'] == 'in-context-text'
     assert front.reads_in_context(block_id, front.stored_native_state(block_id))
-    # A text write stored before the header field existed reads in context only where its store marked it.
+    # A legacy text write: 'text' reads in context unless NATLANG_NEURALESE_TEXT_IN_CONTEXT=0, and one stored before the
+    # header field existed reads in context only where its store marked it.
+    legacy_text = native.store.put_native_state(dataclasses.replace(stored_block, producer_kind='text')).id
+    assert native.reads_in_context(legacy_text, native.store.get_native_state(legacy_text).block)
+    monkeypatch.setenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '0')
+    assert not native.reads_in_context(legacy_text, native.store.get_native_state(legacy_text).block)
+    monkeypatch.delenv('NATLANG_NEURALESE_TEXT_IN_CONTEXT')
     legacy_id = native.store.put_native_state(dataclasses.replace(stored_block, producer_kind=None)).id
     assert legacy_id != block_id
     old = lambda: GenerationRequest(messages=[{'role': 'user', 'content': [

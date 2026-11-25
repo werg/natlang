@@ -2,13 +2,16 @@
 """Neuralese read-back acceptance probe: does a reader get back the text a producer wrote?
 
 usage: neuralese_readback_probe.py --endpoint URL [--out OUT.jsonl] [--temperature 0] [--top-p 1] [--n 24]
-                                   [--tokenizer PATH] [--arms state,inline,shuffled,captured]
+                                   [--tokenizer PATH] [--arms state,context,inline,shuffled,captured]
 
 Through the serving front's public API only (`/v1/neuralese/native-states/write-text`, `/v1/chat/completions`), so it
 measures any engine that serves the protocol. For each text it writes the state, then asks the `natlang.read` call
 (the runtime's own typed readout prompt, `ts-host/src/neuralese/combinators.ts` `natlang:model-read/1`) three ways:
 
-- state: the written state (`native.text-write`) imported where the reader declares its value;
+- state: the written state (`native.text-write` with no producing call: the text written as the answer of the engine's
+  own producer call, `engine.text_producer_messages`) imported where the reader declares its value;
+- context: the same text written at the end of a producer call given as its messages (`native.text-write` with
+  `messages`, as the runtime writes a typed result of a call it served without token ids);
 - captured: the same text as a produce span captured in a producer's own call (`native.capture` of an assistant reply
   that writes it, `select` = the text), imported the same way (needs `--tokenizer` to render the producer call);
 - inline: the same text in its place (the upper bound: what the reader does with the text itself);
@@ -17,7 +20,10 @@ measures any engine that serves the protocol. For each text it writes the state,
 It reports the exact read-back rate of each arm, the import receipts' modes, and how many replies carry a Neuralese
 role marker (`<|neuralese_…|>`: a reader echoing an untrained marker row, or a sampled stray marker). A text-primed state must read back about as well as its inline text
 and far above the shuffled arm (AGENTS: "A span that ablation cannot tell from shuffled state is a defect"); the
-2026-11-23 failure (1 of 87 held read-backs) had state ~ shuffled ~ 0. The texts are synthetic (never held inputs).
+2026-11-23 failure (1 of 87 held read-backs) had state ~ shuffled ~ 0. The texts are synthetic (never held inputs). Every
+state here is written in a producing context (DECISIONS 2026-11-25); the serving engine reads such states as their
+tokens in the reader's context unless it runs with NATLANG_NEURALESE_SPAN_IN_CONTEXT=0, which splices them (the
+receipt modes say which happened).
 """
 import argparse
 import json
@@ -81,10 +87,13 @@ def reader_messages(part):
 MARKER = re.compile(r'<\|/?neuralese_(?:produce|consume)\|>')
 
 
+PRODUCER_MESSAGES = [{'role': 'system', 'content': 'You keep short notes for the team.'},
+                     {'role': 'user', 'content': 'Write down the note for the log.'}]
+
+
 def producer_ids(tokenizer, text):
     """(prompt ids, reply ids) of a producer call whose assistant reply writes ``text`` (the captured arm)."""
-    messages = [{'role': 'system', 'content': 'You keep short notes for the team.'},
-                {'role': 'user', 'content': 'Write down the note for the log.'}]
+    messages = PRODUCER_MESSAGES
     prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
     opened = prompt.rstrip('\n').endswith('<think>')
     reply = ('</think>\n\n' if opened else '') + 'Note:\n' + text + (tokenizer.eos_token or '')
@@ -123,7 +132,7 @@ def main():
     parser.add_argument('--n', type=int, default=len(TEXTS))
     parser.add_argument('--seed', type=int, default=20261123)
     parser.add_argument('--tokenizer', help='tokenizer of the served model (renders the captured arm\'s producer call)')
-    parser.add_argument('--arms', default='state,inline,shuffled,captured')
+    parser.add_argument('--arms', default='state,context,inline,shuffled,captured')
     a = parser.parse_args()
     arms = a.arms.split(',')
     if 'captured' in arms and not a.tokenizer:
@@ -132,6 +141,9 @@ def main():
     states = [post(a.endpoint, '/v1/neuralese/native-states/write-text', {'text': text, 'type': 'Neuralese<string>'})['id']
               for text in texts]
     shuffled = states[1:] + states[:1]
+    contextual = [post(a.endpoint, '/v1/neuralese/native-states/write-text', {
+        'text': text, 'type': 'Neuralese<string>', 'messages': PRODUCER_MESSAGES})['id'] for text in texts] \
+        if 'context' in arms else []
     captured = []
     if 'captured' in arms:
         from transformers import AutoTokenizer
@@ -146,6 +158,7 @@ def main():
     for index, text in enumerate(texts):
         parts = {'state': {'type': 'native_state', 'id': states[index]}, 'inline': {'type': 'text', 'text': text},
                  'shuffled': {'type': 'native_state', 'id': shuffled[index]},
+                 **({'context': {'type': 'native_state', 'id': contextual[index]}} if contextual else {}),
                  **({'captured': {'type': 'native_state', 'id': captured[index]}} if captured else {})}
         for arm in arms:
             try:

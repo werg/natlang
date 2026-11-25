@@ -687,41 +687,25 @@ class SglangEngine(Engine):
                 key = prefix + '_seconds_total' + label
                 metrics[key] = metrics.get(key, 0.0) + time.monotonic() - started
 
-    def native_write_text(self, text, *, value_type=None, adapters=None):
+    def native_write_text(self, text, *, value_type=None, adapters=None, context=None):
         if adapters or not self.sglang_url:
             return self._measure_native_endpoint('write_text', lambda: super(SglangEngine, self).native_write_text(
-                text, value_type=value_type, adapters=adapters))
-        return self._measure_native_endpoint('write_text_sglang', lambda: self._sglang_write_text(text, value_type))
+                text, value_type=value_type, adapters=adapters, context=context))
+        return self._measure_native_endpoint('write_text_sglang', lambda: self._sglang_write_text(text, value_type, context))
 
-    def _sglang_write_text(self, text, value_type):
-        """`_native_write_text_impl` on SGLang: the text forced through the producer span ([produce_open] text
-        [produce_close], positions from 0) and its state exported by one capture request, so a write never reloads the
-        native model into the front (~14 GB per actor on the GB10, 2026-11-12)."""
+    def _sglang_write_text(self, text, value_type, context=None):
+        """`Engine.native_write_text` on SGLang: the text written as a produce span at the end of its producing call
+        (`Engine.write_context`), exported by one capture request (`_sglang_native_capture`), so a write never reloads
+        the native model into the front (~14 GB per actor on the GB10, 2026-11-12)."""
         if not getattr(self, 'native_state_enabled', False):
             raise RequestError('neuralese-native-state-unavailable', 'native text writes require shared-state serving')
         if not isinstance(text, str):
             raise RequestError('neuralese-native-state-text', 'native text writes require text')
-        from .chat import escape_specials
-        nonce = hashlib.sha256((text + str(time.time_ns())).encode()).hexdigest()
-        ids = self._template_tokens(escape_specials(text, self.specials, nonce), nonce)
-        if len(ids) + 2 >= self.context:
-            raise RequestError('context-length', 'forced native text and producer markers exceed this model context')
-        opened = [int(self.role_tokens.produce_open)] + [int(token) for token in ids]
-        block, record = self._native_store_capture(ids, [{'ids': opened, 'start': 1, 'end': len(opened)}], text=text,
-                                                   producer_kind='text')
-        self._note_text_write(record.id)
-        meta = record.meta()
-        if value_type is not None:
-            meta['type'] = value_type
-        with self._sglang_lock:
-            self.sglang_state_writes += 1
-        return {'id': record.id, 'native_state': meta,
-                'source_capture': {'policy': self._native_block_identity(block), 'segments': [
-                    {'kind': 'tokens', 'token_ids': [self.role_tokens.produce_open], 'producing': [False]},
-                    {'kind': 'tokens', 'token_ids': ids, 'producing': [True] * len(ids)},
-                    {'kind': 'tokens', 'token_ids': [self.role_tokens.produce_close], 'producing': [False]}],
-                    'payload_start': 1, 'payload_stop': len(ids) + 1, 'adapter_binding': block.adapter_binding},
-                'source_text_sha256': hashlib.sha256(text.encode('utf-8')).hexdigest()}
+        return self.write_in_context(text, context, lambda prompt, segments, reply: self._sglang_native_capture(
+            prompt, reply, None, value_type, segments, text=text))
+
+    def _capture_exact(self, block):
+        return self._sglang_exact(block)
 
     def native_capture(self, prompt_token_ids, reply_token_ids, *, prompt_segments=None, select=None, value_type=None,
                        adapters=None):
@@ -755,7 +739,8 @@ class SglangEngine(Engine):
         return [base + int.from_bytes(hashlib.sha256(f'{block_id}:{index}'.encode()).digest()[:4], 'little')
                 % (2 ** 31 - 1 - base) for index in range(count)]
 
-    def _sglang_native_capture(self, prompt_token_ids, reply_token_ids, select, value_type, prompt_segments=None):
+    def _sglang_native_capture(self, prompt_token_ids, reply_token_ids, select, value_type, prompt_segments=None,
+                               text=None):
         """`_native_capture_impl` on SGLang: one capture request of the reply's content span in its own context, the
         prompt's imported states (`prompt_segments`) as the fork's imports where they stood."""
         if not getattr(self, 'native_state_enabled', False):
@@ -763,7 +748,7 @@ class SglangEngine(Engine):
         prompt, imports = self.capture_prompt(prompt_token_ids, prompt_segments)
         blocks = self._capture_blocks(imports)
         self._capture_import_tokens = sum(len(block.token_ids) for block in blocks)
-        prefix, span = self.capture_plan(prompt, reply_token_ids, select, imports)
+        prefix, span = self.capture_plan(prompt, reply_token_ids, select, imports, text=text)
         ids, spliced, last = [], [], 0
         for (at, ident), block in zip(imports, blocks):
             ids.extend(prefix[last:at])
@@ -775,13 +760,14 @@ class SglangEngine(Engine):
         ids.extend(prefix[last:])
         start = len(ids)
         ids.extend(span)
-        text = self.tokenizer.decode(span, skip_special_tokens=False)
+        if text is None:
+            text = self.tokenizer.decode(span, skip_special_tokens=False)
         block, record = self._native_store_capture(span, [{'ids': ids, 'start': start, 'end': len(ids),
                                                            **({'imports': spliced} if spliced else {})}], text=text,
                                                    producer_kind='span')
         with self._sglang_lock:
             self.sglang_state_writes += 1
-        return self._capture_result(block, record, prefix, span, value_type, imports, blocks)
+        return self._capture_result(block, record, prefix, span, value_type, imports, blocks, text=text)
 
     def native_init_body(self, messages, tools, placeholder, text, **kwargs):
         return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
