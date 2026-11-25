@@ -133,6 +133,36 @@ def longest_list(value) -> int:
     return 0
 
 
+PROSE_WORD = re.compile(r"[^\W\d_]{2,}(?:['\u2019][^\W\d_]+)?")
+
+
+def prose_words(value, seen: set | None = None) -> int:
+    """Words of prose in value: alphabetic words of the string leaves holding at least three of them, each distinct
+    string counted once (ids, codes, timecodes and numbers are not prose)."""
+    seen = set() if seen is None else seen
+    if isinstance(value, str):
+        found = PROSE_WORD.findall(value)
+        if len(found) < 3 or value in seen:
+            return 0
+        seen.add(value)
+        return len(found)
+    if isinstance(value, dict):
+        return sum(prose_words(v, seen) for v in value.values())
+    if isinstance(value, list):
+        return sum(prose_words(v, seen) for v in value)
+    return 0
+
+
+def string_leaves(value) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [s for v in value.values() for s in string_leaves(v)]
+    if isinstance(value, list):
+        return [s for v in value for s in string_leaves(v)]
+    return []
+
+
 def text_items(value) -> int:
     """The most elements of one list in value that each hold text (at least three words): items a judgment can read."""
     if isinstance(value, list):
@@ -152,7 +182,7 @@ def declared_words(card: dict) -> int | None:
 ID_NAME = re.compile(r'^(id|ids|key|keys|slug|code|codes|ref|refs|uuid|url|urls|path|paths|email|date|time|timestamp|'
                      r'language|lang|locale|currency|unit|units|iso)$|(Id|Ids|Key|Keys|Code|Codes|Ref|Refs|Url|Path|Date|'
                      r'Time|At|Iso)$')
-ID_DOC = re.compile(r'\b(identifier|ids?|ISO|code|date|timestamp|URL|path|digits|computed)\b')
+ID_DOC = re.compile(r'\b(identifier|ids?|ISO|code|date|timestamp|timecode|URL|path|digits|computed)\b')
 TYPE_ALIAS = re.compile(r'(?:/\*\*((?:(?!\*/)[\s\S])*)\*/\s*)?export\s+type\s+(\w+)\s*=\s*')
 
 
@@ -269,6 +299,149 @@ def hardest_items(notes: str) -> int:
     return len(re.findall(r'^\s*(?:[-*]|\d+\.)\s+\S', section.group(1), re.M)) if section else 0
 
 
+# ---- what the reference run shows: sizes, copies of answers, identity, the children each call took ------------------
+STOP_VALUES = frozenset({'none', 'other', 'same', 'yes', 'no', 'true', 'false', 'first', 'last', 'only', 'neither',
+                         'both', 'all', 'unknown', 'unclear', 'null', 'before', 'after', 'unrelated', 'nothing'})
+ITEM_TOKEN = re.compile(r'[\w.:-]*\d[\w.:-]*')
+
+
+def stem(word: str) -> str:
+    word = word.lower()
+    for suffix in ('ing', 'ed', 'es', 's'):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 4:
+            return word[:-len(suffix)]
+    return word
+
+
+def value_words(value, args) -> list[str]:
+    """The words of a finite answer (a literal of three words at most that is not copied from the arguments)."""
+    leaves = set(string_leaves(args))
+    return [word for leaf in string_leaves(value) if leaf not in leaves and len(leaf.split()) <= 3
+            for word in re.split(r'[-_\s]+', leaf) if len(word) >= 4 and word.lower() not in STOP_VALUES]
+
+
+def deciding_words(calls: list[dict]) -> list[str]:
+    """S7: a relation word of an answer that settles a judgment by itself. For each such word, the calls whose own
+    argument text holds it: when every one of them has that answer, a reader answers from the word alone (the item states
+    its answer). A word that also appears in items with other answers settles nothing."""
+    found = []
+    # Only relation words (a verb in the third person: replaces, cancels, knows): a noun value (a solvent, a household)
+    # names a domain term the text may well use; a text saying "this replaces" states the relation the judgment reads.
+    words = {w.lower() for call in calls for w in value_words(call.get('value'), call.get('args'))
+             if re.fullmatch(r'[a-z]{3,}[^su\W]s', w.lower()) and not w.lower().endswith(('ous', 'ss', 'is'))}
+    for word in sorted(words):
+        pattern = re.compile(r'\b' + re.escape(stem(word)) + r'\w*', re.I)
+        holding = [call for call in calls if any(pattern.search(t) for t in string_leaves(call.get('args'))
+                                                   if len(PROSE_WORD.findall(t)) >= 3)]
+        answered = [call for call in holding if word in {w.lower() for w in value_words(call.get('value'), call.get('args'))}]
+        if holding and len(answered) == len(holding):
+            name = holding[0].get('name') or holding[0].get('path')
+            texts = [t for t in string_leaves(holding[0].get('args')) if pattern.search(t)]
+            hit = pattern.search(texts[0]) if texts else None
+            excerpt = texts[0][max(0, hit.start() - 40):hit.end() + 40] if hit else ''
+            found.append(f'{name}: {"the one call" if len(holding) == 1 else f"every one of the {len(holding)} calls"} whose '
+                         f'text says "{word}" answers {word} (e.g. "...{excerpt}..."), so the word alone settles it')
+    return found
+
+
+def identical_arguments(args) -> list[str]:
+    if not isinstance(args, dict):
+        return []
+    keys = list(args)
+    same = []
+    for i, a in enumerate(keys):
+        for b in keys[i + 1:]:
+            left, right = args[a], args[b]
+            if left == right and (isinstance(left, (dict, list)) or (isinstance(left, str) and len(left) >= 12)):
+                same.append(f'{a} and {b}')
+    return same
+
+
+def hardest_entries(notes: str) -> list[str]:
+    section = re.search(r'^#+\s*Hardest items[^\n]*\n([\s\S]*?)(?=^#|\Z)', notes, re.M | re.I)
+    return re.findall(r'^\s*(?:[-*]|\d+\.)\s+(.+)$', section.group(1), re.M) if section else []
+
+
+def reference_report(data: dict, cases: list[dict], trace: dict, notes: str, declared: int | None) -> tuple[list[str], list[str], str]:
+    """Problems, warnings and the readable reference report (qualification/reference.txt) from the reference trace."""
+    problems, warnings, lines = [], [], []
+    names = {case['id']: inst.get('name') for case, inst in zip(cases, data.get('instances') or [])}
+    by_id = {case['id']: case for case in cases}
+    shown_all = []
+    for row in trace.get('results', []):
+        case = by_id.get(row['id'])
+        if not case:
+            continue
+        label = f'instance {names.get(row["id"])}'
+        children = case['curriculum']['reference'].get('children') or []
+        lines += [f'== {label} ({row["id"]}): {row.get("status")}, {row.get("calls")} model calls',
+                  'returned: ' + json.dumps(row.get('value'), ensure_ascii=False)]
+        if row.get('detail'):
+            lines.append('detail: ' + row['detail'])
+        if row.get('error') or row.get('status') != 'done':
+            problems.append(f'F3: {label}: the reference trace did not run to an answer: '
+                            f'{(row.get("error") or row.get("detail") or row.get("status"))!s:.600}')
+        # C2 counts the prose of items read by an entry of their own: text a scripted reading depends on.
+        per_entry: dict = {}
+        for answer in row.get('answers', []):
+            per_entry.setdefault(answer['entry'], []).append(answer['shown'])
+        own = [shown[0] for entry, shown in per_entry.items() if entry >= 0 and len(shown) == 1]
+        judged_all = prose_words([c.get('args') for c in row.get('children', [])])
+        judged = prose_words([c.get('args') for c in row.get('children', [])
+                              if any(leaf[:30] in text for leaf in string_leaves(c.get('args'))
+                                     if len(PROSE_WORD.findall(leaf)) >= 3 for text in own)])
+        lines.append(f'prose words reaching judgment calls: {judged_all}; in items read by an entry of their own: {judged}')
+        if row.get('status') == 'done':
+            if judged < MIN_WORDS:
+                problems.append(f'C2: {label}: {judged} words of prose in items a judgment reads with an entry of their own '
+                                f'({judged_all} reach judgment calls in all); at least {MIN_WORDS}')
+            if declared and judged < 0.9 * declared:
+                problems.append(f'C2: {label}: {judged} words of prose in items read by an entry of their own, but the idea '
+                                f'card declares {declared}')
+            # An entry may be there for calls only an ablation or a mutant makes; a reference whose run takes few of its
+            # entries did not run the program the entries were written for (a stale runtime, a broken fragment).
+            unused = [index for index in range(len(children)) if index not in per_entry]
+            for index in unused:
+                warnings.append(f'{label}: children entry {index} {json.dumps(children[index].get("match"), ensure_ascii=False)[:160]} '
+                                'answers no call of the reference run (fine when an ablation or a mutant needs it)')
+            if children and len(unused) * 2 > len(children):
+                problems.append(f'F3: {label}: the reference run took {len(children) - len(unused)} of its {len(children)} '
+                                f'children entries ({row.get("calls")} model calls); it does not run the program they '
+                                'were written for: check the fragments against the openings in reference.txt')
+        by_name: dict = {}
+        for call in row.get('children', []):
+            by_name.setdefault(call.get('name') or call.get('path'), []).append(call)
+        for calls in by_name.values():
+            for copy in deciding_words(calls):
+                problems.append(f'S7: {label}: {copy}; let the item describe what happens and the judgment name it')
+        for call in row.get('children', []):
+            for pair in identical_arguments(call.get('args')):
+                problems.append(f'S8: {label}: {call.get("name")} is asked about {pair}, which are the same value; code '
+                                'settles exact identity before it asks a judgment')
+        uses: dict = {}
+        for answer in row.get('answers', []):
+            uses.setdefault(answer['name'], {}).setdefault(answer['entry'], []).append(answer['shown'])
+            shown_all.append(answer['shown'])
+        for name, entries in sorted(uses.items()):
+            lines.append(f'-- {name}: {sum(len(v) for v in entries.values())} calls')
+            for entry, shown in sorted(entries.items()):
+                child = children[entry] if 0 <= entry < len(children) else {}
+                items = [next(iter(ITEM_TOKEN.findall(text)), oneline(text)[:40]) for text in shown]
+                what = (f'entry {entry} {json.dumps(child.get("match"), ensure_ascii=False)} -> '
+                        f'{json.dumps(child.get("value", child.get("call")), ensure_ascii=False)[:120]}') if child else 'no entry'
+                lines.append(f'   {what}: {len(shown)} call(s): {", ".join(items)[:600]}')
+    for number, entry in enumerate(hardest_entries(notes), 1):
+        tokens = [t.strip('.,:;') for t in ITEM_TOKEN.findall(entry)]
+        if not any(re.search(rf'(?<![\w]){re.escape(t)}(?![\w])', text) for t in tokens if t for text in shown_all):
+            problems.append(f'C4: hardest item {number} ("{entry[:60]}") names no item a judgment is called on; name the '
+                            'item by its id, one whose text leaves the judgment to the reader')
+    return problems, warnings, '\n'.join(lines) + '\n'
+
+
+def oneline(text: str) -> str:
+    return re.sub(r'\s+', ' ', text).strip()
+
+
 def metrics(data: dict, files: dict[str, str]) -> dict:
     root = data['root']
     stem = root[:-3]
@@ -300,8 +473,9 @@ def metrics(data: dict, files: dict[str, str]) -> dict:
     return {'nl_functions': len(nl_files), 'judgment_files': len(judgment_files), 'inline_nl': len(inline),
             'ts_helpers': len(ts_files), 'ts_exported_functions': exported, 'ts_logic_lines': ts_lines,
             'functions': len(nl_files) + exported, 'call_depth': depth, 'constructs': constructs,
-            'instances': [{'name': i.get('name'), 'words': words(i.get('inputs')), 'longest_list': longest_list(i.get('inputs')),
-                           'text_items': text_items(i.get('inputs'))} for i in instances]}
+            'instances': [{'name': i.get('name'), 'words': words(i.get('inputs')), 'prose_words': prose_words(i.get('inputs')),
+                           'longest_list': longest_list(i.get('inputs')), 'text_items': text_items(i.get('inputs'))}
+                          for i in instances]}
 
 
 def static_problems(submission: Path, data: dict, files: dict[str, str], m: dict) -> list[str]:
@@ -353,9 +527,14 @@ def static_problems(submission: Path, data: dict, files: dict[str, str], m: dict
         if not reference.get('children'):
             problems.append(f'F3: {label}: the reference needs scripted children for the judgment calls')
         wrong = inst.get('wrong_answers') or []
-        if len(wrong) < 3 or not all(isinstance(w, dict) and 'value' in w and w.get('mistake') for w in wrong):
-            problems.append(f'F4: {label}: at least three wrong answers, each {{"value", "mistake"}}')
-        elif any(canonical(w['value']) == canonical(inst.get('expected')) for w in wrong):
+        if len(wrong) < 3 or not all(isinstance(w, dict) and w.get('mistake') for w in wrong):
+            problems.append(f'F4: {label}: at least three wrong answers, each with its mistake')
+        for number, w in enumerate(wrong, 1):
+            if isinstance(w, dict) and not (isinstance(w.get('children'), list) or isinstance(w.get('code'), str)):
+                problems.append(f'F4: {label}: wrong answer {number} declares no mistake to run: give "children" (the '
+                                'judgment answers the mistake changes) or "code" (the root script with the exact step '
+                                'done the wrong way); qualify replays it and the checker must reject what it returns')
+        if any(isinstance(w, dict) and 'value' in w and canonical(w['value']) == canonical(inst.get('expected')) for w in wrong):
             problems.append(f'F4: {label}: a wrong answer equals expected')
         ablated = {a.get('judgment') for a in inst.get('ablations') or [] if a.get('children')}
         if names - ablated:
@@ -366,12 +545,12 @@ def static_problems(submission: Path, data: dict, files: dict[str, str], m: dict
         elif INLINE_NL.search(baseline) or re.search(r'\bdecide\s*\(', baseline):
             problems.append(f'S3: {label}: the keyword baseline makes a natural-language call')
         size = m['instances'][index]
-        if size['text_items'] < MIN_TEXT_ITEMS and size['words'] < MIN_WORDS:
-            problems.append(f'C2: {label}: {size["text_items"]} items with text, {size["words"]} words; at least '
-                            f'{MIN_TEXT_ITEMS} items whose text a judgment reads, or {MIN_WORDS} words of outside text')
-        if declared and size['words'] < 0.9 * declared:
-            problems.append(f'C2: {label}: {size["words"]} words, but the idea card declares {declared}; the card\'s size '
-                            'is binding: write the instance at the size the card names')
+        if size['prose_words'] < MIN_WORDS:
+            problems.append(f'C2: {label}: {size["prose_words"]} words of prose in the inputs; at least {MIN_WORDS} words '
+                            'of text people wrote reach the judgments (ids, codes and timecodes do not count)')
+        if declared and size['prose_words'] < 0.9 * declared:
+            problems.append(f'C2: {label}: {size["prose_words"]} words of prose, but the idea card declares {declared}; '
+                            "the card's size is binding: write the instance at the size the card names")
     if len(judgments) < 3 or m['judgment_files'] + m['inline_nl'] < 3:
         problems.append('S1: at least three distinct judgments (judgment .nl files or inline nl calls), listed in judgments')
     if m['functions'] < 5:
@@ -456,7 +635,9 @@ def package(data: dict, files: dict[str, str]) -> list[dict]:
                              'instruction_sha256': text_digest(root_body)[:16], 'instruction_id': text_digest(root_body)[:12],
                              'neuralese_room': '', 'framing': 'invented', 'constructs': constructs,
                              'subject_domain': 'other', 'oracle_depth': 'answer',
-                             'checks': {'wrong_answers': [w['value'] for w in inst['wrong_answers']],
+                             'checks': {'wrong_answers': [w['value'] for w in inst['wrong_answers']
+                                                          if 'value' in w and 'children' not in w and 'code' not in w],
+                                        'wrong_mutants': [w for w in inst['wrong_answers'] if 'children' in w or 'code' in w],
                                         'alias_answers': aliases,
                                         'keyword_baseline_code': [inst['keyword_baseline']],
                                         'ablations': inst.get('ablations') or []}}},
@@ -552,6 +733,32 @@ def node() -> str:
     return 'node'
 
 
+def newest(path: Path) -> float:
+    if path.is_file():
+        return path.stat().st_mtime
+    return max((f.stat().st_mtime for f in path.rglob('*') if f.is_file()), default=0.0) if path.is_dir() else 0.0
+
+
+def stale_runtime(runtime: Path) -> bool:
+    """Whether the runtime's built dist is older than its sources (the replays would run old code)."""
+    built = min((runtime / 'dist' / rel).stat().st_mtime if (runtime / 'dist' / rel).is_file() else 0.0
+                for rel in ('cli/main.js', 'teacher/curriculum.js'))
+    return built < max(newest(runtime / 'src'), newest(runtime / 'prelude.js'), newest(runtime / 'package.json'))
+
+
+def runtime_problems(runtime: Path) -> list[str]:
+    """Rebuild a stale dist (scripts/dev-bootstrap.mjs, as the natlang CLI does) and fail when it stays stale."""
+    if not stale_runtime(runtime):
+        return []
+    bootstrap = runtime.parent / 'scripts' / 'dev-bootstrap.mjs'
+    if bootstrap.is_file():
+        subprocess.run([node(), '--input-type=module', '-e',
+                        f'const m = await import({json.dumps(bootstrap.as_uri())}); await m.ensureNodeBuild({json.dumps(str(runtime.parent))});'],
+                       capture_output=True, text=True, timeout=1800)
+    return [f'F1: {runtime}/dist is older than its sources and could not be rebuilt; the replays would run old code '
+            '(rebuild with npm --prefix ts-host run build:node and qualify again)'] if stale_runtime(runtime) else []
+
+
 def natlang_check(program: Path) -> list[str]:
     natlang = os.environ.get('NATLANG_BIN') or str(Path.home() / '.local/bin/natlang')
     run = subprocess.run([natlang, 'check', '--json'], cwd=program, capture_output=True, text=True, timeout=900)
@@ -567,13 +774,14 @@ def natlang_check(program: Path) -> list[str]:
     return out
 
 
-def qualify(submission: Path, runtime: Path) -> dict:
+def qualify(submission: Path, runtime: Path, print_reference: bool = False) -> dict:
     data, files = load(submission)
     m = metrics(data, files)
     problems = static_problems(submission, data, files, m)
     out = submission / 'qualification'
     out.mkdir(exist_ok=True)
     report: dict = {'slug': data.get('slug'), 'metrics': m}
+    problems += runtime_problems(runtime)
     problems += natlang_check(submission / 'program')
     try:
         cases = package(data, files)
@@ -599,6 +807,15 @@ def qualify(submission: Path, runtime: Path) -> dict:
             for wrong in row.get('wrong', []):
                 if wrong.get('accepted') is not False:
                     problems.append(f'F4: {name}: wrong answer not rejected: {json.dumps(wrong)[:300]}')
+            for number, mutant in enumerate(row.get('mutants', []), 1):
+                if not mutant.get('ran'):
+                    problems.append(f'F4: {name}: wrong answer "{mutant.get("mistake")}" {mutant.get("error", "did not run")}'[:900])
+                elif mutant.get('accepted') is not False:
+                    problems.append(f'F4: {name}: wrong answer "{mutant.get("mistake")}" returns an answer the checker '
+                                    f'accepts: {json.dumps(mutant.get("value"))[:300]}')
+                elif mutant.get('value_matches') is False:
+                    problems.append(f'F4: {name}: wrong answer "{mutant.get("mistake")}" declares a value, but its replay '
+                                    f'returns {json.dumps(mutant.get("value"))[:300]}; drop "value" or make it that')
             for baseline in row.get('keyword_baseline', []):
                 if baseline.get('accepted') is not False:
                     problems.append(f'S3: {name}: keyword baseline not rejected: {json.dumps(baseline)[:900]}')
@@ -625,6 +842,18 @@ def qualify(submission: Path, runtime: Path) -> dict:
             trace = {'error': (run.stderr or run.stdout)[-1500:]}
             problems.append('reference_trace.mjs did not finish: ' + trace['error'][-300:])
         report['reference_calls'] = {row['id']: row.get('calls') for row in trace.get('results', [])}
+        card = submission / 'idea.json'
+        try:
+            declared = declared_words(json.loads(card.read_text())) if card.is_file() else None
+        except ValueError:
+            declared = None
+        notes = submission / 'NOTES.md'
+        found, warnings, text = reference_report(data, cases, trace, notes.read_text() if notes.is_file() else '', declared)
+        problems += found
+        report['warnings'] = warnings
+        (out / 'reference.txt').write_text(text)
+        if print_reference:
+            print(text, flush=True)
         cases = with_reference_calls(cases, trace)
         (out / 'cases.jsonl').write_text(''.join(json.dumps(c, ensure_ascii=False) + '\n' for c in cases))
         if not problems:
@@ -830,6 +1059,10 @@ def main(argv=None) -> int:
     q = sub.add_parser('qualify')
     q.add_argument('submission', type=Path)
     q.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
+    q.add_argument('--print-reference', action='store_true',
+                   help="print each instance's reference run: the value it returns, the prose words its judgment calls "
+                        'read, and for each judgment which children entry answered which item (also in '
+                        'qualification/reference.txt)')
     dg = sub.add_parser('digest')
     dg.add_argument('submission', type=Path)
     ad = sub.add_parser('admit')
@@ -893,8 +1126,9 @@ def main(argv=None) -> int:
         args.out.write_text(''.join(json.dumps(c, ensure_ascii=False) + '\n' for c in cases))
         print(json.dumps({'cases': len(cases)}))
         return 0
-    report = qualify(submission, args.runtime.resolve())
-    print(json.dumps({'ok': report['ok'], 'problems': report['problems'][:40]}, indent=1))
+    report = qualify(submission, args.runtime.resolve(), print_reference=args.print_reference)
+    print(json.dumps({'ok': report['ok'], 'problems': report['problems'][:60], 'warnings': report.get('warnings', [])},
+                     ensure_ascii=False, indent=1))
     return 0 if report['ok'] else 1
 
 

@@ -68,6 +68,13 @@ function, or keep the tool loop. Literal unions may mix strings and numbers (`-2
 value names one meaning: when the same thing could be called two ways on some input (a section that occurs once is its
 first and its last), give it its own value (`'only'`) or say in the type's doc comment which one it is.
 
+**Judgments read values; code compares them.** A limit, a condition or an amount in text becomes a typed value in
+the judgment's result, and TypeScript does the comparison. One judgment reads the datasheet's "active from 37 °C to
+50 °C, up to 5% DMSO" into `{ celsius: { min: 37, max: 50 }, additives: [{ name: 'dmso', maxPercent: 5 }] }`, another
+reads the step into `{ celsius: 50, additives: [{ name: 'dmso', percent: 3 }] }`, and code decides whether the step
+lies within the limits, inclusive edges included. Code also settles exact identity before a judgment is asked: two
+equal texts are the same without a call, and the judgment reads the pairs that differ.
+
 **Judgments map words to referents; code finds the item.** A judgment reads what the words say and returns it as a
 finite description; TypeScript resolves the description against the data. "The second right after the church" is
 `{ side: 'right', ordinal: 2, after: 'church' }` from the judgment, and the map walk finds the road. A choice among items

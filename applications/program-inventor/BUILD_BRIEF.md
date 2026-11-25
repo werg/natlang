@@ -54,17 +54,31 @@ TypeScript helpers.
 
 A submission is a program an expert would recognise as their own work, run on a real working session:
 
-- **Instances at full size.** Each instance is what the card's `inputs` describes, and at least 800 words of text
-  people wrote or 15 items a judgment reads. Write the texts the way the real ones are: a caller's directions run on
-  for 100-150 words with a false start and a correction; a rehearsal thread has 20-30 messages, several about other
-  songs. Size comes from more and longer texts; the reference's model calls grow with it, and each case's episode
-  budget (twice the reference's calls) grows along.
-- **Evidence, not answers, in the data.** Each item carries the evidence a careful reader weighs: a donation slip says
-  "née Klein, publishes under her married name", and the judgment works out the filing name from it. The NOTES
-  paragraph names the evidence that settles each item.
+- **Instances at full size: one real working session.** Each instance is what the card's `inputs` describes: the
+  day's calls, the whole rehearsal thread, the week's letters. Every item is there because the user would meet it and a
+  judgment has to read it: a caller's directions run on for 100-150 words with a false start and a correction; a
+  rehearsal thread has 20-30 messages, several about other songs. C2 counts the prose of the items a judgment reads with
+  a children entry of their own (at least 800 words, and the card's size), so size comes from items that each need
+  reading.
+- **The item describes; the judgment names.** The text says what happened in the words its writer would use, and the
+  judgment's answer is the name for it. "We can do the 18th instead of the 12th now, if that still suits" is a new date
+  for the same visit, and `supersedes` names it `replaces`; the message itself talks about dates, not about replacing.
+  A value's own domain term is fine in the text (a step that adds DMSO, a judgment that names the additive `dmso`); the
+  text holds the evidence, and the reader still has to weigh it. qualify reports a relation word that settles a
+  judgment alone (S7: every call whose text says "replaces" answers `replaces`).
+- **Every rule a scripted answer rests on is written down.** Each scripted answer follows from the judgment's
+  instruction, its argument types' doc comments and the item, read literally. When the answer needs a precedence or
+  resolution rule (an estimate leaves a standing policy in force; emphasis words are not claims), write the rule into
+  the instruction or the doc comment, or put it in code, and apply it to every item the same way.
+- **The program covers what the items show.** When an item describes a case the types cannot hold (a retcon that says
+  the character heard it another way), extend the types and the code to represent it, and keep the item.
 - **A judgment reads a passage.** At least one judgment reads two or more sentences and weighs them together (a whole
   transcript turn, a paragraph of a letter), and at least one reads the results of two earlier judgments, or state
   carried across items (the place a caller has reached, the key in force).
+- **Judgments read values; code compares.** A judgment reads limits, conditions and amounts into typed values, and
+  TypeScript compares them: the datasheet's "active from 37 °C to 50 °C" becomes `{ min: 37, max: 50, inclusive: true }`,
+  the step's "incubate at 50 °C" becomes `{ celsius: 50 }`, and code decides whether 50 lies in the range. Code also
+  settles exact identity before it asks: two identical texts are the same utterance without a judgment.
 - **Words to referents; code counts.** A judgment reads what the words say, and TypeScript works out which item they
   pick. "Take the second right after the church" becomes `{ side: 'right', ordinal: 2, after: 'church' }` from the
   judgment, and code walks the map to the road. A choice among items known only at run time works the same way: code
@@ -129,7 +143,8 @@ it, so this call reads the results of two judgments; it then updates which compl
       "children": [{"match": ["<fragment of the judgment's instruction>", "<fragment unique to this item>"], "value": "<correct answer>"}]
     },
     "ablations": [{"judgment": "<name>", "children": [{"match": ["..."], "value": "<the trap reading>"}]}],
-    "wrong_answers": [{"value": "<wrong answer>", "mistake": "<the real mistake that produces it>"}],
+    "wrong_answers": [{"mistake": "<the real mistake>", "children": [{"match": ["..."], "value": "<the misreading>"}]},
+                      {"mistake": "<an exact step done the wrong way>", "code": "<the root script with that step wrong>"}],
     "keyword_baseline": "<root eval script with no nl call that answers from surface cues; ends with return>"
   }]
 }
@@ -140,24 +155,39 @@ it, so this call reads the results of two judgments; it then updates which compl
   opening (its instruction text, its arguments and the doc comments of the types it uses). Use one fragment from the
   judgment's instruction (within one line) and one unique to the item (an id in its arguments). Keep instance ids out
   of `types.ts` doc comments, and make no id a substring of another, or a fragment matches calls it was not meant for.
-  An entry with only the instruction fragment answers every remaining call of that judgment: put the per-item entries
-  first and such a default last. After rewording an instruction, take its fragments again from the new text. A decision's value is the plain option; a `Neuralese<string>`
-  result is text. The value the eval returns must be accepted by the checker.
+  Give each item its own entry: `qualify --print-reference` lists, per judgment, which entry answered which item, so an
+  entry that answers several items is visible, and each such item gets the same answer for the same reason. An entry
+  no call of the reference takes is listed as a warning (it may serve an ablation); a reference that takes fewer than
+  half its entries fails F3. After rewording an instruction, take its fragments again from the new text.
+  A decision's value is the plain option (a record for a finite record result); a `Neuralese<string>` result is text.
+  The value the eval returns must be accepted by the checker.
+
+  The opening a fragment is found in shows each argument as `name: Type = value`: a string as `note: string =
+  "the text"`, an `Untrusted` string as a quoted data block holding the text verbatim, a record as
+  `step: Step = { stepId: "RT 4", celsius: 50, text: ... }`. Good fragments are an id with its key (`stepId: "RT 4"`)
+  or a short phrase of the item's own text, within one line.
 - **ablations**: one per judgment. Its children are placed before the reference's, so they answer that judgment's
   calls with the trap reading. Each ablated replay must return an answer the checker rejects (S2): this is what shows
   the answer depends on the judgment. A trap reading changes the state later steps see, so the ablated run can make
   calls the reference never makes (a location moved by the trap puts new pairs in reach of a pair judgment): walk the
   ablated run through and answer those calls in the ablation's own children. The replay names a call no entry answers.
-- **wrong_answers**: at least three per instance, each the result of a named real mistake (a missed override, a wrong
-  merge of two items, an exact step applied in the wrong order), never a random perturbation.
+- **wrong_answers**: at least three per instance, each a named real mistake that qualify runs (F4): `children` for a
+  misreading (entries placed before the reference's, like an ablation's) or `code` for an exact step done the wrong way
+  (the root script that runs the helpers with that step done otherwise). The replay computes the wrong answer, so it
+  is always the answer that mistake gives; the checker must reject it. Add `value` only to check it against the replay.
 - **keyword_baseline**: the best rule over surface cues you can write without any `nl` call; it must run to an answer
   and be rejected (S3). It runs in the root's eval scope, where every callable-folder item is bound (a file's default
-  export under the file's base name, a file of named exports as an object of them): give its locals other names. If your best keyword rule is accepted, the instance tests wording, not meaning: change it.
+  export under the file's base name, a file of named exports as an object of them): give its locals other names. It
+  has no scripted children, so it uses only the helpers that make no judgment call. If your best keyword rule is accepted, the instance tests wording, not meaning: change it.
 - **oracle**: `exact` (deep equality, record key order ignored) or `normalized` (also case, spacing and number format),
   or `verifier` with `"verifier": {"path": "training/semantic_fp_tasks/verifiers/<name>.mjs", "oracle": {...}}` when
   several answers are right.
 - `expected` comes from running the program literally: each judgment read as the function would read it, receiving
-  only its own arguments; each exact step as the code does it. Never the answer you intend.
+  only its own arguments; each exact step as the code does it. Script the children, run `qualify --print-reference`,
+  read every call it lists against its item, and take `expected` from the value it prints.
+- **Inputs are written, once.** Each input fact is written by hand in one place. A structured field the code reads
+  (`celsius: 50` beside the step text) is fine when you wrote it; a field computed by a script from other fields is
+  not data (N2). A scratch script beside SUBMISSION may lay out what you wrote as JSON.
 - `semanticMap` and `semanticFilter` call their function with `(item, index)`: wrap a `.partial`-bound judgment in a
   lambda that passes only the item.
 
@@ -171,8 +201,20 @@ python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-qual-<slug>-
   -- /bin/bash -c '/home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/sources/invented.py qualify SUBMISSION > LOGS/qualify-<slug>-<n>.log 2>&1'
 ```
 
-`qualify` runs everything: `natlang check` (F1), packaging, the reference replay, wrong answers, ablations, keyword
-baselines and the crisp requirements. A type check alone is the same command with `--workdir SUBMISSION/program` and
+`qualify` runs everything: `natlang check` (F1, after rebuilding a stale runtime), packaging, the reference replay,
+wrong answers, ablations, keyword baselines and the crisp requirements. `--print-reference` also prints, per instance,
+the value the reference returns, the prose words its judgment calls read, and for each judgment which children entry
+answered which item (the same text is in `qualification/reference.txt`). What the crisp checks read:
+- C2: the prose words of items read by an entry of their own (alphabetic words of texts of three words or more; ids,
+  codes, timecodes and numbers do not count), at least 800 and the card's size.
+- S6: a plain `string` a `.nl` function reads, as an argument or a record field, passes when its name says it is an
+  identifier (`id`, `...Id`, `key`, `code`, `ref`, `url`, `path`, `date`, `time`, `...At`, `language`, `unit`) or its doc
+  comment says so (`identifier`, `id`, `ISO`, `code`, `date`, `timestamp`, `timecode`, `URL`, `path`, `digits`, `computed`).
+- S7: a relation word of an answer (`replaces`, `cancels`, `knows`) that every call holding it in its text answers.
+- S8: a judgment asked about two identical values.
+- C4: each `## Hardest items` entry names an item a judgment is called on by an id that appears in that call (`m-a14`,
+  `s22.2`), an item whose text leaves the reading to the reader.
+- F3: the reference runs to an answer the checker accepts and takes at least half its children entries. A type check alone is the same command with `--workdir SUBMISSION/program` and
 `/home/werg/.local/bin/natlang check --json > LOGS/check-<slug>-<n>.json 2>&1`. Both run in 1.5 GB, which the ledger
 admits at once.
 
@@ -187,8 +229,14 @@ you built as `SUBMISSION/idea.json`.
 
 ## In a campaign
 
-1. Take a card: `PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python scripts/rl_tasks/program_atlas.py take
-   BANK_DIR --by <agent-name>` (one builder per card; prints the card; exit 1 when the bank is exhausted).
+1. Take a card (one builder per card; exit 1 when the bank is exhausted). A ledger unit's output goes to the
+   journal, so write it to a file and read that:
+
+   ```
+   python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-take-<agent> --budget-gb 1.5 --reserve-gb 3 --priority low --wait 3600 \
+     --workdir /home/werg/natlang \
+     -- /bin/bash -c 'PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python scripts/rl_tasks/program_atlas.py take BANK_DIR --by <agent> > LOGS/take-<agent>.json 2>&1'
+   ```
 2. Build and qualify as above until `report.json` is ok.
 3. A reviewer (`REVIEW_BRIEF.md`) writes `SUBMISSION/review.json`; fix its findings, requalify, have it reviewed again.
 4. `invented.py admit SUBMISSION` (through the memory ledger) admits it: train ideas to the pool batch, dev and

@@ -82,3 +82,29 @@ test('a file of named exports binds as an object; a sliced untrusted string ente
   const opening = trajectory.find(turn => /inside this call: shift/.test(String(turn.context?.[1]?.content))).context.slice(1, 4).map(m => String(m.content)).join('\n');
   assert.match(opening, /untrusted data from argument message of shift\n a tone please/);
 });
+
+test('a signature naming a type a helper exports says to move it to types.ts', () => {
+  const compiled = check({ 'root.nl': '---\nargs:\n  note: string\nreturns: number\n---\nCall run(note).\n',
+    'root/run/holds.ts': 'export type Holds = { who: string };\nexport function holds(note: string): Holds { return { who: note }; }\n',
+    'root/run.ts': "import aired from './run/aired.nl';\nimport { holds } from './run/holds.js';\nexport default async function run(note: string): Promise<number> { return (await aired(holds(note))) ? 1 : 0; }\n",
+    'root/run/aired.nl': '---\nargs:\n  h: Holds\nreturns: boolean\nreadout: decision\n---\nDecide whether h is aired.\n' });
+  const [problem] = compiled.diagnostics;
+  assert.equal(problem.file, 'root/run/aired.nl');
+  assert.match(problem.message, /unknown type name Holds: it is declared in holds\.ts.*move Holds to types\.ts/);
+});
+
+test('a decision child no entry matches is named, not reported as a malformed choice', async () => {
+  const record = stage('return await keep(note);', [{ match: ['worth keeping', 'parking ticket'], value: 'keep' }]);
+  record.semantics.files['root/keep.nl'] = record.semantics.files['root/keep.nl'].replace('---\nDecide', 'readout: decision\n---\nDecide');
+  const seen = [];
+  const { run } = await replayReference(record, TOOLS_PROMPT, undefined, { onChild: answer => seen.push(answer) });
+  assert.match(JSON.stringify(run.outcome.detail ?? run.outcome), /no answer for the child call keep \(its arguments: /);
+  assert.deepEqual(seen.map(({ name, entry }) => ({ name, entry })), [{ name: 'keep', entry: -1 }]);
+  assert.match(seen[0].shown, /a receipt for the tax return/);
+});
+
+test('a counted loop may run downwards to its bound', () => {
+  const compiled = check({ 'root.nl': ROOT, 'root/find.ts': 'export default function find(tokens: string[]): number {\n' +
+    '  let last = -1;\n  for (let i = tokens.length - 1; i >= 0; i--) if (last < 0 && tokens[i] === \'a\') last = i;\n  return last;\n}\n' });
+  assert.deepEqual(compiled.diagnostics.filter(item => item.severity === 'error'), []);
+});

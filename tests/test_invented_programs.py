@@ -40,14 +40,20 @@ HELPER = '\n'.join(['import withdraws from "./withdraws.nl";', 'import supersede
                    ['  return { standing: kept.map(n => n.slice(0, 4)) };', '}', 'export function order(a: string[]): string[] { return [...a].sort(); }'])
 
 
+PROSE = ('the tenant wrote again about the leaking roof over the back bedroom and said the landlord had promised a '
+         'repair before the winter but nobody came and the ceiling stain kept spreading after every storm so she asked '
+         'whether the earlier complaint still stood or whether this letter took its place')
+
+
 def instance(name):
-    return {'name': name, 'level': 3, 'inputs': {'notes': [f'n{i} withdraws nothing yet' for i in range(16)]}, 'oracle': 'exact',
+    return {'name': name, 'level': 3, 'inputs': {'notes': [f'n{i} {PROSE}' for i in range(16)]}, 'oracle': 'exact',
             'expected': {'standing': ['n1']},
             'reference': {'root': [['eval', {'code': 'const r = await rule(notes); return r;', 'finish': True}]],
                           'children': [{'match': ['withdraws an earlier'], 'value': False}]},
             'ablations': [{'judgment': j, 'children': [{'match': ['x'], 'value': True}]}
                           for j in ('withdraws', 'supersedes', 'same_item')],
-            'wrong_answers': [{'value': {'standing': [w]}, 'mistake': 'm'} for w in ('n2', 'n3', 'n4')],
+            'wrong_answers': [{'children': [{'match': ['withdraws an earlier', w], 'value': True}], 'mistake': 'm'}
+                              for w in ('n2', 'n3', 'n4')],
             'keyword_baseline': 'return { standing: notes.filter(n => n.includes("1")) };'}
 
 
@@ -102,7 +108,8 @@ def test_generator_script_and_missing_controls_fail(tmp_path):
 def test_the_bar_size_card_size_notes_code_depth_and_untrusted_fields(tmp_path):
     sub = write(tmp_path)
     data = json.loads((sub / 'submission.json').read_text())
-    data['instances'][0]['inputs'] = {'notes': ['short note here'] * 10}
+    data['instances'][0]['inputs'] = {'notes': ['n1', 'n2']}
+    data['instances'][0]['wrong_answers'][0] = {'value': {'standing': []}, 'mistake': 'a value with no mistake to run'}
     (sub / 'submission.json').write_text(json.dumps(data))
     (sub / 'idea.json').write_text(json.dumps({'slug': 'withdrawal-ruling', 'inputs': 'notes, about 1,300 words in all'}))
     (sub / 'NOTES.md').write_text('withdraws: the trap.\n')
@@ -123,9 +130,10 @@ export type Note = {
     helper.write_text(helper.read_text().replace('\n'.join(f'  const step{i} = kept.length + {i};' for i in range(50, 100)) + '\n', ''))
     problems, _ = check(sub)
     text = '\n'.join(problems)
-    assert 'C2: instance a: 10 items with text' in text, problems
-    assert "C2: instance b: 64 words, but the idea card declares 1300" in text, problems
+    assert 'C2: instance a: 0 words of prose in the inputs' in text, problems
+    assert 'C2: instance b: 800 words of prose, but the idea card declares 1300' in text, problems
     assert 'C4: NOTES.md lists 0 hardest items' in text and 'D1: ' in text, problems
+    assert 'F4: instance a: wrong answer 1 declares no mistake to run' in text, problems
     flagged = [p.split(' is a plain string')[0] for p in problems if p.startswith('S6')]
     assert flagged == ['S6: program/rule_notes/same_item.nl: note (Note).by', 'S6: program/rule_notes/same_item.nl: label'], problems
 
@@ -261,3 +269,50 @@ def test_admit_needs_a_review_of_this_version_then_stages_by_split(tmp_path, mon
     invented.admit(sub, **kwargs)
     assert len(invented.rows_of(root / 'accepted.jsonl')) == 1, 'admitting again does not repeat the ledger line'
     assert invented.publish(root, dry_run=True)['fresh'] == ['withdrawal-ruling']
+
+
+def test_reference_report_reads_the_trace(tmp_path):
+    sub = write(tmp_path)
+    data, files = invented.load(sub)
+    cases = invented.package(data, files)
+    case = cases[0]
+    case['curriculum']['reference']['children'] = [
+        {'match': ['withdraws an earlier', 'n1 the'], 'value': 'replaces'},
+        {'match': ['withdraws an earlier'], 'value': 'stands'},
+        {'match': ['never used'], 'value': 'stands'}]
+    note = lambda i, extra='': f'n{i} {extra}{PROSE}'  # noqa: E731
+    children = [{'name': 'withdraws', 'path': 'rule_notes/withdraws.nl', 'args': {'note': note(1, 'This replaces the earlier one. ')}, 'value': 'replaces'},
+                {'name': 'withdraws', 'path': 'rule_notes/withdraws.nl', 'args': {'note': note(2)}, 'value': 'stands'},
+                {'name': 'withdraws', 'path': 'rule_notes/withdraws.nl', 'args': {'note': note(3)}, 'value': 'stands'},
+                {'name': 'same_item', 'path': 'rule_notes/same_item.nl', 'args': {'a': note(4), 'b': note(4)}, 'value': True}]
+    answers = [{'name': 'withdraws', 'entry': 0, 'shown': 'note: ' + note(1, 'This replaces the earlier one. ')},
+               {'name': 'withdraws', 'entry': 1, 'shown': 'note: ' + note(2)},
+               {'name': 'withdraws', 'entry': 1, 'shown': 'note: ' + note(3)}]
+    trace = {'results': [{'id': case['id'], 'status': 'done', 'calls': 5, 'value': {'standing': []},
+                          'children': children, 'answers': answers},
+                         {'id': cases[1]['id'], 'error': "TypeError: Cannot read properties of undefined (reading 'slice')"}]}
+    problems, _, text = invented.reference_report(data, cases, trace, '## Hardest items\n\n- n1: the replacement.\n- x9: absent.\n', None)
+    joined = '\n'.join(problems)
+    assert 'F3: instance b: the reference trace did not run to an answer' in joined, problems
+    assert 'F3: instance a: the reference run took' not in joined, problems
+    case['curriculum']['reference']['children'] += [{'match': [f'unused {i}'], 'value': 'x'} for i in range(4)]
+    assert 'F3: instance a: the reference run took 2 of its 7 children entries' in '\n'.join(
+        invented.reference_report(data, cases, trace, '', None)[0])
+    assert 'S7: instance a: withdraws: the one call whose text says "replaces" answers replaces' in joined, problems
+    assert 'S8: instance a: same_item is asked about a and b' in joined, problems
+    assert 'C2: instance a: ' in joined and 'C4: hardest item 2' in joined and 'C4: hardest item 1' not in joined, problems
+    assert 'entry 1 ["withdraws an earlier"] -> "stands": 2 call(s)' in text, text
+
+
+def test_a_dist_older_than_its_sources_is_stale(tmp_path):
+    runtime = tmp_path / 'ts-host'
+    for rel in ('dist/cli/main.js', 'dist/teacher/curriculum.js', 'src/a.ts', 'package.json'):
+        (runtime / rel).parent.mkdir(parents=True, exist_ok=True)
+        (runtime / rel).write_text('x')
+    import os
+    os.utime(runtime / 'src/a.ts', (2_000_000_000, 2_000_000_000))
+    assert invented.stale_runtime(runtime)
+    for rel in ('dist/cli/main.js', 'dist/teacher/curriculum.js'):
+        os.utime(runtime / rel, (2_000_000_100, 2_000_000_100))
+    assert not invented.stale_runtime(runtime)
+    assert invented.runtime_problems(runtime) == []

@@ -374,6 +374,57 @@ recursion, eval-scope names of helpers) were each checked against the runtime an
 refinements.md, with tests (`ts-host/test/authoring-diagnostics.test.mjs`). The second calibration round runs the
 revised briefs on idea-bank cards.
 
+## 12c. Sonnet calibration round 2 (2026-11-25): the revised brief, and what still went wrong
+
+Four Sonnet builders (`/home/werg/data/natlang-novel-programs/sonnet-cal2-20261125/`) built from the round-1 brief and
+skill: `campaign-npc-knowledge-ledger`, `household-move-service-cutover`, `reagent-substitution-protocol-replanner`,
+`subtitle-recut-conformer`.
+
+| | round 1 (3 programs) | round 2 (4 programs) |
+|---|---|---|
+| prose words per instance (current files) | 112-460 | 1,551-3,043 |
+| exact TypeScript lines | 98-180 | 196-285 |
+| coordinator grades | code depth and size below the bar | code depth 4, at the size bar, idiom 4, semantic depth about 3 |
+| review verdicts unmet | S4 2 of 3, D3 1 | S4 4 of 4, S5 1, D3 1 |
+
+Round 2 fixed size and code depth; every program still fails S4 on one or two items. Causes, from the reviews, the
+friction logs and the brief they read, each with its change (commit after `f8e62950c`):
+
+1. **The brief's own evidence example stated the answer.** "née Klein, publishes under her married name" is the answer
+   in the slip's words, and the builders wrote the same shape: "This replaces the 22 December slot", "hears nothing of
+   it". Change: "The item describes; the judgment names" with an example whose text talks about dates, not replacing;
+   S7 (crisp) reports a relation word of an answer that settles every call holding it. A first S7 (any value word in
+   the item's text) was gamed twice by renaming values ("faction" to "Company news", `working` to `acting`); it now
+   flags only relation words (`replaces`, `knows`) and only when the word alone settles the judgment, and the brief says
+   a value's domain term is fine in the text.
+2. **The default-children idiom of round 1 hid two-reading items.** The brief said an instruction-only entry answers
+   the remaining calls; subtitle's `same` default answered "ovens are open/lit", reagent's `buffer=false` default every
+   in-house mix. Change: the brief asks for one entry per item; `qualify --print-reference` and
+   `qualification/reference.txt` list, per judgment, which entry answered which item; an entry the reference never takes
+   is a warning, and a reference that takes fewer than half its entries fails F3.
+3. **Rules the scripting used were not in what the call sees.** household scripted `alongside` from the card's "take
+   the policy worst case", a rule in neither the instruction nor code. Change: "Every rule a scripted answer rests on is
+   written down" (brief, S4, REVIEW_BRIEF).
+4. **The skill had words-to-referents for ordinals but not for ranges**, so reagent compared temperatures inside a
+   judgment. Change: composition.md and the brief, "Judgments read values; code compares", and code settles exact
+   identity (S8, crisp).
+5. **No way to see the reference's value.** All builders wrote independent simulations to get `expected`, and the
+   simulation carried their own misreadings through (the ledger builder: "a simulation checks code against labels, not
+   labels against text"). Change: `--print-reference`; wrong answers are mutants qualify runs (F4: `children` or
+   `code`), so a wrong answer is always what its mistake gives.
+6. **Size by padding.** Counting all prose led to "seven filler entries" and 21 added steps. Change: C2 counts the prose
+   of items read with a children entry of their own, and the brief frames size as one real working session whose every
+   item needs reading.
+7. **Fix by deletion.** A retcon the program could not represent lost its sentence. Change: "The program covers what
+   the items show".
+8. **Tooling.** `memory_ledger.py` was not executable (now 755); `take` gets an exact ledger line; how arguments render
+   in openings is documented; S6's accepted names are listed; a stale `ts-host/dist` gave a false `ok: true` with 2
+   reference calls: qualify now rebuilds a stale dist or fails, and a trace that does not run is an F3 problem; a type a
+   helper exports and a judgment names now fails with the file to move it from (the replay-only failure the ledger
+   builder saw did not reproduce: check reports it at the `.nl` line); a decision child no entry answers is named
+   instead of reading as a malformed choice. The structured-field N2 warning (91 hits for `celsius`, `minutes` beside
+   the step text) was noise and is gone; N2 says each input field is written by hand, once.
+
 ## 13. What is not built or not checked
 
 - **`natlang run applications/program-inventor` end to end.** The program passes `natlang check` and its crisp

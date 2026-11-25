@@ -160,6 +160,9 @@ function findFinalTopLevelReturn(code) {
   return lastReturn >= 0 && !hasLaterStmt ? lastReturn : -1;
 }
 
+// Key order does not matter when a mutant's declared value is compared with the value its replay returned.
+const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ?
+  Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 // The terminal answering action of a reference: a return_result value, or the final top-level `return ...` of an eval.
 function withAnswer(record, value) {
   const copy = structuredClone(record);
@@ -240,6 +243,25 @@ async function qualify(record) {
     }
     catch (e) { result.keyword_baseline.push({ value: code.slice(0, 120), accepted: null, error: String(e).slice(0, 300) }); }
   }
+  // Mutant wrong answers (invented programs): a named mistake declared as the judgment answers it changes (children
+  // placed before the reference's) or as the root script with an exact step done wrongly (code). The replay computes the
+  // wrong answer, so a declared value is checked against it and the checker must reject what the mutant returns.
+  result.mutants = [];
+  for (const mutant of checks.wrong_mutants ?? []) {
+    const variant = structuredClone(record);
+    if (mutant.children) variant.curriculum.reference.children = [...mutant.children, ...(variant.curriculum.reference.children ?? [])];
+    if (mutant.code) variant.curriculum.reference.root = [['eval', { code: mutant.code, finish: true }]];
+    const row = { mistake: String(mutant.mistake ?? '').slice(0, 160) };
+    try {
+      const { run } = await replayReference(variant, TOOLS_PROMPT);
+      row.ran = run.outcome.status === 'done';
+      row.accepted = row.ran ? run.outcome.accepted === true : null;
+      row.value = run.outcome.value ?? null;
+      if (!row.ran) row.error = 'did not run to an answer: ' + JSON.stringify(run.outcome.detail ?? run.outcome.status).slice(0, 700);
+      if ('value' in mutant) row.value_matches = JSON.stringify(canonical(mutant.value)) === JSON.stringify(canonical(row.value));
+    } catch (e) { row.ran = false; row.accepted = null; row.error = String(e).slice(0, 400); }
+    result.mutants.push(row);
+  }
   for (const value of wrongs) {
     const variant = withAnswer(record, value);
     if (!variant) { result.wrong.push({ value, accepted: null, error: 'no terminal answer to replace' }); continue; }
@@ -254,7 +276,8 @@ async function qualify(record) {
   }
   result.wrong_rejected = result.wrong.length > 0 && result.wrong.every(w => w.accepted === false);
   result.keyword_baseline_rejected = result.keyword_baseline.every(w => w.accepted === false);
-  result.ok = result.reference_ok && result.wrong_rejected && result.keyword_baseline_rejected;
+  result.mutants_rejected = result.mutants.every(m => m.ran && m.accepted === false && m.value_matches !== false);
+  result.ok = result.reference_ok && result.wrong_rejected && result.keyword_baseline_rejected && result.mutants_rejected;
   return result;
 }
 // Resume only under the exact input and executable closure. Preserve obsolete
