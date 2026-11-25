@@ -16,6 +16,17 @@ export type EffectEvent = { phase: 'requested' | 'completed' | 'failed'; service
 /** Marks services that are already wrapped, so they are never recorded twice. */
 const RECORDED = Symbol('natlang.recorded-services');
 export const isRecording = (services: object) => Object.hasOwn(services, RECORDED);
+// Private provenance removes only our observer when a descendant becomes the
+// executing call. The retained map is a snapshot of exactly the granted names;
+// it never substitutes the task's wider authority or discovers later additions.
+const recordingSources = new WeakMap<object, Readonly<Record<string, unknown>>>();
+const recordingPorts = new WeakMap<object, object>();
+export function unrecordedServices<T extends Record<string, unknown>>(services: T): T {
+  const source = recordingSources.get(services);
+  if (source) return source as T;
+  return Object.freeze(Object.fromEntries(Object.entries(services).map(([name, port]) =>
+    [name, port && typeof port === 'object' ? recordingPorts.get(port) ?? port : port]))) as T;
+}
 const selectedSurfaces = new WeakMap<object, object>();
 /** Only recorder-owned proxies have this declared selected-execution surface. */
 export function selectedServiceSurface(value: unknown): unknown {
@@ -30,6 +41,30 @@ export function selectedServiceSurface(value: unknown): unknown {
  */
 export const ONCE_EFFECTS = Symbol.for('natlang.once-effects');
 const onceResults = new WeakMap<object, Map<string, unknown>>();
+
+// Result-checking wrappers must run for every invocation, including a cached
+// native effect. Only the underlying service object owns the once cache.
+const resultCheckedPorts = new WeakSet<object>();
+export function resultCheckingService<T extends object>(port: T): T {
+  resultCheckedPorts.add(port);
+  return port;
+}
+
+/** Invoke the supplied native method with its original receiver and once scope. */
+export function invokeServiceMethod(object: object, method: string, value: Function, args: unknown[]): unknown {
+  const once = resultCheckedPorts.has(object) ? undefined : (object as Record<symbol, unknown>)[ONCE_EFFECTS];
+  const key = Array.isArray(once) && once.includes(method) ? argumentsKey(method, args) : undefined;
+  let results = key === undefined ? undefined : onceResults.get(object);
+  if (key !== undefined && !results) onceResults.set(object, results = new Map());
+  if (key !== undefined && results!.has(key)) return results!.get(key);
+  let result = value.apply(object, args);
+  if (key !== undefined) {
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function')
+      result = Promise.resolve(result).catch(error => { results!.delete(key); throw error; });
+    results!.set(key, result);
+  }
+  return result;
+}
 
 /** The cache key of a call's arguments, or undefined when they hold anything but plain data. */
 function argumentsKey(method: string, args: unknown[]): string | undefined {
@@ -50,7 +85,13 @@ function argumentsKey(method: string, args: unknown[]): string | undefined {
  * per property access; the original receiver is preserved.
  */
 export function recordingServices<T extends Record<string, unknown>>(services: T,
-  emit: (event: EffectEvent) => unknown): T {
+  emit: (event: EffectEvent) => unknown,
+  authority?: T): T {
+  // Checked service-result wrappers belong to this invocation. Its descendants
+  // reapply their own checks to the same lexical ports, rather than executing
+  // through an ancestor's checker and observer.
+  const source = unrecordedServices(authority ?? services);
+  if (!authority) services = source;
   const preview = (value: unknown): unknown => {
     try {
       const text = JSON.stringify(value);
@@ -78,29 +119,8 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
         const args = given.map(item => hostCopy(item));
         const seq = sequence++;
         emit({ phase: 'requested', service: label, method: property, args: preview(args), seq, exact: { args } });
-        const once = (object as Record<symbol, unknown>)[ONCE_EFFECTS];
-        const key = Array.isArray(once) && once.includes(property) ? argumentsKey(property, args) : undefined;
-        let results = key === undefined ? undefined : onceResults.get(object);
-        if (key !== undefined && !results) onceResults.set(object, results = new Map());
-        if (key !== undefined && results!.has(key)) {
-          const earlier = results!.get(key);
-          if (earlier && typeof (earlier as PromiseLike<unknown>).then === 'function')
-            return Promise.resolve(earlier).then(async resolved => {
-              await emit({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
-                exact: { result: resolved, async: true } });
-              return resolved;
-            }, async error => { await emit({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq, exact:{async:true} }); throw error; });
-          emit({ phase: 'completed', service: label, method: property, result: preview(earlier), seq,
-            exact: { result: earlier, async: false } });
-          return earlier;
-        }
         try {
-          let result = (value as Function).apply(object, args);
-          if (key !== undefined) {
-            if (result && typeof (result as PromiseLike<unknown>).then === 'function')
-              result = Promise.resolve(result).catch(error => { results!.delete(key); throw error; });
-            results!.set(key, result);
-          }
+          const result = invokeServiceMethod(object, property, value, args);
           if (result && typeof (result as PromiseLike<unknown>).then === 'function')
             return Promise.resolve(result).then(async resolved => { await emit({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
               exact: { result: resolved, async: true } }); return resolved; },
@@ -132,10 +152,13 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
         enumerable: true });
     }
     selectedSurfaces.set(proxy, surface);
+    const origin = source[label];
+    if (origin && typeof origin === 'object') recordingPorts.set(proxy, origin);
     return proxy;
   };
   const wrapped = Object.fromEntries(Object.entries(services).map(([name, service]) =>
     [name, service && typeof service === 'object' ? wrap(service, name) : service]));
+  recordingSources.set(wrapped, source);
   Object.defineProperty(wrapped, RECORDED, { value: true });
   return Object.freeze(wrapped) as T;
 }
