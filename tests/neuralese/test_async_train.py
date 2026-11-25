@@ -2976,6 +2976,9 @@ def test_async_driver_retention_pass_and_opt_out(tmp_path, monkeypatch):
     assert d.retain('r0001 published') is None and actor.exists()
     d.a.no_retention = False
     monkeypatch.setenv('NATLANG_OPS_ROOT', str(tmp_path / 'ops'))
+    # a pass another test's driver started in the background holds the class-wide lock until it ends
+    assert ei.AsyncRoundDriver.RETAIN_LOCK.acquire(timeout=120)
+    ei.AsyncRoundDriver.RETAIN_LOCK.release()
     d.retain('r0001 published').join(60)
     assert not actor.exists() and notes and notes[-1]['retention'] == 'r0001 published', notes
     assert notes[-1]['errors'] == 0 and notes[-1]['actions'] == 1
@@ -3050,3 +3053,41 @@ def test_a_round_short_of_new_supervision_waits_and_rebuilds_until_the_wait_expi
     _, off = _driver(tmp_path / 'off', monkeypatch, argv=['--min-new-tokens', '0'])
     (off.root / 'r0001' / 'stages').mkdir(parents=True)
     assert not off.supply_wait(off.root / 'r0001', short)
+
+
+def test_the_colab_fill_is_kept_running_beside_each_serving_session_and_never_on_a_training_one(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--fill', str(tmp_path / 'fill')])
+    import pop_rl_actor
+    import filled_reasoning
+    from natlang_neuralese.common import data_registry
+    monkeypatch.setattr(data_registry, 'role_paths', lambda name, **kw: [])
+    targets = [{'host': 'colab-g4', 'front': 'http://127.0.0.1:8570', 'pop': False, 'suffix': '-remote0', 'slots': 64},
+               {'host': 'pop-os', 'front': 'http://pop:18531', 'pop': True, 'suffix': '-pop', 'slots': 32}]
+    monkeypatch.setattr(d, 'remote_targets', lambda: targets)
+    monkeypatch.setattr(d, 'target_endpoint', lambda t: 'http://127.0.0.1:18731')
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port: f'http://127.0.0.1:{port + 10161}')
+    monkeypatch.setattr(d, 'fill_export', lambda: '/export')
+    monkeypatch.setattr(d, 'trained_builds', lambda: ['/r1/mix'])
+    monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    alive, present, busy, launched = [True], set(), set(), []
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: alive[0])
+    monkeypatch.setattr(d.c, 'present', lambda unit: unit in present)
+    monkeypatch.setattr(d, 'colab_sft_busy_hosts', lambda: busy)
+    monkeypatch.setattr(d.c, 'ledger', lambda unit, gb, prio, argv, log, **kw: launched.append((unit, gb, argv)))
+    assert d.colab_fill_check() == ['aei-colab-fill-remote0']           # Pop is not a Colab session
+    unit, gb, argv = launched[0]
+    parsed = filled_reasoning.build_parser().parse_args(list(map(str, argv[2:])))
+    assert gb == ei.COLAB_FILL_GB and parsed.polite and parsed.sglang == 'http://127.0.0.1:19731'
+    assert parsed.front == 'http://127.0.0.1:18731' and parsed.skip_trained == ['/r1/mix']
+    assert parsed.expect_policy == d.controller.current['sha256'] and parsed.prefer_work == [str(tmp_path / 'work')]
+    present.add(unit)
+    assert d.colab_fill_check() == []                                    # running: left alone
+    present.clear()
+    assert d.colab_fill_check() == ['aei-colab-fill-remote0']           # it died: relaunched
+    busy.add('colab-g4')
+    assert d.colab_fill_check() == []                                    # a round's SFT holds the session
+    busy.clear()
+    alive[0] = False
+    assert d.colab_fill_check() == []                                    # its actor does not serve the head
+    _, off = _driver(tmp_path / 'off', monkeypatch, argv=['--fill', str(tmp_path / 'fill'), '--no-colab-fill'])
+    assert off.colab_fill_check() == []

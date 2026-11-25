@@ -1118,12 +1118,46 @@ def test_the_fixed_val_set_is_chosen_once_from_untrained_held_family_tasks_and_t
     assert not again.new and again.tasks == record['tasks'] and again.report()['tasks'] == {'own': 3, 'teacher': 2}
 
 
-def test_the_fill_skips_episodes_the_lineage_already_trained(monkeypatch):
+def test_the_fill_skips_episodes_whose_fill_trained_and_fills_raw_trained_ones_last(monkeypatch):
     import filled_reasoning
-    episodes = [{'key': 'teacher:p:t1:0', 'task_id': 'a'}, {'key': 'teacher:p:t2:0', 'task_id': 'b'}]
+    episodes = [{'key': k, 'task_id': t, 'work': '/w'} for k, t in (('teacher:p:t1:0', 'a'), ('teacher:p:t2:0', 'b'),
+                                                                     ('teacher:p:t3:0', 'c'))]
     assert filled_reasoning.untrained(episodes, []) == episodes
-    monkeypatch.setattr(sft_sources, 'trained_exposures',
-                        lambda builds: sft_sources.Exposures([({'teacher:p:t1:0'}, {'a'}, set())]))
+    # build 1 trained t1 raw; build 2 trained t2's fill
+    builds = [({'teacher:p:t1:0'}, {'a'}, {('a', 'teacher:p:t1:0')}), (set(), {'b'}, {('b', 'filled:teacher:p:t2:0')})]
+
+    def exposures(paths, fill_after_raw=False):
+        e = sft_sources.Exposures(builds)
+        e.fill_after_raw = fill_after_raw
+        return e
+    monkeypatch.setattr(sft_sources, 'trained_exposures', exposures)
     funnel = collections.defaultdict(collections.Counter)
-    assert filled_reasoning.untrained(episodes, ['/r1/mix'], funnel) == [episodes[1]]
+    kept = filled_reasoning.untrained([dict(e) for e in episodes], ['/r/mix'], funnel)
+    assert [e['key'] for e in kept] == ['teacher:p:t1:0', 'teacher:p:t3:0'] and kept[0].get('raw_trained')
     assert funnel['teacher']['trained_before_skipped'] == 1
+    order = filled_reasoning.ordered(kept, [], None, 0, shape_cap=0)
+    assert [e['key'] for e in order] == ['teacher:p:t3:0', 'teacher:p:t1:0']       # never-trained first
+    # the opt-out: one exposure per episode, a raw-trained episode is not filled
+    off = filled_reasoning.untrained([dict(e) for e in episodes], ['/r/mix'], fill_after_raw=False)
+    assert [e['key'] for e in off] == ['teacher:p:t3:0']
+
+
+def test_a_fill_of_a_raw_trained_episode_counts_only_earlier_fills_and_trains_its_reasoning_only():
+    import numpy as np
+    raw, fill = 'teacher:pool:t000001:0', 'filled:teacher:pool:t000001:0'
+    exposure = sft_sources.Exposures([({raw}, {'task-a'}, {('task-a', raw)})])
+    assert exposure(('filled', 'task-a', fill)) == 1                  # the one-exposure rule (opt-out)
+    exposure.fill_after_raw = True
+    assert exposure(('filled', 'task-a', fill)) == 0 and exposure.raw_trained('task-a', raw)
+    assert exposure(('teacher', 'task-a', raw)) == 1                  # the raw episode itself never trains again
+    exposure2 = sft_sources.Exposures([(set(), {'task-a'}, {('task-a', fill)})])
+    exposure2.fill_after_raw = True
+    assert exposure2(('filled', 'task-a', fill)) == 1                 # nor does a fill that trained
+    close = 9
+    rows = [{'sample': np.array([5, 6, close, 7, 8]), 'weight': np.array([1, 1, 1, 1, 0.5], np.float32)},
+            {'sample': np.array([7, 8])}]                               # an action with no reasoning
+    chains = [{'segs': [(0, 5, rows[0]), (5, 2, rows[1])]}, {'segs': [(0, 2, {'sample': np.array([1, 2])})],
+                                                              'decision': {'options': []}}]
+    kept, total = sft_sources.reasoning_after_raw(chains, close)
+    assert len(kept) == 1 and total == 3.0                            # the reasoning through </think> only
+    assert rows[0]['weight'].tolist() == [1, 1, 1, 0, 0] and rows[1]['weight'].tolist() == [0, 0]

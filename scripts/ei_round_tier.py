@@ -117,6 +117,31 @@ def _round_sha(r: Path) -> str | None:
         return None
 
 
+def round_trained(r: Path, state: dict) -> bool:
+    """Whether round ``r`` trained: the driver recorded it (``trained_rounds``), or its factors or publication exist."""
+    return (r.name in set(state.get('trained_rounds') or []) or (r / 'policy' / 'published.json').exists()
+            or (r / 'sft' / 'factors' / 'policy_manifest.json').exists())
+
+
+def round_pending(r: Path, state: dict) -> bool:
+    """A round that is still to train, whatever ``active_round`` says: not discarded, not trained (``round_trained``),
+    and either prepared (``stages/prepared.done``) or prepared from the lineage head (round.json ``base_policy_sha`` or
+    ``trained_from``). Its mix, fill and Neuralese-graph inputs and learner state are protected. 2026-11-25 14:23: with
+    ``active_round`` on a GRPO round that was later dropped, r0011 (prepared, never trained) counted as older than the
+    active round and lost its chains and inputs."""
+    if (r / 'discarded.json').exists() or round_trained(r, state):
+        return False
+    if (r / 'stages' / 'prepared.done').exists():
+        return True
+    lineage = state.get('lineage') or []
+    head = (lineage[-1].get('sha256') or '') if lineage else ''
+    try:
+        record = json.loads((r / 'round.json').read_text())
+    except (OSError, ValueError):
+        return False
+    return bool(head) and head in (record.get('base_policy_sha'), record.get('trained_from'))
+
+
 def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[dict]:
     """Retention (DECISIONS 2026-11-25 "EI retention"): what no consumer reads once a round is trained or a collection
     is closed is deleted, on the NVMe or through an earlier move's link on the HDD. Every action is a 'delete'; an
@@ -128,7 +153,7 @@ def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[di
       calls stored; a resumed partial never continues past a Neuralese write, ``episode_files.partial_continuable``;
       the SFT build trains imports as pass-through). Guarded by ``actor`` (the running actor names ``--store-dir``).
     - Rounds that trained (``trained_rounds``, ``discarded.json``, or older than the active round), never the active
-      one: ``sft/learner-state*`` (the round's resume state: read by ``--resume``, ``recap_for_dgx``, ``sft_handback``
+      one nor one still to train (``round_pending``: prepared and not trained, or prepared from the lineage head): ``sft/learner-state*`` (the round's resume state: read by ``--resume``, ``recap_for_dgx``, ``sft_handback``
       and ``rebuild_round`` only before publication); ``*.pkl`` of a mix directory whose ``trained-units.json`` exists
       (``--prefer-unseen`` reads rows.jsonl.zst and trained-units.json, ``sft_sources.trained_units``) or of a
       ``mix.pre-rebuild-*`` copy; ``filled/chains.pkl`` and ``neuralese-graph-own/chains.pkl`` (inputs of that
@@ -160,7 +185,7 @@ def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[di
                                     'alias': [str(d / 'actor' / name)],
                                     'why': f'closed collection of {m.group(2)} (not the lineage head): actor {name}'})
     for r in sorted((p for p in driver.iterdir() if ROUND.match(p.name) and p.is_dir()), key=lambda p: p.name):
-        if r.name == active:
+        if r.name == active or round_pending(r, state):
             continue
         discarded = (r / 'discarded.json').exists()
         if not (r.name in trained or discarded or (active_n is not None and int(r.name[1:]) < active_n)):
@@ -239,7 +264,7 @@ def _tier_plan(driver: Path, state: dict, current_policy: dict | None) -> list[d
             actions.append({'op': 'move', 'path': str(d), 'why': f'collection of unprotected policy {m.group(2)}'})
     for r in sorted((p for p in driver.iterdir() if ROUND.match(p.name) and p.is_dir() and not p.is_symlink()),
                     key=lambda p: p.name):
-        if r.name in last_two or r.name == active or int(r.name[1:]) >= head:
+        if r.name in last_two or r.name == active or int(r.name[1:]) >= head or round_pending(r, state):
             continue
         policy = by_round.get(r.name)
         policy_kept = policy is not None and policy.get('sha256') in keep

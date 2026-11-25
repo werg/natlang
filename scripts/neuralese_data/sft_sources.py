@@ -2060,9 +2060,22 @@ class Exposures:
         self.replaced = frozenset().union(*(r for _, _, r in self.per_build))
         self.tasks = frozenset().union(*(t for _, t, _ in per_build))
 
+    # a stand-in (fill) unit counts only earlier fills of its episode, not the episode's raw training: its filled
+    # reasoning is new supervision, and the actions the raw episode trained go in at zero weight
+    # (``reasoning_after_raw``; coordinator 2026-11-25). False: one exposure per episode whichever part trained it.
+    fill_after_raw = False
+
+    def raw_trained(self, task, episode_key):
+        """Whether an earlier build trained the episode ``episode_key`` itself (raw: its rows or its unit)."""
+        return episode_key in self.keys or (task, episode_key) in self.units
+
     def __call__(self, key):
         task, round_ = key[1], key[2]
         stood = stand_in((task, round_))[1]     # the episode this unit stands in for, if it is a stand-in
+        if stood is not None and self.fill_after_raw:
+            if key[1:] not in self.units and (task, stood) not in self.replaced:
+                return 0
+            return sum(1 for _, units, replaced in self.per_build if key[1:] in units or (task, stood) in replaced)
         if (round_ not in self.keys and key[1:] not in self.units and (task, round_) not in self.replaced
                 and (stood is None or (stood not in self.keys and (task, stood) not in self.units))):
             return 0
@@ -2079,9 +2092,36 @@ def stand_in(unit):
     return (task, rest) if rest.count(':') >= 2 else (task, None)
 
 
-def trained_exposures(builds):
+def trained_exposures(builds, fill_after_raw=False):
     """``Exposures`` of the earlier builds (each read once: rows.jsonl.zst and trained-units.json)."""
-    return Exposures([(*_trained_in_build(build), trained_units([build])) for build in builds])
+    exposure = Exposures([(*_trained_in_build(build), trained_units([build])) for build in builds])
+    exposure.fill_after_raw = fill_after_raw
+    return exposure
+
+
+FILL_AFTER_RAW = 'reasoning'     # --fill-after-raw default
+
+
+def reasoning_after_raw(chains, close_id):
+    """Zero the weight of every target token after the first ``</think>`` of each row of ``chains`` (in place): the
+    actions a raw episode already trained, leaving its filled reasoning (through ``</think>``, which the raw episode
+    trained as zero-weight context) as the only targets, so no target token trains twice. A row without ``</think>``
+    is all action (weight 0); a decision readout (``chain['decision']``: an option choice the raw episode trained) is
+    dropped. Returns (kept chains, weighted target tokens)."""
+    import numpy as np
+    kept, total = [], 0.
+    for chain in chains:
+        if chain.get('decision') is not None:
+            continue
+        for _, length, row in chain['segs']:
+            weight = np.array(row['weight'], np.float32) if 'weight' in row else np.ones(length, np.float32)
+            sample = np.asarray(row['sample'])
+            closes = np.flatnonzero(sample[:length] == close_id)
+            weight[(int(closes[0]) + 1) if len(closes) else 0:] = 0.
+            row['weight'] = weight
+            total += float(weight.sum())
+        kept.append(chain)
+    return kept, total
 
 
 def drop_overexposed(chains, exposure, max_prior):
@@ -3241,7 +3281,8 @@ def build(args):
 
     def is_wrapper(c):
         return constructs.get(c['task_id'], ((), False))[1]
-    exposure = trained_exposures(getattr(args, 'prefer_unseen', None) or [])
+    fill_after_raw = getattr(args, 'fill_after_raw', FILL_AFTER_RAW) == 'reasoning'
+    exposure = trained_exposures(getattr(args, 'prefer_unseen', None) or [], fill_after_raw)
     trained_keys, trained_before, trained_unit_keys = exposure.keys, exposure.tasks, exposure.units
     max_prior = getattr(args, 'max_prior_exposures', MAX_PRIOR_EXPOSURES) or 0
     if max_prior:   # an episode the lineage trained max_prior times already is no candidate (``drop_overexposed``)
@@ -3487,6 +3528,17 @@ def build(args):
     # after it took budget from teacher episodes that have no fill (r0002: 2,811 such episodes, ~36% of 180M)
     aux_parts = [parse_aux(spec) for spec in args.aux]
     loaded = [(part, load_aux(part, renderer.tokenizer, held)) for part in aux_parts]
+    if fill_after_raw:      # a fill of an episode that trained raw trains its filled reasoning only
+        close_id = int(renderer.tokenizer.convert_tokens_to_ids('</think>'))
+        for part, units in loaded:
+            if part.get('replaces') != 'teacher':
+                continue
+            for unit in units:
+                episode_key = replaced_round(part, unit)
+                if episode_key is not None and exposure.raw_trained(unit['task'], episode_key):
+                    unit['chains'], unit['weighted'] = reasoning_after_raw(unit['chains'], close_id)
+                    part['reasoning_after_raw'] = part.get('reasoning_after_raw', 0) + 1
+            units[:] = [u for u in units if u['chains'] and u['weighted'] > 0]
     filled_keys = frozenset(
         key for part, units in loaded if part.get('replaces') == 'teacher' and part['share'] == 'all'
         for key in (replaced_round(part, unit) for unit in units) if key is not None) \
@@ -3917,6 +3969,7 @@ def build(args):
                    'defer_unfilled': {'hours': getattr(args, 'defer_unfilled_hours', 0) or 0,
                                       'campaign_works': len(getattr(args, 'campaign_work', None) or ()),
                                       'fill_out': getattr(args, 'fill_out', None)},
+                   'fill_after_raw': getattr(args, 'fill_after_raw', FILL_AFTER_RAW),
                    'own_solved': {'anchor_per_task': getattr(args, 'anchor_per_task', 1),
                                   'rate': getattr(args, 'own_solved_rate', OWN_SOLVED_RATE)},
                    'max_forward_tokens': getattr(args, 'max_forward_tokens', 0) or 0,
@@ -3973,7 +4026,7 @@ def recap(args):
     out.mkdir(parents=True, exist_ok=True)
     with (src / 'chains.pkl').open('rb') as handle:
         payload = pickle.load(handle)
-    exposure = trained_exposures(args.prefer_unseen or [])
+    exposure = trained_exposures(args.prefer_unseen or [], getattr(args, 'fill_after_raw', FILL_AFTER_RAW) == 'reasoning')
     chains, cap = cap_target_tokens(payload['chains'], args.max_target_tokens, exposure.keys, exposure.units,
                                     args.max_forward_tokens, exposure=exposure)
     report = json.loads((src / 'build.json').read_text())
@@ -4583,6 +4636,10 @@ def main():
     b.add_argument('--anchor-per-task', type=int, default=1,
                    help='own episodes of a task the frontier marks solved (a light anchor); 0: none, and with '
                         '--own-solved-rate also none of a task the frontier did not measure whose newest rate is solved')
+    b.add_argument('--fill-after-raw', choices=('reasoning', 'skip'), default=FILL_AFTER_RAW,
+                   help='a filled-reasoning unit of a teacher episode an earlier build trained raw: reasoning (default) '
+                        'trains its filled reasoning only, the actions at zero weight (reasoning_after_raw); skip: '
+                        'one exposure per episode, the fill never trains (before 2026-11-25)')
     b.add_argument('--defer-unfilled-hours', type=float, default=0.,
                    help='a --campaign-work teacher episode younger than this that --fill-out has not attempted is not '
                         'admitted raw: it waits for its fill (FillPending; 0: off)')

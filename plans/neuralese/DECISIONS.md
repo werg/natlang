@@ -13706,3 +13706,39 @@ The Python engines store a reply captured in its own context as `producer_kind` 
   - Tests: `test_graph_calls_lower_an_operator_capture_as_a_pass_through_import` and
     `test_operator_calls_are_not_reworded_matches_of_each_other` (`test_authored_trajectories.py`); the updated
     `ts-host/test/authored-in-context-neuralese.test.mjs`.
+
+## 2026-11-25 18:00 aei1 supply, coordinator decisions: fills of raw-trained episodes train their reasoning only; a Colab fill keeper; retention protects rounds still to train (ei-supply agent)
+
+Coordinator decisions on the 16:30 entry: (1) allow fills of episodes that already trained raw, with the actions at
+zero weight so no target token trains twice; (2) keep the family cap at 0.05; (3) the Colab fill gets an owner that
+relaunches it; (4) fix the retention bug that deleted r0011's chains; (5) update the `test_native_prefill_chunks` stub
+once the engine change is on main.
+
+1. **Reasoning after raw** (`sft_sources build --fill-after-raw reasoning`, default; `skip` opts out). A fill unit
+   counts only earlier *fills* of its episode (`Exposures.fill_after_raw`), not the episode's raw training. When the
+   episode trained raw (`Exposures.raw_trained`), `reasoning_after_raw` zeroes every target token after the row's
+   first `</think>`. Those are the actions the raw episode trained; the filled reasoning through `</think>` was
+   zero-weight context in the raw episode and now trains. A row without `</think>` is all action (weight 0). A
+   decision readout (an option choice the raw episode trained) is dropped. So one exposure per target token holds
+   exactly. The raw episode never trains again after its fill. The fills (`filled_reasoning --skip-trained`) now skip
+   only episodes whose fill trained, and they fill raw-trained episodes after every never-trained one
+   (`raw_trained`, last group of `ordered`). This unlocks the ~30k raw-trained teacher episodes at ~1.0-1.3K new
+   reasoning tokens each. Their teacher episodes passed the core caps when they trained raw, so the fills enter as the
+   `filled` aux part (shape share and per-task tokens apply).
+2. Family cap unchanged (0.05).
+3. **Colab fill keeper** (`AsyncRoundDriver.colab_fill_check`, every 5 min in the remote-collection loop;
+   `--no-colab-fill` opts out). Every Colab session actor that serves the lineage head gets a unit
+   `<name>-colab-fill<suffix>`: `fill_command(colab=True)`, polite, campaigns first, `--skip-trained` with the lineage's
+   builds, `--expect-policy` the head, 8 GB. It is relaunched whenever it is gone: it died, or it exited because the
+   actor moved to a newer policy. It never starts on a session that a round's SFT holds. Log:
+   `ROOT/colab-fill/<unit>.log`. The hand-launched `colab-fill-campaigns-20261125` should stop when the driver starts
+   on this pin, because the keeper replaces it.
+4. **Retention** (`ei_round_tier.round_pending`, used by `drop_plan` and the tier moves `_tier_plan`, the callers of
+   both `retain` and `plan`). A round that is not discarded and not trained (not in `trained_rounds`, no
+   `policy/published.json`, no factors manifest) is never touched when it is prepared (`stages/prepared.done`) or
+   prepared from the lineage head (round.json `base_policy_sha`/`trained_from`), whatever `active_round` says. Test:
+   `test_a_round_still_to_train_keeps_its_mix_whatever_active_round_says`.
+5. Already on main: 348d7574d updated the stub with the engine change.
+
+Also: `test_async_driver_retention_pass_and_opt_out` failed when run after another driver test whose background
+retention pass still held the class-wide lock. The test now waits for the lock.

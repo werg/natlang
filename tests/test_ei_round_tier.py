@@ -292,6 +292,32 @@ def test_drop_plan_keeps_protected_and_untrained_mixes(tmp_path):
     assert 'r0002/mix/chains.pkl' not in acts and 'r0002/sft/learner-state' in acts
 
 
+def test_a_round_still_to_train_keeps_its_mix_whatever_active_round_says(tmp_path):
+    """2026-11-25 14:23: active_round pointed at a later GRPO round (dropped afterwards) and r0011, prepared and never
+    trained, lost its chains and inputs as 'older than the active round'. A prepared round that has not trained, and
+    a round prepared from the lineage head, are kept by the deletions and the moves."""
+    m = load()
+    root, state = trained_driver(tmp_path)
+    state['active_round'] = {'round_id': 'r0009', 'base_sha256': sha('4')}
+    write(root / 'r0005' / 'stages' / 'prepared.done', b'{}')                 # prepared, never trained
+    write(root / 'r0006' / 'round.json', json.dumps({'base_policy_sha': sha('4')}).encode())   # from the head
+    for r in ('r0005', 'r0006'):
+        assert m.round_pending(root / r, state)
+    assert not m.round_pending(root / 'r0004', state)                         # trained
+    assert not m.round_pending(root / 'r0007', state)                         # discarded
+    acts = {str(Path(a['path']).relative_to(root)) for a in m.drop_plan(root, state, None)}
+    assert not any(p.startswith(('r0005', 'r0006')) for p in acts)
+    assert 'r0004/mix/chains.pkl' in acts                                     # a trained round still goes
+    state['trained_rounds'].append('r0005')                                   # once it trained, its pickles go
+    acts = {str(Path(a['path']).relative_to(root)) for a in m.drop_plan(root, state, None)}
+    assert 'r0005/mix/chains.pkl' in acts and not any(p.startswith('r0006') for p in acts)
+    state['lineage'] = [*state['lineage'], {'round_id': 'r0008', 'sha256': sha('8'), 'version': 8},
+                        {'round_id': 'r0009', 'sha256': sha('9'), 'version': 9}]
+    state['trained_rounds'] = ['r0001', 'r0002', 'r0003', 'r0004']
+    moved = {str(Path(a['path']).relative_to(root)) for a in m.plan(root, state, None, drop=False)}
+    assert not any(p.startswith('r0005') for p in moved)                      # the tier moves keep it too
+
+
 def test_retain_deletes_through_links_skips_referenced_and_compacts_teacher(tmp_path, monkeypatch):
     m = load()
     root, state = trained_driver(tmp_path)
