@@ -2,7 +2,8 @@
 from copy import deepcopy
 import hashlib
 import json
-from pathlib import Path
+import os
+from pathlib import Path, PurePosixPath
 
 from natlang_neuralese.common.jsonio import canonical_json_bytes
 
@@ -11,6 +12,44 @@ from natlang_neuralese.common.jsonio import canonical_json_bytes
 EXECUTION_FIELDS = frozenset({'requiresReview', 'devices', 'requiresAndroidEmulator',
                               'requiresDeploymentPackage', 'workspaceBaseline'})
 ENTRY_EXECUTION_FIELDS = frozenset({'program', 'callable', 'resultType', 'skill'})
+
+
+def adapter_defaults(entry):
+    """Validate explicit producer provenance without treating non-null evidence as metadata."""
+    declared = entry.get('adapterDefaults')
+    if 'adapterDefaults' not in entry:
+        return {}
+    if not isinstance(declared, dict) or set(declared) != {'values', 'source'}:
+        raise ValueError('invalid entry adapter defaults')
+    values, source = declared['values'], declared['source']
+    if (not isinstance(values, dict) or not values or 'goal' in values or
+            any(not isinstance(name, str) or not name.isidentifier() for name in values) or
+            not isinstance(source, dict) or set(source) != {'path', 'sha256'}):
+        raise ValueError('invalid entry adapter default provenance')
+    path, digest = source['path'], source['sha256']
+    if (not isinstance(path, str) or not path or PurePosixPath(path).is_absolute() or
+            '..' in PurePosixPath(path).parts or path == '.' or ':' in path or '\\' in path or
+            str(PurePosixPath(path)) != path or
+            not isinstance(digest, str) or len(digest) != 64 or
+            any(c not in '0123456789abcdef' for c in digest)):
+        raise ValueError('invalid entry adapter default source')
+    args, encoded = entry.get('arguments'), entry.get('argumentJson')
+    names, inputs = entry.get('parameterNames'), entry.get('inputValues')
+    if (not isinstance(args, dict) or not isinstance(encoded, dict) or
+            not isinstance(names, list) or not isinstance(inputs, list) or
+            len(names) != len(inputs) or any(not isinstance(name, str) for name in names) or
+            len(set(names)) != len(names)):
+        raise ValueError('adapter defaults require complete actual input bindings')
+    for name, value in values.items():
+        if name not in args or name not in encoded or name not in names:
+            raise ValueError('adapter default is absent from actual input bindings')
+        try:
+            representations = [args[name], json.loads(encoded[name]), inputs[names.index(name)]]
+        except (ValueError, TypeError, IndexError) as error:
+            raise ValueError('invalid adapter default argument encoding') from error
+        if any(canonical_json_bytes(actual) != canonical_json_bytes(value) for actual in representations):
+            raise ValueError('adapter default differs from actual input bindings')
+    return values
 
 
 def catalog_rows(path, *, lines=None):
@@ -47,6 +86,7 @@ def catalog_rows(path, *, lines=None):
             entry = row.get('entry', {})
             if not isinstance(entry, dict):
                 raise ValueError(f'invalid catalog entry: {task}')
+            adapter_defaults(entry)
             for key in ENTRY_EXECUTION_FIELDS & entry.keys():
                 if not isinstance(entry[key], str) or not entry[key]:
                     raise ValueError(f'invalid entry execution metadata {key}: {task}')
@@ -81,6 +121,17 @@ def identity(row):
         result.pop('goal', None)  # actual value has been verified against the retained digest
         entry = result.get('entry')
         if entry is not None:
+            defaults = adapter_defaults(entry) if os.environ.get('NATLANG_CATALOG_ADAPTER_DEFAULTS', '1') != '0' else {}
+            # Null supplementary adapter state carries no authored task input.
+            # Non-null research/evidence stays in all original bindings.
+            entry.pop('adapterDefaults', None)
+            for name, value in defaults.items():
+                if value is not None:
+                    continue
+                entry['arguments'].pop(name)
+                entry['argumentJson'].pop(name)
+                index = entry['parameterNames'].index(name)
+                del entry['parameterNames'][index], entry['inputValues'][index]
             for key in ENTRY_EXECUTION_FIELDS:
                 entry.pop(key, None)
             for key in ('arguments', 'argumentJson'):
@@ -120,7 +171,7 @@ def compatible_catalogs(snapshot, current):
     for row in after_rows:
         previous = old[row['taskId']]
         fields = [key for key in sorted(EXECUTION_FIELDS) if (key in previous) != (key in row) or previous.get(key) != row.get(key)]
-        for key in sorted(ENTRY_EXECUTION_FIELDS):
+        for key in sorted(ENTRY_EXECUTION_FIELDS | {'adapterDefaults'}):
             a, b = previous.get('entry', {}), row.get('entry', {})
             if (key in a) != (key in b) or a.get(key) != b.get(key):
                 fields.append(f'entry.{key}')

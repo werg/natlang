@@ -300,3 +300,70 @@ def test_round_driver_accepts_metadata_only_registry_differences(tmp_path):
     (other/ing.REGISTRY).write_text(''.join(json.dumps(row) + '\n' for row in rows))
     with pytest.raises(SystemExit, match='different holdout registries'):
         ei.live_holdout_registry([work, other])
+
+
+def add_adapter_default(row, value=None):
+    entry = row['entry']
+    entry['arguments']['research'] = value
+    entry['argumentJson']['research'] = json.dumps(value)
+    entry['parameterNames'].append('research')
+    entry['inputValues'].append(value)
+    entry['adapterDefaults'] = {'values': {'research': value},
+        'source': {'path': 'skills/open-user-goal/entries.json', 'sha256': 'a' * 64}}
+
+
+def test_source_declared_empty_adapter_context_preserves_held_task_and_actual_bindings(tmp_path):
+    from live_catalog_identity import compatible_catalogs
+    rows, root, work, source, snapshot = identity_catalog(tmp_path)
+    before = snapshot.read_bytes()
+    for row in rows:
+        add_adapter_default(row)
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    assert ing.holdout_registry(root, work) == snapshot
+    assert snapshot.read_bytes() == before
+    assert rows[0]['entry']['arguments']['research'] is None
+    assert rows[0]['entry']['parameterNames'][-1] == 'research'
+    proof = compatible_catalogs(snapshot, source)
+    assert all('entry.adapterDefaults' in item['fields'] for item in proof['execution_metadata_changes'])
+
+
+@pytest.mark.parametrize('mutation', ['undeclared-null', 'nonnull', 'encoded', 'positional',
+    'binding-absent', 'default-differs', 'goal', 'source-absolute', 'source-escape', 'source-hash',
+    'source-extra', 'metadata-null', 'unhashable-name'])
+def test_adapter_metadata_cannot_hide_task_evidence_or_incoherent_bindings(tmp_path, mutation):
+    rows, root, work, source, snapshot = identity_catalog(tmp_path)
+    original = snapshot.read_bytes()
+    row = rows[0]
+    add_adapter_default(row)
+    entry = row['entry']
+    if mutation == 'undeclared-null': del entry['adapterDefaults']
+    elif mutation == 'nonnull':
+        entry['arguments']['research'] = {'findings': 'new actual evidence'}
+        entry['argumentJson']['research'] = json.dumps(entry['arguments']['research'])
+        entry['inputValues'][-1] = entry['arguments']['research']
+        entry['adapterDefaults']['values']['research'] = entry['arguments']['research']
+    elif mutation == 'encoded': entry['argumentJson']['research'] = '"different"'
+    elif mutation == 'positional': entry['inputValues'][-1] = 'different'
+    elif mutation == 'binding-absent': del entry['arguments']['research']
+    elif mutation == 'default-differs': entry['adapterDefaults']['values']['research'] = 'different'
+    elif mutation == 'goal': entry['adapterDefaults']['values'] = {'goal': None}
+    elif mutation == 'source-absolute': entry['adapterDefaults']['source']['path'] = '/tmp/entries.json'
+    elif mutation == 'source-escape': entry['adapterDefaults']['source']['path'] = '../entries.json'
+    elif mutation == 'source-hash': entry['adapterDefaults']['source']['sha256'] = 'not-a-hash'
+    elif mutation == 'source-extra': entry['adapterDefaults']['source']['trustMe'] = True
+    elif mutation == 'metadata-null': entry['adapterDefaults'] = None
+    elif mutation == 'unhashable-name': entry['parameterNames'][-1] = []
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    with pytest.raises(SystemExit, match='changed'):
+        ing.holdout_registry(root, work)
+    assert snapshot.read_bytes() == original
+
+
+def test_adapter_default_projection_has_strict_input_identity_optout(tmp_path, monkeypatch):
+    rows, root, work, source, snapshot = identity_catalog(tmp_path)
+    for row in rows:
+        add_adapter_default(row)
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    monkeypatch.setenv('NATLANG_CATALOG_ADAPTER_DEFAULTS', '0')
+    with pytest.raises(SystemExit, match='changed'):
+        ing.holdout_registry(root, work)
