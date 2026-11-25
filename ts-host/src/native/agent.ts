@@ -20,6 +20,8 @@ import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, SCOPE_VALUE_CHARS, SMALL_VALUE_CHARS, literalFits, note as cutNote, sealedValuesChars, sealedValuesEnabled } from './cutoff.js';
 import type { TrainingGuidance } from './training-guidance.js';
+import { hoistReturnContract } from './contract-hoist.js';
+import { runPrefixSharedBranchSearch, type BranchSearchOptions } from './branch-search.js';
 
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
 const scopeValueChars = (session: NativeSession) => Math.max(SCOPE_VALUE_CHARS, session.pages.budget);
@@ -658,6 +660,11 @@ export class NativeToolAgent {
       compactionChars?: number;
       /** Program guidance states: `call` (default) primes them at their real position, `text` writes them from text alone. */
       guidancePriming?: 'call' | 'text';
+      /** Calibrated single-pass `readout: decision` settlement policy (`plans/NATLANG_COMPILER.md` §6.1). */
+      compiledDecision?: { temperature: number; fastThreshold: number; riskThresholds?: Readonly<Record<string, number>> };
+      /** Prefix-shared `branch@N` search with crisp-first + StepVerifierHead ranking (`plans/NATLANG_COMPILER.md` §6.2).
+       * The kept turn is a selection over samples, not one policy sample: never set it for on-policy collection. */
+      branchSearch?: BranchSearchOptions;
       /**
        * Receives the deltas of the call's model turns as they stream (plans/STREAMING.md §1.6), with the turn's number
        * (as its `model_request` trace events give it). A turn taken again after a failed request first gets a `reset`.
@@ -1794,6 +1801,51 @@ export class NativeToolAgent {
     // A reasoned readout (`readout: decision`, the default) first samples the model's own reasoning on the readout's
     // messages, `samples` times, and scores the options after each; `readout: instant` scores them right away.
     const reasoningTemperature = decisionReasoningTemperature(this.options.temperature);
+    // Compiled decision fast path (plans/NATLANG_COMPILER.md §6.1): one calibrated scoring pass (no decoded tokens)
+    // settles a confident choice; a borderline or risk-floor input takes the reasoned readout below. A failed scoring
+    // request fails the readout as the reasoned path's own scoring would (no silent fallback).
+    const compiledDecision = this.options.compiledDecision;
+    if (compiledDecision && joint && replies && replies.length >= 2) {
+      const scoredFast = await runInFrame(session.runtime.frame, () => decide({
+        messages: encoded.messages, options: replies, cache_messages: cacheMessages,
+        ...(callId ? { invocation_id: callId, invocation_role: session.runtime.options.parentCallId ? 'child' as const : 'root' as const } : {}),
+        ...(capturedGuidance ? { x_natlang_privileged_context: capturedGuidance } : {}),
+        ...(adapters.length ? { adapters } : {}),
+      }, session.runtime.signal));
+      const fast = scoredFast.log_probs.length === replies.length && scoredFast.log_probs.every(v => Number.isFinite(v))
+        ? scoredFast : undefined;
+      if (fast) {
+        const temp = Math.max(1e-6, compiledDecision.temperature);
+        const scaled = fast.log_probs.map(lp => lp / temp);
+        const probs = softmax(scaled);
+        let bestIdx = 0;
+        for (let i = 1; i < probs.length; i++) if (probs[i]! > probs[bestIdx]!) bestIdx = i;
+        const maxProb = probs[bestIdx]!;
+        let riskTripped = false;
+        if (compiledDecision.riskThresholds) {
+          for (let i = 0; i < replies.length; i++) {
+            const rawLabel = (() => { try { const p = JSON.parse(replies[i]!); return typeof p === 'string' ? p : replies[i]!; } catch { return replies[i]!; } })();
+            const floor = compiledDecision.riskThresholds[rawLabel] ?? compiledDecision.riskThresholds[replies[i]!];
+            if (floor !== undefined && probs[i]! >= floor && i !== bestIdx) { riskTripped = true; break; }
+          }
+        }
+        if (!riskTripped && maxProb >= compiledDecision.fastThreshold) {
+          const fields = recordMarginals(joint.map(item => item.value), probs);
+          session.runtime.trace.emit('decision_readout', {
+            call_id: callId, phase: 'scored', fast_path: 'compiled-decision', temperature: temp,
+            options: replies, log_probs: fast.log_probs, probabilities: probs, tokens: fast.tokens ?? null, chosen: bestIdx,
+            ...(fields ? { fields } : {}),
+            ...(fast.prompt_tokens !== undefined ? { prompt_tokens: fast.prompt_tokens } : {}),
+            duration_ms: Math.round(performance.now() - started),
+          });
+          lam.return = joint[bestIdx]!.value as Value;
+          lam.note = JSON.stringify({ readout: 'decision', fastPath: 'compiled-decision', temperature: temp,
+            probabilities: Object.fromEntries(replies.map((reply, index) => [reply, probs[index]])) });
+          if (!session.finish()) return 'decision readout chose a value the declared type rejects';
+          return;
+        }
+      }
+    }
     const samples = lam.readout === 'instant' || reasoningRefused.has(this.driver) ? 0 :
       decisionSamples(this.options.decisionSamples, reasoningTemperature);
     let reasonings: DecisionReasoning[] = [];
@@ -2568,9 +2620,31 @@ export class NativeToolAgent {
         if (this.options.modelBudget && !reservation) return budgetStop('graph model request or token budget exhausted');
         if (reservation) turnRequest.max_tokens = reservation.limit;
         calledDriver = true;
-        // model-call-kind: tool-loop-turn -- training/model-call-kinds.json
-        response = await runInFrame(session.runtime.frame, () => turnOptions ? currentDriver(turnRequest, session.runtime.signal, turnOptions) :
-          currentDriver(turnRequest, session.runtime.signal));
+        // Prefix-shared branch@N + StepVerifier ranking (`plans/NATLANG_COMPILER.md` §6.2) when configured on primary actor.
+        const branchCfg = !fallbackIndex ? this.options.branchSearch : undefined;
+        if (branchCfg && branchCfg.branches > 1) {
+          const hoisted = session.lam.type.kind === 'lambda' ? hoistReturnContract(session.lam.type.returns, session.env) : undefined;
+          const validateReturnValue = branchCfg.validateReturnValue ?? (hoisted ? (value: unknown) => hoisted.fastCheck(value) : undefined);
+          const searched = await runPrefixSharedBranchSearch(
+            turnRequest,
+            (req) => runInFrame(session.runtime.frame, () => turnOptions ? currentDriver(req, session.runtime.signal, turnOptions) : currentDriver(req, session.runtime.signal)),
+            { ...branchCfg, ...(validateReturnValue ? { validateReturnValue } : {}) },
+            { callId, turnNumber: turn },
+          );
+          response = searched.selected.turn;
+          session.runtime.trace.emit('branch_search', {
+            call_id: callId, turn, branches: branchCfg.branches,
+            selected_index: searched.selected.index,
+            pass1_crisp_ok: searched.ranked.find(c => c.index === 0)?.crispOk ?? true,
+            selected_crisp_ok: searched.selected.crispOk,
+            selected_verifier_score: searched.selected.verifierScore,
+            branch_win: searched.branchWin,
+          });
+        } else {
+          // model-call-kind: tool-loop-turn -- training/model-call-kinds.json
+          response = await runInFrame(session.runtime.frame, () => turnOptions ? currentDriver(turnRequest, session.runtime.signal, turnOptions) :
+            currentDriver(turnRequest, session.runtime.signal));
+        }
         exceededGraphReservation = reservation?.limit !== null && reservation?.limit !== undefined &&
           response.completion_tokens !== undefined && response.completion_tokens > reservation.limit;
         reservation?.finish(response.completion_tokens);

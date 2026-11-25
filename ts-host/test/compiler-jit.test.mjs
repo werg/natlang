@@ -20,6 +20,9 @@ import {
   formatStageADemonstrations,
   worthRememberingCrisp,
 } from '../dist/memory/experience-kb.js';
+import { hoistReturnContract } from '../dist/native/contract-hoist.js';
+import { rankBranchCandidates, runPrefixSharedBranchSearch } from '../dist/native/branch-search.js';
+import { TypeEnv, parseType } from '../dist/native/types.js';
 
 test('JIT chooseTier policy, provenance cache, and compile-on-creation closures', async () => {
   const baseStats = {
@@ -183,4 +186,49 @@ test('experience-KB policies are pluggable parts; Stage-A formatting of retrieve
   ]);
   assert.match(formatted, /\[group:sql \| repair \| w=0\.71\] Always use COALESCE/);
   assert.equal(formatStageADemonstrations([]), '');
+});
+
+test('Contract hoisting extracts union literals/schemas and fast-checks return values', () => {
+  const env = new TypeEnv({});
+  const unionContract = hoistReturnContract(parseType('"approve" | "block" | "escalate"'), env);
+  assert.deepEqual(unionContract.allowedLiterals, ['"approve"', '"block"', '"escalate"']);
+  assert.equal(unionContract.fastCheck('approve').ok, true);
+  assert.equal(unionContract.fastCheck('unknown').ok, false);
+
+  const recContract = hoistReturnContract(parseType('{ id: number; status: "ok" | "err" }'), env);
+  assert.equal(recContract.jsonSchema.type, 'object');
+  assert.deepEqual(recContract.jsonSchema.required, ['id', 'status']);
+  assert.equal(recContract.fastCheck({ id: 1, status: 'ok' }).ok, true);
+  assert.equal(recContract.fastCheck({ id: 'bad', status: 'ok' }).ok, false);
+});
+
+test('Prefix-shared branch@4 ranks crisp-first, verifier-second, and fires onBranchWin', async () => {
+  const wins = [];
+  const baseRequest = { messages: [{ role: 'user', content: 'solve' }], tools: [], seed: 42, temperature: 0 };
+  const sampleTurn = async (req, idx) => {
+    if (idx === 0) return { calls: [['return_result', { status: 'success', value: 'bad-label' }]], text: '' };
+    if (idx === 1) return { calls: [], text: '', malformed_call: 'bad_json' };
+    if (idx === 2) return { calls: [['return_result', { status: 'success', value: 'ok' }]], text: '' };
+    return { calls: [['return_result', { status: 'success', value: 'ok' }]], text: '' };
+  };
+  const scores = [0.99, 0.95, 0.62, 0.88];
+  const res = await runPrefixSharedBranchSearch(
+    baseRequest,
+    sampleTurn,
+    {
+      branches: 4,
+      scoreBranch: (_turn, idx) => scores[idx],
+      validateReturnValue: (v) => (v === 'ok' ? { ok: true } : { ok: false, reason: 'invalid label' }),
+      onBranchWin: (w) => wins.push(w),
+    },
+    { callId: 'call-1', turnNumber: 1 },
+  );
+  // Branch 0 & 1 fail crisp checks despite higher verifier scores; branch 3 beats branch 2 on verifier score!
+  assert.equal(res.selected.index, 3);
+  assert.equal(res.branchWin, true);
+  assert.equal(wins.length, 1);
+  assert.equal(wins[0].pass1CrispOk, false);
+  assert.equal(wins[0].selectedCrispOk, true);
+  assert.equal(wins[0].selectedScore, 0.88);
+  assert.deepEqual(rankBranchCandidates(res.ranked).map(c => c.index), [3, 2, 0, 1]);
 });

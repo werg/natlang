@@ -784,6 +784,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   }
   // A strict tier attempt serves from crisp cases only: with none, the engine goes on to the next tier and no model runs.
   if (attempt?.strict && !handoff) { capture?.discard(); task.discardGraphCall(callId, frame.parentCallId); throw new Deopt(attempt.declined ?? 'no crisp case of this tier served the call'); }
+  const compilerOpts = task.runtime.options.compiler;
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
   const lexicalServices = unrecordedServices(frame.services ?? task.services);
@@ -857,6 +858,11 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     maxSeconds: model.maxSeconds, contextTokens: definition.budget?.contextTokens ?? model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, decisionReadout: model.decisionReadout, decisionGeneration: model.decisionGeneration, decisionSamples: model.decisionSamples,
     guidance: model.guidance, promptRendering: model.promptRendering,
+    ...(compilerOpts?.compiledDecisions ? (() => {
+      const cal = compilerOpts.compiledDecisions.get(definition.id) ?? compilerOpts.compiledDecisions.get(definition.name);
+      return cal ? { compiledDecision: cal } : {};
+    })() : {}),
+    ...(compilerOpts?.branchSearch ? { branchSearch: compilerOpts.branchSearch } : {}),
     // Live events (plans/STREAMING.md §1.6): the call's model deltas, tagged with the call; nothing without a subscriber.
     ...(task.live ? { onDelta: liveDeltas(task.live, { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null,
       definitionId: definition.id, name: definition.name }) } : {}),
