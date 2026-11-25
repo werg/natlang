@@ -3754,6 +3754,16 @@ def neuralese_graph(args):
     from exp0_sft import MAX_LEN, chains_of, source_tokens
     from lower_rollout_turns import episode_turns
     work, out = Path(args.work), Path(args.out)
+    # Legacy context-free writes become the span written at the end of their producing turn (DECISIONS 2026-11-25),
+    # unless --recorded-write-documents keeps the recorded documents.
+    in_context = None
+    if not getattr(args, 'recorded_write_documents', False):
+        from transformers import AutoTokenizer
+        source = args.tokenizer or work / 'tokenizer'
+        if not Path(source).exists():
+            raise SystemExit(f'{source}: no tokenizer; pass --tokenizer (or --recorded-write-documents)')
+        tokenizer = AutoTokenizer.from_pretrained(str(source))
+        in_context = tuple(int(tokenizer.convert_tokens_to_ids(t)) for t in ('<think>', '</think>'))
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(args.seed)
     held = held_closure(args.held_manifest)
@@ -3807,7 +3817,7 @@ def neuralese_graph(args):
                 row = json.loads(line)
                 if row.get('sample') in samples and row.get('task_id') == samples[row['sample']]['task_id']:
                     counters = collections.Counter()
-                    calls = episode_turns(row, counters)
+                    calls = episode_turns(row, counters, in_context=in_context)
                     for call in calls:      # SFT: the own sampled tokens are the target (no importance weights)
                         for field in ('logp', 'probabilities'):
                             call.pop(field, None)
@@ -4078,6 +4088,11 @@ def main():
     g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
                    help='own runs left out (as build --exclude-run), matched against the episode run label')
     g.add_argument('--seed', type=int, default=20261117)
+    g.add_argument('--tokenizer', default=None,
+                   help='the policy tokenizer (its <think> ids; default: WORK/tokenizer): legacy context-free writes are '
+                        'rewritten in context')
+    g.add_argument('--recorded-write-documents', action='store_true',
+                   help='keep the recorded producer documents of legacy context-free writes (before 2026-11-25)')
     for parser in (e, r, c, b, rc, n, g):
         parser.add_argument('--registry-repo', default=None, help='explicit live dataset registry owner; default pinned snapshot')
         parser.add_argument('--registry-ref', default=None, help='published Git snapshot for explicit live admission')
