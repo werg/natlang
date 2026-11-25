@@ -292,6 +292,7 @@ class Actor:
         self.inflight = 0
         self.load_at, self.load = 0., None
         self.policy_at, self.policy_value = 0., None
+        self.policy_lock = threading.Lock()
         self.counts = collections.Counter()
 
     def post(self, path, body, timeout=7200, down_for=4 * 3600):
@@ -345,11 +346,11 @@ class Actor:
             self.inflight -= 1
             self.cond.notify_all()
 
-    def policy(self):
+    def policy(self, max_age=30.):
         """The served policy's identity (the front's ``rl_policy_binding``; GRPO rebinds it in place every step)."""
         if not self.front:
             return None
-        if time.time() - self.policy_at > 30:
+        if time.time() - self.policy_at > max_age:
             try:
                 info = self.get(self.front + '/v1/neuralese/info')
                 binding = info.get('rl_policy_binding') or {}
@@ -359,6 +360,21 @@ class Actor:
                 self.policy_value = {'error': repr(error)[:200]}
             self.policy_at = time.time()
         return self.policy_value
+
+    def attest(self):
+        """The served policy's checkpoint sha256 read now (shared by the workers for ``ATTEST_AGE`` seconds), None
+        when the front does not answer or binds none."""
+        with self.policy_lock:
+            return (self.policy(ATTEST_AGE) or {}).get('checkpoint_sha256')
+
+
+class PolicyRefused(RuntimeError):
+    """The front serves another policy than the generation expects (``--expect-policy``, default the export's)."""
+
+
+ATTEST_AGE = 2.          # seconds a served-policy read stands for every worker (the front answers ~8 KB)
+ATTEST_TRIES = 4         # draws of one step before an unstable or unattested served policy fails the episode
+ATTEST_WAIT = 30.        # seconds before asking an unanswering front again
 
 
 # ---- generation ------------------------------------------------------------------------------------------------------
@@ -371,6 +387,34 @@ class Filler:
         self.banned = sorted(banned)
         self.counts = collections.Counter()
         self.lock = threading.Lock()
+        self.attesting = getattr(args, 'policy_attest', True)
+        self.expect = getattr(args, 'expect_policy', None)
+
+    def attested_step(self, context, calls, t, context_text, rng, trend):
+        """``step`` under an attested policy: the served policy read before and after the draws must be the same (a
+        rebind in between draws the step again) and, unless the generation follows the served policy, the expected
+        one (``PolicyRefused`` otherwise). The step records it as ``policy``; an unanswering front waits."""
+        if not self.attesting:
+            fill = self.step(context, calls, t, context_text, rng, trend)
+            fill['policy'] = (self.actor.policy() or {}).get('checkpoint_sha256')
+            return fill
+        for _ in range(ATTEST_TRIES):
+            before = self.actor.attest()
+            if before is None:
+                with self.lock:
+                    self.counts['policy_unattested_waits'] += 1
+                time.sleep(ATTEST_WAIT)
+                continue
+            if self.expect and before != self.expect:
+                raise PolicyRefused(f'the front serves {before}, not the expected policy {self.expect} '
+                                    '(--expect-policy / the export\'s; --follow-served-policy follows the actor)')
+            fill = self.step(context, calls, t, context_text, rng, trend)
+            if self.actor.attest() == before:
+                fill['policy'] = before
+                return fill
+            with self.lock:
+                self.counts['policy_changed_mid_step'] += 1
+        raise RuntimeError(f'no attested served policy for step {t} after {ATTEST_TRIES} tries')
 
     def text(self, ids, special=False):
         return self.tok.decode([int(i) for i in ids], skip_special_tokens=not special)
@@ -587,7 +631,7 @@ class Filler:
         started = time.time()
         rng = random.Random(f"{self.args.seed}:{item['key']}")
         chains, _ = renderer.chains(item)
-        policy_start = self.actor.policy()
+        policy_start = self.actor.policy(0.)
         directory = getattr(self.args, 'partial_dir', None)
         current = json.loads(json.dumps(settings(self.args)))
         saved = load_partial(directory, item['key'], current)
@@ -596,6 +640,9 @@ class Filler:
             calls = calls_of(chain, self.close)
             digest = chain_digest(chain)
             done = saved.get(digest, [])[:len(calls)]
+            if self.attesting and any(not f.get('policy') or (self.expect and f.get('policy') != self.expect)
+                                      for f in done):
+                done = []       # a saved step without an attested (or the expected) policy is drawn again
             context = [int(i) for i in calls[0]['prompt']]
             context_text = self.text(context, special=True)
             fills = []
@@ -605,8 +652,7 @@ class Filler:
                     fill = done[t]
                     resumed += 1
                 else:
-                    fill = self.step(context, calls, t, context_text, rng, trend)
-                    fill['policy'] = (self.actor.policy() or {}).get('checkpoint_sha256')
+                    fill = self.attested_step(context, calls, t, context_text, rng, trend)
                 fills.append(fill)
                 if fill.get('kind') == 'filled':
                     trend = 0
@@ -623,7 +669,7 @@ class Filler:
             out_chains.append({'digest': digest, 'calls': fills})
         return {'schema': SCHEMA, **item_of(item), 'name': item.get('name'), 'teacher': item['teacher'], 'render_tokenizer': renderer.tokenizer_dir,
                 'policy_start': policy_start,
-                'policy_end': self.actor.policy(), 'seconds': round(time.time() - started, 1), 'finished': time.time(),
+                'policy_end': self.actor.policy(0.), 'seconds': round(time.time() - started, 1), 'finished': time.time(),
                 'resumed_steps': resumed,
                 'settings': settings(self.args), 'chains': out_chains}
 
@@ -811,7 +857,13 @@ def generate(args):
     if sha256_file(Path(args.render_tokenizer) / 'tokenizer.json') != sha256_file(export / 'tokenizer.json'):
         raise SystemExit(f'{args.render_tokenizer}: rendering tokenizer differs from the served one ({export})')
     manifest = export / 'natlang-export.json'
-    banned = (json.loads(manifest.read_text()).get('serving') or {}).get('banned_token_ids', []) if manifest.exists() else []
+    exported = json.loads(manifest.read_text()) if manifest.exists() else {}
+    banned = (exported.get('serving') or {}).get('banned_token_ids', [])
+    args.policy_attest = not args.no_policy_attest
+    args.expect_policy = None if (args.follow_served_policy or not args.policy_attest) else \
+        (args.expect_policy or exported.get('checkpoint_sha256'))
+    if args.policy_attest and not args.front:
+        raise SystemExit('--front is required to attest the served policy of every step (--no-policy-attest opts out)')
     stops = [i for i in (tokenizer.token_to_id('<|im_end|>'), tokenizer.token_to_id('<|endoftext|>')) if i is not None]
     funnel = collections.defaultdict(collections.Counter)
     episodes = teacher_episodes(works, held, funnel, drifted=args.admit_drifted == 'on',
@@ -827,6 +879,12 @@ def generate(args):
     if args.partial_dir is not None:
         args.partial_dir.mkdir(exist_ok=True)
     actor = Actor(args.sglang, args.front, args.polite, args.max_inflight, args.min_inflight, args.max_running)
+    if args.policy_attest:
+        served = actor.policy(0.) or {}
+        if args.expect_policy and served.get('checkpoint_sha256') != args.expect_policy:
+            raise SystemExit(f"{args.front} serves {served.get('checkpoint_sha256') or served}, not the expected policy "
+                             f'{args.expect_policy} (--expect-policy, default the export\'s; --follow-served-policy '
+                             'fills with whatever the actor serves and records it)')
     filler = Filler(args, actor, tokenizer, stops, banned)
     renderer = Renderer(args.render_tokenizer)
     run = {'event': 'start', 'schema': SCHEMA, 'code': code_provenance(REPO), 'argv': sys.argv, 'works': works,
@@ -864,6 +922,13 @@ def generate(args):
     def _one(item):
         try:
             record = filler.episode(item, renderer)
+        except PolicyRefused as error:     # the actor moved to another policy: stop, nothing of it is written
+            with write_lock:
+                log.write(json.dumps({'event': 'policy refused', 'key': item['key'], 'error': str(error)[:400],
+                                      'time': time.time()}) + '\n')
+                log.flush()
+            print(json.dumps({'event': 'policy refused', 'error': str(error)[:400]}), flush=True)
+            os._exit(4)
         except Exception as error:
             failures['episodes'] += 1
             with write_lock:
@@ -930,6 +995,25 @@ def record_fills(out, works, held, *, registry_repo=None, registry_ref=None):
 
 
 # ---- status, build and report ----------------------------------------------------------------------------------------
+RELABELS = 'policy-relabels.json'
+
+
+def attest_record(record, relabels):
+    """``record`` with every step attested, or None: a step without a recorded policy (before per-step attestation a
+    front that did not answer left None) takes the policy ``relabels`` (OUT/policy-relabels.json, {key: sha256}, from
+    the serving record) names for its episode; otherwise the episode is not attributable and is left out."""
+    steps = [f for c in record.get('chains', ()) for f in c.get('calls', ())]
+    if all(f.get('policy') for f in steps):
+        return record
+    sha = relabels.get(record.get('key'))
+    if not sha:
+        return None
+    for f in steps:
+        if not f.get('policy'):
+            f['policy'] = sha
+    return record
+
+
 def read_fills(out):
     for line in (Path(out) / 'fills.jsonl').open():
         if line.strip():
@@ -1132,11 +1216,19 @@ def build(args):
     record_fills(args.out, sorted({w for r in starts for w in r['works']}), starts[-1]['held'],
                  **registry_options(registry_repo, ref=registry_ref, writer=True))
     records = list(read_fills(args.out))
+    if not getattr(args, 'admit_unattested', False):
+        relabels_path = Path(args.out) / RELABELS
+        relabels = json.loads(relabels_path.read_text()) if relabels_path.exists() else {}
+        attested = [attest_record(r, relabels) for r in records]
+        unattested = sum(a is None for a in attested)
+        records = [a for a in attested if a is not None]
     excluded = set(args.exclude_policy)
     weighting = block_weights(records, args.length_reweight_cap, args.block_reweight)
     renderers = {}
     chains, counts = [], collections.Counter()
     close = None
+    if not getattr(args, 'admit_unattested', False):
+        counts['unattested_policy'] = unattested
     for record in records:
         if fill_policies(record) & excluded:   # drawn by a policy the cycle rejected as failed (expert_iteration gate)
             counts['excluded_policy'] += 1
@@ -1390,6 +1482,15 @@ def build_parser():
     g.add_argument('--render-tokenizer', required=True,
                    help='sft_sources tokenizer dir the rows are rendered with (an sft WORK\'s tokenizer/)')
     g.add_argument('--export', required=True, help='the served export dir (tokenizer.json, natlang-export.json)')
+    g.add_argument('--expect-policy', metavar='SHA256', default=None,
+                   help='the policy the fills must come from (default the --export manifest\'s checkpoint_sha256): a '
+                        'step is drawn only while the front serves it, otherwise the generation stops (exit 4)')
+    g.add_argument('--follow-served-policy', action='store_true',
+                   help='fill with whatever policy the front serves (a standing actor the driver rebinds to each new '
+                        'student policy); every step still records the attested policy that drew it')
+    g.add_argument('--no-policy-attest', action='store_true',
+                   help='opt out: no per-step served-policy attestation (the policy is read from a 30 s cache, may be '
+                        'None) and no expected policy')
     g.add_argument('--polite', action='store_true', help='beside a training run: draw only into spare engine slots')
     g.add_argument('--max-inflight', type=int, default=8)
     g.add_argument('--min-inflight', type=int, default=2)
@@ -1456,6 +1557,9 @@ def build_parser():
                         'bins only (before 2026-11-22), off')
     b.add_argument('--exclude-policy', action='append', default=[], metavar='SHA',
                    help='leave out episodes any step of which this policy drew (a held-failed candidate)')
+    b.add_argument('--admit-unattested', action='store_true',
+                   help='opt out: also build episodes with steps that record no drawing policy (default: left out '
+                        'unless OUT/policy-relabels.json names their policy from the serving record)')
     a = sub.add_parser('audit')
     a.add_argument('--out', required=True)
     a.add_argument('--work', action='append', default=[])

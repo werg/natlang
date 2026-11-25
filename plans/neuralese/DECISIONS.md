@@ -13047,3 +13047,65 @@ hosts' own configs (they hold their own exports and receive checkpoints by trans
 historical ops records (`ops/*-1101.json` etc.: receipts, not consumers; scanning them would keep everything).
 Tests: `tests/test_ei_round_tier.py::test_retain_keeps_what_a_configured_consumer_names_between_its_runs`,
 `tests/test_prune_stale_checkouts.py::test_configured_consumers_and_failed_units_reference`.
+
+## 2026-11-25 12:30 Filled reasoning attests the drawing policy of every step; the vibe student fill follows the served student (storage agent)
+
+**Observation.** The vibe student fill's config (`semantic-fill-consumer-config.json`) passes `--export` of e15b and
+records `policy_at_switch` e15b, while the Colab actor it calls (`127.0.0.1:19731`, front `18731`) is rebound in place
+by aei1 to each new student (48607211153c, 8e634a0f46ce, 6f19fe3a4c6b, 4dec7ca9c301 since 2026-11-24 17:20, per the
+generate.log start records). The rows were not labelled e15b: every step already recorded the front's
+`rl_policy_binding.checkpoint_sha256`, but from a 30 s cache read after the draws, None when the front did not answer,
+and nothing compared it with any expected policy.
+**Change (default; `generate --no-policy-attest` opts out).** `filled_reasoning generate` reads the served policy
+before and after each step's draws (shared 2 s read); a rebind between them draws the step again
+(`policy_changed_mid_step`), an unanswering front waits, and the step records the attested sha. The expected policy is
+`--expect-policy`, default the `--export` manifest's checkpoint; a front serving another refuses at start (exit) and
+mid-run (`policy refused`, exit 4, nothing written for that episode). `--follow-served-policy` fills with whatever the
+actor serves. Saved partial steps without an attested (or the expected) policy are drawn again. `expert_iteration`
+fill commands pass `--expect-policy` of the actor they started. `build` leaves out episodes with an unattested step
+unless `OUT/policy-relabels.json` names their policy (`--admit-unattested` opts out).
+**Which policy.** The fill's consumers (`filled_reasoning build` -> `filled/chains.pkl` -> `sft_sources build --aux
+filled=...,replaces=teacher`) use the policy only to leave out episodes drawn by a held-failed policy
+(`--exclude-policy`, record-level union of step labels); any lineage policy's fills are admitted. A student fill
+should come from the current student, which the rebound Colab actor serves, so the vibe fill runs with
+`--follow-served-policy` (config changed; `policy_at_switch` kept as history, `policy_mode: follow-served`).
+**Rows already written** (`/home/werg/data/filled-reasoning-20261120/fills.jsonl`, 17,188 records, shared by every fill
+generator, so not rewritten while two of them append): no record carries a label other than the front's binding.
+379 records have at least one unattested (None) step: 185 (34 after 2026-11-24 17:20) name exactly one policy
+otherwise and no publication, rebind or Pop serve (any `ops/ei/*/drive.log`) falls within their window +-30 s; they are
+relabelled with it in `policy-relabels.json`. 194 (123 after 17:20) are not attributable and are left out of builds.
+1,410 records (712 after 17:20) carry two or more step labels (they straddled a rebind); the failed-policy exclusion
+already takes the union of a record's labels, so they stay.
+
+## 2026-11-25 12:00 nl literal captures: literal-union capture types and capture by ordinary word (runtime strand)
+
+**Observation (authored-w1 builders).** (1) agent-run-blame-tree: a literal ``nl`Write ${aim}. ...` `` built from
+`const aim = kind === 'bad-brief' ? '...' : ...` and called for two kinds in one run "carried the first call's
+instructions into the second"; the replay answered both calls with one entry. (2) annotated-game-claim-checker: "could
+not be played" captured an eval array `played`, changing the call's opening.
+**Cause of (1), with evidence.** Not a cache, specializer or call-store key: each call's instructions were rendered
+from its own interpolated value (`lowered.ts` `inline`/`render`, per-instance `renderedValues`). The interpolated `aim`
+is also a capture (identifiers inside interpolations are captured, `inline.ts` slot captures), and its declared type in
+the opening was TypeScript's inferred literal union of all four branch strings:
+`const aim: "the brief node should have received: ..." | "one or two lines ... copy figures ..." | ... = "<this kind>";`.
+So every call's opening contained every kind's instruction text; the replay matches an entry by fragments that must
+appear in the opening (`curriculum.ts` `referenceDriver`), and the bad-brief entry's fragment matched the ignored-report
+call too (author order breaks the 2-fragment tie). Reproduced by replaying the submission with the interpolated
+`fixWriter` restored (`aw1-08-check-7` warning reproduced exactly: calls[85] answers 2 calls, calls[87] none); the run
+with kinds own-error/ignored-report passed only because its entries' fragments happened not to collide. Fixed: a
+capture (implicit and `nl.with`) of a binding inferred from literals is declared with the base type (`string`), as for
+`let`; declared types are kept (`inline.ts` `shownBindingType`, also used by the eager-typing data rewrite). After the
+fix the repro replays with each call answered by its own entry. Opt-out `NATLANG_LITERAL_CAPTURE_TYPES=1`.
+Runtime bug (model-facing: every such call showed other branches' text); the replay matched correctly given the
+opening. Replay improvement: `authored_replay.mjs` records each inline call's captured declarations and the check's
+"answers N different calls" warning names the captured variable a fragment matched (`capture_cause`).
+**(2), decision.** Capture by exact-name mention, ordinary words included, stays the language rule (spec "Captures";
+`request`/`verdict`/`rubric` by bare word is the documented idiom and cannot be told from prose crisply). Added: lint
+`nl-word-capture` (warning, `natlang check`; never fails an eval) when every bare mention of a captured name sits in
+verb position after an auxiliary or copula ("could not be played", "was seen"); backticks, `.field`, `[` and
+interpolation count as name uses. The message names the phrase and the fixes (backticks if needed, else reword or
+`nl.with`). Opt-out `NATLANG_WORD_CAPTURE_LINT=0`. Spec, `skills/natlang-authoring` (language.md, SKILL.md error table)
+and BUILD_BRIEF updated. Engines (llama-server, wllama, Python native, SGLang) do not render openings or key caches on
+templates: the opening is rendered only in `ts-host/src/native/agent.ts` (the one "captured by this call" renderer),
+engines see tokens. Not changed: interpolated identifiers remain captured (spec; adaptation `slotBindings` need them),
+so their value appears twice.

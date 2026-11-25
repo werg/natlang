@@ -2065,6 +2065,8 @@ class Cycle:
         return [PY, str(self.fill_repo() / 'scripts' / 'neuralese_data' / 'filled_reasoning.py'), 'generate',
                 *map(str, ['--out', self.a.fill, '--sglang', actor['sglang'], '--front', actor['url'],
                            '--render-tokenizer', self.work / 'tokenizer', '--export', actor['export'], *share,
+                           # each step is drawn only while the actor serves this policy (filled_reasoning attests it)
+                           *(('--expect-policy', actor['checkpoint_sha256']) if actor.get('checkpoint_sha256') else ()),
                            *[x for w in works for x in ('--work', w)],
                            # the live WORKs' episodes first, and their new ones as the ingester adds them
                            *[x for w in live for x in ('--prefer-work', w)],

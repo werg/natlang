@@ -154,7 +154,10 @@ def test_episode_walk_against_a_scripted_engine(monkeypatch):
         lp = -1.0 if empty else -0.2           # actions are likelier after reasoning than after an empty block
         return {'meta_info': {'input_token_logprobs': [[lp, i, None] for i in ids[start:]],
                               'input_token_ids_logprobs': [[[-1.0, close, None]] for _ in range(n)]}}
-    actor = types.SimpleNamespace(post=post, acquire=lambda: None, release=lambda: None, policy=lambda: {'p': 1})
+    served = {'sha': 'p1'}
+    actor = types.SimpleNamespace(post=post, acquire=lambda: None, release=lambda: None,
+                                  policy=lambda max_age=30.: {'checkpoint_sha256': served['sha']},
+                                  attest=lambda: served['sha'])
     args = types.SimpleNamespace(unhinted=2, hinted=2, hint_horizon=3, hint_response_chars=1500, hint_max_tokens=6000,
                                  score_horizon=1, max_tokens=512, max_len=32000, band=(0.67, 1.5), close_floor=0.01,
                                  min_improvement=0.0, ratio_floor=None, top_p=0.95, seed=0, draw='parallel',
@@ -170,6 +173,21 @@ def test_episode_walk_against_a_scripted_engine(monkeypatch):
     built = fr.filled_rows(fr.calls_of(chain, close), calls, close, 'filled:teacher:k')
     assert list(built[0]['sample']) == long_block + action1
     assert list(built[1]['prompt']) == prompt + long_block + action1 + suffix   # the filled block is history
+    assert [c['policy'] for c in calls] == ['p1', 'p1']                  # every step attests the served policy
+
+    # an expected policy the front does not serve refuses the step; a rebind during a step draws it again
+    args.expect_policy = 'p0'
+    with pytest.raises(fr.PolicyRefused):
+        fr.Filler(args, actor, tok, [im_end], []).episode(
+            {'key': 'teacher:k', 'work': 'w', 'name': 'n', 'task_id': 't', 'teacher': 'm'}, renderer)
+    args.expect_policy = None
+    reads = iter(['p1', 'p2'] + ['p2'] * 20)
+    actor.attest = lambda: next(reads)
+    rebound = fr.Filler(args, actor, tok, [im_end], [])
+    out = rebound.episode({'key': 'teacher:k', 'work': 'w', 'name': 'n', 'task_id': 't', 'teacher': 'm'}, renderer)
+    assert [c['policy'] for c in out['chains'][0]['calls']] == ['p2', 'p2']
+    assert rebound.counts['policy_changed_mid_step'] == 1
+    actor.attest = lambda: served['sha']
 
     # a stopped generation resumes an episode at the step it reached (OUT/partial/), its blocks as history
     import tempfile
@@ -186,6 +204,12 @@ def test_episode_walk_against_a_scripted_engine(monkeypatch):
         assert again['chains'][0]['calls'][0] == saved_chain['calls'][0]
         args.max_tokens = 256                                   # other settings: the partial file is not used
         assert fr.load_partial(args.partial_dir, 'teacher:k', json.loads(json.dumps(fr.settings(args)))) == {}
+        args.max_tokens = 512
+        # a saved step without an attested policy (written before attestation) is drawn again
+        fr.save_partial(args.partial_dir, 'teacher:k', json.loads(json.dumps(fr.settings(args))),
+                        [{'digest': fr.chain_digest(chain), 'calls': [{**saved_chain['calls'][0], 'policy': None}]}])
+        redo = filler.episode({'key': 'teacher:k', 'work': 'w', 'name': 'n', 'task_id': 't', 'teacher': 'm'}, renderer)
+        assert redo['resumed_steps'] == 0
 
 
 def test_fill_policies_name_every_policy_that_drew_a_step():
@@ -270,7 +294,8 @@ def scripted_filler(blocks, action_lp, args_extra=None):
         lp = action_lp(ids[start + 1] == close)
         return {'meta_info': {'input_token_logprobs': [[lp, i, None] for i in ids[start:]],
                               'input_token_ids_logprobs': [[[-1.0, close, None]] for _ in ids[start:]]}}
-    actor = types.SimpleNamespace(post=post, acquire=lambda: None, release=lambda: None, policy=lambda: {'p': 1})
+    actor = types.SimpleNamespace(post=post, acquire=lambda: None, release=lambda: None,
+                                  policy=lambda max_age=30.: {'checkpoint_sha256': 'p1'}, attest=lambda: 'p1')
     args = types.SimpleNamespace(unhinted=2, hinted=2, hint_horizon=3, hint_response_chars=1500, hint_max_tokens=6000,
                                  score_horizon=1, max_tokens=512, max_len=32000, band=(0.67, 1.5), close_floor=0.01,
                                  min_improvement=0.0, ratio_floor=None, top_p=0.95, seed=0, draw='staged',
@@ -435,3 +460,29 @@ def test_observed_live_episodes_are_fill_sources_and_their_records_name_the_boun
     record = {'schema': fr.SCHEMA, **fr.item_of(item), 'teacher': 'luna', 'chains': []}
     assert fr.item_of(record) == {k: item[k] for k in fr.ITEM_KEYS}
     assert fr.open_goal_of({'key': 'teacher:y', 'work': 'w', 'name': 'n', 'task_id': 'y'}) is None
+
+
+def test_actor_attests_the_served_policy_and_generate_flags():
+    """The export names e15b, a rebound actor serves another policy: the front's binding is what each step records."""
+    args = fr.build_parser().parse_args(['generate', '--out', 'o', '--sglang', 's', '--export', 'e',
+                                         '--render-tokenizer', 't'])
+    assert not args.follow_served_policy and not args.no_policy_attest and args.expect_policy is None
+    actor = fr.Actor('http://s', 'http://f', False, 1, 1, 1)
+    actor.get = lambda url, timeout=10: {'rl_policy_binding': {'checkpoint_sha256': 'b' * 64}}
+    assert actor.attest() == 'b' * 64
+    actor.get = lambda url, timeout=10: (_ for _ in ()).throw(OSError('down'))
+    assert actor.attest() == 'b' * 64                # read within ATTEST_AGE: shared
+    actor.policy_at = 0.
+    assert actor.attest() is None                    # an unanswering front attests nothing
+    assert fr.build_parser().parse_args(['generate', '--out', 'o', '--sglang', 's', '--export', 'e',
+                                         '--render-tokenizer', 't', '--follow-served-policy']).follow_served_policy
+
+
+def test_unattested_steps_are_relabelled_from_the_serving_record_or_left_out():
+    def rec(key, *policies):
+        return {'key': key, 'chains': [{'calls': [{'policy': p} for p in policies]}]}
+    assert fr.attest_record(rec('a', 'x', 'x'), {}) is not None
+    assert fr.attest_record(rec('b', 'x', None), {}) is None              # not attributable: left out
+    fixed = fr.attest_record(rec('c', None, 'x'), {'c': 'x'})
+    assert [f['policy'] for f in fixed['chains'][0]['calls']] == ['x', 'x']
+    assert fr.build_parser().parse_args(['build', '--out', 'o', '--corpus', 'c']).admit_unattested is False
