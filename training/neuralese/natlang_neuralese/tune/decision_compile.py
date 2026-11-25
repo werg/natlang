@@ -94,26 +94,29 @@ def decision_margin_loss(
     margin: float = 1.0,
     hard_neg_weight: float = 0.5,
     soft_kl_weight: float = 0.5,
+    rule: str = 'logLoss',
 ) -> torch.Tensor:
-    """Combined CE + hard-negative margin + optional teacher soft-KL loss for compiled decisions."""
+    """Proper decision score (the shared ``common.decision_objective``) + hardest-negative margin.
+
+    The proper-score part is the one finite-decision equation every readout learner uses: against the verified label,
+    plus ``soft_kl_weight`` times the same score against the teacher's option distribution when one is given (with
+    logLoss that is a KL to the teacher up to a constant). The hinge adds ``max(0, margin - (s_y - max_{j != y} s_j))``.
+    """
+    from ..common.decision_objective import decision_loss_to_goal
     logits = option_logits.float()
     y = targets.long()
-    ce = F.cross_entropy(logits, y)
-
-    # Hardest negative margin: max(0, margin - (logit[y] - max_{j != y} logit[j]))
     b, k = logits.shape
-    gold = logits.gather(-1, y.unsqueeze(-1)).squeeze(-1)
-    neg_mask = F.one_hot(y, num_classes=k).bool()
-    hardest_neg = logits.masked_fill(neg_mask, -1e9).max(dim=-1).values
-    hinge = F.relu(float(margin) - (gold - hardest_neg)).mean()
-    total = ce + float(hard_neg_weight) * hinge
-
+    onehot = F.one_hot(y, num_classes=k).float()
+    proper = torch.stack([decision_loss_to_goal(logits[i], onehot[i], rule=rule) for i in range(b)]).mean()
+    total = proper
     if soft_teacher_probs is not None and soft_kl_weight > 0.0:
-        t_prob = soft_teacher_probs.detach().float().clamp_min(1e-8)
-        t_prob = t_prob / t_prob.sum(dim=-1, keepdim=True)
-        kl = F.kl_div(F.log_softmax(logits, dim=-1), t_prob, reduction="batchmean")
-        total = total + float(soft_kl_weight) * kl
-    return total
+        goal = soft_teacher_probs.detach().float().clamp_min(0.0)
+        total = total + float(soft_kl_weight) * torch.stack(
+            [decision_loss_to_goal(logits[i], goal[i], rule=rule) for i in range(b)]).mean()
+    gold = logits.gather(-1, y.unsqueeze(-1)).squeeze(-1)
+    hardest_neg = logits.masked_fill(onehot.bool(), float('-inf')).max(dim=-1).values
+    hinge = F.relu(float(margin) - (gold - hardest_neg)).mean()
+    return total + float(hard_neg_weight) * hinge
 
 
 def should_settle_fast(
