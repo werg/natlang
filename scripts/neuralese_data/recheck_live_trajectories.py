@@ -89,7 +89,7 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
         raise ValueError('reassessment requires recorded clean code provenance')
     source_code = pins['repositories']['natlang']
     out = Path(out)
-    out.mkdir(parents=True, exist_ok=False)
+    out.mkdir(mode=0o700, parents=True, exist_ok=False)
     try:
         raw = out / Path(packet_path).name
         shutil.copyfile(packet_path, raw)
@@ -155,6 +155,15 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
         # An unsuccessful attempt remains visible for diagnosis and is never published as an export.
         (out / 'INCOMPLETE').touch()
         raise
+    finally:
+        # This exact directory was created exclusively above. Keep its root
+        # private throughout creation, and finalize only our new artifacts
+        # before publishing the result (including retained failure evidence).
+        # Inputs and shared ancestors are outside this ownership boundary.
+        for artifact in out.rglob('*'):
+            if artifact.is_symlink():
+                continue
+            artifact.chmod(0o700 if artifact.is_dir() else 0o600)
 
 
 def structural_coverage(manifests):

@@ -592,7 +592,8 @@ def test_structural_coverage_counts_actual_learned_functions(tmp_path):
     assert len(metrics['unreadable_manifests']) == 1
 
 
-def test_offline_recovery_binds_independent_checks_and_preserves_original(tmp_path, monkeypatch):
+@pytest.mark.parametrize("failed_publication", [False, True])
+def test_offline_recovery_binds_independent_checks_and_preserves_original(tmp_path, monkeypatch, failed_publication):
     import recheck_live_trajectories as recovery
     root = tmp_path / 'source'
     root.mkdir()
@@ -616,9 +617,43 @@ def test_offline_recovery_binds_independent_checks_and_preserves_original(tmp_pa
     artifact(root, 'assessment.json', assessment)
     monkeypatch.setattr(recovery, 'held_closure', lambda _: {})
     monkeypatch.setattr(recovery, 'held_hit', lambda *_: False)
+    import os
+    import stat
+    parent_mode = stat.S_IMODE(tmp_path.stat().st_mode)
+    source_mode = stat.S_IMODE((root / 'original.json').stat().st_mode)
+    source_directory_mode = stat.S_IMODE(root.stat().st_mode)
     out = tmp_path / 'recovered'
-    result = recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
-                              root / 'catalog.jsonl', root / 'held.json', out)
+    original_copy = recovery.shutil.copyfile
+    def copy_into_private_root(source, destination):
+        assert stat.S_IMODE(out.stat().st_mode) == 0o700
+        return original_copy(source, destination)
+    monkeypatch.setattr(recovery.shutil, 'copyfile', copy_into_private_root)
+    if failed_publication:
+        def reject_publication(*_):
+            (out / 'input-link').symlink_to(root / 'original.json')
+            (out / 'input-directory-link').symlink_to(root, target_is_directory=True)
+            raise OSError('actual publication failure')
+        monkeypatch.setattr(recovery, 'load_episode', reject_publication)
+    old_umask = os.umask(0)
+    try:
+        if failed_publication:
+            with pytest.raises(OSError, match='actual publication failure'):
+                recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
+                                 root / 'catalog.jsonl', root / 'held.json', out)
+        else:
+            result = recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
+                                      root / 'catalog.jsonl', root / 'held.json', out)
+    finally:
+        os.umask(old_umask)
+    assert stat.S_IMODE(out.stat().st_mode) == 0o700
+    assert all(stat.S_IMODE(path.stat().st_mode) == 0o600 for path in out.iterdir() if not path.is_symlink())
+    assert stat.S_IMODE(tmp_path.stat().st_mode) == parent_mode
+    assert stat.S_IMODE((root / 'original.json').stat().st_mode) == source_mode
+    assert stat.S_IMODE(root.stat().st_mode) == source_directory_mode
+    assert json.loads((root / 'original.json').read_text()) == packet
+    if failed_publication:
+        assert (out / 'INCOMPLETE').is_file()
+        return
     assert result['decisions'] == 1
     assert json.loads((out / 'original.json').read_text()) == packet
     assert live.load_episode(out / 'manifest.json')['trajectory_ir']['outcome']['status'] == 'partial'

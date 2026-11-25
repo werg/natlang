@@ -39,3 +39,21 @@ matches pinned Examples a4f source. The real source-bundled deterministic
 validation passed (274.5MiB); one independent Terra review is still required
 before any completed reassessment is admitted. No teacher rerun. Dataset staging,
 registry ingestion and actual learner exposure remain distinct.
+
+Recovery privacy inventory: recheck_live_trajectories.recover is used by its
+recover CLI and the offline recovery tests; bind, direct writes, copyfile and
+ZstdWriter all publish flat files under its newly created output directory.
+They inherit umask, which produced775/664 captured data during the actual
+recovery. Shared jsonio/ZstdWriter also serve ordinary datasets and state, so
+this capture-specific policy belongs to recover's owned output boundary.
+The output root must be private at creation; before returning on either success
+or failure, its new artifacts are finalized private. No existing output is
+admitted, no input/ancestor/shared directory is chmodded, no symlink is followed,
+and the producer does not alter process-global umask. Source/manifest bytes and
+framing remain unchanged. Permission tests use permissive umask and inspect
+success, retained failure, source-input and ancestor modes.
+Actual privacy regression run vibe-private-recovery-focused-20261125c passed all
+four selected recovery/complete-proof cases (342.3MiB): permissive umask success,
+retained failure with injected input-file/directory symlinks, and both existing
+whole-proof role paths. The output root is checked private while copies are
+being created; source input and ancestor modes remain unchanged.
