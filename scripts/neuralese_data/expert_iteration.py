@@ -1115,17 +1115,21 @@ def link_live_works(work, live_works):
 
 
 def live_holdout_registry(live_works):
-    """The open-goal holdout registry (catalog copy) the ``--live-work`` WORKs carry, for the build's
-    ``--live-holdout-registry`` (an open-goal episode trains only against its catalog's registration), or None."""
-    from natlang_neuralese.common.hashing import sha256_file_hex
-    found = {}
+    """One immutable live registration; allow only compatible execution/review metadata across WORKs."""
+    from live_catalog_identity import compatible_catalogs
+    selected = None
     for live in map(Path, live_works):
         path = live / LIVE_REGISTRY
-        if path.exists():
-            found.setdefault(sha256_file_hex(path), path)
-    if len(found) > 1:
-        raise SystemExit(f'--live-work WORKs carry {len(found)} different holdout registries; the build takes one')
-    return next(iter(found.values()), None)
+        if not path.exists():
+            continue
+        if selected is None:
+            selected = path
+        else:
+            try:
+                compatible_catalogs(selected, path)
+            except (ValueError, TypeError, KeyError) as error:
+                raise SystemExit(f'--live-work WORKs carry different holdout registries: {error}') from error
+    return selected
 
 
 AUTHORED_TEACHER_ROLE = 'ei-authored-teacher'

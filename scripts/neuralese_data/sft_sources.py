@@ -1603,8 +1603,8 @@ def live_holdout_registry(path, held):
     task_ids = set()
     test_cases = 0
     ids, groups, sources = held
-    for line in zstd_lines(path):
-        row = json.loads(line)
+    from live_catalog_identity import catalog_rows
+    for row in catalog_rows(path, lines=zstd_lines(path)):
         if row.get('interaction') != 'open-user-goal':
             continue
         task_id, split, relatives = row.get('taskId'), row.get('split'), row.get('sourceGroups')

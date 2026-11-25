@@ -20,7 +20,7 @@ A scan's kept manifests are extracted together by ``sft_sources.extract --live-r
 the build and filled_reasoning read every ``episodes*.jsonl.zst``, each key once), then one line per directory is
 appended to ``WORK/ingest.jsonl`` (the ingested marker: a rerun skips it; a scan cut off before its lines is extracted
 again). The catalog is copied once to ``WORK/live-holdout-registry.jsonl``
-(the build's ``--live-holdout-registry``) and must stay byte-identical. Original campaign data is never modified. After durable ingestion, unreferenced native diagnostic pack
+(the build's ``--live-holdout-registry``) and remains immutable. Later catalogs must preserve its exact task/held identity; inventoried execution/review metadata may change with a source-hashed compatibility receipt. Original campaign data is never modified. After durable ingestion, unreferenced native diagnostic pack
 infrastructure excluded from all registered snapshots may be retired, with a small retirement receipt;
 original trajectories, IR, source and verification evidence remain unchanged.
 
@@ -45,7 +45,6 @@ REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE)]
 
 from natlang_neuralese.common import data_registry  # noqa: E402
-from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 
 SCHEMA = 'natlang.live-campaign-ingest/1'
 REGISTRY = 'live-holdout-registry.jsonl'
@@ -75,14 +74,21 @@ def ingested(work):
 
 
 def holdout_registry(campaign, work):
-    """WORK's copy of the campaign catalog (copied on first use; the original must keep the copy's bytes)."""
+    """Immutable WORK registration; explicitly inventoried execution metadata may evolve."""
+    from live_catalog_identity import compatible_catalogs
     source, copy = Path(campaign) / 'catalog.jsonl', Path(work) / REGISTRY
     if not copy.exists():
         temporary = copy.with_suffix('.partial')
         shutil.copyfile(source, temporary)
         os.replace(temporary, copy)
-    if sha256_file(source) != sha256_file(copy):
-        raise SystemExit(f'{source} changed since {copy} was taken: a new catalog needs a new WORK')
+    try:
+        receipt = compatible_catalogs(copy, source)
+    except (ValueError, TypeError, KeyError) as error:
+        raise SystemExit(f'{source} changed since {copy} was taken: {error}; a new identity needs a new WORK') from error
+    receipt_path = Path(work) / 'catalog-compatibility.json'
+    temporary = receipt_path.with_suffix('.partial')
+    temporary.write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
+    os.replace(temporary, receipt_path)
     return copy
 
 
