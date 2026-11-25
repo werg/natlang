@@ -14109,3 +14109,15 @@ tests (62 passed); hindsight-kb kernel/attention/LFM3 tests incl. the new CUDA T
 **Open:** T2 on hindsight-kb's `ExperienceWriter` with the 000000002 `H`/`Q` (W0.2 extraction on g4a) instead of the
 stand-in writer; Tier-1 runtime binding as a tuned release; call-level rows carry no prompt token count (the teach
 step's size cap bounds them).
+
+## 2026-11-25 22:40 Compiled releases: why the first real-weights parity run diverged (integration agent)
+
+Run (cde55352685b, greedy 32): base 32/32 everywhere; compiled release native 5/32 and SGLang 5/32 (split at token 6,
+margin 0.68), fork llama 12/32 (token 13). Causes, reproduced on the tiny LFM fixture and fixed in 836fc32d5:
+(1) the parity script's native/SGLang requests did not declare the state `same-base-adapter-state`, so under the
+adapter the engines re-encoded the header text and dropped the compiled residual (training and the runtime declare it);
+(2) no-grad native serving merged adapter stacks into the BF16 weights while training, SGLang and the fork apply them
+factored in FP32, and the parity reference used the merged form; serving is now factored (`inference_factors`, opt-out
+`NATLANG_FACTORED_LORA=0`). Whether (2) accounts for llama's 12/32 is unmeasured: the real-weights rerun of all phases
+(including the new page phase) is next. Undeclared same-base states under an adapter still re-encode silently on
+native and SGLang (documented best-effort); every production client found declares the mode.
