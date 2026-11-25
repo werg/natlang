@@ -4,6 +4,7 @@ import type { InlineLambdaPlan, InlineRebindSite, NatlangDiagnostic } from './co
 import type { GenericInstantiation, NeuraleseLiteral, NeuraleseReadout } from './compiler/neuralese.js';
 import { authoredCallables, finiteCounterComparison, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
 import { TOOL_MARKUP } from './native/tool-markup.js';
+import { STD_SPECIFIERS } from './compiler/intrinsics.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
 export const SCOPE_COMPILE_VERSION = 3 as const;
@@ -53,6 +54,9 @@ export type ScopeCompileOptions = {
   persistentTypeNames?: readonly string[];
   /** Opaque host values supplied by the runtime outside the portable snapshot. */
   opaqueBindings?: readonly string[];
+  /** The standard library's combinators this eval has as built-ins (opt-out: undefined). An import of the library
+   * (`import { semanticMap } from '@natlang/node/std'`) is then read as those built-ins, never loaded as a package. */
+  stdBindings?: readonly string[];
   /** Enabled only when the evaluator exposes application-scoped module loading. */
   allowModules?: boolean;
   allowNetwork?: boolean;
@@ -592,8 +596,48 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   return result;
 }
 
+/**
+ * Eval's imports of the standard library (`@natlang/node/std`, `@natlang/browser/std`, `@natlang/core/std`) as the std
+ * built-ins already in scope: an import of a built-in under its own name is dropped, one under another name becomes
+ * `const alias = name;`, a type-only import is dropped. Anything else the library exports is not an eval built-in: one
+ * sentence says which are. Loading the package instead ran a second copy of the runtime with no task in it.
+ */
+function lowerStdImports(source: string, std: readonly string[]): string | ScopeCompileDiagnostic {
+  if (!/@natlang\/(?:node|browser|core)\/std\b/.test(source)) return source;
+  const module = ts.createSourceFile('imports.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const imports = module.statements.filter((statement): statement is ts.ImportDeclaration => ts.isImportDeclaration(statement) &&
+    ts.isStringLiteral(statement.moduleSpecifier) && (STD_SPECIFIERS as readonly string[]).includes(statement.moduleSpecifier.text));
+  let lowered = source;
+  for (const statement of [...imports].reverse()) {
+    const specifier = (statement.moduleSpecifier as ts.StringLiteral).text;
+    const clause = statement.importClause;
+    const bindings = clause?.namedBindings;
+    const named = bindings && ts.isNamedImports(bindings) ? bindings.elements.filter(element => !element.isTypeOnly && !clause!.isTypeOnly) : [];
+    const other = clause && !clause.isTypeOnly && (clause.name || (bindings && ts.isNamespaceImport(bindings))) ? '*' :
+      named.map(element => (element.propertyName ?? element.name).text).find(name => !std.includes(name));
+    if (other !== undefined || (!clause && !std.length)) {
+      const start = statement.getStart(module), location = module.getLineAndCharacterOfPosition(start);
+      const list = std.length ? `${std.slice(0, -1).join(', ')}${std.length > 1 ? ' and ' : ''}${std.at(-1)}` : '';
+      return { code: 'forbidden-dynamic-code', start, end: statement.end, line: location.line + 1, column: location.character + 1,
+        message: std.length ? `${other === '*' ? `A namespace or default import of ${specifier}` : `${other} from ${specifier}`} ` +
+          `is not available in eval; its combinators ${list} are built into this scope: call them by name, without an import.` :
+          `${specifier} is not available in this eval.` };
+    }
+    const text = named.filter(element => element.propertyName && element.propertyName.text !== element.name.text)
+      .map(element => `const ${element.name.text} = ${element.propertyName!.text};`).join(' ');
+    lowered = lowered.slice(0, statement.getStart(module)) + text + lowered.slice(statement.end);
+  }
+  return lowered;
+}
+
 function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOptions = {}): ScopeCompileResult {
   if (typeof source !== 'string') throw new TypeError('scope source must be a string');
+  if (options.stdBindings) {
+    const lowered = lowerStdImports(source, options.stdBindings);
+    if (typeof lowered !== 'string') return { version: SCOPE_COMPILE_VERSION, ok: false, entrypoint: ENTRYPOINT, bindings: [],
+      producesResult: false, diagnostics: [lowered], repairs: [] };
+    if (lowered !== source) return compileScopeSnippetUnhinted(lowered, options);
+  }
   if (options.allowModules) {
     const module = ts.createSourceFile('imports.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
     const imports = module.statements.filter(ts.isImportDeclaration);

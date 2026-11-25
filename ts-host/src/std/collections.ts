@@ -10,6 +10,17 @@ import { isNeuraleseRef, NeuraleseUnsupportedError } from '../native/neuralese.j
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { beats as shippedBeats, meets as shippedMeets, relates as shippedRelates } from './judgments.js';
 import { StdSpan, stdError } from './trace.js';
+import { callableMeta } from '../runtime/callable.js';
+
+/**
+ * Call a callback with JavaScript's (item, index, ...) arguments. A natlang function with a fixed parameter list takes
+ * as many as it declares, as an arrow function ignores the rest: its call refuses extra arguments, so
+ * `semanticMap(notes, summarize)` would fail on the index.
+ */
+function callback<A extends unknown[], R>(fn: (...args: A) => R, ...args: A): R {
+  const definition = callableMeta(fn)?.definition;
+  return definition && !definition.openParameters ? fn(...(args.slice(0, definition.params.length) as A)) : fn(...args);
+}
 
 type Maybe<T> = T | Promise<T>;
 
@@ -96,7 +107,7 @@ export async function semanticMap<T, R>(items: readonly T[], fn: (item: T, index
   return span.around(async () => {
     const results = await mapBounded(items, concurrency, async (item, index) => {
       const input = carry === 'neuralese' ? await span.run(() => view(item, options.viewInstructions)) as T : item;
-      return await span.run(() => fn(input, index));
+      return await span.run(() => callback(fn, input, index));
     });
     span.stage('map', { items: items.length, ...(carry === 'neuralese' ? { carry } : {}) });
     return results;
@@ -135,11 +146,11 @@ export async function semanticFilter<T>(items: readonly T[], predicate: string |
         return prob >= (floor ?? 0.5);
       }
       if (floor !== undefined) {
-        const decision = await decideInFrame(span.frame, async (x: T, i: number) => predicate(x, i), [item, index]);
+        const decision = await decideInFrame(span.frame, async (x: T, i: number) => callback(predicate, x, i), [item, index]);
         const prob = decision.probabilities.find(entry => entry.value === true)?.probability ?? (decision.value === true ? decision.confidence : 0);
         return prob >= floor;
       }
-      return Boolean(await span.run(() => predicate(item, index)));
+      return Boolean(await span.run(() => callback(predicate, item, index)));
     });
     const kept = items.filter((_, index) => keptFlags[index]);
     span.stage('filter', { items: items.length, kept: kept.length });
@@ -245,7 +256,7 @@ export async function semanticReduce<T, S>(items: readonly T[], initial: S, step
     if (mode === 'linear') {
       let state: unknown = carry === 'neuralese' ? await span.run(() => view(initial, options.viewInstructions)) : initial;
       for (let index = 0; index < items.length; index++) {
-        state = await span.run(() => step(state as S, items[index]!, index));
+        state = await span.run(() => callback(step, state as S, items[index]!, index));
         if (carry === 'neuralese' && index + 1 < items.length)
           state = await span.run(() => view(state, options.viewInstructions));
         span.stage('step', { index, ...(carry === 'neuralese' ? { carry } : {}) });
@@ -254,7 +265,7 @@ export async function semanticReduce<T, S>(items: readonly T[], initial: S, step
     }
     const initState = (carry === 'neuralese' ? await span.run(() => view(initial, options.viewInstructions)) : initial) as S;
     let level = await mapBounded(items, concurrency, async (item, index) => {
-      const out = await span.run(() => step(initState, item, index));
+      const out = await span.run(() => callback(step, initState, item, index));
       return (carry === 'neuralese' && items.length > 1 ? await span.run(() => view(out, options.viewInstructions)) : out) as S;
     });
     span.stage('leaves', { count: level.length, ...(carry === 'neuralese' ? { carry } : {}) });

@@ -3,6 +3,20 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-25 — the std combinators are eval built-ins
+
+- **What changed.** Eval in every call has the standard library's combinators by name (`semanticMap`,
+  `semanticFilter`, `semanticPartition`, `semanticReduce`, `semanticMatch`, `semanticRank`, `semanticRepair`,
+  `fixedPoint`, `semanticMerge`, `escalate`, `withContext`, `compileRule`; `proposeAndVerify` and `branchAndSelect` in
+  calls with a folder), typed from `@natlang/node/std` and run in the call's frame, so their `std:<name>` spans and
+  child calls nest under the call. Before, a bare name was `unbound-name` and an eval `import` loaded a second copy of
+  the runtime and failed at the call with "No natlang task is active here". An eval import of a combinator now reads
+  as the built-in; any other std import fails with one sentence naming the built-ins. DECISIONS 2026-11-25.
+- **What the model sees.** The system prompt, tool list and opening are unchanged (the stable prefix stays
+  byte-stable). The scope guide (shown when a call reaches for something it lacks) lists "the semantic combinators
+  ..."; `read_code("semanticMap")` etc. document each; a tool call named after one is told to call it in eval.
+  Opt-out: `NATLANG_EVAL_STD=0`.
+
 ### 2026-11-25 — a Neuralese text write is written at the end of its producing call
 
 - **What changed.** `native.text-write` no longer encodes a value's text from position 0 with nothing before it. The

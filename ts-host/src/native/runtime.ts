@@ -36,7 +36,7 @@ import { isNatlangCallable } from '../runtime/callable.js';
 import { withSelectedCaptureAccessors } from '../runtime/selected-captures.js';
 import { declareSelectedSurface } from './selected-surface.js';
 import { PATH_ONLY, isProtectedSource, parseModule, parseNatlang, treeProtectedSources, type ItemRecord } from '../runtime/loader.js';
-import { compileModule } from '../runtime/modules.js';
+import { compileModule, stdModule } from '../runtime/modules.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { undeclaredServiceType } from './introspection.js';
 import { NATIVE_TOOL_SCHEMA } from './tool-surface.js';
@@ -281,6 +281,76 @@ function evalContextValue(): { empty(): unknown; ofCallable(fn: unknown): unknow
     ofCallable: (fn: unknown) => contextClass().ofCallable(fn),
   });
 }
+
+/**
+ * The standard library's combinators as eval built-ins (2026-11-25): a call composes its judgments with them by name,
+ * and they run in the call's frame, so their child calls nest under it in `std:<name>` spans. The two workspace
+ * combinators take a folder and are offered where the call has one. NATLANG_EVAL_STD=0 turns them off (eval then has
+ * only the built-ins it had before).
+ */
+export const EVAL_STD_COMBINATORS = ['semanticMap', 'semanticFilter', 'semanticPartition', 'semanticReduce', 'semanticMatch',
+  'semanticRank', 'semanticRepair', 'fixedPoint', 'semanticMerge', 'escalate', 'withContext', 'compileRule'] as const;
+export const EVAL_STD_FOLDER_COMBINATORS = ['proposeAndVerify', 'branchAndSelect'] as const;
+/** Whether eval offers the std combinators (default on; NATLANG_EVAL_STD=0, off or false turns them off). */
+export function evalStdEnabled(): boolean {
+  const setting = typeof process === 'undefined' ? undefined : process.env?.NATLANG_EVAL_STD;
+  return !/^(?:0|off|false|no)$/i.test((setting ?? '').trim());
+}
+/** An `import` of the standard library in eval source (the std built-ins are in scope without one). */
+const STD_IMPORT = /\bimport\s+(?:type\s+)?[^;'"]*?\bfrom\s*['"]@natlang\/(?:node|browser|core)\/std['"]\s*;?/g;
+
+/** read_code documentation of the std built-ins (the declarations are those of `@natlang/node/std`). */
+export const STD_BUILT_IN_DOCS: Record<string, string> = {
+  semanticMap: `semanticMap(items, fn, { concurrency? }): call fn(item, index) on every item, concurrently, and return the
+results in the items' order. fn is a function of this program, an nl function or an arrow function.
+  const summaries = await semanticMap(tickets, summarize);
+  const labels = await semanticMap(rows, row => nl<'bug' | 'question'>\`Label the row's text.\`(row.text), { concurrency: 4 });
+Each call runs as a child of this call, under a std:semanticMap span.`,
+  semanticFilter: `semanticFilter(items, criterionOrPredicate, { floor? }): the items that pass, in order. A string criterion is
+judged per item by the shipped meets judgment; a function returns a boolean. With floor, each judgment is scored and an
+item passes when its probability of true reaches floor.
+  const urgent = await semanticFilter(tickets, 'needs a reply today');
+  const valid = await semanticFilter(rows, isValidRow);`,
+  semanticPartition: `semanticPartition(items, classifier, { floor? }): group items by the label classifier(item) returns.
+  const { groups, uncertain } = await semanticPartition(tickets, routeTicket);
+groups maps each label to its items; uncertain lists items whose label's probability fell below floor.`,
+  semanticReduce: `semanticReduce(items, initial, step, { mode?: 'linear' | 'tree', combine? }): fold the items into one state.
+step(state, item, index) returns the next state; with mode 'tree', step makes one state per item from initial and
+combine(left, right) joins them pairwise.
+  const digest = await semanticReduce(notes, '', (summary, note) => nl<string>\`Fold note into summary.\`(summary, note));
+Each step runs as a child of this call, under a std:semanticReduce span.`,
+  semanticMatch: `semanticMatch(left, right, { relation?, match?, block?, floor? }): pair items of left with items of right.
+relation is a sentence judged per pair (shipped relates judgment), or match(l, r) decides; block(l, r) skips pairs cheaply.
+  const { pairs, unmatchedLeft, unmatchedRight } = await semanticMatch(invoices, payments, { relation: 'pays this invoice' });`,
+  semanticRank: `semanticRank(items, goal, { debiased? }): order items by goal from pairwise judgments (shipped beats judgment).
+  const { ranked, scores } = await semanticRank(drafts, 'clearest answer to the question');`,
+  semanticRepair: `semanticRepair(value, { check, fix, attempts }): check(value) returns the problems it finds (strings, none when
+it passes); while there are problems, fix(value, problems) returns a new value, at most attempts times.
+  const repaired = await semanticRepair(draft, { check: d => problemsOf(d), fix: (d, problems) => reviseDraft(d, problems), attempts: 3 });
+  // { ok, value, problems, attempts, history }`,
+  fixedPoint: `fixedPoint(step, initial, { settled?, maxSteps? }): apply step to its own output until the value stops changing
+in meaning (the shipped settled judgment, or settled(previous, current)); returns { value, steps, settled }. With an exact
+settled test give maxSteps.
+  const { value } = await fixedPoint(tighten, draft);`,
+  semanticMerge: `semanticMerge(base, ours, theirs, { check? }): merge two edits of base key by key; conflicting edits are judged
+by intent and combined when compatible. Returns { value, merged, unresolved }.`,
+  escalate: `escalate(fn, { to, floor?, risk?, policy? }): fn's decision, sent to the stronger model to when its confidence is below
+floor (or a risky label's probability passes risk[label]). Returns a function; its result is a decision record.
+  const verdict = await escalate(classify, { to: 'teacher', floor: 0.8 })(item);
+  // verdict.value, verdict.confidence, verdict.escalated`,
+  withContext: `withContext(fn, entries): fn bound to its own context with these data entries added (fn.in(...)); not awaited.
+  const strict = withContext(review, { policy: strictPolicy });
+  const verdict = await strict(item);`,
+  compileRule: `compileRule(rule, { examples?, check?, attempts? }): a function (item) => Promise<result> written from the rule,
+checked against the examples ({ input, expected }) and revised until they pass.
+  const isSpam = await compileRule('the message asks for money from a stranger', { examples });`,
+  proposeAndVerify: `proposeAndVerify(folder, reducer, { verify, attempts, args? }): run reducer on a private copy of folder,
+verify(proposal) returns the problems it finds; a failing proposal is proposed again with its problems as reducer's last
+argument. Only a passing proposal is accepted into folder. Returns { accepted, proposal, value, problems, attempts, history }.`,
+  branchAndSelect: `branchAndSelect(folder, branches, { verify?, goal?, select? }): run each branch (a reducer, or { reducer, args })
+on its own private copy of folder, keep the ones verify passes, choose one by goal (pairwise judgments) or select, and
+accept it. Returns { chosen, proposal, value, candidates }.`,
+};
 
 export const BUILT_IN_DOCS: Record<string, string> = {
   Neuralese: NEURALESE_TYPE_DOCUMENTATION,
@@ -1572,7 +1642,31 @@ export class NativeSession {
   /** Exact native tool schemas offered by NativeToolAgent for this call's current turn. */
   private readonly offeredToolDocs = new Map<string, { description: string; parameters: unknown }>();
   private activeScopeLocals?: Map<string, [() => unknown, ((value: unknown) => void)?]>;
+  /** The std built-ins the eval being compiled has (hooks.ts evalDeclarations types them from `@natlang/node/std`). */
+  evalStdBindings: readonly string[] = [];
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) { this.markUntrusted(); }
+
+  /** The standard library eval's std built-ins come from: the platform's instance, unless NATLANG_EVAL_STD turns them off. */
+  private stdLibrary(): Record<string, unknown> | undefined {
+    return evalStdEnabled() ? stdModule(this.runtime.frame?.task.runtime.platform) : undefined;
+  }
+  /** The std combinators this call offers in eval: all of them, the workspace ones where the call has a folder. */
+  private stdCombinators(): string[] {
+    const library = this.stdLibrary();
+    if (!library) return [];
+    return [...EVAL_STD_COMBINATORS, ...(this.lam.projectTransaction ? EVAL_STD_FOLDER_COMBINATORS : [])]
+      .filter(name => typeof library[name] === 'function');
+  }
+  /** The std combinators an eval of `source` has: those no input, local, function, service, capture or declaration of it takes. */
+  private evalStdNames(source: string): string[] {
+    const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
+    const services = this.availableServices(), captures = this.lam.captures ?? {};
+    const own = source.replace(STD_IMPORT, '');
+    return this.stdCombinators().filter(name => !inputs.includes(name) && !Object.hasOwn(this.lam.let, name) &&
+      !Object.hasOwn(this.lam.codebase, name) && !Object.hasOwn(services, name) && !Object.hasOwn(captures, name) &&
+      !this.persistentScopeHelpers.has(name) &&
+      !new RegExp(`\\b(?:const|let|var|function|class)\\s+${name}\\b|[{,]\\s*${name}\\s*[,}=]`).test(own));
+  }
 
   executionOccurrence(): import('../contracts.js').NativeExecutionOccurrence | undefined {
     const event=this.runtime.trace.events.find(item=>item.kind==='invocation'&&item.phase==='start'&&
@@ -1675,10 +1769,13 @@ export class NativeSession {
     this.evalDetail = { console: logs.join('\n') };
     // A model reaching for something the scope does not have (a name, a Node module, eval) is shown what it does have,
     // or it goes on probing the environment.
-    const reaching = /is not defined|unavailable in eval|is not a function|Cannot find name/.test(message +
-      diagnostics.map(item => String(item.message ?? '')).join('\n'));
+    // The checker's unbound-name rejection (before anything runs) reaches as a runtime ReferenceError does.
+    const allText = message + diagnostics.map(item => String(item.message ?? '')).join('\n');
+    const reaching = /is not defined|unavailable in eval|is not a function|Cannot find name|is not bound in this call's eval scope/.test(allText);
+    const unbound = /\b(\w+) is not bound in this call's eval scope/.exec(allText)?.[1];
     // A tool named in eval code: the tools are called as tools, next to eval, not from inside it.
-    const tool = /\b(\w+) is not defined/.exec(message)?.[1];
+    const tool = /\b(\w+) is not defined/.exec(message)?.[1] ??
+      (unbound && (NATIVE_TOOLS.includes(unbound) || unbound === this.lam.functionName) ? unbound : undefined);
     const toolNote = tool && NATIVE_TOOLS.includes(tool) && tool !== 'return_result' ?
       `\n${tool} is one of your tools: call it as a tool, not from eval code.` : '';
     // The call's own name is not a function in its scope: the model is executing it (it tries to call itself).
@@ -2191,7 +2288,8 @@ export class NativeSession {
   private notATool(name: string, args: Record<string, unknown>): { path: string; code: string; text?: string; expected?: string } {
     const root = name.split('.')[0]!;
     const hasCodebase = Object.keys(this.lam.codebase).length > 0;
-    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read', 'refine', 'assume', 'NatlangContext', ...(hasCodebase ? ['search_code'] : [])];
+    const builtins = ['transcript', 'nl', 'iterateOn', 'decide', 'read', 'refine', 'assume', 'NatlangContext', ...(hasCodebase ? ['search_code'] : []),
+      ...this.stdCombinators()];
     const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const scope = new Set([...builtins, ...inputs, ...Object.keys(this.lam.captures ?? {}), ...Object.keys(this.lam.let),
       ...this.persistentScopeHelpers.keys(), ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())]);
@@ -2199,9 +2297,11 @@ export class NativeSession {
       return { path: name, code: 'bad-action', expected: 'a scope-eval tool' };
     const first = Object.values(args).find(value => typeof value === 'string' || typeof value === 'number');
     const shown = first === undefined ? '' : JSON.stringify(first);
-    const awaited = builtins.includes(root) && root !== 'transcript' && root !== 'NatlangContext' && root !== 'search_code' && root !== 'assume' || Object.hasOwn(this.lam.codebase, root) ||
+    // Built-ins that return no promise (escalate and withContext return a function).
+    const unawaited = ['transcript', 'NatlangContext', 'search_code', 'assume', 'escalate', 'withContext'];
+    const awaited = builtins.includes(root) && !unawaited.includes(root) || Object.hasOwn(this.lam.codebase, root) ||
       this.persistentScopeHelpers.has(root);
-    const value = !awaited && root !== 'transcript' && root !== 'NatlangContext' && root !== 'search_code' && root !== 'assume' && !Object.hasOwn(this.availableServices(), root);
+    const value = !awaited && !unawaited.includes(root) && !Object.hasOwn(this.availableServices(), root);
     const example = name === 'transcript' ? 'transcript.search("…")' : value && name === root ? name :
       `${awaited ? 'await ' : ''}${name}(${shown})`;
     return { path: name, code: 'bad-action', text: `${name}: bad-action, ${name} is not a tool: ${root} is in this call's eval scope. ` +
@@ -2239,7 +2339,9 @@ export class NativeSession {
       ...(Object.keys(this.lam.codebase).length > 0 ? ['search_code'] : []),
     ];
     const builtInList = `${builtIns.slice(0, -1).join(', ')} and ${builtIns.at(-1)}`;
-    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${builtInList} ` +
+    const std = this.stdCombinators().filter(name => !names.includes(name));
+    const stdList = std.length ? `, the semantic combinators ${std.slice(0, -1).join(', ')} and ${std.at(-1)}` : '';
+    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${builtInList}${stdList} ` +
       '(read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }
 
@@ -2298,8 +2400,9 @@ export class NativeSession {
     }
     // An external service is shown by its declaration, and is not the program's to change.
     const service = requested.split('.')[0]!;
+    const stdDoc = this.stdCombinators().includes(requested) ? STD_BUILT_IN_DOCS[requested] : undefined;
     if (Object.hasOwn(this.availableServiceDeclarations(), service) && !findCodebaseItem(this.lam.codebase, requested) &&
-        !Object.hasOwn(BUILT_IN_DOCS, requested)) {
+        !Object.hasOwn(BUILT_IN_DOCS, requested) && stdDoc === undefined) {
       if (name === 'edit_code') throw new Reject([{ path: requested, code: 'external', expected:
         `a function of this program; ${service} is an external service: its declaration can be read, but it runs outside this program and cannot be changed` }]);
       const declaration = this.runtime.declarations[service]!;
@@ -2307,6 +2410,11 @@ export class NativeSession {
     }
     const found = findCodebaseItem(this.lam.codebase, requested);
     // A built-in of eval is documented, not defined, here: read shows its documentation; it cannot be edited.
+    if (!found && stdDoc !== undefined) {
+      if (name === 'edit_code') throw new Reject([{ path: requested, code: 'built-in', expected:
+        `a function of this program's codebase; ${requested} is built into eval and cannot be changed` }]);
+      return { kind: 'ok', text: stdDoc, value: stdDoc };
+    }
     if (!found && Object.hasOwn(BUILT_IN_DOCS, requested)) {
       if (name === 'edit_code') throw new Reject([{ path: requested, code: 'built-in', expected:
         `a function of this program's codebase; ${requested} is built into eval and cannot be changed` }]);
@@ -2624,6 +2732,10 @@ export class NativeSession {
         expected: 'This argument is declared Neuralese<T>. Marker bodies are literal and do not evaluate JavaScript concatenation. Return the computed typed value directly, without marker strings.' }]);
     // Literals the model wrote are block markers in its text; compiled, each is a call the checker types from context.
     const desugared = desugarNlCalls(sourceWithLiteralCalls(written));
+    // The std combinators by name (typed for the checker through evalStdBindings), unless a binding of the call takes it.
+    const stdLibrary = this.stdLibrary();
+    const stdNames = stdLibrary ? this.evalStdNames(desugared) : [];
+    this.evalStdBindings = stdNames;
     const code = this.runtime.hooks.lowerRefinements ? this.runtime.hooks.lowerRefinements(this, desugared) : desugared;
     const scopeBefore = this.scopeSnapshot(), traceMark = this.runtime.trace.events.length;
     const inputNames = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
@@ -2684,6 +2796,7 @@ export class NativeSession {
       helper.declarationSpan.start >= 0 && helper.declarationSpan.end - helper.declarationSpan.start === helper.source.length &&
       !declaredHere(helper.name) && !inputNames.includes(helper.name) && !localNames.includes(helper.name) &&
       !callableNames.includes(helper.name) && !serviceNames.includes(helper.name) && !opaqueNames.includes(helper.name) &&
+      !stdNames.includes(helper.name) &&
       !Object.hasOwn(captureCells, helper.name));
     const savedHelperNames = savedHelpers.map(helper => helper.name);
     const visibleTypes = { ...this.lam.typesSrc, ...Object.fromEntries(Object.keys(this.localTypes).map(name => [name, ''])) };
@@ -2704,7 +2817,7 @@ export class NativeSession {
     }
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, boundValues, localBindings, helperBindings: callableNames,
       persistentHelpers: savedHelpers, persistentHelperNames: savedHelperNames, persistentTypeNames,
-      opaqueBindings: opaqueNames,
+      opaqueBindings: [...opaqueNames, ...stdNames], ...(stdLibrary ? { stdBindings: stdNames } : {}),
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
       serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source, [...opaqueNames, ...savedHelperNames]), neuralese: this.holdsNeuralese(),
       ...(hooks.checkFields ? { checkFields: (source: string) => hooks.checkFields!(this, source, [...opaqueNames, ...savedHelperNames]) } : {}),
@@ -2848,6 +2961,10 @@ export class NativeSession {
       },
       finite: hooks.finite, finiteArrayIterator: hooks.finiteArrayIterator, finiteAsync: hooks.finiteAsync, guard: hooks.guard,
       iterateOn: (step: unknown, initial: unknown, ...args: unknown[]) => hooks.iterateOn(this, step, initial, ...args),
+      // Each std combinator runs in the frame of the code calling it (this call, or a combinator's span when nested),
+      // so its std:<name> span and child calls nest under this call.
+      std: Object.fromEntries(stdNames.map(name => [name, (...args: unknown[]) =>
+        runInFrame(currentFrame() ?? this.runtime.frame, () => (stdLibrary![name] as (...items: unknown[]) => unknown)(...args))])),
       finish: (value: unknown) => { finished = value; } };
     const prologue = [
       ...(this.lam.projectTransaction ? ['const folder = __live.folder;'] : []),
@@ -2860,6 +2977,7 @@ export class NativeSession {
       ...(contextBinding ? ['const NatlangContext = __live.NatlangContext;'] : []),
       ...(assumeBinding ? ['const assume = (value: any, predicate: string | string[]) => __live.assume(value, predicate);'] : []),
       ...(decideBinding ? ['const decide = (fn: any, ...args: any[]) => __live.decide(fn, args);'] : []),
+      ...stdNames.map(name => `const ${name} = __live.std.${name};`),
       ...finishers.map(name => `const ${name} = (value?: unknown, status: string = 'success', reason?: string) => ` +
         `{ __live.request(${JSON.stringify(name)}, { value, status, reason }); };`),
     ].join('\n');

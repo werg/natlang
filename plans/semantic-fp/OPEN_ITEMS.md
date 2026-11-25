@@ -46,14 +46,6 @@ Closed 2026-11-23 by the language-gaps agent (DECISIONS "Semantic-FP language ga
   package is an error and an unknown member of a loaded type file is TS2305/2614/2724 at load. Still untyped on purpose: a
   type file outside the loaded root (a sub-function loaded on its own whose `types.ts` lives in the program root), since
   the loader never reads past its root.
-- **std combinators are not in eval's scope (found 2026-11-25, authored-programs redesign).** A `.nl` function's
-  call cannot use `semanticMap`, `semanticFilter`, `semanticReduce`, `semanticMatch`, `semanticRank`,
-  `semanticRepair` or `fixedPoint`: eval's built-ins are `nl`, `read`, `iterateOn`, `decide`, `refine`, `assume`,
-  `transcript`, `NatlangContext` (`native/runtime.ts` `scopeGuide`); an eval `import ... from '@natlang/node/std'`
-  fails at the call with "No natlang task is active here"; a callable-folder re-export is refused at load. So a model
-  composes with combinators only through authored TypeScript helpers, which the authored-program campaign keeps out.
-  Owner: the std-in-eval agent launched 2026-11-25 by the program-inventor strand (eval built-ins running in the
-  call's frame, opt-out, skill and spec).
 - **Runtime function synthesis is NL literals (owner 2026-11-25: "It's just built in our ability to make these nl
   literals").** Works under replay today: a literal built in eval from derived values, and a `.nl` function with a
   function result whose call finishes with `return nl`...``. Not checked yet: a synthesized function stored as data

@@ -34,6 +34,9 @@ export type Frame = Readonly<{
   nlActive?: ActiveCall;
   /** Call ID of the natlang invocation that created this frame, if any. */
   parentCallId?: string;
+  /** In a std combinator's span (parentCallId is the span's), the call that ran the combinator: calls bound to that
+   * call's frame (eval's callables and inline nl functions) started here nest under the span (callable.ts startCall). */
+  spanOf?: string;
   programOwner?: string;
   /** Whether that invocation is an inline `nl` function: a judgment eval code handed over. */
   inline?: boolean;

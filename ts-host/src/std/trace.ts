@@ -19,7 +19,8 @@ export class StdSpan {
   constructor(readonly name: string) {
     this.parentFrame = currentFrame() ?? resolveFrame();
     this.callId = `${this.parentFrame.task.id}/std-${this.name}-${++sequence}`;
-    this.frame = { ...this.parentFrame, parentCallId: this.callId };
+    this.frame = { ...this.parentFrame, parentCallId: this.callId,
+      ...(this.parentFrame.spanOf ?? this.parentFrame.parentCallId ? { spanOf: this.parentFrame.spanOf ?? this.parentFrame.parentCallId } : {}) };
     this.mark = this.parentFrame.task.traces.length;
   }
 

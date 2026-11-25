@@ -9,7 +9,7 @@ import { analyzeInlineLambdas, type InlineLambdaPlan, type InlineRebindSite, typ
 import { hexDigest } from '../native/hash.js';
 import { formatTypeScript, parseTypeCached } from '../native/types.js';
 import { NEURALESE_LITERAL_INTRINSIC, type GenericInstantiation, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
-import { ITERATE_ON_SIGNATURE, RESERVED_CALLABLE_PROPERTIES } from './intrinsics.js';
+import { ITERATE_ON_SIGNATURE, RESERVED_CALLABLE_PROPERTIES, STD_MODULE_FILE } from './intrinsics.js';
 
 export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean; rest?: boolean }[];
   returns: string; async: boolean; kind: 'natural language' | 'TypeScript' | 'directory reducer' | 'module';
@@ -33,6 +33,8 @@ export type EvalScopeDeclarations = {
   /** The call's return type: the type of the snippet's top-level return. */
   returns?: string;
   opaque?: string[];
+  /** The standard library's combinators the eval has as built-ins, typed by their `@natlang/node/std` declarations. */
+  std?: readonly string[];
   globals?: readonly string[];
   /** Reject unknown runtime value names before executing any effects (default true). */
   checkUnknownBindings?: boolean;
@@ -84,13 +86,15 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
     else lines.push(`declare const ${name}: any;`);
   }
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
-  const explicit = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
+  const taken = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
     .concat(scope.services ?? [], scope.opaque ?? []));
+  const std = (scope.std ?? []).filter(name => /^[A-Za-z_$][\w$]*$/.test(name) && !taken.has(name));
+  for (const name of std) lines.push(`declare const ${name}: typeof import(${JSON.stringify(STD_MODULE_FILE.replace(/\.d\.ts$/, ''))}).${name};`);
+  const explicit = new Set([...taken, ...std]);
   for (const name of scope.globals ?? []) if (/^[A-Za-z_$][\w$]*$/.test(name) && !explicit.has(name) && !standardValueBindings().has(name))
     lines.push(`declare const ${name}: any;`);
   if (iterationHelper) lines.push(`declare function ${iterationHelper}${ITERATE_ON_SIGNATURE};`);
-  const named = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
-    .concat(scope.services ?? [], scope.opaque ?? []));
+  const named = new Set([...explicit]);
   if (!named.has('decide')) lines.push('declare function decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): ' +
     'Promise<{ value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean }>;');
   // The runtime writes a model-written Neuralese literal as this call; its contextual type types it.
