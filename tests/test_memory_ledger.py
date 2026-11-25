@@ -1781,3 +1781,22 @@ def test_a_shrunk_launch_is_admitted_at_its_requested_budget_with_its_full_memor
     with pytest.raises(SystemExit):                 # without it: raised to 78 GB, which 60 GB available cannot admit
         ledger.run(args('aei1-collect-v0001-1234', False))   # same family
     assert len(launched) == 1
+
+
+def test_wait_exit_returns_the_units_exit_status_once_it_has_ended(monkeypatch, capsys):
+    states = iter(['ActiveState=active\nResult=success\nExecMainStatus=0\n',
+                   'ActiveState=activating\nResult=success\nExecMainStatus=0\n',
+                   'ActiveState=failed\nResult=exit-code\nExecMainStatus=3\n'])
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda *a, **k: type('R', (), {'stdout': next(states)})())
+    monkeypatch.setattr(ledger.time, 'sleep', lambda s: None)
+    assert ledger.wait_exit('qual-1.service') == 3
+    assert ledger.json.loads(capsys.readouterr().out.splitlines()[-1]) == {'unit': 'qual-1.service', 'exit_status': 3}
+    monkeypatch.setattr(ledger.subprocess, 'run', lambda *a, **k: type('R', (), {
+        'stdout': 'ActiveState=inactive\nResult=signal\nExecMainStatus=0\n'})())
+    assert ledger.unit_exit('qual-2.service') == (True, 1), 'a unit stopped by a signal did not finish its job'
+
+
+def test_wait_exit_refuses_a_resumable_unit():
+    args = type('A', (), {'wait_exit': True, 'resumable': None, 'detach': False})()
+    with pytest.raises(SystemExit, match='--no-resumable'):
+        ledger.run(args)

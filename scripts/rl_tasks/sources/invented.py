@@ -13,6 +13,10 @@ program per new idea, with two or three literal input instances, exact checkers 
       reference_trace.mjs (the reference run call by call: each case declares `semantics.episode_model_calls`, twice
       its reference run's model calls, and its stage tasks are cut); writes SUBMISSION/qualification/{cases.jsonl,
       stages.jsonl,trace.json,report.json}. Run through the memory ledger on the DGX.
+  invented.py dry-run SUBMISSION [--controls]
+      the program's TypeScript run with the scripted judgment answers (no model, seconds): the reference against
+      `expected`, the entry that answered each call, the static checks; --controls replays every wrong answer,
+      ablation and keyword baseline too. Writes nothing into the submission.
   invented.py stages SUBMISSION [--runtime TS_HOST]
       only the stage tasks of an already qualified submission (qualification/stages.jsonl), verified by replay.
 
@@ -22,13 +26,16 @@ NATLANG_INVENTOR_ROOT):
   invented.py digest SUBMISSION        the digest of program/ + submission.json a review names (REVIEW_BRIEF.md)
   invented.py admit SUBMISSION [--review FILE] [--idea FILE] [--root ROOT] [--publish] [--skip-qualify]
       qualify (above: crisp requirements, natlang check, replay, ablations, keyword baselines, reference trace,
-      episode budgets, stage cut); the review (default SUBMISSION/review.json, `natlang.invented-review/1`) must name
-      this digest and meet every judged requirement (S4, S5, C3, D3, D5, N1); then the idea's split (70/15/15 by world):
+      episode budgets, stage cut) admits; a review is optional (default SUBMISSION/review.json,
+      `natlang.invented-review/1`), and one naming this digest blocks only by its `wrong_expected` items
+      (NATLANG_INVENTED_STRICT_REVIEW=1: every judged requirement must be met); then the idea's split (70/15/15 by world):
       train ideas stage their cases and stage tasks for the pool, dev and confirmation ideas their cases for the held
       slice (ROOT/admitted/<slug>/). The idea enters ROOT/accepted.jsonl (the atlas every later builder reads) and its
       claim is closed as accepted. --publish publishes at once.
+  invented.py sample-reviews N [--seed S]   N admitted submissions drawn at random for a review (REVIEW_BRIEF.md)
   invented.py publish [--root ROOT] [--dry-run]
-      every admitted, unpublished idea, as one batch: train cases + stage tasks -> ROOT/pool/<stamp>/cases.jsonl,
+      every admitted, unpublished idea, as one batch (a program whose sampled review of the admitted version lists
+      `wrong_expected` is withheld from this and every later batch): train cases + stage tasks -> ROOT/pool/<stamp>/cases.jsonl,
       repetition measured against the pool (measure_repetition.py), registry dataset natlang-rl-invented-<stamp>
       promoted to grpo-pool; dev + confirmation programs of every admitted idea so far -> the held slice
       ops/held-inv/<stamp>/ (held_eval pin --all-rows, also excluding held-v3; held_eval verify against every pool row
@@ -53,8 +60,10 @@ import json
 import os
 import re
 import shutil
+import random
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -185,7 +194,7 @@ def declared_words(card: dict) -> int | None:
 ID_NAME = re.compile(r'^(id|ids|key|keys|slug|code|codes|ref|refs|uuid|url|urls|path|paths|email|date|time|timestamp|'
                      r'language|lang|locale|currency|unit|units|iso)$|(Id|Ids|Key|Keys|Code|Codes|Ref|Refs|Url|Path|Date|'
                      r'Time|At|Iso)$')
-ID_DOC = re.compile(r'\b(identifier|ids?|ISO|code|date|timestamp|timecode|URL|path|digits|computed)\b')
+ID_DOC = re.compile(r'\b(identifier|ids?|ISO|code|date|timestamp|timecode|URL|path|digits|computed)\b', re.I)
 TYPE_ALIAS = re.compile(r'(?:/\*\*((?:(?!\*/)[\s\S])*)\*/\s*)?export\s+type\s+(\w+)\s*=\s*')
 
 
@@ -354,10 +363,22 @@ def stem(word: str) -> str:
     return word
 
 
+def answer_leaves(value) -> list[str]:
+    """The string leaves of an answer that may name a relation: not those under an identifier or unit field
+    (`unit: 'knots'` names a unit the text may well use, not what the item does)."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [leaf for key, item in value.items() if not ID_NAME.search(str(key)) for leaf in answer_leaves(item)]
+    if isinstance(value, list):
+        return [leaf for item in value for leaf in answer_leaves(item)]
+    return []
+
+
 def value_words(value, args) -> list[str]:
     """The words of a finite answer (a literal of three words at most that is not copied from the arguments)."""
     leaves = set(string_leaves(args))
-    return [word for leaf in string_leaves(value) if leaf not in leaves and len(leaf.split()) <= 3
+    return [word for leaf in answer_leaves(value) if leaf not in leaves and len(leaf.split()) <= 3
             for word in re.split(r'[-_\s]+', leaf) if len(word) >= 4 and word.lower() not in STOP_VALUES]
 
 
@@ -525,14 +546,27 @@ def reference_report(data: dict, cases: list[dict], trace: dict, notes: str, dec
             for entry, shown in sorted(entries.items()):
                 child = children[entry] if 0 <= entry < len(children) else {}
                 items = [next(iter(ITEM_TOKEN.findall(text)), oneline(text)[:40]) for text in shown]
+                # An entry with an item fragment besides the instruction's is written for one item; when it answers
+                # several different calls, its item fragment also occurs in their openings (a list of the same records).
+                if len(child.get('match') or []) >= 2 and len(set(shown)) > 1:
+                    warnings.append(f'{label}: children entry {entry} {json.dumps(child.get("match"), ensure_ascii=False)[:160]} '
+                                    f'answered {len(set(shown))} different {name} calls ({", ".join(dict.fromkeys(items))[:200]}): '
+                                    'an entry with an item fragment is meant for one item; when that fragment also occurs in '
+                                    "other calls' arguments, take it from the argument's own line "
+                                    '(`event: Event = { eventId: "E15"`), and write a default as an entry with the '
+                                    'instruction fragment alone')
                 what = (f'entry {entry} {json.dumps(child.get("match"), ensure_ascii=False)} -> '
                         f'{json.dumps(child.get("value", child.get("call")), ensure_ascii=False)[:120]}') if child else 'no entry'
                 lines.append(f'   {what}: {len(shown)} call(s): {", ".join(items)[:600]}')
+    shown_normalized = [normalized(text) for text in shown_all]
     for number, entry in enumerate(hardest_entries(notes), 1):
         tokens = [t.strip('.,:;') for t in ITEM_TOKEN.findall(entry)]
-        if not any(re.search(rf'(?<![\w]){re.escape(t)}(?![\w])', text) for t in tokens if t for text in shown_all):
+        # An item whose call carries no id (a phrase a landmark judgment resolves) is named by quoting its text.
+        quoted = [normalized(q).strip(' .,;:') for q in QUOTED.findall(entry) if len(q.split()) >= 2]
+        if not (any(re.search(rf'(?<![\w]){re.escape(t)}(?![\w])', text) for t in tokens if t for text in shown_all)
+                or any(q and q in text for q in quoted for text in shown_normalized)):
             problems.append(f'C4: hardest item {number} ("{entry[:60]}") names no item a judgment is called on; name the '
-                            'item by its id, one whose text leaves the judgment to the reader')
+                            'item by an id its call carries, or quote a phrase of its text in double quotes')
     return problems, warnings, '\n'.join(lines) + '\n'
 
 
@@ -879,12 +913,22 @@ def bar() -> dict:
             if requirements.is_file() else None}
 
 
+def write_report(out: Path, report: dict) -> None:
+    """report.json appears only whole, at the end of a run (a temp file moved in)."""
+    temp = out / f'.report.json.{os.getpid()}'
+    temp.write_text(json.dumps(report, ensure_ascii=False, indent=1) + '\n')
+    os.replace(temp, out / 'report.json')
+
+
 def qualify(submission: Path, runtime: Path, print_reference: bool = False) -> dict:
     data, files = load(submission)
     m = metrics(data, files)
     problems = static_problems(submission, data, files, m)
     out = submission / 'qualification'
     out.mkdir(exist_ok=True)
+    # The previous run's report goes at once: a run stopped part way (preempted, killed) leaves no report rather than
+    # an old one that reads as this run's result.
+    (out / 'report.json').unlink(missing_ok=True)
     report: dict = {'slug': data.get('slug'), 'bar': bar(), 'digest': digest(submission), 'metrics': m}
     problems += runtime_problems(runtime)
     problems += natlang_check(submission / 'program')
@@ -973,8 +1017,67 @@ def qualify(submission: Path, runtime: Path, print_reference: bool = False) -> d
             report['stages'] = qualify_stages(out, runtime, cases, trace)
     report['problems'] = problems
     report['ok'] = not problems
-    (out / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=1) + '\n')
+    write_report(out, report)
     return report
+
+
+def dry_run(submission: Path, runtime: Path, controls: bool = False) -> dict:
+    """The program's TypeScript run with the scripted judgment answers, no model, in seconds: what the reference returns
+    against `expected`, which entry answered which call, the static checks, and with `controls` what each wrong
+    answer, ablation and keyword baseline returns. It writes nothing into the submission (qualification/ is qualify's)."""
+    data, files = load(submission)
+    m = metrics(data, files)
+    problems = static_problems(submission, data, files, m) + runtime_problems(runtime)
+    try:
+        cases = package(data, files)
+    except (KeyError, TypeError, ValueError) as error:
+        return {'ok': False, 'problems': problems + [f'package: {error}'], 'warnings': [], 'text': ''}
+    with tempfile.TemporaryDirectory(prefix='invented-dry-run-') as scratch:
+        source, target = Path(scratch) / 'cases.jsonl', Path(scratch) / 'dry-run.json'
+        source.write_text(''.join(json.dumps(c, ensure_ascii=False) + '\n' for c in cases))
+        run = run_node('dry_run.mjs', runtime, str(source), str(target), '1' if controls else '0')
+        try:
+            trace = json.loads(target.read_text())
+        except (OSError, ValueError):
+            return {'ok': False, 'problems': problems + ['dry_run.mjs did not finish: ' + (run.stderr or run.stdout)[-1500:]],
+                    'warnings': [], 'text': ''}
+    notes = submission / 'NOTES.md'
+    card = submission / 'idea.json'
+    try:
+        declared = declared_words(json.loads(card.read_text())) if card.is_file() else None
+    except ValueError:
+        declared = None
+    found, warnings, text = reference_report(data, cases, trace, notes.read_text() if notes.is_file() else '', declared)
+    problems += found
+    lines = ['(dry run: C2 counts every entry of its own as decisive; qualify counts only those the result depends on)']
+    for inst, row in zip(data.get('instances') or [], trace.get('results', [])):
+        label = f'instance {inst.get("name")}'
+        lines.append(f'== {label}: reference {"accepted" if row.get("accepted") else "NOT accepted"}')
+        lines.append('expected: ' + json.dumps(inst.get('expected'), ensure_ascii=False))
+        lines.append('returned: ' + json.dumps(row.get('value'), ensure_ascii=False))
+        if row.get('status') == 'done' and not row.get('accepted'):
+            problems.append(f'F3: {label}: the reference returns an answer the checker rejects')
+        for mutant in row.get('mutants', []):
+            state = ('did not run: ' + mutant.get('error', '') if not mutant.get('ran') else
+                     'ACCEPTED (must be rejected)' if mutant.get('accepted') else 'rejected')
+            if mutant.get('value_matches') is False:
+                state += ', declared value differs'
+            lines.append(f'wrong answer "{mutant.get("mistake")}": {state}: {json.dumps(mutant.get("value"), ensure_ascii=False)[:300]}')
+            if not (mutant.get('ran') and mutant.get('accepted') is False and mutant.get('value_matches') is not False):
+                problems.append(f'F4: {label}: wrong answer "{mutant.get("mistake")}": {state}'[:600])
+        for ablation in row.get('ablations', []):
+            state = ('did not run: ' + ablation.get('error', '') if not ablation.get('ran') else
+                     'ACCEPTED (must be rejected)' if ablation.get('accepted') else 'rejected')
+            lines.append(f'ablation {ablation.get("judgment")}: {state}: {json.dumps(ablation.get("value"), ensure_ascii=False)[:300]}')
+            if not (ablation.get('ran') and ablation.get('accepted') is False):
+                problems.append(f'S2: {label}: ablating {ablation.get("judgment")}: {state}'[:600])
+        for baseline in row.get('baselines', []):
+            state = ('did not run: ' + baseline.get('error', '') if not baseline.get('ran') else
+                     'ACCEPTED (must be rejected)' if baseline.get('accepted') else 'rejected')
+            lines.append(f'keyword baseline: {state}: {json.dumps(baseline.get("value"), ensure_ascii=False)[:300]}')
+            if not (baseline.get('ran') and baseline.get('accepted') is False):
+                problems.append(f'S3: {label}: keyword baseline: {state}'[:600])
+    return {'ok': not problems, 'problems': problems, 'warnings': warnings, 'text': '\n'.join(lines) + '\n' + text}
 
 
 # ---- campaign pipeline: admit one submission, publish batches --------------------------------------------------------
@@ -996,18 +1099,52 @@ def digest(submission: Path) -> str:
 
 
 def review_problems(review: dict, submission: Path) -> list[str]:
+    """What in a review keeps a qualified submission out (owner 2026-11-25: volume over per-program perfection;
+    reviews sample quality and feed the brief and skill). Only an expected answer the reviewer shows is wrong
+    (``wrong_expected``: item, why) blocks, and only a review of this version; judged requirements are recorded,
+    not gates. ``NATLANG_INVENTED_STRICT_REVIEW=1`` restores the all-requirements-met gate."""
     if review.get('schema') != REVIEW_SCHEMA:
         return [f'review: schema must be {REVIEW_SCHEMA}']
-    problems = []
     if review.get('digest') != digest(submission):
-        problems.append('review: it names another version of the submission (digest); review the current one')
-    if not review.get('reviewer'):
-        problems.append('review: reviewer (model id) is missing')
-    for rid in JUDGED:
-        verdict = (review.get('requirements') or {}).get(rid) or {}
-        if verdict.get('met') is not True:
-            problems.append(f'{rid}: judged unmet: {"; ".join(map(str, verdict.get("findings") or ["no verdict"]))[:400]}')
+        return []   # a review of an older version neither blocks nor stands for this one
+    problems = [f'wrong expected answer: {str(item)[:400]}' for item in review.get('wrong_expected') or []]
+    if os.environ.get('NATLANG_INVENTED_STRICT_REVIEW') == '1':
+        if not review.get('reviewer'):
+            problems.append('review: reviewer (model id) is missing')
+        for rid in JUDGED:
+            verdict = (review.get('requirements') or {}).get(rid) or {}
+            if verdict.get('met') is not True:
+                problems.append(f'{rid}: judged unmet: {"; ".join(map(str, verdict.get("findings") or ["no verdict"]))[:400]}')
     return problems
+
+
+def sample_reviews(root: Path, count: int, seed: str | None = None, reviewed: bool = False) -> list[dict]:
+    """Draw admitted submissions at random for a review (REVIEW_BRIEF.md: one sampled pass, owner 2026-11-25: "reviews
+    should only be on a drawn sample"). By default only those without a review of their current version."""
+    pool = []
+    for path in sorted((root / 'admitted').glob('*/admission.json')):
+        admission = json.loads(path.read_text())
+        submission = Path(admission.get('submission') or '')
+        if not (submission / 'submission.json').is_file():
+            continue
+        current = digest(submission)
+        review = submission / 'review.json'
+        done = review.is_file() and json.loads(review.read_text()).get('digest') == current
+        if reviewed or not done:
+            pool.append({'slug': admission['slug'], 'submission': str(submission), 'split': admission.get('split'),
+                         'digest': current, 'reviewed': done})
+    return random.Random(seed).sample(pool, min(count, len(pool)))
+
+
+def withheld(admission: dict, home: Path) -> list[str]:
+    """Wrong expected answers a sampled review found in the admitted version: that program stays out of the batches
+    published from now on (a review written after admission sits in the submission; admit copies one it saw)."""
+    for review_path in (Path(admission.get('submission') or '') / 'review.json', home / 'review.json'):
+        if review_path.is_file():
+            review = json.loads(review_path.read_text())
+            if review.get('digest') == admission.get('digest') and review.get('wrong_expected'):
+                return [str(item)[:400] for item in review['wrong_expected']]
+    return []
 
 
 def rows_of(path: Path) -> list[dict]:
@@ -1031,9 +1168,11 @@ def admit(submission: Path, *, review_path: Path | None, idea_path: Path | None,
     if not report.get('ok'):
         return {'admitted': False, 'stage': 'qualify', 'problems': report.get('problems', [])}
     review_path = review_path or submission / 'review.json'
-    if not review_path.exists():
+    # A review is optional: qualification admits; a sampled review blocks only on a wrong expected answer.
+    review = json.loads(review_path.read_text()) if review_path.exists() else None
+    if review is None and os.environ.get('NATLANG_INVENTED_STRICT_REVIEW') == '1':
         return {'admitted': False, 'stage': 'review', 'problems': [f'no review at {review_path} (REVIEW_BRIEF.md)']}
-    problems = review_problems(json.loads(review_path.read_text()), submission)
+    problems = review_problems(review, submission) if review is not None else []
     if problems:
         return {'admitted': False, 'stage': 'review', 'problems': problems}
     data, _ = load(submission)
@@ -1052,9 +1191,11 @@ def admit(submission: Path, *, review_path: Path | None, idea_path: Path | None,
     home = root / 'admitted' / data['slug']
     save_rows(home / 'cases.jsonl', cases)
     save_rows(home / 'stages.jsonl', stages)
-    shutil.copy2(review_path, home / 'review.json')
+    if review is not None:
+        shutil.copy2(review_path, home / 'review.json')
     admission = {'slug': data['slug'], 'split': split, 'submission': str(submission), 'digest': digest(submission),
                  'cases': len(cases), 'stages': len(stages), 'reference_calls': report.get('reference_calls'),
+                 'reviewed': review is not None and review.get('digest') == digest(submission),
                  'at': time.time(), 'published': None}
     (home / 'admission.json').write_text(json.dumps(admission, indent=1) + '\n')
     ledger = root / 'accepted.jsonl'
@@ -1094,6 +1235,13 @@ def publish(root: Path, *, dry_run: bool = False, no_check: bool = False) -> dic
     stamp = time.strftime('%Y%m%d-%H%M%S')
     admitted = [(json.loads((d / 'admission.json').read_text()), d) for d in sorted((root / 'admitted').glob('*'))
                 if (d / 'admission.json').exists()]
+    for admission, d in admitted:
+        reasons = withheld(admission, d)
+        if reasons and admission.get('withheld') != reasons and not dry_run:
+            admission['withheld'] = reasons
+            (d / 'admission.json').write_text(json.dumps(admission, indent=1) + '\n')
+        admission['withheld'] = reasons
+    admitted = [(a, d) for a, d in admitted if not a['withheld']]
     fresh = [(a, d) for a, d in admitted if not a.get('published')]
     train = [(a, d) for a, d in fresh if a['split'] == 'train']
     held = [(a, d) for a, d in admitted if a['split'] != 'train']
@@ -1195,12 +1343,26 @@ def main(argv=None) -> int:
     pb.add_argument('--no-check', action='store_true',
                     help="promote without the registry's check-main --quick (when another strand's uncommitted change "
                          'turns it red; the promotion commits only registry files)')
+    dr = sub.add_parser('dry-run', help="run the program's TypeScript with the scripted judgment answers, no model, in "
+                                         'seconds: the reference against expected, which entry answered which call, the '
+                                         'static checks; --controls also replays every wrong answer, ablation and baseline')
+    dr.add_argument('submission', type=Path)
+    dr.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
+    dr.add_argument('--controls', action='store_true')
+    sr = sub.add_parser('sample-reviews', help='draw N admitted submissions at random for a review (REVIEW_BRIEF.md)')
+    sr.add_argument('count', type=int)
+    sr.add_argument('--root', type=Path, default=INVENTOR_ROOT)
+    sr.add_argument('--seed')
+    sr.add_argument('--reviewed', action='store_true', help='also draw submissions whose current version has a review')
     st = sub.add_parser('stages')
     st.add_argument('submission', type=Path)
     st.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
     args = parser.parse_args(argv)
     if args.command == 'publish':
         print(json.dumps(publish(args.root, dry_run=args.dry_run, no_check=args.no_check), indent=1))
+        return 0
+    if args.command == 'sample-reviews':
+        print(json.dumps(sample_reviews(args.root, args.count, seed=args.seed, reviewed=args.reviewed), indent=1))
         return 0
     submission = args.submission.resolve()
     if args.command == 'digest':
@@ -1227,9 +1389,15 @@ def main(argv=None) -> int:
         (out / 'cases.jsonl').write_text(''.join(json.dumps(c, ensure_ascii=False) + '\n' for c in cases))
         report['reference_calls'] = {row['id']: row.get('calls') for row in trace.get('results', [])}
         report['stages'] = qualify_stages(out, args.runtime.resolve(), cases, trace)
-        (out / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=1) + '\n')
+        write_report(out, report)
         print(json.dumps({'reference_calls': report['reference_calls'], 'stages': report['stages']}, indent=1))
         return 0
+    if args.command == 'dry-run':
+        result = dry_run(submission, args.runtime.resolve(), controls=args.controls)
+        print(result['text'])
+        print(json.dumps({'ok': result['ok'], 'problems': result['problems'][:60], 'warnings': result['warnings']},
+                         ensure_ascii=False, indent=1))
+        return 0 if result['ok'] else 1
     if args.command == 'check':
         data, files = load(submission)
         m = metrics(data, files)

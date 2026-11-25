@@ -250,22 +250,26 @@ def test_admit_needs_a_review_of_this_version_then_stages_by_split(tmp_path, mon
     (sub / 'idea.json').write_text(json.dumps(card('withdrawal-ruling', 'Rule on notes.', ['withdraws', 'supersedes', 'same_item'])))
     root = tmp_path / 'root'
     kwargs = dict(review_path=None, idea_path=None, root=root, runtime=tmp_path, skip_qualify=True)
-    assert invented.admit(sub, **kwargs)['stage'] == 'review'
     review = {'schema': invented.REVIEW_SCHEMA, 'reviewer': 'claude-opus-5-5', 'digest': invented.digest(sub),
               'requirements': {r: {'met': True, 'findings': []} for r in invented.JUDGED}}
     review['requirements']['S4'] = {'met': False, 'findings': ['note text reaches withdraws as plain string']}
+    review['wrong_expected'] = ['n2: the note withdraws n1, so the expected "stands" is wrong']
     (sub / 'review.json').write_text(json.dumps(review))
     result = invented.admit(sub, **kwargs)
-    assert not result['admitted'] and 'S4' in result['problems'][0]
-    review['requirements']['S4'] = {'met': True, 'findings': []}
+    assert not result['admitted'] and 'wrong expected' in result['problems'][0], 'a wrong expected answer blocks'
+    monkeypatch.setenv('NATLANG_INVENTED_STRICT_REVIEW', '1')
+    del review['wrong_expected']
+    (sub / 'review.json').write_text(json.dumps(review))
+    assert 'S4' in invented.admit(sub, **kwargs)['problems'][0], 'strict mode: an unmet requirement blocks'
+    monkeypatch.delenv('NATLANG_INVENTED_STRICT_REVIEW')
+    review['wrong_expected'] = ['stale finding']
     review['digest'] = 'stale'
     (sub / 'review.json').write_text(json.dumps(review))
-    assert 'digest' in invented.admit(sub, **kwargs)['problems'][0]
-    review['digest'] = invented.digest(sub)
-    (sub / 'review.json').write_text(json.dumps(review))
+    assert invented.review_problems(review, sub) == [], 'a review of another version neither blocks nor stands'
+    (sub / 'review.json').unlink()
     assert invented.static_problems(sub, data, files, invented.metrics(data, files)) == []   # review/idea are allowed
     result = invented.admit(sub, **kwargs)
-    assert result['admitted'] and result['split'] == invented.split_of(data)
+    assert result['admitted'] and result['split'] == invented.split_of(data) and result['reviewed'] is False, 'qualification alone admits'
     assert result['cases'] == 2 and result['stages'] == 4
     assert (root / 'admitted' / 'withdrawal-ruling' / 'stages.jsonl').exists()
     ledger = invented.rows_of(root / 'accepted.jsonl')
@@ -377,3 +381,119 @@ def test_c2_counts_only_calls_whose_own_entry_the_result_depends_on():
     counted = invented.calls_of_own_entries(row, set(invented.own_entries(row)))
     assert [c['args']['step'] for c in counted] == [item(0)], 'a default-answered call sharing the datasheet does not count'
     assert invented.calls_of_own_entries(row, set()) == [], 'an entry no answer depends on does not count'
+
+
+def test_s6_reads_identifier_words_in_any_case_and_s7_skips_unit_fields(tmp_path):
+    sub = write(tmp_path)
+    (sub / 'program' / 'types.ts').write_text(TYPES + '''/** A batch. */
+export type Batch = {
+  /** Identifier of the batch in the plant's system. */
+  batch: string;
+  text: Untrusted<string>;
+};
+''')
+    (sub / 'program' / 'rule_notes' / 'same_item.nl').write_text(JUDGE.replace('note: "Untrusted<string>"', 'note: Batch'))
+    assert not [p for p in check(sub)[0] if p.startswith('S6')], 'a doc comment opening "Identifier of" marks an id'
+    knots = lambda i: f'w{i} the pilot reported the wind at twenty knots gusting higher over the ridge'  # noqa: E731
+    calls = [{'name': 'statedValue', 'args': {'card': knots(i)}, 'value': {'amount': 20, 'unit': 'knots'}} for i in range(2)]
+    assert invented.deciding_words(calls) == [], 'a unit field names the unit the text uses, not a relation'
+    calls = [{'name': 'reads', 'args': {'card': knots(i) + ' and this cancels the earlier one'}, 'value': 'cancels'}
+             for i in range(2)]
+    assert invented.deciding_words(calls), 'a relation word that settles every call holding it is still flagged'
+
+
+def test_hardest_items_named_by_a_quoted_phrase_and_overmatching_entries_warn(tmp_path):
+    sub = write(tmp_path)
+    data, files = invented.load(sub)
+    cases = invented.package(data, files)
+    case = cases[0]
+    case['curriculum']['reference']['children'] = [{'match': ['withdraws an earlier', 'n1'], 'value': True}]
+    texts = [f'note: n{i} {PROSE}' for i in (1, 12)]
+    trace = {'results': [{'id': case['id'], 'status': 'done', 'calls': 3, 'value': {'standing': []},
+                          'children': [], 'answers': [{'name': 'withdraws', 'entry': 0, 'shown': t} for t in texts]}]}
+    notes = '## Hardest items\n\n- "the ceiling stain kept spreading": the landmark.\n- "never in any call": absent.\n'
+    problems, warnings, _ = invented.reference_report(data, cases[:1], trace, notes, None)
+    assert [p for p in problems if p.startswith('C4')] == [
+        'C4: hardest item 2 (""never in any call": absent.") names no item a judgment is called on; name the item by an '
+        'id its call carries, or quote a phrase of its text in double quotes'], problems
+    notes = '## Hardest items\n\n- "leaking roof over the back bedroom": both notes.\n'
+    assert not [p for p in invented.reference_report(data, cases[:1], trace, notes, None)[0] if p.startswith('C4')]
+    assert any('children entry 0 ["withdraws an earlier", "n1"] answered 2 different withdraws calls' in w
+               for w in warnings), warnings
+
+
+def test_qualify_leaves_no_old_report_and_writes_the_new_one_whole(tmp_path, monkeypatch):
+    sub = write(tmp_path)
+    out = sub / 'qualification'
+    out.mkdir()
+    (out / 'report.json').write_text('{"ok": true, "stale": true}')
+    seen = {}
+
+    def stop(program):   # the run is stopped part way: the old report must already be gone
+        seen['report'] = (out / 'report.json').exists()
+        raise KeyboardInterrupt
+    monkeypatch.setattr(invented, 'runtime_problems', lambda runtime: [])
+    monkeypatch.setattr(invented, 'natlang_check', stop)
+    import pytest
+    with pytest.raises(KeyboardInterrupt):
+        invented.qualify(sub, tmp_path)
+    assert seen == {'report': False} and not (out / 'report.json').exists()
+    invented.write_report(out, {'ok': False})
+    assert json.loads((out / 'report.json').read_text()) == {'ok': False} and sorted(p.name for p in out.iterdir()) == ['report.json']
+
+
+def fake_runtime(tmp_path):
+    """A runtime whose replay answers like the program would: a children entry valued 'misread' (or a root script
+    with 'wrong' in it) returns a rejected answer; the reference returns the accepted one."""
+    runtime = tmp_path / 'runtime'
+    (runtime / 'dist/native').mkdir(parents=True)
+    (runtime / 'dist/teacher').mkdir()
+    (runtime / 'package.json').write_text('{"type":"module"}')
+    (runtime / 'dist/native/prompt.js').write_text('export const TOOLS_PROMPT = "p";')
+    (runtime / 'dist/teacher/curriculum.js').write_text('''
+      export async function replayReference(row, prompt, policy, hooks) {
+        const ref = row.curriculum.reference;
+        const wrong = ref.children?.[0]?.value === true || /wrong|includes/.test(ref.root[0][1].code);
+        hooks?.onChild?.({ name: 'withdraws', entry: 0, shown: 'note: n1 text' });
+        return { trajectory: [1, 2], run: { invocationTraces: [], outcome: { status: 'done', accepted: !wrong,
+          value: wrong ? { standing: [] } : { standing: ['n1'] } } } };
+      }''')
+    return runtime
+
+
+def test_dry_run_replays_the_reference_and_every_control_without_touching_the_submission(tmp_path, monkeypatch):
+    sub = write(tmp_path)
+    monkeypatch.setattr(invented, 'runtime_problems', lambda runtime: [])
+    runtime = fake_runtime(tmp_path)
+    result = invented.dry_run(sub, runtime, controls=True)
+    assert 'expected: {"standing": ["n1"]}' in result['text'] and 'returned: {"standing": ["n1"]}' in result['text']
+    assert result['text'].count('wrong answer "m": rejected') == 6 and 'ablation withdraws: rejected' in result['text']
+    assert 'keyword baseline: rejected' in result['text']
+    assert not (sub / 'qualification').exists()
+    data = json.loads((sub / 'submission.json').read_text())
+    data['instances'][0]['wrong_answers'][0]['children'][0]['value'] = False
+    (sub / 'submission.json').write_text(json.dumps(data))
+    result = invented.dry_run(sub, runtime, controls=True)
+    assert 'F4: instance a: wrong answer "m": ACCEPTED (must be rejected)' in result['problems'] and not result['ok']
+
+
+def test_sampled_reviews_draw_unreviewed_admissions_and_a_wrong_expected_withholds_from_publishing(tmp_path):
+    root = tmp_path / 'root'
+    subs = []
+    for name in ('one', 'two', 'three'):
+        sub = write(tmp_path / name)
+        home = root / 'admitted' / name
+        home.mkdir(parents=True)
+        (home / 'admission.json').write_text(json.dumps({'slug': name, 'split': 'train', 'submission': str(sub),
+                                                         'digest': invented.digest(sub), 'cases': 2, 'published': None}))
+        subs.append(sub)
+    review = {'schema': invented.REVIEW_SCHEMA, 'digest': invented.digest(subs[0]), 'wrong_expected': ['n2: withdraws n1']}
+    (subs[0] / 'review.json').write_text(json.dumps(review))
+    drawn = invented.sample_reviews(root, 5, seed='x')
+    assert sorted(d['slug'] for d in drawn) == ['three', 'two'], 'a submission reviewed at its current version is not drawn again'
+    assert len(invented.sample_reviews(root, 1, seed='x')) == 1
+    assert len(invented.sample_reviews(root, 5, reviewed=True)) == 3
+    assert invented.publish(root, dry_run=True)['fresh'] == ['three', 'two'], 'the program with a wrong expected answer is withheld'
+    review['digest'] = 'an older version'
+    (subs[0] / 'review.json').write_text(json.dumps(review))
+    assert invented.publish(root, dry_run=True)['fresh'] == ['one', 'three', 'two']
