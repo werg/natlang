@@ -1,0 +1,51 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "held-inv-20261125-020600",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-inv/20261125-020600",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 130451,
+      "sha256": "0e534aeebb0f897e605c3e0758532cefed1fe738fc48e149cb8a049b0b10cb2d",
+      "lines": 2
+    },
+    {
+      "path": "engine.json",
+      "bytes": 1162,
+      "sha256": "951540fd91151c45cc6d990d5e0970cdd8292a97a725e92f7c33b173aba6be40"
+    },
+    {
+      "path": "exclusion-ids.json",
+      "bytes": 113,
+      "sha256": "bf315684e1e0fc3f9c1c040d7d886146e889b4e82340c5835c886abf8c01a943"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1898,
+      "sha256": "5a07b49440718a19e70c6505529208d6740f41a9ac317e854f712ddf751d84e2"
+    },
+    {
+      "path": "source/avoid-groups.json",
+      "bytes": 3132018,
+      "sha256": "275aa4516a3ddadc1ab65455b993c9dcdda012ad9d8435adc62a2e6c6fb52ab3"
+    },
+    {
+      "path": "source/avoid-ids.json",
+      "bytes": 3245732,
+      "sha256": "40164fc296d8bbc3ecfe5ba66e4a287a2747cbda71277316cfecebf041e6aec9"
+    },
+    {
+      "path": "source/cases.jsonl",
+      "bytes": 130451,
+      "sha256": "0e534aeebb0f897e605c3e0758532cefed1fe738fc48e149cb8a049b0b10cb2d",
+      "lines": 2
+    },
+    {
+      "path": "verify.json",
+      "bytes": 709,
+      "sha256": "aea42b35e54d7db250770925701fe8f4ef91fa4706e9e7c682ea204b921f012b"
+    }
+  ],
+  "bytes": 6642534
+}
