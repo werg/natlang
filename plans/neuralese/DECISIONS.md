@@ -14192,3 +14192,11 @@ Sixteen targeted custody/negative controls passed in ledger vibe-regency-recover
 - Tests: `test_episode_files.py` (compaction and readers, retention pass on an open collection, remote pull, block GC
   cutoff); the stale expectation in `test_grpo_sampling_supply.py` (the token after an empty think block is context
   since c1abc6a47) fixed.
+
+### 2026-11-26: Recover the original Regency progress query without a teacher rerun
+
+The original 0072 works-progress-versus-route-flow capture correctly answers that repair progress remains 0→0 and East Crossing is not fully reopened. Its eight native effect checks passed; the old verifier rejected a private reference decomposition, token and finding count. The shared source-hashed reassessor preserves those original false reference checks as incidental evidence rather than fabricating missing actor calls or reference findings. Exact original source, native accounts/forecasts, actual returned claims and original masks remain bound.
+
+One authorized independent `openai-codex:gpt-5.6-terra` review of the bound original accepted the actual requested meaning. Canonical recovery, Python completion validation and Node NativeIR materialization passed: one completed episode, 19 eligible training decisions. The actual standing reader f2227ce64 also loaded the derivative successfully using exact git-object Python sources (22 modules), independently of the newer 3171 reader. No original bytes or teacher trajectory were rewritten, and no Luna call was repeated.
+
+The verified manifest was atomically appended to the existing campaign seed list, preserving every earlier entry, and archived through `vibestudio_campaign.remote_archive` at DGX `recovered-0072-regency-findings-20261126/capture/manifest.json`. Local source/review/reader/materializer/seed/archive proofs are under `/home/werg/vibe-regency-recovery-ops`. The standing ingest owner received the archive and compatibility proof; ingestion itself is not claimed here. The other actual 0072 missing drafts, requested roster/note omissions and contradictory answers remain failed unless separately established from their own evidence.
