@@ -1,3 +1,4 @@
+import { unrecordedServices } from '../native/effects.js';
 import {openCrispTrace} from './crisp-trace.js';
 /**
  * The shared invocation kernel. Every natlang call (a named `.nl` function, an inline `nl`, an
@@ -780,12 +781,13 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   if (attempt?.strict && !handoff) { capture?.discard(); task.discardGraphCall(callId, frame.parentCallId); throw new Deopt(attempt.declined ?? 'no crisp case of this tier served the call'); }
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
-  const services = recordingServices(checkedServices(task, frame, frame.services ?? task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => {
+  const lexicalServices = unrecordedServices(frame.services ?? task.services);
+  const services = recordingServices(checkedServices(task, frame, lexicalServices, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => {
     const captured = { ...event, exact, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) };
     if(event.phase === 'requested') runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event });
     else graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },[{ node: invocationNodeId(callId), port: 'caller' }]);
     return capture?.effect(captured,'agent');
-  });
+  }, lexicalServices);
   // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
   const addendum = [frame.systemAddendum, attempt?.guidance].filter(Boolean).join('\n\n') || undefined;
   const nativeReader = !!(task.runtime.options.neuralese?.nativeStateConsumer ||

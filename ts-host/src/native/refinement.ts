@@ -1,3 +1,4 @@
+import { invokeServiceMethod, resultCheckingService } from './effects.js';
 /**
  * Refinement checks: `Is<T, "predicate">` (plans/REFINEMENT_TYPES.md).
  *
@@ -383,7 +384,7 @@ export const refinementCodeOf = (detail: string): Exclude<RefinementCode, 'refin
 export function checkServiceResults<T extends Record<string, unknown>>(services: T, declared: Record<string, Type>,
   check: (value: unknown, type: Type, label: string) => Promise<void>): T {
   if (!Object.keys(declared).length) return services;
-  const wrap = (target: object, service: string): object => new Proxy({}, {
+  const wrap = (target: object, service: string): object => resultCheckingService(new Proxy({}, {
     has: (_shell, property) => Reflect.has(target, property),
     ownKeys: () => Reflect.ownKeys(target),
     getOwnPropertyDescriptor: (_shell, property) => {
@@ -394,14 +395,15 @@ export function checkServiceResults<T extends Record<string, unknown>>(services:
       const value = Reflect.get(target, property, target);
       const type = typeof property === 'string' ? declared[`${service}.${property}`] : undefined;
       if (typeof value !== 'function') return value;
-      if (!type) return new Proxy(value, { apply: (fn, _receiver, args) => Reflect.apply(fn, target, args) });
+      if (!type) return new Proxy(value, { apply: (fn, _receiver, args) =>
+        typeof property === 'string' ? invokeServiceMethod(target, property, fn, args) : Reflect.apply(fn, target, args) });
       return async (...args: unknown[]) => {
-        const result = await (value as (...given: unknown[]) => unknown).apply(target, args);
+        const result = await invokeServiceMethod(target, String(property), value, args);
         await check(result, type, `${service}.${String(property)}`);
         return result;
       };
     },
-  });
+  }));
   return Object.freeze(Object.fromEntries(Object.entries(services).map(([name, service]) =>
     [name, service && typeof service === 'object' ? wrap(service, name) : service]))) as T;
 }
