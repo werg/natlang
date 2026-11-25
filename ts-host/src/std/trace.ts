@@ -54,6 +54,10 @@ export class StdSpan {
       definition.instructions=capture.ref(body);capture.setInputs({operation:name});capture.announce();capture.watch(()=>this.nativeTrace.trace.events);
       this.capture=capture;task.markInvocationRecorded(this.callId);
     }catch(error){reportStoreFailure(store,error);}
+    task.setInvocationEffectObserver(this.callId,({exact,...event})=>{
+      if(event.phase==='requested')this.nativeTrace.trace.emit('effect',{call_id:this.callId,capability:`${event.service}.${event.method}`,...event});
+      return this.capture?.effect({...event,exact,...(event.phase==='requested'?{graph_order:task.nextGraphEffectOrder()}:{})},'crisp');
+    });
   }
 
   /** Run a caller's or a shipped function inside this combinator's span frame. */
