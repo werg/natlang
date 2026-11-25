@@ -57,9 +57,9 @@ A submission is a program an expert would recognise as their own work, run on a 
 - **Instances at full size: one real working session.** Each instance is what the card's `inputs` describes: the
   day's calls, the whole rehearsal thread, the week's letters. Every item is there because the user would meet it and a
   judgment has to read it: a caller's directions run on for 100-150 words with a false start and a correction; a
-  rehearsal thread has 20-30 messages, several about other songs. C2 counts the prose of the items a judgment reads with
-  a children entry of their own (at least 800 words, and the card's size), so size comes from items that each need
-  reading.
+  rehearsal thread has 20-30 messages, several about other songs. The inputs hold the card's size in prose, and C2 counts
+  the prose of the items a judgment reads with a children entry of their own (at least 800 words), so size comes from
+  items that each need reading.
 - **The item describes; the judgment names.** The text says what happened in the words its writer would use, and the
   judgment's answer is the name for it. "We can do the 18th instead of the 12th now, if that still suits" is a new date
   for the same visit, and `supersedes` names it `replaces`; the message itself talks about dates, not about replacing.
@@ -175,6 +175,8 @@ it, so this call reads the results of two judgments; it then updates which compl
   misreading (entries placed before the reference's, like an ablation's) or `code` for an exact step done the wrong way
   (the root script that runs the helpers with that step done otherwise). The replay computes the wrong answer, so it
   is always the answer that mistake gives; the checker must reject it. Add `value` only to check it against the replay.
+  Take mistakes that pass the program's own checks: one the root's `ensures:` refuses never reaches the checker, so it
+  is no wrong answer.
 - **keyword_baseline**: the best rule over surface cues you can write without any `nl` call; it must run to an answer
   and be rejected (S3). It runs in the root's eval scope, where every callable-folder item is bound (a file's default
   export under the file's base name, a file of named exports as an object of them): give its locals other names. It
@@ -201,12 +203,15 @@ python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-qual-<slug>-
   -- /bin/bash -c '/home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/sources/invented.py qualify SUBMISSION > LOGS/qualify-<slug>-<n>.log 2>&1'
 ```
 
+The bar is versioned: `report.json` records `bar` (its version and the digest of `requirements.json`), and the
+checks change only between waves, so the bar you start against is the bar you finish against.
+
 `qualify` runs everything: `natlang check` (F1, after rebuilding a stale runtime), packaging, the reference replay,
 wrong answers, ablations, keyword baselines and the crisp requirements. `--print-reference` also prints, per instance,
 the value the reference returns, the prose words its judgment calls read, and for each judgment which children entry
 answered which item (the same text is in `qualification/reference.txt`). What the crisp checks read:
-- C2: the prose words of items read by an entry of their own (alphabetic words of texts of three words or more; ids,
-  codes, timecodes and numbers do not count), at least 800 and the card's size.
+- C2: the inputs hold at least the card's size in prose (alphabetic words of texts of three words or more; ids, codes,
+  timecodes and numbers do not count), and the prose of items read by an entry of their own is at least 800 words.
 - S6: a plain `string` a `.nl` function reads, as an argument or a record field, passes when its name says it is an
   identifier (`id`, `...Id`, `key`, `code`, `ref`, `url`, `path`, `date`, `time`, `...At`, `language`, `unit`) or its doc
   comment says so (`identifier`, `id`, `ISO`, `code`, `date`, `timestamp`, `timecode`, `URL`, `path`, `digits`, `computed`).

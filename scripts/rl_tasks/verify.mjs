@@ -274,7 +274,8 @@ async function qualify(record) {
     try { result.aliases.push({ value, accepted: await accepted(variant) }); }
     catch (e) { result.aliases.push({ value, accepted: null, error: String(e).slice(0, 300) }); }
   }
-  result.wrong_rejected = result.wrong.length > 0 && result.wrong.every(w => w.accepted === false);
+  // Mutants are wrong answers too: a case whose controls are all mutants has its wrong answers there.
+  result.wrong_rejected = result.wrong.length + result.mutants.length > 0 && result.wrong.every(w => w.accepted === false);
   result.keyword_baseline_rejected = result.keyword_baseline.every(w => w.accepted === false);
   result.mutants_rejected = result.mutants.every(m => m.ran && m.accepted === false && m.value_matches !== false);
   result.ok = result.reference_ok && result.wrong_rejected && result.keyword_baseline_rejected && result.mutants_rejected;
@@ -324,7 +325,9 @@ const aliasTried = results.flatMap(r => r.aliases).filter(a => a.accepted !== nu
 const summary = {
   cases: rows.length, kept: kept.length,
   reference_ok: results.filter(r => r.reference_ok).length,
-  wrong_controls: results.reduce((n, r) => n + r.wrong.length, 0),
+  wrong_controls: results.reduce((n, r) => n + r.wrong.length + (r.mutants ?? []).length, 0),
+  mutants: results.reduce((n, r) => n + (r.mutants ?? []).length, 0),
+  mutants_rejected: results.reduce((n, r) => n + (r.mutants ?? []).filter(m => m.ran && m.accepted === false && m.value_matches !== false).length, 0),
   wrong_accepted: results.reduce((n, r) => n + r.wrong.filter(w => w.accepted === true).length, 0),
   wrong_errors: results.reduce((n, r) => n + r.wrong.filter(w => w.accepted === null).length, 0),
   keyword_baselines: results.reduce((n, r) => n + (r.keyword_baseline ?? []).length, 0),

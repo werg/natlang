@@ -66,6 +66,9 @@ SCHEMA = 'natlang.invented-program/1'
 GENERATOR = 'natlang.invented-programs/1'
 ORACLES = frozenset({'exact', 'normalized', 'verifier'})
 VERIFIER_ROOT = 'training/semantic_fp_tasks/verifiers/'
+# The bar a wave of builders qualifies against: BAR_VERSION and the requirements' digest go into every report.json, and
+# they change only between waves (coordinator 2026-11-25), never while builders iterate.
+BAR_VERSION = '2026-11-25.2'
 # The bar (requirements.json; coordinator 2026-11-25 after the calibration review): size floors, code depth, notes.
 MIN_WORDS, MIN_TEXT_ITEMS, MIN_TS_LINES, MIN_HARDEST = 800, 15, 100, 3
 SUBMISSION_ENTRIES = frozenset({'program', 'submission.json', 'NOTES.md', 'qualification', 'idea.json', 'review.json'})
@@ -395,9 +398,6 @@ def reference_report(data: dict, cases: list[dict], trace: dict, notes: str, dec
             if judged < MIN_WORDS:
                 problems.append(f'C2: {label}: {judged} words of prose in items a judgment reads with an entry of their own '
                                 f'({judged_all} reach judgment calls in all); at least {MIN_WORDS}')
-            if declared and judged < 0.9 * declared:
-                problems.append(f'C2: {label}: {judged} words of prose in items read by an entry of their own, but the idea '
-                                f'card declares {declared}')
             # An entry may be there for calls only an ablation or a mutant makes; a reference whose run takes few of its
             # entries did not run the program the entries were written for (a stale runtime, a broken fragment).
             unused = [index for index in range(len(children)) if index not in per_entry]
@@ -774,13 +774,19 @@ def natlang_check(program: Path) -> list[str]:
     return out
 
 
+def bar() -> dict:
+    requirements = REPO / 'applications' / 'program-inventor' / 'requirements.json'
+    return {'version': BAR_VERSION, 'requirements_sha256': hashlib.sha256(requirements.read_bytes()).hexdigest()[:16]
+            if requirements.is_file() else None}
+
+
 def qualify(submission: Path, runtime: Path, print_reference: bool = False) -> dict:
     data, files = load(submission)
     m = metrics(data, files)
     problems = static_problems(submission, data, files, m)
     out = submission / 'qualification'
     out.mkdir(exist_ok=True)
-    report: dict = {'slug': data.get('slug'), 'metrics': m}
+    report: dict = {'slug': data.get('slug'), 'bar': bar(), 'metrics': m}
     problems += runtime_problems(runtime)
     problems += natlang_check(submission / 'program')
     try:

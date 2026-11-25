@@ -304,6 +304,10 @@ def test_reference_report_reads_the_trace(tmp_path):
     assert 'entry 1 ["withdraws an earlier"] -> "stands": 2 call(s)' in text, text
 
 
+def test_reports_name_the_bar_they_were_qualified_against():
+    assert invented.bar()['version'] == invented.BAR_VERSION and len(invented.bar()['requirements_sha256']) == 16
+
+
 def test_a_dist_older_than_its_sources_is_stale(tmp_path):
     runtime = tmp_path / 'ts-host'
     for rel in ('dist/cli/main.js', 'dist/teacher/curriculum.js', 'src/a.ts', 'package.json'):
@@ -316,3 +320,32 @@ def test_a_dist_older_than_its_sources_is_stale(tmp_path):
         os.utime(runtime / rel, (2_000_000_100, 2_000_000_100))
     assert not invented.stale_runtime(runtime)
     assert invented.runtime_problems(runtime) == []
+
+
+def test_verify_counts_mutant_wrong_answers_in_its_summary(tmp_path):
+    import shutil
+    import subprocess
+    runtime = tmp_path / 'runtime'
+    (runtime / 'dist/native').mkdir(parents=True)
+    (runtime / 'dist/teacher').mkdir()
+    (runtime / 'package.json').write_text('{"type":"module"}')
+    (runtime / 'dist/native/prompt.js').write_text('export const TOOLS_PROMPT = "p";')
+    (runtime / 'dist/native/external.js').write_text('export function externalModule() { throw Error("unused"); }')
+    (runtime / 'dist/teacher/curriculum.js').write_text('''
+      export async function verifyCases(rows) { return rows.map(() => ({ ok: true, problems: [] })); }
+      export async function replayReference(row) {
+        const wrong = row.curriculum.reference.children?.[0]?.value === 'misread';
+        return { run: { outcome: { status: 'done', accepted: !wrong, value: wrong ? 'w' : 'r' } } };
+      }''')
+    row = {'id': 'm', 'family': 'f', 'split': 'train', 'semantics': {'expected': 'r'},
+           'curriculum': {'reference': {'root': [['eval', {'code': 'const r = await f(); return r;', 'finish': True}]],
+                                        'children': [{'match': ['x'], 'value': 'read'}]},
+                          'external': {'checks': {'wrong_answers': [], 'keyword_baseline_code': [],
+                                                  'wrong_mutants': [{'mistake': 'm', 'children': [{'match': ['x'], 'value': 'misread'}], 'value': 'w'}]}}}}
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(json.dumps(row) + '\n')
+    node = next(iter(sorted(Path.home().glob('.local/share/natlang-dev/node-v24*/bin/node'), reverse=True)), None) or shutil.which('node')
+    subprocess.run([str(node), str(REPO / 'scripts/rl_tasks/verify.mjs'), str(runtime), str(source), str(tmp_path / 'out'), '1'],
+                   check=True, capture_output=True, text=True, timeout=60)
+    summary = json.loads((tmp_path / 'out' / 'verification.json').read_text())['summary']
+    assert (summary['kept'], summary['wrong_controls'], summary['mutants_rejected']) == (1, 1, 1), summary
