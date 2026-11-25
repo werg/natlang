@@ -12307,3 +12307,16 @@ estimated after from the compacted groups 0.008, 0.025, 0.010, now mostly the ep
 `rollouts.jsonl` hold each episode twice: the next lever).
 **Restart needs:** the collections on a pin containing this commit (the driver's next collection launch); the remote0
 unit's pull runs the canonical checkout's `remote_collect.py` and takes the exclusion at its next start.
+
+### 2026-11-25 — account for resolver-prefixed provider DNS failures
+
+The actual V27 wave0055 failure `natlang ...: failed: getaddrinfo EAI_AGAIN
+chatgpt.com` was missed by the transport classifier, which recognized the DNS
+code only without its resolver prefix. That spent a goal attempt on a provider
+failure. Recognize resolver-prefixed transient DNS codes within the existing
+failed-call envelope; circuit-breaker/HTTP wrappers remain supported. Descriptions
+of a DNS failure inside document text or schema errors still do not classify as
+transport. Three generic `terminated` records remain under investigation rather
+than being blanket-reclassified. All original packets and receipts stay intact;
+status recomputes their accounting under the repaired driver at resume. Actual
+53 campaign tests passed; collection's existing accounting opt-out still applies.
