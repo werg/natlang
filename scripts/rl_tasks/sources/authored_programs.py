@@ -1056,7 +1056,7 @@ GUIDANCE = {
     'refine': 'Let refinements fail where a careful first answer honestly can: put the property the writer was not told '
               'or could not see (a fact only the context holds, a promise the policy does not allow) in an `Is<T, "...">` '
               'result or an `ensures:` predicate, answer its `holds` false, and author the corrected second answer '
-              '(`expected_failures`). Never break a rule the call\'s own instructions state to give a loop work.',
+              '(two `return_result` turns; not an `expected_failures` action). Never break a rule the call\'s own instructions state to give a loop work.',
     'ground': 'An open answer states only what its call\'s opening shows: pass a fact the writer should mention as an '
               'argument rather than writing in what you know about the instance.',
 }

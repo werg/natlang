@@ -13122,3 +13122,60 @@ exported yet at its admitted digest except the 13 pilot (stage) programs, whose 
 programs with the current runtime, so guidebook-route-to-trail-graph is rendered with the fixed openings when fed (no
 re-replay of already-exported rows needed). Not checked: openings of collected (model-sampled) episodes; any
 literal-union captures there are in training data already exported by collection.
+
+## 2026-11-25 12:40 Authored programs wave 1 closed; wave 2 prepared (program-inventor strand)
+
+**Wave 1** (`/home/werg/data/natlang-novel-programs/authored-w1-20261125/`, `REPORT.md`): 12 Sonnet builders, 12
+admitted. Wave means against calibration: crisp share 0.012 (11 of 12 with no TypeScript beyond `types.ts`), 19 `.nl`
+functions, NL depth 5.7 (4.5), 9.5 interior functions (7), 17.8 construct kinds (10.5), 32 combinator uses per instance
+(4.8), 148 NL calls per instance, open share 0.37 (0.30; 7 programs under 0.35), 12 NL literals built from data per
+instance, 0.26 of the call tree through literals. Never used: folder reducers (and transactions), `refine`, `escalate`,
+`semanticMerge`, `compileRule`, `pluggable`, Neuralese; few: `semanticMatch` and `fixedPoint` (4 of 12), `withContext`
+(1). All 68 `holds` judgments answered `true`. 13% of open answers state numbers or names their call's opening lacks.
+Criterion check (calibration entry): statistics moved toward every target; the bad-answer rate of the drawn sample is
+under one call in ten (32 of ~640 calls checked), so the failure condition is not met.
+
+**Drawn-sample review** (3 programs, one Opus pass each, `sub/{group-trip-expense-ledger,sequence-of-operations-trend-
+conformance,shooting-order-continuity-breakdown}/review.json`; grades 3-5, trajectory realism 3 in all three). Bad
+answers 13 / 8 / 11: 14 writers stating facts their call never received, 9 planted defects (a writer breaking its own
+format so `semanticRepair` has work) or `holds` passing them, 9 misreadings. Funnel findings folded into
+`BUILD_BRIEF.md` ("The trajectory": answers from the opening, honest loops, refinements on final values, literal
+instructions name only parameters; instances differ in structure and exercise the card's traps; unions cover the
+source vocabulary; pick one of several with one decision; synthesized literals carry derived content; branch on
+`decide` confidence) and into wave 2's `EMPHASIS.md`.
+
+**Fixed (default, tests; 231179bfd and this commit).** `authored_programs.py`: one `check` lists every missing entry in
+every stage (a `referenceDriver` `missing` hook answers an unmatched call with a placeholder of its declared type, so
+the replay reaches later stages; each NO ENTRY is a problem) with the call's whole opening and a suggested entry;
+`dump` writes the whole replay as JSON; warnings for an entry answering calls of several functions, a call matched by
+several entries that answer differently (the silent wrong answer of a fragment quoted by a later call), and open
+answers stating numbers/names their opening lacks; failed actions and the returned value in full; a clear error for a
+missing `submission.json`; `natlang check`'s `*.d.nl.ts` removed; `review.json` allowed in a submission. Statistics:
+`semanticRepair`'s own `iterateOn` no longer counts as `iterate-measure`; outputs whose long text is copied from the
+arguments are `selection`, not open; calls through a function argument are placed under the call whose eval ran them
+(the runtime records them under the function's maker); literals interpolating only root inputs are not "built from
+data"; `withContext` is its own kind; shipped-judgment answers (`holds` false = failed refinements) and ungrounded
+answers are reported with targets. `program_atlas.py take --sub WAVE/sub` writes `idea.json`. Documented (skill
+`composition.md`, BUILD_BRIEF): the shipped judgments' openings and arguments (`meets`, `relates`, `beats`, `settled`,
+`holds` with `context`), `semanticRank`'s debiased n(n-1) default, `withContext` vs `.in` for interior functions,
+the fenced rendering of untrusted strings, and the failed-refinement trajectory form (verified by replay: `holds`
+false, two `return_result` turns, no `expected_failures`).
+
+**Language and runtime issues from the friction logs** (runtime agent, e944b16a2 / ba75d6aa4; MODEL_FACING_CHANGES,
+OPEN_ITEMS): eval locals keep object identity across evals (the scope is copied as one graph; `NATLANG_EVAL_IDENTITY=0`
+opts out); a saved helper was dropped because a regex read a call argument as a declaration (now parsed; `Untrusted`/
+`Is` annotated helpers persist too); recursive types declared in eval and `interface` in `types.ts` now load; a
+reserved word (`case`) as an argument name is a load error naming the rename; recursion over a growing visited path
+keeps the smaller-argument rule (termination is structural) with an error that names the walk over unvisited nodes;
+mutual recursion between `.nl` functions is an OPEN_ITEMS entry (next language-gaps pass), cycles in data are a counted
+loop of passes or `fixedPoint`. The NL-literal capture problems were handled by the runtime strand (3545bcbc9).
+
+**Card-construct pairing.** Builders called constructs bolted on for their cards, so `idea-bank-20261125/focus-w2.json`
+suggests per untaken card up to two under-used constructs whose fit shows in the card's text (keyword cues: 63 match,
+60 fixed-point, 33 structural recursion, 16 folder reducer; 49 cards none). A suggestion, left out with a reason when
+it does not fit.
+
+**Wave 2:** `/home/werg/data/natlang-novel-programs/authored-w2-20261125/BRIEF.md` with `EMPHASIS.md`. Success: at
+least half the programs with a `holds` answered false, ungrounded open answers <= 0.1, folder reducers and structural
+recursion each in at least a quarter of programs, open share >= 0.35 in most programs. Failure: planted defects or
+ungrounded writers again dominate the drawn sample's bad answers; then the brief changes again.
