@@ -293,6 +293,26 @@ def factored_factors(resolved):
         return None
 
 
+def inference_factors(resolved, parameters):
+    """``{target: (B, A)}`` (FP32, on each weight's device) for forward-only serving of an adapter stack, or None
+    (``NATLANG_FACTORED_LORA=0`` opts out, or a 3-D expert bank target), in which case serving merges ``W + delta`` in
+    the weight's storage dtype. Merging rounded the delta onto the BF16 weight grid while training applied it factored
+    in FP32 (``factored_factors``), so served greedy decodes of a trained stack left the trained function (2026-11-25,
+    compiled sites: the fork's FP32 LoRA, which applies factored, agreed with training longer than the merged native
+    reference did)."""
+    if not factored_training_enabled():
+        return None
+    try:
+        factors = lowrank_factors(resolved)
+    except ValueError:
+        return None
+    out = {}
+    for name, (factor_b, factor_a) in factors.items():
+        device = parameters[name].device
+        out[name] = (factor_b.to(device=device, dtype=torch.float32), factor_a.to(device=device, dtype=torch.float32))
+    return out
+
+
 _FP8_E4M3_MAX = 448.0
 
 
@@ -721,7 +741,9 @@ def _effective_replacements(parameters, resolved, gradient_precision):
 
 
 class InferenceReplacementCache:
-    """Effective adapter weights for no-grad inference, reused across the tokens and calls of one adapter stack.
+    """A stack's served form for no-grad inference, reused across the tokens and calls of one adapter stack: its FP32
+    low-rank factors (``inference_factors``, the default: applied beside the base projections as training applies them)
+    or, when it cannot run factored, its effective merged weights.
 
     Adapters and bases are immutable, content-addressed artifacts, so a stack's resolved adapters and effective
     weights are the same on every decode round; rebuilding them per token cost about 26x a plain decode step
@@ -840,15 +862,27 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
             from .native_weight_carrier import ParameterCotangentScope, carrier_linear_modules
             if cache is not None:
                 if cached is None:
-                    cached_replacement, cached_storage = _effective_replacements(parameters, resolved, gradient_precision)
-                    cache.put(cache_key, (resolved, identity, binding, cached_replacement, cached_storage),
-                              sum(value.numel() * value.element_size() for value in cached_replacement.values()))
+                    served = inference_factors(resolved, parameters)
+                    if served is not None:
+                        cached_replacement, cached_storage = None, served
+                        size = sum(value.numel() * value.element_size() for pair in served.values() for value in pair)
+                    else:
+                        cached_replacement, cached_storage = _effective_replacements(parameters, resolved, gradient_precision)
+                        size = sum(value.numel() * value.element_size() for value in cached_replacement.values())
+                    cache.put(cache_key, (resolved, identity, binding, cached_replacement, cached_storage), size)
+                if cached_replacement is None:
+                    # Factored serving: the base projections stay the model's own and each low-rank delta runs in FP32
+                    # beside them, the arithmetic the training executor differentiates (`factored_factors`).
+                    with factored_lora_modules(engine.shared_model, cached_storage):
+                        return callback()
                 _ACTIVE.get()[-1][5].update(cached_storage)
                 _ACTIVE.get()[-1][4].update(id(value) for value in cached_replacement.values())
                 selected = [parameters[key.removeprefix('model.')] for key in cached_replacement]
                 with carrier_linear_modules(engine.shared_model, selected):
                     return torch.func.functional_call(_Operation(engine.shared_model, callback), cached_replacement, ())
             factors = factored_factors(resolved)
+            if factors is None and not torch.is_grad_enabled() and reference is None:
+                factors = inference_factors(resolved, parameters)
             if factors is not None:
                 # The base weights stay the model's own: ordinary autograd carries the delta's gradient to the
                 # adapter leaves and the base projections keep their cotangent routing.

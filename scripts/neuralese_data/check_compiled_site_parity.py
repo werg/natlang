@@ -1,7 +1,8 @@
 """A compiled site (``compiler/compiled_site.py``) served by the engines equals the training executor.
 
-usage: check_compiled_site_parity.py CHECKPOINT BASE RELEASE WORK --phase reference|native|sglang-collect|llama|score
+usage: check_compiled_site_parity.py CHECKPOINT BASE RELEASE WORK --phase reference|native|sglang-collect|llama|page|score
            [--tokens T] [--port P] [--kv-gb G] [--sglang-python PY] [--llama-server BIN] [--threads N]
+           [--wllama DIR] [--node BIN]
 
 RELEASE is ``run_t2``'s ``release/`` (``tune.build`` layout: ``result.json``, ``artifacts/`` with the xs basis and the
 compiled cores, ``states/`` with the compiled header state, and ``site-row.json``, the real call it was compiled for).
@@ -18,6 +19,8 @@ The call is rendered with the header replaced by the compiled state (``place_sta
   written under), the release's cores as a GGUF LoRA (``tune.export``: the tuned-fit export), the state file as
   ``--native-state``; the prompt is the engine's rendered text with the state's marker where it stands (the fork adds
   the consume markers), checked token for token against natlang's tokenization of the same segments.
+- ``page``: the in-page wllama build (``ts-host/scripts/wllama-lora-smoke.mjs --parity`` with ``--native-state``) on the
+  llama phase's base GGUF and LoRA, the same state-marked prompt text.
 - ``score``: per engine, the greedy tokens against the reference (agreement up to the first difference, and the
   reference's top-2 margin there), and whether the compiled continuation differs from the base one.
 
@@ -87,13 +90,21 @@ def reference_greedy(engine, messages, tools, stack, steps):
     return {'prompt_ids': ids, 'tokens': out, 'margins': margins}
 
 
-def generate(engine, messages, tools, stack, steps):
+def generate(engine, messages, tools, stack, steps, state=None):
+    """Greedy decode through ``engine.generate``. ``state``: the release's header state, declared
+    ``same-base-adapter-state`` as training declares it (``site_loss``) and as the runtime does for a tuned call's soft
+    states under its stack (``neuralese-server.ts`` ``nativeStateModesFor``). Undeclared, a base-written state under an
+    adapter stack is not exact for the adapted identity and every engine re-encodes its text instead (mode
+    ``best-effort-text-retokenization``), dropping the compiled residual."""
     from natlang_neuralese.serve.engine import GenerationRequest
     request = GenerationRequest(messages=messages, tools=tools, temperature=0.0, max_tokens=steps, rl_capture=True,
-                                native_recording=True, seed=7, adapters=stack)
-    capture = engine.generate(request)['x_natlang_rl_capture']
+                                native_recording=True, seed=7, adapters=stack,
+                                native_state_modes={state: 'same-base-adapter-state'} if state and stack else None)
+    response = engine.generate(request)
+    capture = response['x_natlang_rl_capture']
     return {'tokens': [sample['token_id'] for sample in capture['samples']],
-            'adapter_binding': capture.get('adapter_binding') is not None}
+            'adapter_binding': capture.get('adapter_binding') is not None,
+            'import_modes': [item.get('mode') for item in (response.get('native_state') or {}).get('imports') or []]}
 
 
 def main():
@@ -102,9 +113,11 @@ def main():
     parser.add_argument('base', type=Path)
     parser.add_argument('release', type=Path)
     parser.add_argument('work', type=Path)
-    parser.add_argument('--phase', required=True, choices=('reference', 'native', 'sglang-collect', 'llama', 'score'))
+    parser.add_argument('--phase', required=True, choices=('reference', 'native', 'sglang-collect', 'llama', 'page', 'score'))
     parser.add_argument('--llama-server', help="the fork's llama-server binary (phase llama)")
     parser.add_argument('--threads', default='8')
+    parser.add_argument('--wllama', help='a built wllama package dir (phase page; after the llama phase)')
+    parser.add_argument('--node', default='node', help='node binary (phase page)')
     parser.add_argument('--tokens', type=int, default=32)
     parser.add_argument('--port', type=int, default=8771)
     parser.add_argument('--kv-gb', type=float, default=2.0)
@@ -122,11 +135,13 @@ def main():
                   'base': reference_greedy(engine, row['messages'], tools, [], args.tokens)}
     elif args.phase == 'llama':
         result = llama(args, row, state, stack, compiled, tools)
+    elif args.phase == 'page':
+        result = page(args, row, state, stack, compiled, tools)
     elif args.phase == 'native':
         engine = load(args)
         engine.start()
         try:
-            result = {'compiled': generate(engine, compiled, tools, stack, args.tokens),
+            result = {'compiled': generate(engine, compiled, tools, stack, args.tokens, state),
                       'base': generate(engine, row['messages'], tools, [], args.tokens)}
         finally:
             engine.stop()
@@ -147,7 +162,7 @@ def main():
                                          'participant': None})
         engine.start()
         try:
-            result = {'compiled': generate(engine, compiled, tools, stack, args.tokens),
+            result = {'compiled': generate(engine, compiled, tools, stack, args.tokens, state),
                       'base': generate(engine, row['messages'], tools, [], args.tokens),
                       'metrics': {k: v for k, v in engine.progress_metrics().items() if 'sglang' in k or 'fallback' in k}}
         finally:
@@ -158,6 +173,46 @@ def main():
     out.write_text(json.dumps(result, indent=1))
     print(json.dumps({k: v for k, v in result.items() if k in ('compiled', 'base')}, default=str)[:2000])
     return 0
+
+
+def prompt_text(engine, messages, tools):
+    """The prompt as text: the engine's rendered segments with each state's marker (the fork adds the consume markers),
+    and natlang's own tokenization of the same segments, the check that the fork reads the same tokens."""
+    rendered = engine.render_request(messages, tools)
+    parts, ids = [], []
+    for segment in rendered.segments:
+        if isinstance(segment, str):
+            parts.append(segment)
+            ids.extend(engine._template_tokens(segment, rendered.escape_nonce))
+        else:
+            parts.append(f'<__natlang_native_state:{rendered.blocks[segment]}__>')
+            ids.append(('state', rendered.blocks[segment]))
+    return ''.join(parts), ids
+
+
+def page(args, row, state, stack, compiled, tools):
+    """The in-page engine: ``ts-host/scripts/wllama-lora-smoke.mjs --parity`` over the llama phase's base GGUF and LoRA
+    with the release state loaded (``--native-state``); the compiled arm is the state-marked prompt at LoRA scale 1, the
+    base arm the plain prompt at scale 0."""
+    import subprocess
+    if not (args.work / 'lora.gguf').exists():
+        raise SystemExit('run the llama phase first (it writes the base GGUF and the release LoRA)')
+    engine = load(args, device='cpu')
+    prompts = []
+    for index, messages in enumerate((compiled, row['messages'])):
+        text, ids = prompt_text(engine, messages, tools)
+        # the harness sizes its context from `ids`: a state stands for its rows plus the two consume markers
+        width = lambda item: [item] if isinstance(item, int) else [-1] * (len(engine.store.get_native_state(item[1]).block.token_ids) + 2)
+        prompts.append({'index': index, 'text': text, 'ids': [token for item in ids for token in width(item)]})
+    (args.work / 'page-prompts.json').write_text(json.dumps({'prompts': prompts}))
+    subprocess.run([args.node, str(ROOT / 'ts-host/scripts/wllama-lora-smoke.mjs'), '--wllama', args.wllama,
+                    '--base', str(args.work / 'gguf' / 'model-bf16.gguf'), '--lora', str(args.work / 'lora.gguf'),
+                    '--native-state', str(args.release / 'states' / f'{state}.nzs'), '--tokens', str(args.tokens),
+                    '--parity', str(args.work / 'page-prompts.json'), '--out', str(args.work / 'page-runs.json')],
+                   check=True, cwd=ROOT / 'ts-host')
+    runs = json.loads((args.work / 'page-runs.json').read_text())['runs']
+    pick = lambda prompt, adapted: next(run for run in runs if run['prompt'] == prompt and run['adapted'] == adapted)
+    return {'compiled': {'tokens': pick(0, True)['tokens']}, 'base': {'tokens': pick(1, False)['tokens']}}
 
 
 def llama(args, row, state, stack, compiled, tools):
@@ -185,20 +240,6 @@ def llama(args, row, state, stack, compiled, tools):
                     base_identity=identity,
                     base_model_name_or_path=str(base_dir / 'hf-config'))
         export_gguf(args.work / 'lora.peft', base_dir / 'hf-config', args.work / 'lora.gguf')
-    # the prompt as text: the engine's rendered segments with each state's marker; natlang's own tokenization of the
-    # same segments is the check that llama reads the same tokens
-    expected = {}
-    def prompt_text(messages):
-        rendered = engine.render_request(messages, tools)
-        parts, ids = [], []
-        for segment in rendered.segments:
-            if isinstance(segment, str):
-                parts.append(segment)
-                ids.extend(engine._template_tokens(segment, rendered.escape_nonce))
-            else:
-                parts.append(f'<__natlang_native_state:{rendered.blocks[segment]}__>')
-                ids.append(('state', rendered.blocks[segment]))
-        return ''.join(parts), ids
     port = args.port + 1
     log = open(args.work / 'llama.log', 'w')
     server = subprocess.Popen([args.llama_server, '-m', str(base_dir / 'model-bf16.gguf'), '--port', str(port), '-c', '16384',
@@ -220,7 +261,7 @@ def llama(args, row, state, stack, compiled, tools):
                 f'http://127.0.0.1:{port}{path}', json.dumps(body).encode(), {'content-type': 'application/json'}), timeout=3600))
         out = {}
         for arm, messages, scale in (('compiled', compiled, 1.), ('base', row['messages'], 0.)):
-            text, natlang_ids = prompt_text(messages)
+            text, natlang_ids = prompt_text(engine, messages, tools)
             pieces = text.split('<__natlang_native_state:')
             llama_ids = []
             for index, piece in enumerate(pieces):
@@ -242,7 +283,7 @@ def llama(args, row, state, stack, compiled, tools):
 def score(args):
     reference = json.loads((args.work / 'reference.json').read_text())
     report = {'reference_compiled_differs_from_base': reference['compiled']['tokens'] != reference['base']['tokens']}
-    for phase in ('native', 'sglang-collect', 'llama'):
+    for phase in ('native', 'sglang-collect', 'llama', 'page'):
         path = args.work / f'{phase}.json'
         if not path.exists():
             continue
@@ -251,7 +292,13 @@ def score(args):
         for arm in ('compiled', 'base'):
             want, have = reference[arm]['tokens'], got[arm]['tokens']
             same = next((i for i, (a, b) in enumerate(zip(have, want)) if a != b), min(len(have), len(want)))
-            report[phase][arm] = {'tokens': len(have), 'agree_prefix': same,
+            modes = got[arm].get('import_modes')
+            report[phase][arm] = {'tokens': len(have), 'agree_prefix': same, 'import_modes': modes,
+                                  # the compiled arm must splice the release's state as stored, never re-encode its text
+                                  'state_spliced': None if modes is None or arm == 'base'
+                                  else bool(modes) and all(mode == 'same-base-adapter-state' for mode in modes),
+                                  **({'prompt_tokens_match': got[arm]['prompt_tokens_match']}
+                                     if 'prompt_tokens_match' in got[arm] else {}),
                                   'agreement': same / max(1, min(len(have), len(want))),
                                   'first_diff_margin': reference[arm]['margins'][same] if same < len(want) and same < len(have) else None}
     (args.work / 'report.json').write_text(json.dumps(report, indent=1))

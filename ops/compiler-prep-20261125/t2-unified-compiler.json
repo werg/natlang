@@ -29,13 +29,13 @@
     "gate_floor_steps": 1000,
     "kv_drop": 0.1,
     "adapter_drop": 0.1,
-    "topk_kl": 64,
+    "topk_kl": null,
     "ce_weight": 0.25,
     "meta_inner_steps": 4,
     "meta_inner_lr": 0.05,
     "meta_prox_lambda": 0.01,
     "reptile_weight": 0.1,
-    "memory_mode": "positioned"
+    "memory_mode": "window_exempt"
   },
   "mandatory_defect_check": "shuffled_minus_joint > 0 on paired held validation"
 }

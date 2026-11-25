@@ -14005,3 +14005,122 @@ Failed aggregate summaries previously prevented export of every call, including 
 ### 2026-11-25 — Correct conditional eval local binding types
 
 Actual joint-program replay on frozen Core7091 completed a native draft, then rejected `const handoff = await predicate(...) ? await stage(...) : null` as boolean. The runtime inferred the first call-like prefix's return type for the entire initializer. Replace that prefix match with the complete TypeScript expression boundary, infer conditional types from their branches rather than predicate, preserve explicit annotations and existing actual-value fallback. This is a first-principles interpreter correction for all TS-host platforms, independent of model quality or original Workerd OOM. Official Node build and19 Node/Workerd/field controls passed without inference; SDKs and the exact application replay enter the next coherent source boundary while current collection continues. No serving policy/retry/model changes or original trajectory rewrites.
+
+## 2026-11-25 21:30 aei1: the DGX collection runs at what fits (collection-fit agent)
+
+**Observation.** Twice today (18:44-19:48, 20:20-21:18+) `aei1-collect-v0009` (192 slots), preempted by a round's
+data/build step (24 GB, high), waited in the ledger at its full 70 GB claim (need 85 with the 15 GB reserve; 58.6 GB
+headroom) for about an hour, DGX GPU at 0%. The prep-share requeue ran only from `wait_for_room`, before a stage
+launched; once the stage ran, nothing resized the waiting collection.
+
+**Change (default on, `scripts/neuralese_data/expert_iteration.py`).**
+- Whenever the driver's DGX collection waits in the ledger (a `collection_fit_loop` thread every 60 s, every
+  `wait_for_room` poll, and each launch), it is requeued at the largest slot count whose budget fits `ledger_room_gb`
+  (ledger headroom less the reserve and the budgets of waiting jobs of at least its priority queued ahead of it), at
+  least 32 slots. The collector starts with `--room-slots N` (no yield on its first check: its launch budget already
+  matches), and once the ledger has room for the growth to `--ledger-full-gb` it takes its full slots and restores its
+  claim (`memory_ledger resize restore`, the existing path). `stop_collections` and the requeue share `COLLECT_LOCK`, so
+  a DGX SFT's stop is never undone by a requeue. Opt-out: `--collect-fit-min-slots 0` / `NATLANG_EI_COLLECT_FIT_MIN_SLOTS=0`.
+- The full claim follows measured use: the largest ledger-learned peak of the newest three `<name>-collect-vNNNN`
+  units x 1.1, capped by `dgx_collection_budget_gb`. Opt-out: `--no-measured-collection-claim` /
+  `NATLANG_EI_MEASURED_COLLECT_CLAIM=0`. With today's peaks (v0007 61.8, v0008 56.1, v0009 65.5 GiB) this is 72 ->
+  capped at 70, so it changes nothing until the peaks fall; the room fit is the operative fix.
+- Fixed along the way: a collection launched below its full size (shrunk, or now a measured claim) got MemoryMax =
+  its launch budget whenever its family (one per version) had no learned peak yet, so restoring the claim to 70 GB left
+  a cgroup cap at the shrunk size. Every DGX collection launch (async driver and `cycle` collect/recollect) now passes
+  `--host-max-gb` = the formula cap.
+
+## 2026-11-25 21:30 Natlang compiler: the second agent's uncommitted work reviewed and integrated (integration agent)
+
+Owner (2026-11-25): the other compiler agent's uncommitted work "can be reviewed, improved, and integrated". Two agents
+had edited the compiler at once; the coordinator's review fixes (18:45 entry) restored committed files over the other
+agent's edits, whose later versions were saved (`compiled_site.py`, `run_t2.py`, the compiled-site test) and are now
+merged onto those fixes. Both sides kept: Mode P stays the header's native state plus a residual with no gate, losses,
+OPSD, the FO-MAML gradient path, the real hindsight-kb store and the declared dependency are unchanged.
+
+**Integrated (with changes):**
+- `compiled_site`: unified slots `Z = [z_site, z_kb, null]` (evidence gate `w/(null_mass+w)` on retrieved slots,
+  `log w` on the logits, a learned null slot), AdapterReader V2 cores `tanh(diag + U V^T)` (`adapter_inner_rank`,
+  0 = dense), learned per-family core scale, independent `kv_drop`/`adapter_drop`, `compose_site_cores`,
+  `LearnedBankBasis` (tune/learned/bank.py's bank basis as live FP32 leaves, `native_grad` passes an adapter's basis
+  leaves through `adapter_leaves_override`), `split_compositional_header`.
+- `run_t2`: Live-KB slots per row (`LiveExperienceWriter`), FO-MAML episodes, compositional `C_scope + C_body` steps,
+  call-level (Engine A) rows in `prepare`, a learned basis and writer in the resumable state, `shuffled_kb` ablation arm.
+- `per_call_hkb.PerCallNeuralHKBCompiler`, `latent_ttt.refine_compiled_site` (Tier 1.5 on Mode P),
+  `train_compiler`/T2 recipe default to Mode W (hindsight-kb refuses `positioned` since 29b952a) and full-vocabulary KL.
+- ts-host: `compiledDecisions` (one calibrated scoring pass settles a confident `readout: decision`, else the reasoned
+  readout), `branchSearch` (prefix-shared branch@N, crisp-first ranking), `contract-hoist.ts` (structural return checks
+  via `coerce`). Off unless configured.
+- hindsight-kb: fused single-pass Mode-W attention (exact LSE merge; Triton on CUDA inference) and the fused `B C A`
+  linear, default on with `HKB_FUSED_MODE_W=0` opt-out and a CUDA parity test against the reference.
+
+**Defects found and fixed in the integrated code:**
+- Factorized cores sat on a saddle: with `U = V = 0` neither gets gradient, so only the diagonal ever trained. U now
+  starts nonzero, V at zero (core still 0 at step 0); test checks V's gradient at step 0.
+- `LearnedBankBasis.orthonormalize_` every 50 steps replaced `B` by `Q` (`B = QR`) without re-expressing the cores the
+  head emits (`bank.transform_core`), changing every compiled site's update at once; removed (`--ortho-every` gone).
+- Live-KB positives excluded only the row's own task id: a source-group sibling's experience text (signature + verified
+  reply) could carry the answer, in training and in the dev ablation. Peers now exclude the row, its task and every
+  source-group sibling.
+- Null-memory restraint zeroed the weights, which only masks the slots (identical to "no memory") and teaches nothing;
+  restraint rows now see distractors only at their real weights (plan: 20%, the new default).
+- `LiveExperienceWriter`'s 000000002 warm start was a silent no-op (it read `writer_warmstart.pt`, the extractor writes
+  `writer_H.pt`; keys were matched by name across a pplx-embed 0.6B and a 2-layer pooler) while the receipt reported a
+  warm start; removed with the dual-LR groups. Its byte-as-token-id fallback for a missing tokenizer is gone.
+- Hard negatives from a `ScopedExperienceKB` mixed records of another writer's value space into this writer's slots;
+  removed (cross-family peers encoded by the same writer remain). `per_call_hkb` documents the one-space requirement.
+- `prepare` fabricated case rows (`{id, source_groups}`) for call-level tasks missing from the collections and ran the
+  held check over them; now fail closed (`call_level_unknown_case`). The funnel lacked `imports_native_state` (KeyError
+  on the first state-importing call); call-level rows are also checked for native-state imports.
+- The compositional step summed the signature's core with the full header's core (no algebra learned); it now compiles
+  scope and body separately (their text states written in the real call) and trains `C_scope + C_body` alone.
+- FO-MAML crashed whenever the Reptile weight was nonzero (the default 0.1): the Reptile term backpropagated through
+  `z0`'s graph after the query backward had freed it (the episode was never exercised by a test). The pull now
+  re-encodes the header. Support was one call; it is now every call but the last, query the last.
+- Resume was not exact: the run's `random.Random` (peers, null rows, episodes) was not saved and dropout drew from the
+  CUDA generator; both are now restored (CPU generator draws).
+- `CompiledSiteConfig.from_dict` silently dropped unknown keys; strict again. `compose_site_cores` refuses mismatched
+  targets. `PerCallCompileRequest` had placeholder `compiler_sha='compiler-v2'`/`policy_sha='base'` defaults and a cache
+  key missing `exclude_tasks` and the base; both identities are now required and the key covers them. Swallowed
+  exceptions in the KB generation lookup removed.
+- ts-host: the decision fast path swallowed scoring errors; branch 0 of branch search got `seed 0` when the request had
+  no seed (it is now the exact pass@1 request).
+
+**Dropped, and why:**
+- The positioned `soft:kb` span: a fixed "[KB] [KB] ..." text state spliced after the header, so step 0 was not the
+  uncompiled call (extra tokens) and the span did not start from input-specific text (AGENTS.md "Learned operators
+  start from text"); no engine or ts-host release binding places a second soft state, so a release carrying it would
+  serve something other than what was trained. Retrieved experience enters through `Z` into the header state residual
+  and the cores (plan §4.1/§4.3). A KB span initialized from the Stage-A record text, with a serving placement, is the
+  route if Stage C needs more bandwidth.
+- ts-host `crispFastPaths`: a second crisp-case mechanism beside `runCrispCase` (guards that decline, type check and
+  refinements on the result, effects, capture, audits), without the type check; §6.3 promotion should emit compiled
+  cases. The kernel's JIT binding: it attached the compiled adapter through a hand-built weights frame (`identity: {}`)
+  and dropped the compiled native state, serving half of what was trained, and swallowed errors; Tier-1 weights should
+  bind as a tuned release (state + adapter) through `tuned-serving`. `partialBindings` (only the JIT used it) and the
+  unused `hoistContracts` option went with it.
+- `step_verifier.harvest_branch_wins`: no caller, and it read `trace_events`/`branch_win` fields no rollout carries.
+- The other agent's 18:06 versions (`collapse`, `unified_head`, `call_level_engine`, `opsd_privileged`, `hkb_bridge`,
+  hindsight-kb `attention`/`native_lfm`): superseded by the committed fixes (Mode P collapse algebra removed, tail-bucket
+  JSD, CE on verified continuations, sibling exclusion, real SQLiteKB, real rollout formats); nothing unique kept.
+
+Tests: `test_compiler_compiled_site` (learned basis release serves the trained loss, V gets gradient at step 0, strict
+config, Live-KB sibling exclusion and restraint, FO-MAML and compositional gradients reach the encoder),
+`test_natlang_compiler`, `test_learned_optimizer_bank` (21 passed); ts-host build + compiler-jit/decision/callable
+tests (62 passed); hindsight-kb kernel/attention/LFM3 tests incl. the new CUDA Triton parity tests (42 passed).
+
+**Open:** T2 on hindsight-kb's `ExperienceWriter` with the 000000002 `H`/`Q` (W0.2 extraction on g4a) instead of the
+stand-in writer; Tier-1 runtime binding as a tuned release; call-level rows carry no prompt token count (the teach
+step's size cap bounds them).
+
+## 2026-11-25 22:40 Compiled releases: why the first real-weights parity run diverged (integration agent)
+
+Run (cde55352685b, greedy 32): base 32/32 everywhere; compiled release native 5/32 and SGLang 5/32 (split at token 6,
+margin 0.68), fork llama 12/32 (token 13). Causes, reproduced on the tiny LFM fixture and fixed in 836fc32d5:
+(1) the parity script's native/SGLang requests did not declare the state `same-base-adapter-state`, so under the
+adapter the engines re-encoded the header text and dropped the compiled residual (training and the runtime declare it);
+(2) no-grad native serving merged adapter stacks into the BF16 weights while training, SGLang and the fork apply them
+factored in FP32, and the parity reference used the merged form; serving is now factored (`inference_factors`, opt-out
+`NATLANG_FACTORED_LORA=0`). Whether (2) accounts for llama's 12/32 is unmeasured: the real-weights rerun of all phases
+(including the new page phase) is next. Undeclared same-base states under an adapter still re-encode silently on
+native and SGLang (documented best-effort); every production client found declares the mode.

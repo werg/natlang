@@ -112,6 +112,11 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
                     leaves[ident]=(adapter_leaves_override[ident] if adapter_leaves_override is not None
                         and ident in adapter_leaves_override else
                         {name:value.detach().clone().requires_grad_(True) for name,value in coefficients.items()})
+                if adapter_leaves_override is not None:
+                    record = engine.store.get_native_tensor_artifact(ident)
+                    basis_id = record.artifact.source_artifact_id if record is not None else None
+                    if basis_id and basis_id in adapter_leaves_override and basis_id not in leaves:
+                        leaves[basis_id] = adapter_leaves_override[basis_id]
         adapter_target_ids=None
         target_specs=(coefficient_targets if coefficient_targets is not None else
                       ([body.get('target')] if isinstance(body.get('target'),dict)

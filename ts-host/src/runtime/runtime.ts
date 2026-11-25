@@ -207,6 +207,20 @@ export type NatlangRuntimeOptions = {
    * maps a predicate to a checker that decides it (`undefined` defers to the judge).
    */
   refinements?: RefinementSettings & { cache?: VerdictCache; crisp?: Record<string, (value: unknown) => boolean | undefined> };
+  /**
+   * Natlang compiler runtime hooks (`plans/NATLANG_COMPILER.md` §6), off unless set:
+   * - `compiledDecisions`: per definition (id or name), a calibrated single-pass `readout: decision`: the options are
+   *   scored once at `temperature`; a choice at or above `fastThreshold` (and no other option at its risk floor)
+   *   settles without reasoning samples, anything else takes the ordinary reasoned readout.
+   * - `branchSearch`: prefix-shared `branch@N` per tool-loop turn, ranked crisp checks first, then the step verifier.
+   *   The kept turn is a selection over samples, not one sample of the policy: not for on-policy collection.
+   * Promoted crisp fast paths are compiled cases (`runCrispCase`), and Tier-1 weights bind as a tuned release; neither
+   * has a hook here.
+   */
+  compiler?: {
+    compiledDecisions?: ReadonlyMap<string, { temperature: number; fastThreshold: number; riskThresholds?: Readonly<Record<string, number>> }>;
+    branchSearch?: import('../native/branch-search.js').BranchSearchOptions;
+  };
 };
 
 export type TaskOptions = {

@@ -1103,7 +1103,7 @@ def test_guided_open_reasoning_streams_on_sglang_like_the_native_engine(tmp_path
     front.native_fallback_reasons = {}
     stop = sorted(front.stop_ids)[0]
     for engine in (native, front):
-        engine._prompt_plan = lambda messages, tools: [('tokens', [9] + ([6] if opened else []))]
+        engine._prompt_plan = lambda messages, tools, template_kwargs=None: [('tokens', [9] + ([6] if opened else []))]
     deltas = {'native': [], 'front': []}
     make = lambda name: GenerationRequest(messages=[{'role': 'user', 'content': 't9'}], temperature=1.0, max_tokens=16,
                                           rl_capture=True, rl_top_k=2, native_recording=True, request_id='g', seed=1,
@@ -1148,7 +1148,7 @@ def test_unguided_stream_announces_open_reasoning_on_sglang_like_the_native_engi
     front.native_fallback_reasons = {}
     stop = sorted(front.stop_ids)[0]
     for engine in (native, front):
-        engine._prompt_plan = lambda messages, tools: [('tokens', [9] + ([6] if opened else []))]
+        engine._prompt_plan = lambda messages, tools, template_kwargs=None: [('tokens', [9] + ([6] if opened else []))]
     tokens = [10, 11, 7, 12, stop]
     records = [record(-0.5, [t, t + 1], [-0.5, -1.5]) for t in tokens]
     front._sglang_stream = lambda body: iter([{'output_ids': tokens[i:i + 2], 'meta_info': {'natlang_top_k': records[i:i + 2]}}
@@ -1170,7 +1170,7 @@ def test_unguided_stream_announces_open_reasoning_on_sglang_like_the_native_engi
             request.on_delta(item)
         future.set_result(actual)
         return future
-    chunks = _stream_chunks(SimpleNamespace(model_name='m', tool_call_format='xml', submit=submit),
+    chunks = _stream_chunks(SimpleNamespace(model_name='m', tool_call_format='xml', submit=submit, template_kwargs=lambda value: value),
                             {'messages': [{'role': 'user', 'content': 't9'}], 'temperature': 1.0})
     reasoning, content = _split(chunks)
     if opened:
@@ -1201,7 +1201,7 @@ def test_sglang_requests_run_on_threads_that_end_with_them():
     import threading
     front = object.__new__(SglangEngine)
     front._ids = iter(range(100))
-    front._prompt_plan = lambda messages, tools: [('tokens', [1, 2])]
+    front._prompt_plan = lambda messages, tools, template_kwargs=None: [('tokens', [1, 2])]
     front._routes_native = lambda request, plan: False
     front._append_only = lambda request, plan: plan
     seen = []
