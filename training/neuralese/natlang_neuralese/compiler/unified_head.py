@@ -1,8 +1,9 @@
-"""UnifiedCompilerHead: single dual head (MemoryKVBank + AdapterReader V2) over unified Z = [z_site, z_kb].
+"""UnifiedCompilerHead: hindsight-kb's dual head (MemoryKVBank + AdapterReader V2) over unified Z = [z_site, z_kb].
 
-Bridges natlang's online LFM3 HeaderEncoder and ~/hindsight-kb's sparse Experience KB through
-one 256-dim semantic slot interface. Supports:
-- Mode P (positioned pre-RoPE .nzs-exact memory) and Mode W (window-exempt RoPE-free memory)
+Mode W only: window-exempt RoPE-free memory and per-block B C A controls on hindsight-kb's decoder, the dynamic
+Stage-C HKB research path (no engine serves it yet: docs/ENGINE_PARITY.md). Served compiled sites (Mode P) are
+``compiled_site``: the header's native state and xs cores, which every engine splices and applies as stored.
+Supports:
 - Linear weight-space composition of C cores inside the shared (B, A) basis
 - Independent reader dropout (kv_drop, adapter_drop) and straight-through memory_gate warmup floor
 """
