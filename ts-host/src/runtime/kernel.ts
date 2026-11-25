@@ -739,6 +739,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], serviceChain: [...(frame.serviceChain ?? frame.chain), definition.id], parentCallId: callId, adHocDepth, adHocQuestions, programOwner: owner,
     ...(nlActive ? { nlActive } : {}),
     typeAliases: definition.types,
+    ...(frame.services ? { services: frame.services } : {}),
     signal: frame.signal, abort: frame.abort,
     ...(invocationSkillFiles ? { skillFiles: invocationSkillFiles } : {}),
     ...(weights ? { weights } : {}), invocationTexts: {},
@@ -779,7 +780,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   if (attempt?.strict && !handoff) { capture?.discard(); task.discardGraphCall(callId, frame.parentCallId); throw new Deopt(attempt.declined ?? 'no crisp case of this tier served the call'); }
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
-  const services = recordingServices(checkedServices(task, frame, task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => {
+  const services = recordingServices(checkedServices(task, frame, frame.services ?? task.services, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => {
     const captured = { ...event, exact, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) };
     if(event.phase === 'requested') runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event });
     else graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },[{ node: invocationNodeId(callId), port: 'caller' }]);
@@ -1064,10 +1065,10 @@ function caseArguments(capture: CallCapture, folder: InvokeOptions['folder']): R
 async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFrame: Frame; callId: string; definition: CallableDefinition;
   options: InvokeOptions; inputs: unknown[]; folder: InvokeOptions['folder']; extraTransactions: FolderTransaction[];
   capture: CallCapture; store: CallStoreLike; item: LoadedCase; siblingOrdinal:number }): Promise<{ served: true; value: unknown } | { served: false; note?: string }> {
-  const { task, childFrame, callId, definition, options, inputs, folder, capture, store, item } = input;
+  const { task, frame, childFrame, callId, definition, options, inputs, folder, capture, store, item } = input;
   const args = caseArguments(capture, folder);
   const original = { ...args };
-  const services = recordingServices(task.services, event => capture.effect({ ...event, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) }, 'crisp'));
+  const services = recordingServices(frame.services ?? task.services, event => capture.effect({ ...event, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) }, 'crisp'));
   let error: unknown;
   let nativeTrace:ReturnType<typeof openCrispTrace>|undefined;
   try {
