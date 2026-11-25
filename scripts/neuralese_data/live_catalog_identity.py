@@ -111,7 +111,7 @@ def catalog_rows(path, *, lines=None):
     return rows
 
 
-def identity(row):
+def identity(row, *, adapter_context=None):
     """Preserve every non-allowlisted field; redundant goal encodings are checked before projection."""
     result = deepcopy(row)
     for key in EXECUTION_FIELDS:
@@ -121,7 +121,18 @@ def identity(row):
         result.pop('goal', None)  # actual value has been verified against the retained digest
         entry = result.get('entry')
         if entry is not None:
-            defaults = adapter_defaults(entry) if os.environ.get('NATLANG_CATALOG_ADAPTER_DEFAULTS', '1') != '0' else {}
+            defaults = adapter_defaults(entry)
+            if not defaults and adapter_context:
+                # Older catalogs may already encode the same empty argument,
+                # before the producer learned to distinguish adapter provenance.
+                nulls = {name: value for name, value in adapter_context['values'].items() if value is None}
+                present = any(name in entry.get('arguments', {}) or name in entry.get('argumentJson', {}) or
+                              name in entry.get('parameterNames', []) for name in nulls)
+                if present:
+                    candidate = {**entry, 'adapterDefaults': {**adapter_context, 'values': nulls}}
+                    defaults = adapter_defaults(candidate)
+            if os.environ.get('NATLANG_CATALOG_ADAPTER_DEFAULTS', '1') == '0':
+                defaults = {}
             # Null supplementary adapter state carries no authored task input.
             # Non-null research/evidence stays in all original bindings.
             entry.pop('adapterDefaults', None)
@@ -159,8 +170,10 @@ def compatible_catalogs(snapshot, current):
     snapshot_bytes, current_bytes = Path(snapshot).read_bytes(), Path(current).read_bytes()
     before_rows = catalog_rows(snapshot, lines=snapshot_bytes.decode('utf-8').splitlines())
     after_rows = catalog_rows(current, lines=current_bytes.decode('utf-8').splitlines())
-    before = {row['taskId']: identity(row) for row in before_rows}
-    after = {row['taskId']: identity(row) for row in after_rows}
+    declarations = {row['taskId']: row.get('entry', {}).get('adapterDefaults')
+                    for row in [*before_rows, *after_rows] if row.get('entry', {}).get('adapterDefaults')}
+    before = {row['taskId']: identity(row, adapter_context=declarations.get(row['taskId'])) for row in before_rows}
+    after = {row['taskId']: identity(row, adapter_context=declarations.get(row['taskId'])) for row in after_rows}
     if canonical_json_bytes(before) != canonical_json_bytes(after):
         changed = sorted(task for task in before.keys() | after.keys()
                          if task not in before or task not in after or

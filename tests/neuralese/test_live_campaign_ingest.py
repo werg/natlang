@@ -367,3 +367,44 @@ def test_adapter_default_projection_has_strict_input_identity_optout(tmp_path, m
     monkeypatch.setenv('NATLANG_CATALOG_ADAPTER_DEFAULTS', '0')
     with pytest.raises(SystemExit, match='changed'):
         ing.holdout_registry(root, work)
+
+
+def test_adapter_declaration_can_describe_existing_identical_legacy_empty_context(tmp_path):
+    from live_catalog_identity import compatible_catalogs
+    rows, root, work, source, snapshot = identity_catalog(tmp_path)
+    for row in rows:
+        add_adapter_default(row)
+        del row['entry']['adapterDefaults']
+    original = ''.join(json.dumps(row) + '\n' for row in rows)
+    snapshot.write_text(original)
+    for row in rows:
+        row['entry']['adapterDefaults'] = {'values': {'research': None},
+            'source': {'path': 'skills/open-user-goal/entries.json', 'sha256': 'a' * 64}}
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    assert compatible_catalogs(snapshot, source)['tasks'] == 3
+    assert snapshot.read_text() == original
+
+
+@pytest.mark.parametrize('mutation', ['nonnull-legacy', 'legacy-encoded-disagrees', 'legacy-positional-disagrees'])
+def test_adapter_declaration_never_erases_different_legacy_context(tmp_path, mutation):
+    from live_catalog_identity import compatible_catalogs
+    rows, root, work, source, snapshot = identity_catalog(tmp_path)
+    for row in rows:
+        add_adapter_default(row)
+        del row['entry']['adapterDefaults']
+    if mutation == 'nonnull-legacy':
+        entry = rows[0]['entry']
+        entry['arguments']['research'] = 'actual original evidence'
+        entry['argumentJson']['research'] = '"actual original evidence"'
+        entry['inputValues'][-1] = 'actual original evidence'
+    elif mutation == 'legacy-encoded-disagrees': rows[0]['entry']['argumentJson']['research'] = '"other"'
+    else: rows[0]['entry']['inputValues'][-1] = 'other'
+    snapshot.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    for row in rows:
+        row['entry']['arguments']['research'] = None
+        row['entry']['argumentJson']['research'] = 'null'
+        row['entry']['inputValues'][-1] = None
+        row['entry']['adapterDefaults'] = {'values': {'research': None},
+            'source': {'path': 'skills/open-user-goal/entries.json', 'sha256': 'a' * 64}}
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    with pytest.raises(ValueError): compatible_catalogs(snapshot, source)

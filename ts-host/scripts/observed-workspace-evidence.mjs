@@ -239,6 +239,49 @@ export function verifyEntry(interaction, record, partial) {
   }
 }
 
+export async function verifyNativeInvocationCertificate(invocation,records,scope,root,details){
+  if(!Object.hasOwn(invocation,'certificate'))return;
+  const certificate=JSON.parse(await readBound(invocation.certificate,root));
+  const raw=await readBound(certificate.originalPacket,root);
+  const packet=JSON.parse(raw[0]===0x1f&&raw[1]===0x8b?gunzipSync(raw):raw);
+  const original=JSON.parse(await readBound(scope.original_outcome,root));
+  const exercise=packet.execution?.diagnostics?.natlangTeacher??{};
+  const proof=packet.execution?.diagnostics?.openGoalVerification??{};
+  const captured=new Map((exercise.calls??[]).map(item=>[item.callId,item.record]));
+  if(details&&!isDeepStrictEqual(new Map((exercise.calls??[]).map(item=>[item.callId,item])),details))throw Error('native invocation packet differs from original events or call metadata');
+  const record=records.get(invocation.call_id);
+  if(certificate.schema!=='natlang.independent-native-return/1'||!isDeepStrictEqual(original,packet.result)||
+     original.passed!==false||!isDeepStrictEqual(captured,records)||record?.outcome!=='done'||
+     !isDeepStrictEqual(certificate.definition,record.definition)||!isDeepStrictEqual(certificate.inputs,record.inputs)||
+     !isDeepStrictEqual(certificate.output,record.output))throw Error('native invocation certificate differs from original failed capture');
+  if(!scope.assessor)throw Error('automatic native scope lacks its source-bound assessor');
+  await readBound(scope.assessor,root);
+  const source=(await readBound(certificate.checker,root)).toString('utf8');
+  const match=/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/u.exec(source);
+  const matches=(ref,text)=>typeof text==='string'&&ref?.complete===true&&ref.bytes===Buffer.byteLength(text)&&ref.hash===digest(text);
+  if(!match||JSON.parse(certificate.instructionsJson)!==match[2]||!matches(record.definition.instructions,certificate.instructionsJson))
+    throw Error('native invocation contract differs from actual authored instructions');
+  const project=(value,parts)=>{if(!Array.isArray(parts)||!parts.length)throw Error('native invocation needs explicit evidence paths');for(const part of parts){if(value===null||typeof value!=='object'||!Object.hasOwn(value,part))throw Error('native invocation evidence path absent');value=value[part];}return value;};
+  const contracts={
+    'gad-question-judgment/1':{source:'reviewDurableQuestion/reviewQuestion/interpretQuestion.nl',returns:'DurableQuestionJudgment',binding:{returnPath:['actualResult','question'],inputPaths:{goal:['goal'],history:['diagnostics','history']},checkNames:['exactIndividualPublications','exactQuestionDisposition']}},
+    'gad-participant-judgment/1':{source:'reviewDurableQuestion/reviewParticipant/evaluateRoster.nl',returns:'DurableParticipantJudgment',binding:{returnPath:['actualResult','participant'],inputPaths:{goal:['goal'],question:['actualResult','question'],roster:['diagnostics','roster']},checkNames:['exactIndividualPublications','exactRetainedRoster','exactParticipantDisposition']}}
+  };
+  const contract=contracts[certificate.contract],binding=certificate.nativeBinding??{},checks=binding.checkNames;
+  if(!contract||record.definition.id!=='nl:'+contract.source||record.definition.source!==contract.source||record.definition.returns!==contract.returns||!isDeepStrictEqual(binding,contract.binding))
+    throw Error('native invocation has an unregistered or mismatched complete-result contract');
+  const observed=proof.observedChecks??proof.checks??{};
+  if(!Array.isArray(checks)||!checks.length||checks.some(name=>observed[name]!==true))throw Error('native invocation cites absent or failed independent checks');
+  const paths=binding.inputPaths??{},inputs=certificate.expectedInputs??{},texts=certificate.expectedInputJson??{};
+  const keys=value=>Object.keys(value).sort();
+  if(!isDeepStrictEqual(keys(paths),keys(record.inputs))||!isDeepStrictEqual(keys(inputs),keys(paths))||!isDeepStrictEqual(keys(texts),keys(paths))||
+     Object.keys(inputs).some(name=>!isDeepStrictEqual(project(proof,paths[name]),inputs[name])||!isDeepStrictEqual(JSON.parse(texts[name]),inputs[name])||!matches(record.inputs[name],texts[name]))||
+     !isDeepStrictEqual(project(proof,binding.returnPath),certificate.expectedReturn)||!isDeepStrictEqual(JSON.parse(certificate.expectedReturnJson),certificate.expectedReturn)||!matches(record.output,certificate.expectedReturnJson))
+    throw Error('native invocation value differs from its independent input/return evidence');
+  const descendants=new Set([record.call_id]);let changed=true;
+  while(changed){changed=false;for(const [id,call]of records)if(descendants.has(call.parent_call_id)&&!descendants.has(id)){descendants.add(id);changed=true;}}
+  if([...descendants].some(id=>records.get(id).effects?.length))throw Error('native pure-return certificate contains authority-bearing effects');
+}
+
 async function trainingScope(receipt, row, root) {
   const scope = receipt.training_scope;
   if (!scope) {
@@ -246,12 +289,15 @@ async function trainingScope(receipt, row, root) {
       throw new Error('partial observed decisions require independently attested training scope');
     return null;
   }
-  if (receipt.status !== 'partial' || scope.schema !== 'natlang.training-scope/1' ||
+  if (receipt.status !== 'partial' || !['natlang.training-scope/1','natlang.training-scope/2'].includes(scope.schema) ||
       !isDeepStrictEqual(scope, row.outcome.training_scope) ||
       JSON.parse(await readBound(scope.original_outcome, root)).passed !== false ||
       !Array.isArray(scope.invocations) || !scope.invocations.length)
     throw new Error('invalid independent partial training scope');
   if(scope.assessor)await readBound(scope.assessor,root);
+  const certified=scope.schema==='natlang.training-scope/2';
+  if(certified&&!scope.assessor||scope.invocations.some(invocation=>Object.hasOwn(invocation,'certificate')!==certified))
+    throw Error('native certificates require training-scope/2 and its source-bound assessor');
   const selected = new Map();
   for (const invocation of scope.invocations) {
     if (typeof invocation.call_id !== 'string' || selected.has(invocation.call_id) ||
@@ -264,7 +310,9 @@ async function trainingScope(receipt, row, root) {
       throw new Error('partial invocation lacks independently verified decision evidence');
     for (const evidence of invocation.evidence) {
       if (!['workspace', 'cdp'].includes(evidence.kind)) throw new Error('partial decisions require native workspace evidence');
-      await readBound(evidence, root);
+      const bytes=await readBound(evidence, root);
+      if(!certified){let witness;try{witness=JSON.parse(bytes);}catch{}
+        if(witness?.schema==='natlang.independent-native-return/1')throw Error('native return evidence cannot downgrade to training-scope/1');}
     }
     selected.set(invocation.call_id, invocation.ordinals == null ? null : new Set(invocation.ordinals));
   }
@@ -445,6 +493,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
   const decisions = Map.groupBy(row.trajectory, item => item.invocation_id);
   const returnExclusions = [];
   const capturedRecords = new Map();
+  const capturedDetails = new Map();
   const captureScopes = new Map(receipt.calls.map(scope => [scope.call_id, scope]));
   const callFiles = new Map(manifest.calls.map(artifact => [artifact.path, artifact]));
   if (captureScopes.size !== receipt.calls.length || callFiles.size !== manifest.calls.length)
@@ -463,6 +512,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
   for (const call of row.outcome.invocation_ledger) {
     const original = JSON.parse(await readBound(call.artifact, root));
     const record = original.record;
+    capturedDetails.set(record.call_id,original);
     capturedRecords.set(record.call_id, record);
     records.push({
       call_id: record.call_id, parent_call_id: record.parent_call_id, task_id: record.task_id,
@@ -537,6 +587,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
   if ((selected && [...selected.keys()].some(id => !capturedRecords.has(id))) ||
       row.outcome.excluded_return_decisions !== undefined && !equal(row.outcome.excluded_return_decisions, returnExclusions))
     throw new Error('observed decision admission differs from independent training scope or return evidence');
+  for(const invocation of receipt.training_scope?.invocations??[])await verifyNativeInvocationCertificate(invocation,capturedRecords,receipt.training_scope,root,capturedDetails);
   const applicationEntry=row.task.interaction?.entry;
   if(applicationEntry?.resultType==='void' &&
       (capturedRecords.get(receipt.root_call_ids[0])?.outcome === 'done' || applicationReturns.length > 0) &&
