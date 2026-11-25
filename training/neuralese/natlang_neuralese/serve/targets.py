@@ -101,6 +101,20 @@ def non_student_context(tokenizer, target_message, target_ids, *, think="context
     return end
 
 
+def own_empty_think_context(tokenizer, target_message, target_ids):
+    """Leading tokens of the student's own rendered reply that are context, not loss: the template's empty think block
+    (through ``</think>``) of an own reply without reasoning, else 0. Such a reply is a decision readout the actor
+    scored (its option is the continuation after the prefix all options share; the recorded ``sample_ids`` are empty)
+    or a call rendered with ``enable_thinking: false``, so ``</think>`` right after the generation prompt's ``<think>``
+    was never the student's choice (the base gives it ~20 nats). Trained, it teaches the policy to close every think
+    block at once: 2026-11-25 the program-tuning fits (``tune.rows``) trained it in 96-153 own readout rows of
+    tally and tree, and the merged arms reasoned in 0-7% of their turns (base 100%). ``sft_sources.think_context``
+    applies the same rule to expert-iteration builds (sft-v4-run1 trained it in 18 own rows)."""
+    if (target_message.get("reasoning_content") or "").strip():
+        return 0
+    return think_end(tokenizer, target_ids)
+
+
 def _first(tokenizer, ids, *tokens):
     """The first position in ``ids`` of any of these vocabulary tokens (templates name them differently), or None."""
     found = [ids.index(i) for i in (tokenizer.convert_tokens_to_ids(t) for t in tokens)

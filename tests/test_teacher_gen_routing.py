@@ -160,3 +160,32 @@ def test_the_standing_queue_has_no_end_but_its_tasks_and_drains_on_request(tmp_p
     (tmp_path / 'work' / 'DRAIN').touch()
     g.slot(a)                                   # returns at once: takes nothing
     assert g.running == 0
+
+
+GEMINI_FREE_429 = ('You exceeded your current quota, please check your plan and billing details. \\n* Quota exceeded for '
+                   'metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: {n}, model: '
+                   'gemini-3.5-flash-lite, description: Generate content requests per minute limit exceeded on Free Tier.'
+                   '\\nPlease retry in 41.2s.')
+
+
+def test_a_free_tier_quota_window_is_a_temporary_limit_not_a_refused_account():
+    # AI Studio's per-model free-tier 429 shares OpenAI's spent-account text; with a nonzero limit it passes
+    window = GEMINI_FREE_429.format(n=15)
+    assert teacher_gen.provider_refusal(window) is None and teacher_gen.provider_limit(window)
+    # no free quota at all for the model (limit 0) and OpenAI's spent account stay refusals
+    assert teacher_gen.provider_refusal(GEMINI_FREE_429.format(n=0)) == 'exceeded your current quota'
+    assert not teacher_gen.provider_limit(GEMINI_FREE_429.format(n=0))
+    openai = 'You exceeded your current quota, please check your plan and billing details. insufficient_quota'
+    assert teacher_gen.provider_refusal(openai) and not teacher_gen.provider_limit(openai)
+    assert teacher_gen.provider_limit('Error: You have hit your ChatGPT usage limit.')
+
+
+def test_a_teacher_key_comes_from_the_provider_key_files_when_not_sourced(tmp_path, monkeypatch):
+    (tmp_path / 'groq.env').write_text('export GROQ_API_KEY="k-groq"\n')
+    (tmp_path / 'other.env').write_text('OTHER=1\n')
+    monkeypatch.setattr(teacher_gen, 'CONFIG_ENV_DIR', tmp_path)
+    assert teacher_gen.config_env_key('GROQ_API_KEY', tmp_path) == 'k-groq'
+    assert teacher_gen.config_env_key('MISSING', tmp_path) is None
+    t = teacher_gen.make_teacher({'model_id': 'm', 'endpoint': 'https://api.groq.com/openai/v1', 'api_key_env': 'GROQ_API_KEY'})
+    assert teacher_gen.episode_env(t, {})['GROQ_API_KEY'] == 'k-groq'
+    assert teacher_gen.episode_env(t, {'GROQ_API_KEY': 'set'})['GROQ_API_KEY'] == 'set'
