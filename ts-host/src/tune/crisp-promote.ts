@@ -179,3 +179,28 @@ export function wrapCrispFastPath<A extends unknown[], R>(
 
   return { call, metrics };
 }
+
+export interface PromotedCaseSource {
+  /** Guard expression or function `(args) => boolean` matching the fast-path domain. */
+  whenSource: string;
+  /** Body expression or function `(args) => value` producing the crisp result. */
+  runSource: string;
+  /** Optional service import lines from `natlang:services`. */
+  imports?: readonly string[];
+}
+
+/**
+ * Emit a standard `cases.ts` compilation module from promoted crisp fast-path sources so they execute
+ * through the kernel's `runCrispCase` pipeline (preserving type checks, refinements, effects, capture, and audits).
+ */
+export function buildCompiledCasesModule(
+  promotedCases: readonly PromotedCaseSource[],
+  report?: CrispVerificationReport,
+): string {
+  if (report && !report.promoted) {
+    throw new Error(`cannot emit compiled cases.ts for unverified crisp candidate: ${report.reason}`);
+  }
+  const importBlock = [...new Set(promotedCases.flatMap(c => c.imports ?? []))].join('\n');
+  const entries = promotedCases.map(c => `  {\n    when: ${c.whenSource.trim()},\n    run: ${c.runSource.trim()},\n  }`);
+  return `${importBlock ? importBlock + '\n\n' : ''}export const cases = [\n${entries.join(',\n')}\n];\n`;
+}

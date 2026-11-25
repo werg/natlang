@@ -287,3 +287,81 @@ def test_prepare_keeps_real_header_calls_and_counts_episode_state_imports(tmp_pa
     assert funnel['imports_native_state'] == 3 and funnel['held_excluded_rollouts'] == 1 and funnel['failed_rollouts'] == 1
     assert len(rows) == 3 and not any(run_t2.imports_native_state(row['messages']) for row in rows)
     assert {row['split'] for row in rows} == {'train', 'dev-seen'}
+
+
+def test_pplx_warmstart_writer_dual_lr_groups_and_strict_manifest(tmp_path):
+    from types import SimpleNamespace
+    from natlang_neuralese.compiler.live_kb_writer import LiveExperienceWriter, PplxWarmstartWriter
+
+    # Fallback embed writer still exposes fresh_parameters() / warm_parameters() cleanly
+    embed_w = LiveExperienceWriter(embed_dim=16, value_dim=8, key_dim=8, num_heads=2, hidden_dim=16)
+    assert len(embed_w.warm_parameters()) == 0
+    assert len(embed_w.fresh_parameters()) == sum(1 for _ in embed_w.parameters())
+
+    # PplxWarmstartWriter.from_warmstart fails fast on missing writer_H.pt / query_Q.pt (no silent random fallback)
+    with pytest.raises(FileNotFoundError, match='writer_H.pt'):
+        PplxWarmstartWriter.from_warmstart(
+            revision='0000000',
+            warmstart_dir=str(tmp_path / 'missing'),
+        )
+
+    # Synthetic stub PPLX encoders verifying dual-LR partition (warm backbone vs fresh value_head/poolers)
+    class _StubPplx(torch.nn.Module):
+        def __init__(self, with_value=True):
+            super().__init__()
+            self.backbone = torch.nn.Linear(8, 8)
+            self.value_head = torch.nn.Linear(8, 12) if with_value else None
+
+        def encode_blocks(self, texts, direction='full'):
+            out = []
+            for _ in texts:
+                h = self.backbone(torch.ones(3, 8))
+                v = self.value_head(h) if self.value_head is not None else None
+                out.append(SimpleNamespace(keys=h, values=v))
+            return out
+
+    w_stub, q_stub = _StubPplx(with_value=True), _StubPplx(with_value=False)
+    writer = PplxWarmstartWriter(w_stub, q_stub, value_dim=12, key_dim=8)
+    warm_ids = {id(p) for p in writer.warm_parameters()}
+    fresh_ids = {id(p) for p in writer.fresh_parameters()}
+    assert warm_ids and fresh_ids and warm_ids.isdisjoint(fresh_ids)
+    assert all(id(p) in fresh_ids for p in w_stub.value_head.parameters())
+    assert all(id(p) in warm_ids for p in w_stub.backbone.parameters())
+    assert all(id(p) in warm_ids for p in q_stub.backbone.parameters())
+    z_kb, k_kb = writer.encode_experience_texts(None, ['r1', 'r2'])
+    q = writer.encode_query_texts(None, ['ctx'])
+    assert z_kb.shape == (2, 12) and k_kb.shape == (2, 8) and q.shape == (1, 8)
+    # the encoders keep computing deterministically (eval) while their parameters train
+    writer.train()
+    assert writer.training and not w_stub.training and not q_stub.training
+
+
+
+def test_latent_ttt_proximal_l2_matches_fo_maml_sum_scale():
+    import inspect
+    from natlang_neuralese.tune import latent_ttt
+    src = inspect.getsource(latent_ttt.refine_site_latents) + inspect.getsource(latent_ttt.refine_compiled_site)
+    assert '.pow(2).sum()' in src and '.pow(2).mean()' not in src
+
+
+def test_step_verifier_progress_weighting_upweights_late_boundaries(tmp_path):
+    from natlang_neuralese.train.step_verifier import VerifierTrainConfig, train_t0
+    feat_dir = tmp_path / 'feats'
+    feat_dir.mkdir()
+    torch.manual_seed(0)
+    # 20 episodes x 4 boundaries: early boundaries (0, 1) are pure noise, late boundaries (2, 3) are separable
+    xs, meta = [], []
+    for ep in range(20):
+        label = ep % 2
+        is_val = ep >= 14
+        for turn in range(4):
+            vec = torch.randn(16)
+            if turn >= 2:
+                vec[0] = 3.0 if label else -3.0
+            xs.append(vec)
+            meta.append({'episode': f'ep-{ep}', 'task_id': f't-{ep}', 'family': 'famA', 'turn': turn,
+                         'boundary': turn, 'success': bool(label), 'validation': is_val})
+    torch.save({'hidden': torch.stack(xs), 'meta': meta}, feat_dir / 'shard-000.pt')
+    receipt = train_t0(feat_dir, tmp_path / 'out', cfg=VerifierTrainConfig(epochs=5, batch_size=16), device='cpu',
+                       progress_weighting=True)
+    assert receipt['auroc']['validation'] > 0.65

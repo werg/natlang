@@ -214,12 +214,26 @@ export type NatlangRuntimeOptions = {
    *   settles without reasoning samples, anything else takes the ordinary reasoned readout.
    * - `branchSearch`: prefix-shared `branch@N` per tool-loop turn, ranked crisp checks first, then the step verifier.
    *   The kept turn is a selection over samples, not one sample of the policy: not for on-policy collection.
-   * Promoted crisp fast paths are compiled cases (`runCrispCase`), and Tier-1 weights bind as a tuned release; neither
-   * has a hook here.
+   * - `hoistContracts`: hoist deterministic structural return-type directives into the call's opening notes on pass 1.
+   * - `jit`: live Tier-1 JIT compiler controller binding BOTH compiled adapter and compiled soft instruction state
+   *   into the invocation frame when no static tuned weight release is already bound.
+   * Promoted crisp fast paths emit standard `cases.ts` modules for `runCrispCase` (`tune/crisp-promote.ts`).
    */
   compiler?: {
     compiledDecisions?: ReadonlyMap<string, { temperature: number; fastThreshold: number; riskThresholds?: Readonly<Record<string, number>> }>;
     branchSearch?: import('../native/branch-search.js').BranchSearchOptions;
+    hoistContracts?: boolean;
+    jit?: {
+      cache: import('./jit.js').CompiledSiteCache;
+      compilerSha: string;
+      policySha: string;
+      baseGgufSha256?: string;
+      compile: (args: {
+        siteId: string;
+        resolvedHeaderText: string;
+        partialArgsJson?: string;
+      }) => Promise<{ adapterId: string | null; nativeStateId: string | null }>;
+    };
   };
 };
 
