@@ -584,7 +584,7 @@ def registry(*args: str) -> None:
     subprocess.run([str(PYTHON), str(REPO / 'scripts/data_registry.py'), *args], check=True, cwd=REPO)
 
 
-def publish(root: Path, *, dry_run: bool = False) -> dict:
+def publish(root: Path, *, dry_run: bool = False, no_check: bool = False) -> dict:
     stamp = time.strftime('%Y%m%d-%H%M%S')
     admitted = [(json.loads((d / 'admission.json').read_text()), d) for d in sorted((root / 'admitted').glob('*'))
                 if (d / 'admission.json').exists()]
@@ -614,7 +614,7 @@ def publish(root: Path, *, dry_run: bool = False) -> dict:
                              f'{sum(a["stages"] for a, _ in train)} stage tasks (scripts/rl_tasks/sources/invented.py)',
                  '--note', 'program inventor campaign (plans/NOVEL_PROGRAMS_20261124.md); ideas: '
                            + ', '.join(a['slug'] for a, _ in train))
-        registry('promote', dataset, '--role', 'grpo-pool')
+        registry('promote', dataset, '--role', 'grpo-pool', *(['--no-check'] if no_check else []))
         summary['pool'] = {'dataset': dataset, 'rows': len(rows), 'path': str(pool)}
     if held:
         directory = HELD_ROOT / stamp
@@ -647,7 +647,8 @@ def publish(root: Path, *, dry_run: bool = False) -> dict:
                              'whose world drew dev or confirmation (the new-programs slice; held-v3 untouched)',
                  '--note', 'evaluation-only-never-training: role held-eval-invented; training excludes every '
                            'held-eval* role (held_eval.training_exclusion_ids); ideas: ' + ', '.join(a['slug'] for a, _ in held))
-        registry('promote', dataset, '--role', 'held-eval-invented', '--role-file', 'manifest.json')
+        registry('promote', dataset, '--role', 'held-eval-invented', '--role-file', 'manifest.json',
+                 *(['--no-check'] if no_check else []))
         summary['held'] = {'dataset': dataset, 'tasks': tasks, 'path': str(directory)}
     for admission, d in fresh:
         admission['published'] = stamp
@@ -681,12 +682,15 @@ def main(argv=None) -> int:
     pb = sub.add_parser('publish')
     pb.add_argument('--root', type=Path, default=INVENTOR_ROOT)
     pb.add_argument('--dry-run', action='store_true')
+    pb.add_argument('--no-check', action='store_true',
+                    help="promote without the registry's check-main --quick (when another strand's uncommitted change "
+                         'turns it red; the promotion commits only registry files)')
     st = sub.add_parser('stages')
     st.add_argument('submission', type=Path)
     st.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
     args = parser.parse_args(argv)
     if args.command == 'publish':
-        print(json.dumps(publish(args.root, dry_run=args.dry_run), indent=1))
+        print(json.dumps(publish(args.root, dry_run=args.dry_run, no_check=args.no_check), indent=1))
         return 0
     submission = args.submission.resolve()
     if args.command == 'digest':
