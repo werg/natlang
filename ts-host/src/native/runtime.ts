@@ -5,6 +5,7 @@
  * Portable data reaches eval as a frozen snapshot; live values (host objects, functions, folder
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
+import {executionOccurrence,occurrenceArgumentHash} from './execution-occurrence.js';
 import { aliasDeclaration } from './type-aliases.js';
 import { writesFields, writesProblem, writesRefinementChecks, type WritesField } from '../runtime/writes.js';
 import { COMPACTED_RESULT, PROMPT_EXAMPLE_SOURCE, PROMPT_EXAMPLE_TEXTS } from './prompt.js';
@@ -496,20 +497,7 @@ function typedTextPreflightType(value: unknown, type: Type, env: TypeEnv, path: 
   return resolved;
 }
 
-function stableBinding(value: unknown): string {
-  const normalize = (item: unknown): unknown => {
-    if (Array.isArray(item)) return item.map(normalize);
-    if (!item || typeof item !== 'object') return item;
-    const record = item as Record<string, unknown>;
-    if (record.$live && typeof record.$live === 'object') {
-      const live = record.$live as Record<string, unknown>;
-      return { $live: { type: live.type } };
-    }
-    if (record.$host && typeof record.$host === 'object') return { $host: normalize(record.$host) };
-    return Object.fromEntries(Object.keys(record).sort().map(key => [key, normalize(record[key])]));
-  };
-  return JSON.stringify(normalize(value));
-}
+
 
 /** Replace only planned leaves in an already-coerced preflight value, retaining every other value by identity. */
 function applyTypedTextRefs(value: Value, plans: PlannedTypedText[], refs: Value[]): Value {
@@ -1219,14 +1207,11 @@ export class NativeRuntime {
       ...Object.values(node.captures ?? {}).flatMap(cell => { try { return valueInputs(cell.get(), `capture:${cell.name}`, producerScopeForTrace(this.trace)); } catch { return []; } })];
     const definitionId=String(manifest.definition_id ?? node.functionName), revision=String(manifest.source_revision ?? '');
     const context=String(manifest.context_id ?? FILE_CONTEXT), signature=formatType(node.type);
-    const argumentBindingSha=hexDigest(stableBinding(dump(node.args,true)));
+    const argumentBindingSha=occurrenceArgumentHash(dump(node.args,true));
     const parentOccurrence=manifest.parent_occurrence&&typeof manifest.parent_occurrence==='object'?
       manifest.parent_occurrence as Record<string,unknown>:undefined;
     const siblingOrdinal=Number.isSafeInteger(manifest.sibling_ordinal)?Number(manifest.sibling_ordinal):0;
-    const occurrenceBase={schema:'natlang.execution-occurrence/1',definition_id:definitionId,revision,context,signature,
-      parent_occurrence_sha256:typeof parentOccurrence?.occurrence_sha256==='string'?parentOccurrence.occurrence_sha256:null,
-      sibling_ordinal:siblingOrdinal,argument_binding_sha256:argumentBindingSha};
-    const occurrence={...occurrenceBase,occurrence_sha256:hexDigest(stableBinding(occurrenceBase))};
+    const occurrence=executionOccurrence({definitionId,revision,context,signature,parent:parentOccurrence,ordinal:siblingOrdinal,argumentHash:argumentBindingSha});
     return { node: invocationNodeId(callId), inputs,
       definition: { id: definitionId, revision }, native_occurrence:occurrence,
       context, signature,

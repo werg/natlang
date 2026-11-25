@@ -1,3 +1,4 @@
+import {openCrispTrace} from './crisp-trace.js';
 /**
  * The shared invocation kernel. Every natlang call (a named `.nl` function, an inline `nl`, an
  * `iterateOn` step or judge) comes through `invokeDefinition`: it builds one lambda node, runs it
@@ -9,12 +10,12 @@ import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
-import { DEFAULT_DIALECT, TypeEnv, containsRefinement, parseAliases, parseTypeCached, type DialectBinding, type Type } from '../native/types.js';
+import { DEFAULT_DIALECT, formatType, TypeEnv, containsRefinement, parseAliases, parseTypeCached, type DialectBinding, type Type } from '../native/types.js';
 import { NeuraleseDialectError, NeuraleseUnsupportedError, dialectBinding, readerDialect } from '../native/neuralese.js';
 import { CRISP, representationType, type GenericResult, type Representation } from '../native/representation.js';
 import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
 import { RefinementError, canonicalValue, checkServiceResults, failureError, refinementCodeOf, type RefinementCode, type RefinementFailure } from '../native/refinement.js';
-import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
+import { MISSING, dump, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, descend, runInFrame, type ActiveCall, type DecisionReadout, type Descent, type Frame } from './context.js';
 import { recordingServices, type LiveEvent, type LiveSink } from './runtime.js';
 import { kernelHooks } from './hooks.js';
@@ -757,7 +758,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   // A tier's own crisp case (calls/tiers.ts) was admitted by the tier's guard; it runs whatever the specialization mode.
   if (capture && attempt?.cases?.[0]) {
     const crisp = await runCrispCase({ task, frame, childFrame, callId, definition, options, inputs, folder, extraTransactions,
-      capture, store: store!, item: attempt.cases[0] });
+      capture, store: store!, item: attempt.cases[0], siblingOrdinal });
     if (crisp.served) return crisp.value;
     handoff = crisp.note;
   }
@@ -770,7 +771,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       shadows = admitted.shadows;
       if (admitted.active) {
         const crisp = await runCrispCase({ task, frame, childFrame, callId, definition, options, inputs, folder, extraTransactions,
-          capture, store: store!, item: admitted.active });
+          capture, store: store!, item: admitted.active, siblingOrdinal });
         if (crisp.served) return crisp.value;
         handoff = crisp.note;
       }
@@ -1064,17 +1065,21 @@ function caseArguments(capture: CallCapture, folder: InvokeOptions['folder']): R
  */
 async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFrame: Frame; callId: string; definition: CallableDefinition;
   options: InvokeOptions; inputs: unknown[]; folder: InvokeOptions['folder']; extraTransactions: FolderTransaction[];
-  capture: CallCapture; store: CallStoreLike; item: LoadedCase }): Promise<{ served: true; value: unknown } | { served: false; note?: string }> {
+  capture: CallCapture; store: CallStoreLike; item: LoadedCase; siblingOrdinal:number }): Promise<{ served: true; value: unknown } | { served: false; note?: string }> {
   const { task, childFrame, callId, definition, options, inputs, folder, capture, store, item } = input;
   const args = caseArguments(capture, folder);
   const original = { ...args };
   const services = recordingServices(task.services, event => capture.effect({ ...event, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) }, 'crisp'));
   let error: unknown;
+  let nativeTrace:ReturnType<typeof openCrispTrace>|undefined;
   try {
-    const raw = await runInFrame({ ...childFrame, services }, () => item.run(args));
-    await task.drainChildren(callId);
     const dialects = dialectBinding(task.runtime.options.neuralese);
     const node = definitionNode(definition, inputs, { ...options, dialects });
+    nativeTrace=openCrispTrace({frame:input.frame,callId,definition:{id:definition.id,name:definition.name,revision:definition.revision??'',source:definition.source},
+      signature:formatType(node.type),arguments:dump(node.args,true),ordinal:input.siblingOrdinal});
+    capture.watch(()=>nativeTrace!.trace.events);
+    const raw = await runInFrame({ ...childFrame, services }, () => item.run(args));
+    await task.drainChildren(callId);
     if (node.type.kind !== 'lambda') throw new Error('not a function');
     const env = new TypeEnv(node.types);
     env.classes = options.classes;
@@ -1109,8 +1114,9 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
     }
     capture.executor = { ...capture.executor, kind: 'crisp', case_hash: item.hash };
     task.record({ callId, parentCallId: input.frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id, name: definition.name,
-      outcome: 'done', detail: `served by compiled case ${item.hash}`, events: [] });
-    capture.finish({ outcome: 'done', detail: `served by compiled case ${item.hash}`, output: value, hasOutput: true, events: [], graphChildren: task.graphChildren(callId) });
+      outcome: 'done', detail: `served by compiled case ${item.hash}`, events: nativeTrace.trace.events });
+    nativeTrace.finish('done');
+    capture.finish({ outcome: 'done', detail: `served by compiled case ${item.hash}`, output: value, hasOutput: true, events: nativeTrace.trace.events, graphChildren: task.graphChildren(callId) });
     try {
       store.caseServed(item.hash, callId, false);
       if (!item.hash.startsWith('tier:') && Math.random() < capture.settings.auditRate) store.enqueue('audit', item.hash, callId);
@@ -1118,6 +1124,7 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
     return { served: true, value };
   } catch (caught) { error = caught; }
   await task.drainChildren(callId);
+  nativeTrace?.finish('error');
   const effects = capture.completedEffects('crisp');
   const files = folder?.transaction.open ? folder.transaction.folder.diffSync().changes.map(change => ({ path: change.path, kind: change.kind })) : [];
   const calls = task.traces.filter(trace => trace.parentCallId === callId).map(trace => ({ name: trace.name, outcome: trace.outcome }));
