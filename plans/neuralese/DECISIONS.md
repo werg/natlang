@@ -12449,3 +12449,49 @@ included, if v0001 is still the collected policy). The canonical-checkout `remot
 groups` event and the health telemetry); whether a continued episode's 3600 s wall clock should count the stopped time
 (it restarts, as the shared-server failover's does); grpo train keeps no partials (versions are not in the capture's
 policy digest).
+
+## 2026-11-25 05:30 SearchSwarm (D02) as collection tasks: `natlang-rl-web-research-20261125` (2,869 rows) in grpo-pool (task-supply agent)
+
+The D02 conversion scoped in `SUBAGENT_NEURALESE_20261124.md` is built (`scripts/rl_tasks/sources/web_research.py`,
+SOURCES `searchswarm`; 0e6a11cbe). One real SearchSwarm item per task, no templates beyond the one program.
+- **Program.** Root `research(question): string` with a callable-folder child `investigate(brief):
+  Neuralese<{ findings; sources: { url; title }[]; open }>`. Both use a crisp `web` service over the item's own frozen
+  corpus: every search result and page reading its recorded trajectory saw (lead and kept sub-agents).
+  - `web.search(query)` is BM25 over title, snippet and reading text, CJK as character bigrams, top 10.
+  - `web.visit(url, goal)` returns the recorded reading. Its header names the caller's goal, so a teacher's goal (often a
+    guessed answer) never reaches the model. An unrecorded url cannot be opened.
+  - Assets: `natlang-rl-web-research-assets-20261125` (3,493 corpora, 2.0 GB, NVMe; `NATLANG_RL_WEB_ASSETS`
+    overrides). The service keeps at most 12 corpora per process.
+- **Funnel** (6,732 rows): 2,011 teacher answer misses the gold; 684 duplicate questions; 226 gold in no recorded
+  output; 29 gold in the question; 0 held-content hits (`subagent_neuralese.held_texts`, every held-eval role).
+  3,782 built. Reference replay (`web_research_replay.mjs`, collection pin edb3cba95b7e): 308,898 of 308,899 recorded
+  visits reproduced exactly, gold reachable through the teacher's own calls in 3,779, silent on an empty corpus in all.
+  Our BM25 returns 41% of the urls the dataset's search engine returned for the same query (not a keep condition).
+- **verify.mjs** (same pin; 4 shards): 3,779 references accepted, 0 other-item golds accepted, 1 alias of 11,055
+  rejected. Dropped: 287 whose keyword baseline (the top search hit's title or first snippet sentence, no model call)
+  passes, and 497 whose generic perturbation `"<gold> and something else entirely"` passes. That second one is an oracle
+  defect (below). Kept 3,057: 2,869 train; held dev 100 and confirmation 88, registered evaluation-only as
+  `natlang-rl-web-research-{dev,confirmation}-20261125`. Families: latin short 2,383, CJK short 246, latin number 222,
+  CJK number 18 (phrase golds were all lost to the perturbation).
+  - The shards' verification.json was rebuilt from partial.jsonl. verify.mjs refused to write it because main's
+    verify.mjs changed on disk mid-run (c68cf8b66). The processes had loaded f8e62950c once, at start. Next time run the
+    pin's own verify.mjs.
+- **Checks.** held-v3 and held-v4 verify 0/0 (ids and groups); `training_exclusion_ids` 0; custody 0 before and after
+  the held registration; question overlap with every grpo-pool input 0 exact, 0 by half of the 10-word shingles.
+- **Repetition** (`measure_repetition` against the 38,139-row pool): 1 program and 1 structure, both new to the pool;
+  all 4 families are new; 2,869 distinct questions, each with its own corpus. EI collection caps a program shape at 1% of
+  groups, so this source gets at most about 1% of a collection's groups until that cap changes.
+- **CJK oracle.** `qaAnswerText` and span F1 keep CJK characters. A Han/kana/hangul run is one token, so a CJK answer must
+  match its run exactly; aliases with `。` and `「」` pass.
+- **Oracle defect found, fixed (fb11b6359).** `containsQaSpan` accepted any answer holding the gold span within twice
+  its length, including "X and Y" and "not X". Words outside the span that are QA hedges (and/or/not/maybe…) absent from
+  the gold now reject. Opt-out `NATLANG_QA_CONTAINMENT_HEDGES=0`, tests in `ts-host/test/oracle.test.mjs`. This is a
+  scoring change for every QA family: a pin with it is a new held scoring series. The 435 cases whose only failure was the
+  perturbation (`build/searchswarm/requalify-ids.json`) are requalified on a runtime with the fix as a second supply. They
+  are not admitted before then, because older pins score them leniently.
+- **Enters:** EI collections that draw the grpo-pool role after this commit (order 24). Opt-out: drop the role.
+- **Not checked:** the policy's pass rate (the questions are BrowseComp-style chains; the teacher used a median of 169
+  search/visit calls including its sub-agents, and only 310 train items kept every sub-agent's evidence); episode length
+  against the 40-call budget; visits with a goal other than the recorded one (they return the closest recorded reading);
+  merging the corpora of duplicate questions; these same items are SFT rows in `sft-rows-sa2nl-20261124-searchswarm-*`,
+  so an SFT round that trains them makes these tasks partly seen.
