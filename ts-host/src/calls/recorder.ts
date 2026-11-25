@@ -185,7 +185,8 @@ export class CallCapture {
 
   setInputs(values: Record<string, unknown>, captures: Record<string, unknown> = {}): void {
     const definition = { name: this.base.definition.name, source: this.base.definition.source };
-    this.hostInputs = Object.fromEntries([...dataEntries(captures),...dataEntries(values)]);
+    const observedDescriptors={...Object.getOwnPropertyDescriptors(captures),...Object.getOwnPropertyDescriptors(values)};
+    this.hostInputs = Object.fromEntries(Object.entries(observedDescriptors).filter(([,item])=>item.enumerable&&Object.hasOwn(item,'value')).map(([name,item])=>[name,item.value]));
     const refs=(record:Record<string,unknown>):Record<string,ValueRef>=>Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(record))
       .filter(([,item])=>item.enumerable).map(([name,item])=>[name,Object.hasOwn(item,'value')
         ?this.ref(item.value,excluded(this.base.exclude,definition,name))

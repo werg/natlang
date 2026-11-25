@@ -29,7 +29,7 @@ test('CallCapture keeps original data identity while recording accessor inputs a
  const records=[],store={record:(r)=>records.push(r),settings:()=>DEFAULT_SETTINGS};
  const capture=new CallCapture(store,DEFAULT_SETTINGS,{callId:'c',parentCallId:null,parentActionIndex:null,taskId:'t',programId:null,buildHash:null,programRoot:null,definition:{id:'f',name:'f',key:'k',interface:'i',source:null,site:'internal',subtype:'function',params:[],returns:'unknown',types:{},instructions:{complete:false,reason:'excluded'}},model:{id:null,revision:null}});
  const actual={x:1},values={actual};Object.defineProperty(values,'secret',{get:forbidden,enumerable:true});
- capture.setInputs(values);assert.equal(capture.hostInputs.actual,actual);assert.deepEqual(capture.inputs.secret,{complete:false,reason:'nonportable'});
+ capture.setInputs(values,{secret:'stale captured value'});assert.equal(capture.hostInputs.secret,undefined);assert.equal(capture.features['str:secret'],undefined);assert.equal(capture.hostInputs.actual,actual);assert.deepEqual(capture.inputs.secret,{complete:false,reason:'nonportable'});
  capture.finish({outcome:'done',detail:'actual result',output:actual,hasOutput:true,events:[]});assert.equal(records.length,1);
 });
 test('revoked proxies are honestly nonportable rather than replacing an application result',()=>{const {proxy,revoke}=Proxy.revocable({},{});revoke();assert.equal(snapshot(proxy,1024).ref.reason,'nonportable');});
