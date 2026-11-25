@@ -1,0 +1,46 @@
+{
+  "id": "natlang-rl-web-research-20261125b",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-web-research-20261125b",
+  "exclude_globs": [
+    "held/*",
+    "assets/*"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.broad-rl-task-source/1: cases.jsonl (train), receipt.json, verification",
+  "rows": 355,
+  "license": "see receipt.json builds (upstream sources)",
+  "protected": false,
+  "inputs": [
+    {
+      "id": null,
+      "path": "data_nvme:natlang-rl-web-research-20261125/build-b"
+    }
+  ],
+  "producer": {
+    "script": "assemble.py",
+    "argv": [
+      "--build",
+      "/home/werg/data/natlang-rl-web-research-20261125/build-b",
+      "--assets",
+      "/home/werg/data/natlang-rl-web-research-20261125/build-b/no-asset-copy",
+      "--legacy-per-family",
+      "0",
+      "--train-cap",
+      "100000",
+      "--out",
+      "/home/werg/natlang/runs/natlang-rl-web-research-20261125b"
+    ],
+    "git_commit": "0834b9013b4d5545bcfe62c9a3d1ad75a19c9779",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "21dd2f1d991062b6b1b8c569ab59db9e66597b15cad202924f6d50b47e14f1c2",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "grpo-pool": {
+      "order": 25,
+      "file": "cases.jsonl"
+    }
+  }
+}

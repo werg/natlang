@@ -1,0 +1,100 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-web-research-20261125b",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-web-research-20261125b",
+  "files": [
+    {
+      "path": "build-commit.txt",
+      "bytes": 41,
+      "sha256": "6fdc1d891ce4bd34f11815ae85c858432de987d1e396f87c44b58b86f7f0608d"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 3898839,
+      "sha256": "6df75549041dac2b0a41e5f393ba31613fe114debb4b137aa3340a8a2eab7cc9",
+      "lines": 355
+    },
+    {
+      "path": "custody-after-held-registration.json",
+      "bytes": 242,
+      "sha256": "42f8eb8628c415d434ed96754e2fb65532772b1f0f785bf2d3abf297cddebd19"
+    },
+    {
+      "path": "custody.json",
+      "bytes": 236,
+      "sha256": "284f0e61a62309b1471dd6f91f09cfb3d2b667d7a00f93e2d368024dd38d206b"
+    },
+    {
+      "path": "diversity.json",
+      "bytes": 913,
+      "sha256": "22e4c19e4403392a69648bcf0a066452d6f4eaf303cb6410729b8108c2b17c44"
+    },
+    {
+      "path": "held-verify/failures.txt",
+      "bytes": 46,
+      "sha256": "1b63f7970bcb2f058f8e554b009a0d62f587df401f3ed81124bd0e7f83f522cf"
+    },
+    {
+      "path": "held-verify/groups.json",
+      "bytes": 26625,
+      "sha256": "62a8f0728ef1e5cf7992ded8838ffde885b641e233e96a432d4d47a20e319f31"
+    },
+    {
+      "path": "held-verify/held-v3-manifest.json.json",
+      "bytes": 694,
+      "sha256": "08363847cbc610009956c190e710f8e0586c84913afe39edfc84eeeba4d0cfd0"
+    },
+    {
+      "path": "held-verify/held-v4-manifest.json.json",
+      "bytes": 656,
+      "sha256": "52747fbb6a8973000b5bd00954d66a7529a37ba90a6d95fbbc1db7c4df4fa451"
+    },
+    {
+      "path": "held-verify/held-v4-reservations.json.json",
+      "bytes": 810,
+      "sha256": "913c600c6edf18af350ac8fce515010fe36f9dfa1f61ba26639298bec61812dc"
+    },
+    {
+      "path": "held-verify/ids.json",
+      "bytes": 29129,
+      "sha256": "c095c6c6de6e743698406db53dfe3bcd3d0f0790da2007eedd542191be9e66e8"
+    },
+    {
+      "path": "qualification.json",
+      "bytes": 99928,
+      "sha256": "4ad954e25e34575bae99f8b5d03fc30b66c3eb5f8a1fa7196246d511656c1fc3"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1252,
+      "sha256": "2011009564e0734199215c6191481181fe06a230acede713206d72fdefbbbf09"
+    },
+    {
+      "path": "reference-replay.json",
+      "bytes": 883507,
+      "sha256": "311a845148b59d416afef1011519140dacd5f9656928b7bd462808fbccae4a87"
+    },
+    {
+      "path": "repetition.json",
+      "bytes": 2528,
+      "sha256": "9ec96484cd2679103acdbe2b8e7aad667c50bda45f05457aff9eb1373a9ee0e3"
+    },
+    {
+      "path": "requalification.txt",
+      "bytes": 167,
+      "sha256": "9a6e6a3442913b4002bd442798b68abc1e47300bcd18d65e1f5ab536bb116276"
+    },
+    {
+      "path": "verification/searchswarm.json",
+      "bytes": 14938,
+      "sha256": "ef9b84c6d0932d179e00e95af73e6c4e662933f541427ca5eda7bae23f4ad601"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 729,
+      "sha256": "ea176368be6fd9f0e68e239cacf7e1890bd4175de7b86d6d1f245f8d39d0a0df"
+    }
+  ],
+  "bytes": 4961280
+}
