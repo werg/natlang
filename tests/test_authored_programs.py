@@ -124,6 +124,19 @@ def test_consistency_reports_unfinished_runs_failed_actions_and_loose_entries():
     assert any('declared oracle rejects' in p for p in problems)
 
 
+def test_a_fragment_that_matched_a_captured_variable_is_named_as_the_cause():
+    data = submission(trajectory={'root': [['eval', {'code': 'return 1;', 'finish': True}]],
+                                  'calls': [{'match': ['could not be played', 'move: string = "Kd8"'], 'value': True}]})
+    captured = 'const played: string[] = ["Kd8 could not be played here"];'
+    row = {**tree_row(), 'answers': [{'name': 'nl@eval:1', 'entry': 0, 'shown': 'move: string = "Kd8" a', 'captured': captured},
+                                     {'name': 'nl@eval:1', 'entry': 0, 'shown': 'move: string = "Kd8" b', 'captured': captured}]}
+    _, warnings = ap.consistency(data, [row])
+    warning = next(w for w in warnings if 'answers 2 different calls' in w)
+    assert "matched `played`, a variable of the calling code that the inline nl captured" in warning
+    assert 'nl.with' in warning
+    assert ap.capture_cause(['elsewhere'], [captured]) == ''
+
+
 def test_statistics_report_the_semantic_fp_shape_and_nl_literals():
     data = submission()
     stats = ap.program_stats(data, FILES, [tree_row()])

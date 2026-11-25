@@ -174,7 +174,10 @@ entry.
   item fragment: an id alone also matches every call whose arguments include that record (the `earlier` list of a
   reduce, for one). The entry with the most fragments that match answers the call. An entry with only `fn` answers
   every remaining call of that function, which is right for an interior function whose turns are the same code
-  (eval code reads the call's own parameters).
+  (eval code reads the call's own parameters). An NL literal's opening also declares the variables it captured: every
+  visible variable its instructions name, as an ordinary word too ("could not be played" captures a `played` array), and
+  every variable interpolated into it. A fragment can match there; the check names the variable when it does. Reword
+  the instructions or list the captures with `nl.with({ … })` when a word captures a variable the call does not need.
 - **`value`** answers in one turn (a decision's option, or the result). **`turns`** plays several turns:
   `[["eval", {"code": ...}], ["return_result", {"status": "success", "value": ...}]]`, or a final eval with
   `"finish": true`.

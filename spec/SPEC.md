@@ -201,7 +201,13 @@ Item names are identifiers and must not collide with function properties
 ## Captures
 
 An inline `nl` with a text body captures the visible bindings its instructions
-mention by exact name. Data captures are read live at each call. A mentioned
+mention by exact name, as an ordinary word too ("could not be played" captures
+a variable `played`), and the bindings its interpolations use. `natlang check`
+warns (`nl-word-capture`) when every mention of a captured name is a word in
+verb position; quote the name in backticks if the call needs it, otherwise
+reword or list the captures with `nl.with`. A capture is declared to the call
+with its binding's type; a binding inferred from literals (`const aim = k ?
+'a' : 'b'`) is declared as its base type (`string`), as for `let`. Data captures are read live at each call. A mentioned
 `let` may be reassigned by the model: the write-back happens after a successful
 eval and is version-checked, so a concurrent change fails that eval with
 `capture-conflict` and the model retries it. Reassigning a captured `const` is a

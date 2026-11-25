@@ -195,6 +195,7 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `readout: decision needs a finite returns type` (or `readout: instant ...`) | Declare a finite `returns` (a literal union, `boolean`, or a record whose fields are all finite), or drop `readout:` and let the call run its tool loop. |
 | `idiom-code-in-prose` (warning) | Move the step the instructions describe as code into a TypeScript helper in the function's companion folder, and let the instructions call it by name. |
 | `idiom-fixed-cursor-iterate` (warning) | Map the step over the list (`await Promise.all(items.map(item => judge(item)))`) and keep `iterateOn` for steps that read the previous state. |
+| `nl-word-capture` (warning) | An ordinary word in an `nl` literal's instructions ("could not be played") names a variable (`played`), so the call also receives it: quote the name in backticks if the call needs it, otherwise reword the instructions or list the captures with `nl.with({ … })`. |
 | `capture-conflict` | Another task changed a captured `let` mid-call; if it recurs, make the state a parameter or a returned value. |
 | `function-signature-mismatch` | The function passed does not have the slot's function type: pass one whose parameters take what the slot passes, by position, and whose result fits (bind extra leading parameters with `fn.partial(...)`). |
 | `type X is not in the natlang type grammar` (load) | Rewrite alias `X` in `types.ts` with records, unions, literals, arrays and `Record`, or keep it out of natlang signatures. |

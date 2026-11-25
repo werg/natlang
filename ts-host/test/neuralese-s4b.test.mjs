@@ -89,7 +89,7 @@ test('a soft body grants no authority (fn-soft-no-authority)', async () => {
     services: { mail: { send: (...args) => { sent.push(args); return 'ok'; } } },
     serviceDeclarations: { mail: 'export function send(to: string, text: string): string;' }, serviceScopes: { mail: ['mailer.nl'] } });
   assert.equal(await runtime.run(() => notify('refund')), 'no');
-  assert.match(results.join('\n'), /mail is not defined/);
+  assert.match(results.join('\n'), /mail is a host service unavailable in this call's authored scope/);
   assert.equal(sent.length, 0);
 });
 

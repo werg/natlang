@@ -1197,7 +1197,8 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
     readouts = analysis.readouts ?? [];
     rebinds = analysis.rebinds ?? [];
     instantiations = analysis.instantiations ?? [];
-    for (const item of analysis.diagnostics) diagnostics.push(toRaw(item));
+    // Warnings (nl-word-capture) are for authors' `natlang check`; an eval fails only on errors.
+    for (const item of analysis.diagnostics) if (item.severity !== 'warning') diagnostics.push(toRaw(item));
   }
   if (options.checkFields) for (const item of options.checkFields(analysisSource)) diagnostics.push(toRaw(item));
 

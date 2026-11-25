@@ -16,7 +16,7 @@ export type NatlangDiagnostic = SourceSpan & {
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'frontmatter-yaml' | `TS${number}` | 'nl-undeclared-type' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-untyped-literal' |
     'neuralese-nested' | 'neuralese-readout-sync' | 'neuralese-crisp-result' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'decision-compare' | 'untrusted-instruction' | 'iteration-unbounded' |
-    'nl-sequential-loop' | 'idiom-decision-readout' | 'idiom-fixed-cursor-iterate' | 'idiom-code-in-prose' |
+    'nl-sequential-loop' | 'nl-word-capture' | 'idiom-decision-readout' | 'idiom-fixed-cursor-iterate' | 'idiom-code-in-prose' |
     `idiom-review-${string}`;
   /** One line: what is wrong. */
   message: string;
@@ -112,6 +112,52 @@ export type InlineAnalysisOptions = {
   /** Code outside any function may `await` (an eval cell, an ES module): a typed Neuralese readout there is not a sync readout. */
   topLevelAwait?: boolean;
 };
+
+/** An initializer whose every possible value is a literal written there: `'a'`, `0`, `true`, `c ? 'a' : 'b'`. */
+export function literalInitializer(expression: ts.Expression): boolean {
+  if (ts.isParenthesizedExpression(expression)) return literalInitializer(expression.expression);
+  if (ts.isConditionalExpression(expression)) return literalInitializer(expression.whenTrue) && literalInitializer(expression.whenFalse);
+  return ts.isLiteralExpression(expression) || ts.isNoSubstitutionTemplateLiteral(expression) ||
+    expression.kind === ts.SyntaxKind.TrueKeyword || expression.kind === ts.SyntaxKind.FalseKeyword ||
+    (ts.isPrefixUnaryExpression(expression) && ts.isNumericLiteral(expression.operand));
+}
+
+/**
+ * The type a model is shown for a local, capture or annotation inferred from literals. `const aim = k ? 'x' : 'y'`
+ * infers `"x" | "y"`; shown as the variable's type, that lists every branch's text in each call that sees the variable
+ * (an `nl` literal built from `aim` carried every other kind's instructions in its opening). As TypeScript does for
+ * `let`, such a binding is a `string` (number, boolean). A declared type (`const k: Kind = ...`, a parameter, a field)
+ * is kept. Opt-out: NATLANG_LITERAL_CAPTURE_TYPES=1 keeps the literal types.
+ */
+export function shownBindingType(checker: ts.TypeChecker, type: ts.Type, declaration?: ts.Node, initializer?: ts.Expression): ts.Type {
+  if ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_LITERAL_CAPTURE_TYPES === '1') return type;
+  const source = initializer ?? (declaration && ts.isVariableDeclaration(declaration) && !declaration.type ? declaration.initializer : undefined);
+  if (!source || !literalInitializer(source)) return type;
+  return type.flags & (ts.TypeFlags.Literal | ts.TypeFlags.Union) && !(type.flags & ts.TypeFlags.EnumLiteral) ?
+    checker.getBaseTypeOfLiteralType(type) : type;
+}
+
+/** A word right after an auxiliary or copula ("could not be played", "was seen") is a verb form, not a name. */
+const VERB_POSITION = /(?:^|[^A-Za-z0-9_$])(?:am|is|are|was|were|be|been|being|not|can|could|will|would|shall|should|must|may|might|has|have|had|do|does|did|get|gets|got|gotten)\s+$/i;
+
+/**
+ * `nl-word-capture`: an implicit capture whose every mention reads as an ordinary word in verb position. The capture
+ * still happens (captures are exact-name mentions, spec "Captures"); the warning names the phrase and the fixes.
+ * Opt-out: NATLANG_WORD_CAPTURE_LINT=0.
+ */
+function wordCaptureWarning(name: string, parts: readonly { text: string }[]): string | undefined {
+  if ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_WORD_CAPTURE_LINT === '0') return;
+  let phrase: string | undefined;
+  for (const part of parts) for (const match of part.text.matchAll(IDENTIFIER_TOKEN)) {
+    if (match[0] !== name) continue;
+    const before = part.text.slice(0, match.index!), after = part.text.slice(match.index! + name.length);
+    if (before.endsWith('\\`') || /^(?:\.[A-Za-z_$]|\[)/.test(after) || !VERB_POSITION.test(before)) return;
+    phrase ??= `${before.split(/\s+/).slice(-3).join(' ').trimStart()}${name}`;
+  }
+  return phrase && `\`${name}\` is captured because the instructions use the word "${name}" ("${phrase}"), so this call also ` +
+    `receives the variable ${name}. If the call needs that variable, write it as \\\`${name}\\\`; if not, reword the ` +
+    `instructions or list exactly what the call sees with nl.with({ … }).`;
+}
 
 const IDENTIFIER_TOKEN = /(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*(?![A-Za-z0-9_$])/g;
 const BACKTICK_MENTION = /\\`([A-Za-z_$][A-Za-z0-9_$]*)\\`/g;
@@ -819,8 +865,11 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         const symbol = checker.getSymbolAtLocation(expression);
         declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
       }
-      const type = checker.getTypeAtLocation(expression);
-      actualTypes.set(name, type);
+      actualTypes.set(name, checker.getTypeAtLocation(expression));
+      const valueSymbol = ts.isShorthandPropertyAssignment(property) ? checker.getShorthandAssignmentValueSymbol(property) :
+        ts.isIdentifier(expression) ? checker.getSymbolAtLocation(expression) : undefined;
+      const type = shownBindingType(checker, checker.getTypeAtLocation(expression),
+        valueSymbol?.valueDeclaration ?? valueSymbol?.declarations?.[0], ts.isIdentifier(expression) ? undefined : expression);
       let described: TargetDescriptor;
       try { described = describeTarget(program, checker, type, { allowHost: true, location: node }); }
       catch (error) {
@@ -997,7 +1046,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     for (const [name, offset] of [...mentions].sort((a, b) => a[1] - b[1])) {
       const symbol = candidates.get(name)!;
       const declaration = (symbol.valueDeclaration ?? symbol.declarations![0]!) as ts.Declaration;
-      const type = checker.getTypeOfSymbolAtLocation(symbol, node);
+      const type = shownBindingType(checker, checker.getTypeOfSymbolAtLocation(symbol, node), declaration);
       let described: TargetDescriptor;
       try { described = describeTarget(program, checker, type, { allowHost: true, location: node }); }
       catch (error) {
@@ -1008,6 +1057,9 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       const source = options.classify?.(declaration) ??
         (described.host ? 'handle' : ts.isParameter(declaration) ? 'input' : isTopLevel(declaration) ? 'local' : 'block');
       captures.push({ name, type: described, mutable, source, mentionSpan: offset });
+      const prose = slotCaptures.has(name) ? undefined : wordCaptureWarning(name, literalParts);
+      if (prose) diagnostics.push({ ...spanOf(node, displayPath, offset, offset + name.length), code: 'nl-word-capture',
+        severity: 'warning', message: prose });
     }
 
     let adaptation: InlineLambdaPlan['adaptation'];

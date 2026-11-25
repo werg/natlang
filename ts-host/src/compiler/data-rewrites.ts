@@ -16,7 +16,7 @@
 import ts from 'typescript';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { scopeDeclarations, typeScriptText, type EvalScopeDeclarations } from './eval-check.js';
-import { analyzeInlineLambdas, type CapturePlan, type InlineLambdaPlan } from './inline.js';
+import { analyzeInlineLambdas, shownBindingType, type CapturePlan, type InlineLambdaPlan } from './inline.js';
 import { describeTarget, TargetError } from './targets.js';
 
 export const DATA_REWRITE_MIGRATION = 'neuralese-language';
@@ -61,7 +61,8 @@ function compile(input: RewriteInput, code: string): Compiled {
   const flatten = (diagnostic: ts.Diagnostic) => `TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')}`;
   const analysis = analyzeInlineLambdas(program, [file], { scopeFiles: [scopeFile], displayPath: () => 'eval', recursiveTypes: true });
   const diagnostics = [...program.getSyntacticDiagnostics(file), ...program.getSemanticDiagnostics(file)].map(flatten)
-    .concat(analysis.diagnostics.map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`)).sort();
+    .concat(analysis.diagnostics.filter(diagnostic => diagnostic.severity !== 'warning') // as eval: warnings never fail it
+      .map(diagnostic => `${diagnostic.code}: ${diagnostic.message}`)).sort();
   const offset = prefix.length;
   const plans = analysis.plans.filter(plan => plan.sourceSpan.start >= offset).map(plan => ({ ...plan,
     sourceSpan: { ...plan.sourceSpan, start: plan.sourceSpan.start - offset, end: plan.sourceSpan.end - offset } }));
@@ -84,12 +85,8 @@ function annotationOf(compiled: Compiled, declaration: ts.VariableDeclaration): 
   const { checker, program } = compiled;
   let type = ts.isIdentifier(declaration.name) ? checker.getTypeAtLocation(declaration.name) :
     checker.getWidenedType(checker.getTypeAtLocation(declaration.initializer!));
-  // `const n = 0` is a number to the model, not the literal type 0.
-  if (type.flags & (ts.TypeFlags.StringLiteral | ts.TypeFlags.NumberLiteral | ts.TypeFlags.BooleanLiteral | ts.TypeFlags.BigIntLiteral) &&
-    declaration.initializer && (ts.isLiteralExpression(declaration.initializer) || declaration.initializer.kind === ts.SyntaxKind.TrueKeyword ||
-      declaration.initializer.kind === ts.SyntaxKind.FalseKeyword || ts.isNoSubstitutionTemplateLiteral(declaration.initializer) ||
-      ts.isPrefixUnaryExpression(declaration.initializer)))
-    type = checker.getBaseTypeOfLiteralType(type);
+  // `const n = 0` is a number to the model, not the literal type 0; `const k = c ? 'a' : 'b'` is a string, not "a" | "b".
+  type = shownBindingType(checker, type, declaration);
   if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return { reason: type.flags & ts.TypeFlags.Any ? 'any' : 'unknown' };
   const signature = type.getCallSignatures().length > 0 && type.getProperties().length === 0;
   if (signature) {
