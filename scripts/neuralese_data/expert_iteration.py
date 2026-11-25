@@ -273,6 +273,7 @@ def select(args):
     import glob
     import grpo
     out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)     # a remote collector's select runs before the DGX collection dir exists
     rows, excluded = grpo.load_tasks(pool_args(args), None)
     rates = {}
     if args.base_rates:
@@ -610,6 +611,8 @@ def frontier_collector(base):
 
 
 def wait_actor(url, sha, process, log_path, timeout=3600):
+    """The actor at ``url`` serving policy ``sha``; ``TimeoutError`` (naming ``timeout`` seconds) when it does not
+    come up in time."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         if process is not None and process.poll() is not None:
@@ -622,7 +625,7 @@ def wait_actor(url, sha, process, log_path, timeout=3600):
         except OSError:
             pass
         time.sleep(10)
-    raise TimeoutError('actor did not come up in an hour')
+    raise TimeoutError(f'actor at {url} did not serve {str(sha)[:12]} within {timeout:g} s')
 
 
 def collect(args):
@@ -3275,8 +3278,8 @@ class AsyncRoundDriver:
         work.mkdir(parents=True, exist_ok=True)
         tasks = self.collect_dir(policy) / 'tasks.json'
         old = self.collection_base(policy) / 'tasks.json'
+        tasks.parent.mkdir(parents=True, exist_ok=True)    # a remote collector's select writes it before the DGX one exists
         if not tasks.exists() and tasks != old and old.exists():
-            tasks.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(old, tasks)
         (work / 'collector.json').write_text(json.dumps({'unit': unit, 'at': round(time.time(), 1)}) + '\n')
         return tasks
@@ -3445,6 +3448,25 @@ class AsyncRoundDriver:
                     raise
         return out
 
+    def colab_sft_busy_hosts(self):
+        """Sessions whose GPU a round's Colab SFT holds (their actor yielded it): ``colab_sft_hosts`` while this driver
+        runs ``run-sft``, and, for a restarted driver (the learner is detached; ``colab_sft`` has not re-entered yet),
+        the host in the active SFT round's ``colab-placement.json`` while the round is still on the ``colab`` profile
+        and its factors do not exist. 2026-11-25 06:23: a collector started against such a session right after a restart
+        and waited 60 s for an actor that was not there."""
+        hosts = set(self.colab_sft_hosts)
+        try:
+            active = self.controller.state.get('active_round') or {}
+            if active.get('phase') == 'sft':
+                run = self.round_dir(active['round_id'])
+                placement = run / 'sft' / 'colab-placement.json'
+                if (placement.exists() and not (run / 'sft' / 'factors' / 'policy_manifest.json').exists()
+                        and json.loads((run / 'round.json').read_text()).get('profile') == 'colab'):
+                    hosts.add(json.loads(placement.read_text())['host'])
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        return hosts
+
     def ensure_remote_collection(self, policy, rebind=True):
         """A DGX-side collector per remote actor that serves ``policy`` (``collect --actor``): restarted with the
         policy like the DGX collection (a rebound actor serves the new policy; the old collector drops it). An actor
@@ -3452,7 +3474,10 @@ class AsyncRoundDriver:
         with self.REMOTE_LOCK:
             if rebind:
                 self.ensure_remote_policy(policy)
+            busy = self.colab_sft_busy_hosts()
             for target in self.remote_targets():
+                if target['host'] in busy:      # its round's SFT trains there: no actor to collect from until it ends
+                    continue
                 if target['host'] and not target['pop']:     # Pop's collector: pop_step (it yields to held measurements)
                     try:
                         if target.get('session'):
@@ -3469,7 +3494,7 @@ class AsyncRoundDriver:
         served (``pop_rl_actor serve-checkpoint --host-profile colab``, the collection weight dtype; in the background,
         at most every COLAB_SERVE_RETRY_SECONDS). ``--no-colab-collect-serve`` opts out."""
         host = target['host']
-        if getattr(self.a, 'no_colab_collect_serve', False) or host in self.colab_sft_hosts:
+        if getattr(self.a, 'no_colab_collect_serve', False) or host in self.colab_sft_busy_hosts():
             return
         endpoint = self.target_endpoint(target)
         if endpoint_alive(endpoint, policy['sha256']):
@@ -3520,7 +3545,7 @@ class AsyncRoundDriver:
         try:
             if self.controller.phase != 'sft' or getattr(self.a, 'no_standing_remote_collection', False):
                 return
-            self.ensure_remote_collection(self.controller.current, rebind=not self.colab_sft_hosts)
+            self.ensure_remote_collection(self.controller.current, rebind=not self.colab_sft_busy_hosts())
         except Exception as error:
             self.note(remote_collection_failed=repr(error)[:300])
 
@@ -3543,7 +3568,10 @@ class AsyncRoundDriver:
         return unit, work, argv, max(8, round(target['slots'] * REMOTE_COLLECTOR_SLOT_GB) + 4)
 
     def start_remote_collector(self, policy, target):
-        """``target``'s collector of ``policy`` (``collect --actor``) once its actor serves ``policy``."""
+        """``target``'s collector of ``policy`` (``collect --actor``) once its actor serves ``policy``; never on the
+        session a round's SFT holds (every start path ends here)."""
+        if target['host'] in self.colab_sft_busy_hosts():
+            return
         endpoint = self.target_endpoint(target)
         unit = self.collection_unit(policy) + target['suffix']
         if self.c.present(unit) and self.collector_on_old_dir(unit, policy, target['suffix']):
@@ -4580,8 +4608,11 @@ class AsyncRoundDriver:
         import pop_rl_actor
         sha, errors = published['checkpoint_sha256'], []
         endpoints = {(host, front): endpoint for host, front, endpoint in self.remote_actors(include_pop=False)}
+        busy = self.colab_sft_busy_hosts()
         for t in self.remote_targets():
             host, front = t['host'], t['front']
+            if host in busy:
+                continue                    # its round's SFT holds the GPU (the actor yielded): rebound after the round
             target = self.a.rebind_actor[t['index']] if t['index'] is not None else f'{host}@{front}'
             if t['pop'] or endpoint_alive(endpoints.get((host, front), front), sha):
                 continue                    # Pop: pop_step serves the new policy
