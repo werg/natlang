@@ -12026,3 +12026,43 @@ teacher campaign; Anthropic API has no credits; `scripts/claude_code_endpoint.py
 OpenAI-compatible teacher endpoint for them). Reviewer reliability (one review per program; Luna's final findings
 contradicted the files twice). Stage-task learnability and whether 263 stage tasks crowd 8 whole-program tasks in
 selection. The held slice's baseline measurement (2 tasks: not yet a useful measure).
+
+## 2026-11-25 02:50 Program-shape cap in collection selection: no program shape takes more than 1% of any prefix of a collection order
+
+**Measured** (pool of `aei1/collect/v0001-8e634a0f46ce/tasks.json`, 34,837 tasks, 520 row families, 50 sources). A
+program shape (`measure_repetition.program_shape`) is the task's callable folder with item data abstracted: every file
+(root stem abstracted from the paths), its frontmatter types with literal unions collapsed, its text with digits,
+quoted spans, mid-sentence capitalized words, code identifiers, paths and hex ids abstracted; plus services and mode.
+`semantics.inputs` is item data and not part of it. The pool has **5,945 distinct shapes, 1,148 effective**
+(exp-entropy); the top shape is 2.0% of the pool, the top 10 11.7%. Per source (rows -> shapes): bgkit 7,195 -> 126,
+composed 6,358 -> 145, codebase-py 2,596 -> 352 (45 effective, top 6.6%), decisions 2,451 -> 1,080, natlang-codebase
+1,763 -> 694 (one repair template 702 rows, 40% of the source), codebase-natlang 885 -> 258, git-history 736 -> 322,
+reasoning-gym 1,671 -> 3 shapes over 57 families, math 737 -> 3, babi 617 -> 4, every tool/QA dataset wrapper 1-6
+shapes; authored (haiku 4,153 -> 2,130; opus 518 -> 347) and inline-curriculum (1,239 -> 251) are mostly distinct. The
+largest shapes: the natlang-codebase type-typo repair (702), three reasoning-gym wrappers spanning 57 families each
+(586, 549, 536), babi (324, 264), math/gsm8k (291, 276, 265), apigen/tau retail (275, 271). Family round-robin makes the
+cross-family wrappers worse: the 2,000-task prefix of v0001/v0007's order had its top shape at 3.3% (expected 2.0% by
+pool share) and 1,313-1,338 shapes, 837-843 effective; the 1,584 collected aei1 groups whose tasks are in this pool
+cover 425 shapes (307 effective), the top two (reasoning-gym arc-1d and rectangle-count wrappers) 50 groups each.
+
+**Change.** `grpo.cap_shapes` reorders a collection order so that no shape takes more than `SHAPE_CAP` (0.01) of any
+prefix beyond its first 4 rows; a capped row waits and enters as soon as the prefix has grown; nothing is dropped
+(only capped shapes left: least-placed first). It applies after the tiers and the family round-robin, so it overrides
+tier order for an over-cap shape (a band task of a 1%-full shape waits behind unmeasured tasks of other shapes).
+`expert_iteration.py select --shape-cap` (default `grpo.SHAPE_CAP`; 0 opts out; `tasks.report.json` records `shapes`
+and `prefix_shapes`) covers both cycle `select_stage` and async-drive `select_command`. GRPO's unmeasured-task walk
+gets the same cap (`grpo.py train --explore-shape-cap`, default `SHAPE_CAP`; `ExploreWalk(shape_cap=)`;
+`explore-constructs.json` records it). Driver opt-out: `--select-args "--shape-cap 0"`.
+
+**Checked** with `simulate_selection.py --ei` (new: the real `selection_order` over the EI pool, v0007's measured rates,
+seed 20261120; 35,841 eligible, 6,040 shapes): uncapped -> 1% cap, prefix 500: 419 -> 425 shapes, top 1.2% -> 1.0%;
+prefix 2,000: 1,340 -> 1,419 shapes, effective 876 -> 1,131, top 3.45% -> 1.0%, top 5 11.5% -> 4.8%; prefix 8,000:
+effective 1,156 -> 1,872, top 4.55% -> 1.0%. 2% and 0.5% arms: effective 987 / 1,238 at 2,000; at 0.5% the 4-row floor
+binds at 500 and 2,000-prefix families fall 521 -> 479 (many-family wrappers deferred), so 1% is the default.
+
+**Not checked / left out.** Shapes are declared program text, not episode behaviour; item words that are lowercase
+prose (an item's topic inside a template sentence) still split a template into several shapes, and two genuinely
+different programs that differ only in abstracted identifiers merge. Held-set effect: not measured (enters at the next
+driver pin; aei1's driver runs pin 21d7c5a050c6 and was not restarted). Teacher campaign order (`teacher_gen` over the
+frontier's rare tasks), filled-reasoning ordering and the SFT mix build are not capped: they consume the collection's
+own outcomes, and training-side exposure is a separate decision. Authored/procedural rows stay in the pool (owner).

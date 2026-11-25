@@ -217,10 +217,11 @@ def tier(successes, scored, solved=0.75, min_scored=2):
     return 'solved' if p >= solved else 'sometimes' if successes else 'never'
 
 
-def selection_order(rows, rates, rng, include_solved=False):
+def selection_order(rows, rates, rng, include_solved=False, shape_cap=0., shape_of=None):
     """Pool rows ordered for collection: tier 0 measured in (0, 1), 1 measured 0, 2 unmeasured, 3 measured 1 (left out
-    unless ``include_solved``); each tier family round-robin (``grpo.family_round_robin``)."""
-    from grpo import family_round_robin
+    unless ``include_solved``); each tier family round-robin (``grpo.family_round_robin``). ``shape_cap`` > 0: no
+    program shape (``shape_of(row)``) takes more than that share of any prefix of the order (``grpo.cap_shapes``)."""
+    from grpo import cap_shapes, family_round_robin
     tiers = collections.defaultdict(list)
     for row in rows:
         s, n = rates.get(row['id'], (0, 0))
@@ -233,10 +234,23 @@ def selection_order(rows, rates, rng, include_solved=False):
         members = list(tiers[t])
         rng.shuffle(members)
         out += family_round_robin(members, rng)
+    if shape_cap > 0:
+        out = cap_shapes(out, shape_of, shape_cap)
     return out, {['band', 'failed', 'unmeasured', 'solved'][t]: len(v) for t, v in sorted(tiers.items())}
 
 
 # ---- select ----------------------------------------------------------------------------------------------------------
+def shape_prefix_report(shapes, prefixes=(500, 2000, 8000)):
+    """Distinct program shapes and the largest shape's share in each prefix of a collection order (a collection
+    reaches a few hundred to a few thousand groups)."""
+    out = {}
+    for n in prefixes:
+        head = collections.Counter(shapes[:n])
+        if head:
+            out[str(n)] = {'shapes': len(head), 'top_share': round(head.most_common(1)[0][1] / min(n, len(shapes)), 4)}
+    return out
+
+
 def pool_args(args):
     import grpo
     from types import SimpleNamespace
@@ -265,12 +279,17 @@ def select(args):
         for task_id, v in json.loads(Path(path).read_text())['tasks'].items():
             if v.get('scored'):
                 rates[task_id] = (v['successes'], v['scored'])
-    ordered, counts = selection_order(rows, rates, random.Random(args.seed), args.include_solved)
+    shapes = grpo.task_shapes(rows)
+    cap = grpo.SHAPE_CAP if getattr(args, 'shape_cap', None) is None else args.shape_cap
+    ordered, counts = selection_order(rows, rates, random.Random(args.seed), args.include_solved,
+                                      shape_cap=cap, shape_of=lambda r: shapes[r['id']])
     if args.limit:
         ordered = ordered[:args.limit]
     out.write_text(json.dumps([r['id'] for r in ordered]) + '\n')
     report = {'eligible': len(rows), 'held_excluded': excluded, 'rated': len(rates), 'group_dirs': len(dirs),
-              'tiers': counts, 'selected': len(ordered), 'families': len({r.get('family') for r in ordered})}
+              'tiers': counts, 'selected': len(ordered), 'families': len({r.get('family') for r in ordered}),
+              'shape_cap': cap, 'shapes': len({shapes[r['id']] for r in ordered}),
+              'prefix_shapes': shape_prefix_report([shapes[r['id']] for r in ordered])}
     out.with_suffix('.report.json').write_text(json.dumps(report, indent=1) + '\n')
     # the rates the order came from (filled_reasoning generate --prefer-rates: teacher episodes of failed tasks first)
     out.with_suffix('.rates.json').write_text(json.dumps({k: {'successes': s, 'scored': n} for k, (s, n) in rates.items()},
@@ -4907,6 +4926,9 @@ def main():
     s.add_argument('--frontier', action='append', default=[], help='earlier frontier files (newest last)')
     s.add_argument('--include-solved', action='store_true')
     s.add_argument('--limit', type=int, default=0)
+    s.add_argument('--shape-cap', type=float, default=None,
+                   help='the share of any prefix of the order one program shape (measure_repetition.program_shape: '
+                        'the program with item data abstracted) may take (default grpo.SHAPE_CAP); 0: no cap (opt-out)')
     c = sub.add_parser('collect')
     pool_flags(c)
     c.add_argument('--work', required=True)
