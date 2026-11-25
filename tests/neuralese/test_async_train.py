@@ -3062,7 +3062,7 @@ def test_the_colab_fill_is_kept_running_beside_each_serving_session_and_never_on
     from natlang_neuralese.common import data_registry
     monkeypatch.setattr(data_registry, 'role_paths', lambda name, **kw: [])
     targets = [{'host': 'colab-g4', 'front': 'http://127.0.0.1:8570', 'pop': False, 'suffix': '-remote0', 'slots': 64},
-               {'host': 'pop-os', 'front': 'http://pop:18531', 'pop': True, 'suffix': '-pop', 'slots': 32}]
+               {'host': 'pop', 'front': 'http://pop:18531', 'pop': True, 'suffix': '-pop', 'slots': 32}]
     monkeypatch.setattr(d, 'remote_targets', lambda: targets)
     monkeypatch.setattr(d, 'target_endpoint', lambda t: 'http://127.0.0.1:18731')
     monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port: f'http://127.0.0.1:{port + 10161}')
