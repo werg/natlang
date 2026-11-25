@@ -4,9 +4,13 @@
 The 2026-11-03 recipe review found the RL source 98% one dataset-wrapper generator. The pool is the cases file the
 interleaved RL stage binds (`rl_task_source`). It keeps verified rows byte-for-byte except scheduling metadata:
 
-1. Generator balance: rows are classed by generator (``generation.generator``; the broad external builder is split
-   into dataset / codebase / composed by source, and new builders carry their own generator ids). Water-filling picks
-   a pool in which no class exceeds ``--max-generator-share`` of the rows; a class smaller than its cap is kept whole.
+1. Generator balance (off by default since 2026-11-25): rows are classed by generator (``generation.generator``; the
+   broad external builder is split into dataset / codebase / composed by source, and new builders carry their own
+   generator ids). With ``--max-generator-share`` > 0, water-filling picks a pool in which no class exceeds that share of
+   the rows; a class smaller than its cap is kept whole. The 2026-11-03 cap (0.2-0.225) kept 6,493 of 44,232 verified
+   dataset rows out of the pool; the program-shape cap at every selection stage (``natlang_neuralese.common.diversity``,
+   DECISIONS 2026-11-25 "Program-shape cap" and "Diversity end to end") now bounds any one template, so a whole
+   generator class is no longer capped (DECISIONS 2026-11-25 "broad-external real datasets admitted").
    Effect/state construct share (``--min-effect-share``, default 0.3, the owner bar) is enforced at SELECTION time, never by
    dropping candidates (2026-11-03 supervisor decision: the earlier pool shrank from 11,275 to 6,666 rows and lost 1,653
    distinct programs to reach the share). Every row that survives the generator and family caps stays in the pool; rows
@@ -127,7 +131,10 @@ def load(paths, exclude_ids=(), program_caps=(), dropped=None, protected=None):
 
 
 def caps(sizes, share):
-    """Largest pool in which every class is at most ``share`` of the rows (water-filling)."""
+    """Largest pool in which every class is at most ``share`` of the rows (water-filling). ``share`` 0 or None (the
+    default): no generator cap, every class kept whole."""
+    if not share:
+        return dict(sizes)
     if share * len(sizes) < 1:
         raise SystemExit(f'{len(sizes)} generator classes cannot satisfy a {share} share cap')
     capped = set()
@@ -305,7 +312,9 @@ def main(argv=None):
     parser.add_argument('--out', help='new output directory')
     parser.add_argument('--out-root', help='write a fresh selection-pool-<UTC time> here and update latest.json')
     parser.add_argument('--max-family-share', type=float, default=0.05)
-    parser.add_argument('--max-generator-share', type=float, default=0.2)
+    parser.add_argument('--max-generator-share', type=float, default=0.0,
+                        help='opt-in per-generator class cap (share of the pool; default 0: none, the program-shape cap '
+                             'at selection bounds repetition)')
     parser.add_argument('--min-effect-share', type=float, default=None,
                         help='effect/state construct share (default 0.3, the owner bar; 0 disables), enforced by the '
                              'selector from tagged rows: no candidate row is dropped for it')

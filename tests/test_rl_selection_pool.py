@@ -25,6 +25,11 @@ def test_caps_water_fill_and_refuse_infeasible_share():
         raise AssertionError('infeasible share accepted')
 
 
+def test_generator_cap_zero_keeps_every_class_whole():
+    sizes = {'a': 100, 'b': 10}
+    assert pool.caps(sizes, 0) == sizes and pool.caps(sizes, None) == sizes
+
+
 def test_pool_caps_generators_and_families_and_prefers_new_programs(tmp_path):
     rows = [case(f'big-{i}', 'template', 'g/big', body='same text', effect=True) for i in range(200)]
     rows += [case(f'big-other-{i}', f'fam{i % 10}', 'g/big', body=f'program {i} {"x" * (i % 7)} variant') for i in range(100)]

@@ -4067,8 +4067,10 @@ def main():
                    help='episodes of a task the start policy never solves; a task it always solves keeps 1')
     b.add_argument('--rich-max-per-task', type=int, default=8,
                    help='the per-task cap for tasks whose program declares a held construct (HELD_CONSTRUCTS)')
-    b.add_argument('--wrapper-share', type=float, default=0.15,
-                   help='dataset-wrapper episodes kept to at most this share of the GRPO-pool selection (1 = no cap)')
+    b.add_argument('--wrapper-share', type=float, default=1.0,
+                   help='opt-in: dataset-wrapper episodes kept to at most this share of the GRPO-pool selection (default '
+                        '1 = no cap since 2026-11-25: --max-shape-share bounds each wrapper template; 0.15 was the old '
+                        'class cap)')
     b.add_argument('--max-family-share', type=float, default=0.05)
     b.add_argument('--dup-threshold', type=float, default=0.8)
     b.add_argument('--max-shape-share', type=float, default=None,
