@@ -1199,6 +1199,56 @@ def reweight(rows, fills, weighting):
                                  row['weight'])
 
 
+def _render_source(job, renderers, make_renderer):
+    """(source chains, ``</think>`` id, None) of one fill record's episode (``Renderer.chains``, one renderer per
+    tokenizer directory in ``renderers``), or (None, None, the error's repr). The chains' rows drop their ``prompt``
+    (``calls_of`` cuts prompts from the chain ids), so a worker process sends back each chain's tokens once rather than
+    every call's whole prompt."""
+    tokenizer_dir, item = job
+    try:
+        if tokenizer_dir not in renderers:
+            renderers[tokenizer_dir] = make_renderer(tokenizer_dir)
+        source, r = renderers[tokenizer_dir].chains(item)
+    except Exception as error:
+        return None, None, repr(error)
+    for chain in source:
+        for _, _, row in chain['segs']:
+            row.pop('prompt', None)
+    return source, int(r.tokenizer.convert_tokens_to_ids('</think>')), None
+
+
+_RENDER_WORKER = {}
+
+
+def _render_worker_init(make_renderer):
+    os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
+    _RENDER_WORKER.update(renderers={}, make_renderer=make_renderer)
+
+
+def _render_worker(job):
+    return _render_source(job, _RENDER_WORKER['renderers'], _RENDER_WORKER['make_renderer'])
+
+
+def rendered_sources(records, workers=1, make_renderer=None):
+    """``_render_source`` of each record, in order: ``workers`` > 1 spawned processes render ahead (a bounded window;
+    the rendering is a pure function of the record's episode, so the results equal the serial ones), 1 renders here.
+    The re-rendering of every filled episode (chat template and tokenizer over each call's whole prompt) was 90% of the
+    build: 86 minutes for aei1 r0011's 16k episodes on one core. ``make_renderer``: a picklable callable of a tokenizer
+    directory (default ``Renderer``)."""
+    make_renderer = make_renderer or Renderer
+    jobs = ((r['render_tokenizer'], item_of(r)) for r in records)
+    if workers <= 1:
+        renderers = {}
+        yield from (_render_source(job, renderers, make_renderer) for job in jobs)
+        return
+    import concurrent.futures
+    import multiprocessing
+    from sft_sources import bounded_map
+    with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context('spawn'),
+                                                initializer=_render_worker_init, initargs=(make_renderer,)) as pool:
+        yield from bounded_map(pool, _render_worker, jobs, 4 * workers)
+
+
 def build(args):
     import pickle
     from exp0_sft import chains_of
@@ -1224,26 +1274,23 @@ def build(args):
         records = [a for a in attested if a is not None]
     excluded = set(args.exclude_policy)
     weighting = block_weights(records, args.length_reweight_cap, args.block_reweight)
-    renderers = {}
     chains, counts = [], collections.Counter()
     close = None
     if not getattr(args, 'admit_unattested', False):
         counts['unattested_policy'] = unattested
+    kept = []
     for record in records:
         if fill_policies(record) & excluded:   # drawn by a policy the cycle rejected as failed (expert_iteration gate)
             counts['excluded_policy'] += 1
             continue
-        item = item_of(record)
-        try:
-            if record['render_tokenizer'] not in renderers:
-                renderers[record['render_tokenizer']] = Renderer(record['render_tokenizer'])
-            source, r = renderers[record['render_tokenizer']].chains(item)
-        except Exception as error:
+        kept.append(record)
+    for record, (source, render_close, error) in zip(kept, rendered_sources(kept, getattr(args, 'workers', 1))):
+        if error is not None:
             counts['render_error'] += 1
-            print(json.dumps({'event': 'render error', 'key': record['key'], 'error': repr(error)[:300]}), flush=True)
+            print(json.dumps({'event': 'render error', 'key': record['key'], 'error': error[:300]}), flush=True)
             continue
         if close is None:
-            close = r.tokenizer.convert_tokens_to_ids('</think>')
+            close = render_close
         if [chain_digest(c) for c in source] != [c['digest'] for c in record['chains']]:
             counts['digest_mismatch'] += 1
             continue
@@ -1557,6 +1604,8 @@ def build_parser():
                         'bins only (before 2026-11-22), off')
     b.add_argument('--exclude-policy', action='append', default=[], metavar='SHA',
                    help='leave out episodes any step of which this policy drew (a held-failed candidate)')
+    b.add_argument('--workers', type=int, default=max(1, min(8, (os.cpu_count() or 2) - 4)),
+                   help='processes re-rendering the filled episodes (1: serial, in this process; ~0.35 GB each)')
     b.add_argument('--admit-unattested', action='store_true',
                    help='opt out: also build episodes with steps that record no drawing policy (default: left out '
                         'unless OUT/policy-relabels.json names their policy from the serving record)')

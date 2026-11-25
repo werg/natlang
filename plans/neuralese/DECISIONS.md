@@ -13203,3 +13203,45 @@ default reserve, ramp reservations and priorities are unchanged. After the guard
 ### 2026-11-25: recorded nested TypeScript entries and invocation lifetimes
 
 Independent review of e52 found that the inherited causal ID suppressed fresh loaded pure-TS entry capture, and that task liveness alone allowed stale callback ancestry. The shared task-owned invocation registry now distinguishes active own entries from external causal parents, expires all kernel/crisp/native-root paths, revalidates deferred task entry, records fresh TS entries as crisp children and preserves same-task helper suppression. Expired callbacks cannot retain invocation service scopes; task-level bindings remain valid. Parent frame references clear at task.close. Standalone native sessions and StdSpan receive their own real lifetime hooks; synthetic spans do not claim recorder-backed custody. Existing optouts remain. Official Node/Core/browser build passed,54 targeted actual tests passed(10.88s,1.4GiB),quick passed18.2s/1.1GiB; no model calls. Historical0064 capture bytes are preserved, not retrospectively reparented. The older StdSpan durable-record gap remains a separate owned follow-up.
+
+## 2026-11-25 13:40 Round data step made fast: exact token memo, parallel renders and extraction, unparsed repeats skipped (data-step agent)
+
+**Observation.** aei1 r0011's data step (`data.sh`: extract, replay, `filled_reasoning build`, `neuralese-graph`) ran
+07:33-10:01 (OOM at its 12 GB cap in `neuralese-graph`) and again from 10:02; from the registry journal: extract 12 and
+60 min, replay 44 and 28 min, filled build 86 min (r0010: 65, r0009: 58), neuralese-graph 9 min (r0010). Rounds are
+meant to take 2-2.5 h, so preparation was the round's bottleneck.
+**Profiles** (cProfile on reproductions under the ledger, pin 30d164222 vs main, scratch registry copy,
+`/home/werg/data/dataprof-20261125/`): the filled build spent 90% in `tokenizers.encode_batch`: every call of an episode
+renders its whole history again and `Engine._template_tokens` tokenized it whole, twice per call (prompt and closed
+template), on one core. Extract waited on reads of 12k group and task files (half on `/mnt/external`) with 6 min of CPU
+on one core. Replay's start parsed every line of the WORK's 45 episode files (~1 GB zstd; each round's extraction repeats
+all earlier episodes) only to skip the replayed keys: 376 s for 0 new episodes. Every registry write resolved the
+canonical checkout with one `git worktree list` per path: 6,446 subprocesses, 40-55 s per command.
+**Changes (each default on, outputs identical by construction and checked):**
+- `natlang_neuralese/serve/segment_tokens.py` `SegmentTokenCache` behind the engine's existing `_token_cache` hook, set
+  by `sft_sources.TemplateRenderer` (filled build, mix build, grpo SD teacher, subagent lowering, prompt_cache_map): a
+  fast tokenizer cuts its input at added tokens and encodes the pieces independently, so with no lstrip/rstrip/
+  single_word/normalized added token and no normalizer (checked; else no cache) the ids are the concatenation of
+  remembered pieces' ids. Exact, no code salt needed. `NATLANG_SEGMENT_TOKEN_CACHE=0` opts out. The serving Engine keeps
+  the hook unset (one request per call; not a protocol feature).
+- `filled_reasoning.py build --workers N` (default min(8, cpus-4); 1 = serial): episodes re-rendered by spawned
+  processes in order, rows without their prompt arrays (`calls_of` cuts prompts from the chain ids).
+- `sft_sources.py extract --workers N` (default min(8, cpus-4)): each RL group and teacher record is a unit converted by
+  a process, lines written in order, census and group rates merged in order.
+- `sft_sources.all_episodes`/`unique_lines`: a line whose leading `"key"` was already seen (or is in `skip`, replay's
+  verdict keys) is not parsed. `NATLANG_EPISODE_LINE_DEDUPE=0` opts out.
+- `data_registry._primary_worktree`: the primary worktree of a checkout once per process.
+- `neuralese-graph`: an episode on an unseen surface is dropped before its calls are lowered and held.
+- `expert_iteration.py async-drive --replay-workers` default 12 (was 8; replays are CPU-bound node runs, median 14 s).
+**Before/after** (same inputs, the DGX at load 36-45):
+- filled build, 17,235 fills: serial pin ~86 min in production (r0011 first run; 1500-fill subset 8.9 min serial),
+  parallel only 23.0 min (8,385 CPU s), parallel + token memo 4.3 min (26 CPU min). 1500 subset: 8.9 min serial ->
+  2.0 serial with memo -> 0.8 parallel with memo. chains.pkl sha identical across serial/parallel/memo and the pin
+  (subset c180c80c..., full ae0f1bc7...).
+- extract (warm page cache, teacher-r0011 left out as it was still growing): pin 12.0 min, workers 8 3.7 min, serial
+  main 8.8 min; episodes, extract.json and rl-group-rates.json identical.
+- replay's scan of the WORK: 376 s -> 47 s.
+Tests: `test_segment_tokens.py`, `test_filled_reasoning.py::test_build_renders_episodes_in_worker_processes_...`,
+`test_sft_sources.py::test_repeated_lines_are_skipped_unparsed...`, `::test_extract_by_worker_processes_...`.
+**Pickup:** the aei1 driver takes it at its next round boundary on a new pin (no driver change needed beyond the pin;
+the replay-workers default applies when async-drive restarts).

@@ -905,6 +905,35 @@ def test_light_episodes_read_by_workers_equal_the_serial_reading(tmp_path):
             assert x['sibling_ambiguous'] == facts['sibling_ambiguous'] is True
 
 
+def test_repeated_lines_are_skipped_unparsed_and_the_reading_is_unchanged(tmp_path, monkeypatch):
+    assert s.line_key('{"key": "a\\"b", "x": 1}') == 'a"b' and s.line_key('{"key": "k"}') == 'k'
+    assert s.line_key('{"source": "x", "key": "k"}') is None and s.line_key('{"key": 3, "x": 1}') is None
+    work = tmp_path / 'work'
+    work.mkdir()
+    for name, keys in (('episodes-a.jsonl.zst', range(0, 40)), ('episodes-b.jsonl.zst', range(20, 60))):
+        writer = s.ZstdWriter(work / name)
+        for i in keys:       # 20..39 twice: the first extraction's record wins
+            writer.write({'key': f'k{i}', 'source': 'rl-own', 'file': name, 'turns': []})
+        writer.close()
+    with (work / 'episodes-c.jsonl').open('w') as handle:   # key not first: parsed, deduped after parsing
+        handle.write(json.dumps({'source': 'rl-own', 'key': 'k5', 'file': 'c', 'turns': []}) + '\n')
+        handle.write(json.dumps({'source': 'rl-own', 'key': 'k99', 'file': 'c', 'turns': []}) + '\n')
+    monkeypatch.setattr(s, 'episode_files', lambda w: sorted(Path(w).glob('episodes*.jsonl*')))
+    parsed = []
+    loads = json.loads
+    monkeypatch.setattr(s.json, 'loads', lambda line, *a, **k: parsed.append(line) or loads(line, *a, **k))
+    fast = [(e['key'], e['file']) for e in s.all_episodes(work)]
+    fast_parsed, parsed[:] = len(parsed), []
+    skipped = [(e['key'], e['file']) for e in s.all_episodes(work, skip={'k1', 'k25', 'k99'})]
+    monkeypatch.setenv('NATLANG_EPISODE_LINE_DEDUPE', '0')
+    parsed[:] = []
+    slow = [(e['key'], e['file']) for e in s.all_episodes(work)]
+    assert fast == slow and len(fast) == 61 and ('k25', 'episodes-a.jsonl.zst') in fast and ('k99', 'c') in fast
+    assert fast_parsed == 62 and len(parsed) == 82        # repeats unparsed; the key-last lines always parsed
+    assert skipped == [x for x in slow if x[0] not in {'k1', 'k25', 'k99'}]
+    assert [(e['key'], e['file']) for e in s.all_episodes(work, 3)] == slow
+
+
 def test_replay_surfaces_and_kept_episodes_read_by_workers_equal_the_serial_reading(tmp_path):
     work = tmp_path / 'work'
     (work / 'replay').mkdir(parents=True)
@@ -1019,6 +1048,52 @@ def test_extract_pass_rates_count_student_samples_only_and_policies_come_from_ea
     assert json.loads((work / 'rl-group-rates.json').read_text())['t'] == {'successes': 1, 'scored': 2}
     own = [json.loads(line) for line in s.zstd_lines(work / 'episodes.jsonl.zst') if '"rl-own"' in line]
     assert own[0]['policies'] == ['p1', 'p2']                          # an episode straddling a rebind
+
+
+def test_extract_by_worker_processes_writes_the_serial_extraction(tmp_path):
+    import types
+    import zstandard
+    run, archive, pool = tmp_path / 'run', tmp_path / 'archive', tmp_path / 'pool'
+    archive.mkdir()
+    turn = lambda i: {'messages': [{'role': 'user', 'content': f'q{i}'}], 'target': {'role': 'assistant', 'content': 'a'},
+                      'invocation_id': 'root', 'sampling': {'prompt': [{'kind': 'tokens', 'token_ids': [1, i]}],
+                                                            'samples': [{'token_id': 5, 'logp': -0.1}]}}
+    for g in range(23):
+        name = f'g{g:06d}'
+        group = run / 'groups' / name
+        group.mkdir(parents=True)
+        (group / 'cases.jsonl').write_text(json.dumps({'id': f't{g % 5}', 'family': 'f', 'split': 'train'}) + '\n')
+        (group / 'score.json').write_text('{}')
+        rows = [{'task_id': f't{g % 5}', 'sample': k, 'outcome': 'task_success' if (g + k) % 3 else 'wrong_result',
+                 'reward': {'quality': float((g + k) % 3 > 0)}, 'turns': [turn(g * 10 + k)],
+                 **({'unscored': True} if (g, k) == (4, 1) else {})} for k in range(4)]
+        text = ''.join(json.dumps(r) + '\n' for r in rows)
+        if g % 4 == 0:      # archived groups
+            (archive / f'{name}.rollouts.jsonl.zst').write_bytes(zstandard.ZstdCompressor().compress(text.encode()))
+        else:
+            (group / 'rollouts.jsonl').write_text(text)
+    pool.mkdir()
+    with (pool / 'manifest.jsonl').open('w') as manifest:
+        for t in range(17):
+            directory = pool / f't{t:06d}'
+            directory.mkdir()
+            (directory / 'cases.jsonl').write_text(json.dumps({'id': f'x{t}', 'family': 'h'}) + '\n')
+            (directory / 'rollouts.jsonl').write_text(json.dumps(
+                {'task_id': f'x{t}', 'sample': 0, 'outcome': 'task_success' if t % 2 else 'timeout',
+                 'reward': {'quality': 1.0}, 'turns': [turn(t)]}) + '\n')
+            manifest.write(json.dumps({'rollouts': str(directory / 'rollouts.jsonl'), 'teacher': 'm'}) + '\n')
+    outputs = []
+    for workers in (1, 3):
+        work = tmp_path / f'work{workers}'
+        s.extract(types.SimpleNamespace(work=str(work), rl=[f'{run}:{archive}'], teacher=[str(pool)],
+                                        out_name='episodes', workers=workers))
+        outputs.append([list(s.zstd_lines(work / 'episodes.jsonl.zst')),
+                        (work / 'episodes-extract.json').read_text(), (work / 'rl-group-rates.json').read_text()])
+    assert outputs[0] == outputs[1]
+    census = json.loads(outputs[0][1])['sources']
+    assert census[f'rl:{tmp_path.name}/run']['groups'] == 23 and census[f'teacher:{tmp_path.name}/pool']['successes'] == 8
+    assert len(outputs[0][0]) == json.loads(outputs[0][1])['episodes'] == 8 + sum(
+        1 for g in range(23) for k in range(4) if (g + k) % 3 and (g, k) != (4, 1))
 
 
 def test_unfilled_live_teacher_episodes_train_with_teacher_reasoning_as_context_unless_dropped():

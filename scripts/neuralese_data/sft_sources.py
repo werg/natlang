@@ -87,7 +87,11 @@ class ZstdWriter:
         self.rows = 0
 
     def write(self, row):
-        self.writer.write(utf8(json_line(row)))
+        self.write_line(json_line(row))
+
+    def write_line(self, line):
+        """One row already encoded by ``json_line``."""
+        self.writer.write(utf8(line))
         self.rows += 1
 
     def close(self, *, publish=True):
@@ -304,6 +308,129 @@ def call_policy(turn):
     return None
 
 
+def _extract_rl_group(label, name, path, group_dir, archive_dir):
+    """``extract``'s lines, census counts and student group rates ({task: [successes, scored]}) of one RL group."""
+    path, c, lines, rates = Path(path), collections.Counter(), [], {}
+    cases = group_cases(group_dir)
+    c['groups'] += 1
+    if not path.exists():   # a live group the run archived since the listing
+        path = Path(archive_dir) / f'{name}.rollouts.jsonl.zst'
+    for line in zstd_lines(path):
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        c['episodes'] += 1
+        if row.get('unscored') or row.get('reward') is None:
+            c['unscored'] += 1
+            continue
+        role = row.get('jolt_role', 'student')
+        success = episode_success(row)
+        if role != 'teacher':   # a guided attempt is no sample of the student's own pass rate
+            rate = rates.setdefault(row['task_id'], [0, 0])
+            rate[1] += 1
+            rate[0] += success
+        if not success:
+            continue
+        task = cases.get(row['task_id'])
+        if task is None:
+            c['success_without_task_row'] += 1
+            continue
+        c['successes'] += 1
+        if row.get('outcome') == MEMETIC:
+            c['memetic_successes'] += 1
+        if role == 'teacher':
+            # a JOLT+ teacher success trains in student form: its consumer calls without the guidance turn,
+            # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4);
+            # one whose replies quote or name the guidance, or whose guidance carried the answer, is left out
+            from natlang_neuralese.rl.jolt import guidance_leak, student_episode
+            from natlang_neuralese.rl.privileged_context import answer_leaves
+            if guidance_leak(row, answers=answer_leaves(task)):
+                c['teacher_attempt_guidance_leak'] += 1
+                continue
+            row = student_episode(row, c)
+            c['teacher_attempt_successes'] += 1
+        ep_policy = (row.get('policy') or {}).get('checkpoint_sha256')
+        call_policies = sorted({p for t in row.get('turns') or () for p in (call_policy(t),) if p})
+        if ep_policy and ep_policy not in call_policies:
+            call_policies = sorted({*call_policies, ep_policy})
+        lines.append(json_line({'key': f"{label}:{name}:{row['sample']}",
+                                'source': 'jolt-guided' if role == 'teacher' else 'rl-own',
+                                'run': label, 'group': name,
+                                **({'role': 'teacher'} if role == 'teacher' else {}),
+                                'sample': row['sample'], 'seed': row.get('seed'), 'task_id': row['task_id'],
+                                'family': row.get('family'), 'policy': ep_policy,
+                                **({'policies': call_policies} if call_policies else {}),
+                                'task': task, 'turns': [semantic_turn(t, True) for t in row['turns']],
+                                'execution_graph_events': len(row.get('execution_graph') or [])}))
+    return label, lines, c, rates
+
+
+def _extract_teacher_record(label, pool, manifest_line):
+    """``extract``'s lines and census counts of one teacher pool manifest record (its task's episodes)."""
+    from teacher_admission import check_record, fixture_task
+    c, lines = collections.Counter(), []
+    record = json.loads(manifest_line)
+    c['tasks'] += 1
+    directory = Path(record['rollouts']).parent
+    cases = group_cases(directory)
+    reviewed = check_record(record, pool) if record.get('admission') else {}
+    for rline in Path(record['rollouts']).open():
+        if not rline.strip():
+            continue
+        row = json.loads(rline)
+        c['episodes'] += 1
+        if row.get('outcome') != SUCCESS or float((row.get('reward') or {}).get('quality') or 0) < 1:
+            continue
+        task = cases.get(row['task_id'])
+        if task is None:
+            c['success_without_task_row'] += 1
+            continue
+        admission = reviewed.get((row['task_id'], row['sample']))
+        if fixture_task(task) and admission is None:
+            c['fixture_not_admitted'] += 1
+            continue
+        c['successes'] += 1
+        turns = []
+        for turn in row['turns']:
+            metadata = (admission or {}).get('invocations', {}).get(turn.get('invocation_id'), {})
+            turns.append(semantic_turn({**turn, **metadata}, False))
+        lines.append(json_line({'key': f"{label}:{directory.name}:{row['sample']}", 'source': 'teacher', 'run': label,
+                                'group': directory.name, 'sample': row['sample'], 'seed': row.get('seed'),
+                                'task_id': row['task_id'], 'family': row.get('family'), 'teacher': record.get('teacher'),
+                                'base_rank': record.get('base_rank'), 'task': task,
+                                'root_mode': record.get('root_mode', 'student'),
+                                'turns': turns,
+                                **({'admission': {'path': admission['path'], 'sha256': admission['sha256'],
+                                                 'manifest_record': record, 'pool': str(Path(pool).resolve())}}
+                                   if admission else {}),
+                                'execution_graph_events': len(row.get('execution_graph') or [])}))
+    return label, lines, c, {}
+
+
+def _extract_unit(unit):
+    kind, *rest = unit
+    return (_extract_rl_group if kind == 'rl' else _extract_teacher_record)(*rest)
+
+
+def extract_units(units, workers=1):
+    """(label, JSONL lines, census counts, student group rates) of each RL group and teacher record, in order:
+    ``workers`` > 1 spawned processes read and convert them ahead (a bounded window; each unit is a pure function of its
+    files, so the lines and counts equal the serial ones), 1 converts here. Serially, aei1 r0011's extract spent 22
+    minutes mostly waiting on reads of 12k group and task files (half on the external HDD) and 6 on one core."""
+    if workers <= 1:
+        yield from map(_extract_unit, units)
+        return
+    import concurrent.futures
+    import multiprocessing
+    with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context('spawn')) as pool:
+        for batch in bounded_map(pool, _extract_units, batched(units, 8), 4 * workers):
+            yield from batch
+
+
+def _extract_units(units):
+    return [_extract_unit(unit) for unit in units]
+
+
 def extract(args):
     live_runs = live_manifest_paths(getattr(args, 'live_run', None) or [],
                                     getattr(args, 'live_capture_root', None) or [])
@@ -323,103 +450,24 @@ def extract(args):
     native_lines = ZstdWriter(native_out) if native_out else None
     census = collections.OrderedDict()
     group_rates = collections.defaultdict(lambda: [0, 0])     # task -> [successes, scored] over all student groups
+    units = []
     for spec in args.rl:
         run_dir, archive_dir = spec.split(':')
         label = 'rl:' + '/'.join(Path(run_dir).parts[-2:])
-        c = census.setdefault(label, collections.Counter())
-        for name, path, group_dir in rl_rollout_files(run_dir, archive_dir):
-            cases = group_cases(group_dir)
-            c['groups'] += 1
-            if not path.exists():   # a live group the run archived since the listing
-                path = Path(archive_dir) / f'{name}.rollouts.jsonl.zst'
-            for line in zstd_lines(path):
-                if not line.strip():
-                    continue
-                row = json.loads(line)
-                c['episodes'] += 1
-                if row.get('unscored') or row.get('reward') is None:
-                    c['unscored'] += 1
-                    continue
-                role = row.get('jolt_role', 'student')
-                success = episode_success(row)
-                if role != 'teacher':   # a guided attempt is no sample of the student's own pass rate
-                    group_rates[row['task_id']][1] += 1
-                    group_rates[row['task_id']][0] += success
-                if not success:
-                    continue
-                task = cases.get(row['task_id'])
-                if task is None:
-                    c['success_without_task_row'] += 1
-                    continue
-                c['successes'] += 1
-                if row.get('outcome') == MEMETIC:
-                    c['memetic_successes'] += 1
-                if role == 'teacher':
-                    # a JOLT+ teacher success trains in student form: its consumer calls without the guidance turn,
-                    # without the guidance policy's own calls (RESTORE_MEMETIC_JOLT_HINDSIGHT_20261117.md section 4);
-                    # one whose replies quote or name the guidance, or whose guidance carried the answer, is left out
-                    from natlang_neuralese.rl.jolt import guidance_leak, student_episode
-                    from natlang_neuralese.rl.privileged_context import answer_leaves
-                    if guidance_leak(row, answers=answer_leaves(task)):
-                        c['teacher_attempt_guidance_leak'] += 1
-                        continue
-                    row = student_episode(row, c)
-                    c['teacher_attempt_successes'] += 1
-                ep_policy = (row.get('policy') or {}).get('checkpoint_sha256')
-                call_policies = sorted({p for t in row.get('turns') or () for p in (call_policy(t),) if p})
-                if ep_policy and ep_policy not in call_policies:
-                    call_policies = sorted({*call_policies, ep_policy})
-                out.write({'key': f"{label}:{name}:{row['sample']}",
-                           'source': 'jolt-guided' if role == 'teacher' else 'rl-own',
-                           'run': label, 'group': name,
-                           **({'role': 'teacher'} if role == 'teacher' else {}),
-                           'sample': row['sample'], 'seed': row.get('seed'), 'task_id': row['task_id'],
-                           'family': row.get('family'), 'policy': ep_policy,
-                           **({'policies': call_policies} if call_policies else {}),
-                           'task': task, 'turns': [semantic_turn(t, True) for t in row['turns']],
-                           'execution_graph_events': len(row.get('execution_graph') or [])})
+        census.setdefault(label, collections.Counter())
+        units += [('rl', label, name, str(path), str(group_dir), archive_dir)
+                  for name, path, group_dir in rl_rollout_files(run_dir, archive_dir)]
     for pool in args.teacher:
         label = 'teacher:' + '/'.join(Path(pool).parts[-2:])
-        c = census.setdefault(label, collections.Counter())
-        for line in Path(pool, 'manifest.jsonl').open():
-            if not line.strip():
-                continue
-            record = json.loads(line)
-            c['tasks'] += 1
-            directory = Path(record['rollouts']).parent
-            cases = group_cases(directory)
-            from teacher_admission import check_record, fixture_task
-            reviewed = check_record(record, pool) if record.get('admission') else {}
-            for rline in Path(record['rollouts']).open():
-                if not rline.strip():
-                    continue
-                row = json.loads(rline)
-                c['episodes'] += 1
-                if row.get('outcome') != SUCCESS or float((row.get('reward') or {}).get('quality') or 0) < 1:
-                    continue
-                task = cases.get(row['task_id'])
-                if task is None:
-                    c['success_without_task_row'] += 1
-                    continue
-                admission = reviewed.get((row['task_id'], row['sample']))
-                if fixture_task(task) and admission is None:
-                    c['fixture_not_admitted'] += 1
-                    continue
-                c['successes'] += 1
-                turns = []
-                for turn in row['turns']:
-                    metadata = (admission or {}).get('invocations', {}).get(turn.get('invocation_id'), {})
-                    turns.append(semantic_turn({**turn, **metadata}, False))
-                out.write({'key': f"{label}:{directory.name}:{row['sample']}", 'source': 'teacher', 'run': label,
-                           'group': directory.name, 'sample': row['sample'], 'seed': row.get('seed'),
-                           'task_id': row['task_id'], 'family': row.get('family'), 'teacher': record.get('teacher'),
-                           'base_rank': record.get('base_rank'), 'task': task,
-                           'root_mode': record.get('root_mode', 'student'),
-                           'turns': turns,
-                           **({'admission': {'path': admission['path'], 'sha256': admission['sha256'],
-                                            'manifest_record': record, 'pool': str(Path(pool).resolve())}}
-                              if admission else {}),
-                           'execution_graph_events': len(row.get('execution_graph') or [])})
+        census.setdefault(label, collections.Counter())
+        units += [('teacher', label, pool, line) for line in Path(pool, 'manifest.jsonl').open() if line.strip()]
+    for label, lines, counts, rates in extract_units(units, getattr(args, 'workers', 1)):
+        for line in lines:
+            out.write_line(line)
+        census[label].update(counts)
+        for task_id, (successes, scored) in rates.items():
+            group_rates[task_id][0] += successes
+            group_rates[task_id][1] += scored
     for path in getattr(args, 'october_teacher', None) or []:
         for episode in october_teacher_episodes(path, getattr(args, 'october_model', None) or (), args.held_manifest,
                                                 census.setdefault('october-teacher:' + october_group(path),
@@ -456,14 +504,51 @@ def episode_files(work):
     return sorted(Path(work).glob('episodes*.jsonl.zst'))
 
 
-def all_episodes(work, workers=1, light=False, keep=None):
+_KEY_DECODER = json.JSONDecoder()
+_KEY_PREFIX = '{"key": '
+
+
+def line_key(line):
+    """The ``key`` of an extracted episode's JSON line without parsing the line (every writer puts it first), or None
+    when the line does not start with it."""
+    if not line.startswith(_KEY_PREFIX):
+        return None
+    try:
+        key, end = _KEY_DECODER.raw_decode(line, len(_KEY_PREFIX))
+    except ValueError:
+        return None
+    return key if isinstance(key, str) and line[end:end + 1] in (',', '}') else None
+
+
+def unique_lines(work, skip=frozenset(), dedupe=True):
+    """WORK's episode lines, a key's first line only and none of ``skip``'s keys: later extractions repeat every earlier
+    episode (each round re-extracts all its collections, 45 files and ~1 GB of zstd in aei1's WORK), and parsing the
+    repeats was most of a reader's time. A line whose key cannot be read without parsing passes (the reader dedupes
+    after parsing). ``dedupe`` False: every line (``NATLANG_EPISODE_LINE_DEDUPE=0`` opts out of the pre-parse check)."""
+    seen = set()
+    for path in episode_files(work):
+        for line in zstd_lines(path):
+            if not line.strip():
+                continue
+            if dedupe:
+                key = line_key(line)
+                if key is not None:
+                    if key in seen or key in skip:
+                        seen.add(key)
+                        continue
+                    seen.add(key)
+            yield line
+
+
+def all_episodes(work, workers=1, light=False, keep=None, skip=frozenset()):
     """The extracted episodes of WORK, each key once (a later extraction of the same episode is the same record).
     ``light``: an episode's ``turns`` are replaced by their ``facts`` (``episode_facts``: what the build's candidate
     selection reads of them; observed-live episodes keep their turns), so ``workers`` > 1 processes can parse the
     lines and send back only that (``bounded_map``); the episodes, their order and the facts are the serial ones.
-    ``keep``: a picklable predicate on the full episode; the others are not yielded (nor sent back)."""
-    seen = set()
-    lines = (line for path in episode_files(work) for line in zstd_lines(path) if line.strip())
+    ``keep``: a picklable predicate on the full episode; the others are not yielded (nor sent back). ``skip``: keys
+    left out unparsed (``replay``'s keys with a verdict)."""
+    seen = set(skip)
+    lines = unique_lines(work, skip, dedupe=os.environ.get('NATLANG_EPISODE_LINE_DEDUPE', '1') != '0')
     if workers > 1:
         import concurrent.futures
         import multiprocessing
@@ -582,6 +667,9 @@ class TemplateRenderer:
         config = json.loads(Path(tokenizer_dir, 'model_type.json').read_text())
         tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_dir), trust_remote_code=False)
         self.tokenizer = bind_history_reasoning(tokenizer, model_type=config['model_type'])
+        from natlang_neuralese.serve.segment_tokens import SegmentTokenCache
+        # the engine's tokenization hook: every call re-renders the whole history; its pieces are tokenized once
+        self._token_cache = SegmentTokenCache.for_tokenizer(self.tokenizer)
         self.tool_call_format = tool_call_format(config['model_type'])
         self.prompt_rendering = 'full'
         self.identity = {'tokenizer_sha256': sha256_file(Path(tokenizer_dir, 'tokenizer.json')),
@@ -1301,7 +1389,7 @@ def replay(args):
     teacher pool replays only its new episodes and appends each verdict once."""
     path = Path(args.work) / 'replay.jsonl'
     done = {json.loads(line).get('key') for line in path.open() if line.strip()} if path.exists() else set()
-    return replay_episodes(args, (e for e in all_episodes(Path(args.work)) if e['key'] not in done))
+    return replay_episodes(args, (e for e in all_episodes(Path(args.work), skip=done) if e['key'] not in done))
 
 
 def replay_episodes(args, episodes):
@@ -3926,6 +4014,11 @@ def neuralese_graph(args):
             if line.strip():
                 row = json.loads(line)
                 if row.get('sample') in samples and row.get('task_id') == samples[row['sample']]['task_id']:
+                    if not (current_surface_run(args, samples[row['sample']]) or window_current(surfaces, row['turns'])):
+                        # dropped as unseen_surface before its calls are read: none are lowered or held
+                        lowered_of[samples[row['sample']]['key']] = (False, None, None)
+                        del row
+                        continue
                     counters = collections.Counter()
                     calls = episode_turns(row, counters, in_context=in_context)
                     if getattr(args, 'empty_replies', 'drop') == 'drop':
@@ -3937,9 +4030,7 @@ def neuralese_graph(args):
                     for call in calls:      # SFT: the own sampled tokens are the target (no importance weights)
                         for field in ('logp', 'probabilities'):
                             call.pop(field, None)
-                    lowered_of[samples[row['sample']]['key']] = (
-                        current_surface_run(args, samples[row['sample']]) or
-                        window_current(surfaces, row['turns']), counters, calls)
+                    lowered_of[samples[row['sample']]['key']] = (True, counters, calls)
                 del row
     per_task = collections.Counter()
     stats = collections.Counter()
@@ -4027,6 +4118,8 @@ def main():
     e.add_argument('--live-trajectory-out', metavar='OUTPUT.jsonl.zst',
                    help='also export verified open goals as standalone canonical trajectory IR')
     e.add_argument('--out-name', default='episodes', help='WORK/NAME.jsonl.zst (build reads every episodes*.jsonl.zst)')
+    e.add_argument('--workers', type=int, default=max(1, min(8, (os.cpu_count() or 2) - 4)),
+                   help='processes reading and converting the RL groups and teacher records (1: serial)')
     e.add_argument('--october-teacher', action='append', default=[], metavar='GROUP.jsonl.zst',
                    help='October per-call rows (sft-sources-20261117/october) as teacher episodes for replay')
     e.add_argument('--october-model', action='append', default=[], metavar='MODEL_ID',

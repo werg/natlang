@@ -99,17 +99,7 @@ def canonical_checkout_repo(repo=None) -> Path:
             raise ValueError(f'immutable pin source checkout is unavailable: {current}')
         git_marker = current / '.git'
         if git_marker.exists() or git_marker.is_symlink():
-            env = {key: value for key, value in os.environ.items()
-                   if key not in {'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE'}}
-            result = subprocess.run(['git', '-C', str(current), 'worktree', 'list', '--porcelain', '-z'],
-                                    capture_output=True, text=True, env=env, check=True)
-            records = [dict(field.split(' ', 1) if ' ' in field else (field, '')
-                            for field in record.split('\0') if field)
-                       for record in result.stdout.split('\0\0') if record]
-            primary = next((row['worktree'] for row in records if 'worktree' in row and 'bare' not in row), None)
-            if primary is None:
-                raise ValueError('Git repository has no mutable primary worktree')
-            return assert_registry_writable(primary)
+            return assert_registry_writable(_primary_worktree(str(current)))
         marker = current / '.natlang-pin.json'
         if not marker.exists() and not marker.is_symlink():
             return assert_registry_writable(current)
@@ -118,6 +108,28 @@ def canonical_checkout_repo(repo=None) -> Path:
         if not isinstance(source, str) or not source or not Path(source).is_absolute():
             raise ValueError(f'immutable pin lacks an absolute source checkout: {current}')
         current = Path(source).expanduser().resolve()
+
+
+_PRIMARY_WORKTREES: dict[str, str] = {}
+
+
+def _primary_worktree(checkout: str) -> str:
+    """The primary worktree of the Git checkout at ``checkout``, once per process: ``canonical_repo`` runs for every
+    path a registry record names (``portable``, ``absolute``), and one ``git worktree list`` each was 6,446 subprocesses
+    and 50 s of a filled-reasoning build's two registry records. A repository's primary worktree does not move."""
+    if checkout not in _PRIMARY_WORKTREES:
+        env = {key: value for key, value in os.environ.items()
+               if key not in {'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE'}}
+        result = subprocess.run(['git', '-C', checkout, 'worktree', 'list', '--porcelain', '-z'],
+                                capture_output=True, text=True, env=env, check=True)
+        records = [dict(field.split(' ', 1) if ' ' in field else (field, '')
+                        for field in record.split('\0') if field)
+                   for record in result.stdout.split('\0\0') if record]
+        primary = next((row['worktree'] for row in records if 'worktree' in row and 'bare' not in row), None)
+        if primary is None:
+            raise ValueError('Git repository has no mutable primary worktree')
+        _PRIMARY_WORKTREES[checkout] = primary
+    return _PRIMARY_WORKTREES[checkout]
 
 
 def registry_owner_repo() -> Path:
