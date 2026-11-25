@@ -23,6 +23,23 @@ entry={'program':'skills/hof/runUserGoal.nl','callable':'runUserGoal','arguments
 interaction={'kind':'open-user-goal','goal':goal,'program':entry['program'],'entry':entry}
 world={'instance':'test-only-local-scripted-gateway','run_id':'test-only-hof-run','context_id':'test-only-hof','case_id':'test-only-higher-order-scalar'}
 checks={'nativeScalarTen':capture['result']==10,'fourActualCapturedCalls':len(details)==4}
+if capture.get('effectful'):
+ make=next(d['record'] for d in details if d['record']['definition']['name']=='make')
+ consume=next(d['record'] for d in details if d['record']['definition']['name']=='consume')
+ escaped=next(d for d in details if d['record']['parent_call_id']==consume['call_id'])
+ effects=escaped['record']['effects']
+ pairs=sorted([(json.loads(capture['values'][e['args']['hash']])[0],json.loads(capture['values'][e['result']['hash']])) for e in effects])
+ for effect in effects:
+  for ref in (effect['args'],effect['result']):
+   encoded=capture['values'][ref['hash']].encode()
+   assert ref['complete'] is True and len(encoded)==ref['bytes'] and hashlib.sha256(encoded).hexdigest()==ref['hash']
+ requests=[e for e in escaped['events'] if e.get('kind')=='effect' and e.get('phase')=='requested' and e.get('service')=='docs']
+ checks.update(nativeEffectsOnCurrentObserver=len(effects)==2 and all(e['service']=='docs' and e['method']=='describe' for e in effects),
+               creatorAndConsumerUnmodified=not make['effects'] and not consume['effects'] and not r['effects'],
+               exactNativePairs=pairs==[('3',{'id':'3','surface':'workspace','qualifiedName':'test-only-hof/3','title':'3'}),('4',{'id':'4','surface':'workspace','qualifiedName':'test-only-hof/4','title':'4'})],
+               uniqueObservedRequestSequences=len(requests)==2 and len({e['seq'] for e in requests})==2)
+ assert all(checks.values()),checks
+
 proof={'goal':goal,'entry':entry,'contextId':world['context_id'],'caseId':world['case_id'],'passed':True,'checks':checks}
 value=capture['values'][r['output']['hash']];assert json.loads(value)==capture['result']
 verification={'schema':'natlang.live-task-verification/1','task_id':'test-only-higher-order-scalar','run_id':world['run_id'],'world':world,'status':'passed','checks':checks,'root_call_ids':[r['call_id']],'calls':[d['summary'] for d in details],'interaction':interaction,

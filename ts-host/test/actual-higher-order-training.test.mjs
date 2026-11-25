@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {readFile, mkdtemp, copyFile, rm} from 'node:fs/promises';
+import {readFile, writeFile, mkdtemp, copyFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {verifyObservedWorkspaceEvidence} from '../scripts/observed-workspace-evidence.mjs';
@@ -35,6 +35,23 @@ test('actual escaped callable capture retains every independently verified train
   assert.match(JSON.stringify(consume.model_turns[0].request.messages),/live value, use it in eval/);
   assert.match(JSON.stringify(escaped.model_turns[0].request.messages),/const delta: number = 7/);
   assert.equal(escaped.parent_call_id,consume.call_id);
+  if(raw.effectful){
+   assert.equal(escaped.effects.length,2);assert.deepEqual(make.effects,[]);assert.deepEqual(consume.effects,[]);
+   const pairs=escaped.effects.map(e=>[JSON.parse(raw.values[e.args.hash])[0],JSON.parse(raw.values[e.result.hash])]).sort((a,b)=>a[0]-b[0]);
+   assert.deepEqual(pairs, [['3',{id:'3',surface:'workspace',qualifiedName:'test-only-hof/3',title:'3'}],['4',{id:'4',surface:'workspace',qualifiedName:'test-only-hof/4',title:'4'}]]);
+   for(const effect of escaped.effects)for(const ref of [effect.args,effect.result]){
+    const text=raw.values[ref.hash];assert.equal(Buffer.byteLength(text),ref.bytes);
+    const{createHash}=await import('node:crypto');assert.equal(createHash('sha256').update(text).digest('hex'),ref.hash);
+   }
+   const decision=native.trajectory.find(d=>d.invocation_id===escaped.call_id);
+   const artifact=join(root,decision.live_exchange.call_artifact.path);
+   const originalBytes=await readFile(artifact,'utf8');
+   const forged=JSON.parse(originalBytes);forged.record.effects[0].result.hash='0'.repeat(64);
+   try{await writeFile(artifact,JSON.stringify(forged));await assert.rejects(verifyObservedWorkspaceEvidence(native));}
+   finally{await writeFile(artifact,originalBytes);}
+   await verifyObservedWorkspaceEvidence(native);
+  }
+
   assert.notEqual(escaped.parent_call_id,make.call_id);
   assert.ok(Date.parse(make.ended_at)<=Date.parse(consume.started_at));
   if(process.env.NATLANG_TEST_HOF_TOKENIZER){
