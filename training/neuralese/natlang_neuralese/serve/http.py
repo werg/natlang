@@ -324,7 +324,7 @@ def make_handler(engine: Engine):
                     body = self._object()
                     # the producing call the text is written at the end of (Engine.write_context); none: its own frame
                     context = {key: body[key] for key in ("messages", "tools", "prompt_token_ids", "prompt_segments",
-                                                          "reply_token_ids") if key in body}
+                                                          "reply_token_ids", "chat_template_kwargs") if key in body}
                     return self._json(201, engine.native_write_text(body.get("text"), value_type=body.get("type"),
                                                                     adapters=body.get('adapters'), context=context or None))
                 if self.path == "/v1/neuralese/native-states/capture":
@@ -492,7 +492,8 @@ def make_handler(engine: Engine):
                     from .chat import split_escaped
 
                     body = self._object()
-                    rendered = engine.render_request(body.get("messages") or [], body.get("tools"))
+                    rendered = engine.render_request(body.get("messages") or [], body.get("tools"),
+                        template_kwargs=engine.template_kwargs(body.get("chat_template_kwargs")))
                     prompt = "".join("<block>" if isinstance(segment, int) else
                                      "".join(run for run, _ in split_escaped(segment, rendered.escape_nonce))
                                      for segment in rendered.segments)
@@ -574,6 +575,7 @@ def make_handler(engine: Engine):
                 raise RequestError('bad-request', 'x_natlang_tool_grammar must be a boolean')
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"), tool_grammar=tool_grammar,
+                chat_template_kwargs=engine.template_kwargs(body.get('chat_template_kwargs')),
                 max_tokens=completion_limit(body),
                 temperature=float(body.get("temperature") or 0.0), top_p=top_p, seed=body.get("seed"),
                 template=body.get("neuralese_template"),

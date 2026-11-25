@@ -68,6 +68,7 @@ import { hostCaptures, type CaptureSource } from '../exact-capture/host-capture.
 import { checkItemResultBinding, type ItemResultBindingSpec } from './item-result-binding.js';
 import { RefinementChecker, type RefinementFailure, type RefinementJudge } from '../native/refinement.js';
 import { createTeacherTextNeuralese, TEACHER_TEXT_NEURALESE_PROMPT } from '../model/teacher-text-neuralese.js';
+import { createInContextNeuralese } from '../model/in-context-neuralese.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import { nodePlatform } from '../runtime/node.js';
 import { currentFrame, runInFrame, type Frame } from '../runtime/context.js';
@@ -130,6 +131,10 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   neuraleseServer?: boolean;
   /** Explicit teacher-only literal text transport; carries no native representation or training claim. */
   textNeuraleseEmulation?: boolean;
+  /** Neuralese as the serving engines read it, without an engine (model/in-context-neuralese.ts): operator calls and
+   * typed Neuralese values run the runtime's own paths, and each request shows a state as its text in place. The replay
+   * of authored teacher episodes (sft_sources replay) uses it, so the replay renders what the authored trajectory did. */
+  inContextNeuralese?: boolean;
   /** Optional collection-specific maximum wall time for one Pi provider request. */
   providerRequestTimeoutMs?: number;
   /** Optional collection-specific maximum wall time for preparation plus provider turns in one action cycle. */
@@ -324,6 +329,8 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.textNeuraleseEmulation ? { neuralese_transport: { schema: 'natlang.teacher-text-neuralese-transport/1',
       mode: 'teacher-text/1', learned_vectors: false, qualification_certificate: false, training_admission: false,
       tokenizer: { kind: 'provider-native-unspecified', ids_claimed: false } } } : {}),
+    ...(options.inContextNeuralese ? { neuralese_transport: { schema: 'natlang.in-context-neuralese/1',
+      read: 'in-context-text', learned_vectors: false, tokenizer: { ids_claimed: false } } } : {}),
     ...(options.chatRequestControls ? { chat_request_controls: options.chatRequestControls } : {}),
     ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
       ...(options.providerRequestControls ? { provider_request_controls: options.providerRequestControls } : {}),
@@ -965,6 +972,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (config.textNeuraleseEmulation && (config.collectionRole !== 'teacher' || config.neuraleseServer || config.trainingGuidance ||
       config.programGuidance || config.chatRequestControls?.x_natlang_guidance))
     throw new Error('teacher-text Neuralese emulation requires teacher role and excludes native Neuralese and native guidance');
+  if (config.inContextNeuralese && (config.textNeuraleseEmulation || config.neuraleseServer))
+    throw new Error('in-context Neuralese excludes teacher-text emulation and a native Neuralese server');
   if (config.textNeuraleseEmulation && !config.provider && !config.endpoint)
     throw new Error('teacher-text Neuralese emulation requires an explicit provider or endpoint transport');
   if (config.judgeModel && (!config.judgeModel.modelId ||
@@ -1019,7 +1028,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const promptStates = nativeValueRuntime ? promptStatesDirectory() : undefined;
     if (promptStates) Object.assign(nativeValueRuntime!, { systemPrompts: await loadPromptStates(promptStates, nativeStore!) });
     const teacherTextTransport = config.textNeuraleseEmulation ? createTeacherTextNeuralese() : undefined;
-    const valueRuntime = teacherTextTransport?.runtime ?? (nativeStore ? nativeValueRuntime ?? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : undefined);
+    const inContext = config.inContextNeuralese ? createInContextNeuralese() : undefined;
+    const valueRuntime = inContext?.runtime ?? teacherTextTransport?.runtime ?? (nativeStore ? nativeValueRuntime ?? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : undefined);
     const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,
       config.modelId, config.piOptions, config.providerRequestControls)) : undefined;
     const judgeConfig = config.judgeModel;
@@ -1538,7 +1548,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       };
     }
     let run: ProgramRun;
-    try { run = await hermeticEpisode({}, () => (config.execution?.run ?? executeProgram)(item.record, driver,
+    try { run = await hermeticEpisode({}, () => (config.execution?.run ?? executeProgram)(item.record, inContext ? inContext.wrap(driver) : driver,
       { ...config, systemPrompt: effectiveSystemPrompt(config), runId: executionRunId, signal: providerParentSignal(),
         onPartialExecution: async snapshot => appendEvidence(partialExecutionRecords({ ...snapshot,
           logical_run_id: runId, execution_attempt_id: partial.execution_attempt_id }), 'execution_interrupted'),

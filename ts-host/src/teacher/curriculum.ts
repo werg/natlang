@@ -15,6 +15,7 @@ import { trainingQualityReason, runtimeFailureReason, RETIRED_FAMILIES, quaranti
 import { sourceConversionProblems } from './source-conversion.js';
 import { delegatedDecisionObserved } from './delegated-decision.js';
 import { scriptedSuccess } from '../native/decision.js';
+import type { InContextNeuralese } from '../model/in-context-neuralese.js';
 
 export const CURRICULUM_VERSION = 'natlang.inline_curriculum/1';
 export const CURRICULUM_ADMISSION_VERSION = 'natlang.inline_curriculum_admission/2';
@@ -431,13 +432,21 @@ export type MissingChild = (request: ModelTurnRequest, name: string) => unknown;
 /** The value a `MissingChild` hook returns to leave the call unanswered. */
 export const NO_PLACEHOLDER = Symbol('no placeholder');
 
+/** The function name an authored entry gives a learned operator's call (`fn: "view"`): the builtin `view(value,
+ * instructions)` whose site it runs at (native/operator-frames.ts viewSiteMessages). */
+export const OPERATOR_CALL = 'view';
+
 export function referenceDriver(record: CurriculumRecord, reasoningFor?: ReasoningHook,
     onChild?: (answer: ChildAnswer) => void, missing?: MissingChild): (request: ModelTurnRequest) => Promise<ModelTurn> {
   const rootName = record.semantics.root.replace(/\.nl$/, '').split('/').pop()!;
   let step = 0, seeded = !record.semantics.failure_seed;
   const childTurns = new Map<string, number>();
   return async request => {
-    const context = request.messages as Message[], name = callName(context);
+    // A learned operator's call (`<call>#operator-<n>`, `compaction: nl`, native/agent.ts operatorWrite) runs at view's
+    // site, not in a call frame: it is a call of `view`, matched by its opening (the instructions and the value), and
+    // its reply is the summary text an entry's `value` gives.
+    const operator = /#operator-\d+$/.test(request.invocation_id ?? '');
+    const context = request.messages as Message[], name = operator ? OPERATOR_CALL : callName(context);
     let calls: [string, Record<string, unknown>][];
     if (name === rootName && !seeded) {
       // The collector answers a seeded program's first root turn with the failing eval; so does the replay.
@@ -453,7 +462,7 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
       calls = [call ? [call[0], call[1]] :
         ['return_result', { status: 'failed', reason: referenceEnded(context) }]];
     } else {
-      const opening = openingText(context);
+      const opening = operator ? `You are inside this call: ${OPERATOR_CALL}(\n${openingText(context)}` : openingText(context);
       const children = record.curriculum.reference.children ?? [];
       const source = scopedFileHandleSource(context);
       let answer: (typeof children)[number] | undefined;
@@ -473,8 +482,15 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
       const callKey = request.invocation_id ? `call:${request.invocation_id}` : opening;
       const turn = childTurns.get(callKey) ?? 0;
       childTurns.set(callKey, turn + 1);
-      if (turn === 0) onChild?.({ name, entry: answer ? children.indexOf(answer) : -1, opening, shown: argumentText(context) });
+      if (turn === 0) onChild?.({ name, entry: answer ? children.indexOf(answer) : -1, opening,
+        shown: operator ? text(context[1]?.content) : argumentText(context) });
       const placeholder = !answer && turn === 0 && missing ? missing(request, name) : NO_PLACEHOLDER;
+      if (operator) {
+        // An operator call answers with its reply text (a failed operator keeps the crisp cut: agent.ts compactRef).
+        const reply = answer && !answer.calls && !answer.call ? answer.value : placeholder !== NO_PLACEHOLDER ? placeholder : undefined;
+        if (reply === undefined) throw new Error(unansweredChild(context, name));
+        return { text: typeof reply === 'string' ? reply : JSON.stringify(reply), calls: [] };
+      }
       if (placeholder !== NO_PLACEHOLDER) {
         const reply = scriptedSuccess(request, placeholder);
         if ('text' in reply) return reply;
@@ -542,9 +558,12 @@ export async function replayReference(record: CurriculumRecord, systemPrompt: st
     options: { onChild?: (answer: ChildAnswer) => void; missing?: MissingChild;
       /** Every model request and the scripted reply as the runtime sent and received them (authored-trajectory export:
        * scripts/rl_tasks/reference_episodes.mjs; a decision readout's reply is its `text`). */
-      onTurn?: (request: ModelTurnRequest, response: ModelTurn) => void } = {}): Promise<{ run: ProgramRun; trajectory: Turn[] }> {
+      onTurn?: (request: ModelTurnRequest, response: ModelTurn) => void;
+      /** Neuralese as the serving engines read it (model/in-context-neuralese.ts): learned compaction's operator calls
+       * and `Neuralese<T>` values run the runtime's own paths, and every request shows each state as its text in place. */
+      neuralese?: InContextNeuralese } = {}): Promise<{ run: ProgramRun; trajectory: Turn[] }> {
   const trajectory: Turn[] = [], reference = referenceDriver(record, reasoningFor, options.onChild, options.missing);
-  const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
+  const scripted = async (request: ModelTurnRequest): Promise<ModelTurn> => {
     const response = await reference(request);
     options.onTurn?.(structuredClone(request), structuredClone(response));
     trajectory.push({ context: structuredClone(request.messages) as Message[],
@@ -552,7 +571,9 @@ export async function replayReference(record: CurriculumRecord, systemPrompt: st
         ...(response.reasoning ? { reasoning: response.reasoning } : {}) } });
     return response;
   };
-  const run = await executeProgram(record, driver, { ...REFERENCE_OPTIONS, ...referenceRun(record, systemPrompt, 'replay'), systemPrompt });
+  const driver = options.neuralese ? options.neuralese.wrap(scripted) : scripted;
+  const run = await executeProgram(record, driver, { ...REFERENCE_OPTIONS, ...referenceRun(record, systemPrompt, 'replay'), systemPrompt,
+    ...(options.neuralese ? { neuralese: options.neuralese.runtime } : {}) });
   return { run, trajectory };
 }
 

@@ -992,7 +992,7 @@ class SglangEngine(Engine):
         future: Future = Future()
         request.request_id = request.request_id or f"chatcmpl-{next(self._ids)}"
         try:
-            plan = self._prompt_plan(request.messages, request.tools)
+            plan = self._prompt_plan(request.messages, request.tools, request.chat_template_kwargs)
         except Exception as error:
             future.set_exception(error)
             return future
@@ -1018,7 +1018,7 @@ class SglangEngine(Engine):
 
     def generate(self, request):
         request.request_id = request.request_id or f"chatcmpl-{next(self._ids)}"
-        plan = self._prompt_plan(request.messages, request.tools)
+        plan = self._prompt_plan(request.messages, request.tools, request.chat_template_kwargs)
         if self._routes_native(request, plan):
             return self._native_gated(lambda: super(SglangEngine, self).generate(request))
         return self._sglang_run(Sequence(request, Future(), prompt_plan=self._append_only(request, plan)))

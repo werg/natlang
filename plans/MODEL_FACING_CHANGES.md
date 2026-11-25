@@ -3555,3 +3555,19 @@ Found by the authored-program wave 1 builders (`/home/werg/data/natlang-novel-pr
 ### 2026-11-25 — retain nested TypeScript entries without stale invocation scopes
 
 Fresh loaded TypeScript entries now retain their typed crisp child records and actual NL descendants; ordinary same-task helpers remain native implementation. Causal trace links are checked at actual entry and expire when the owning invocation ends, including crisp/strict/error paths. Expired invocation-bound callbacks receive a context error directing hosts to start a new task; task-scope callbacks remain valid. No fallback widens expired service/source grants. Existing `traceParent:false` and `recording.nativeRoots:false` remain explicit independent-trace/root-recording choices. Integration skill and host reference explain recovery. Node/Workerd actual compiled-entry, callback and standalone-root tests use no model calls; original0064 records remain immutable. Inventory: `plans/neuralese/NESTED_INVOCATION_LIFETIME_20261125.md`.
+### 2026-11-25 — learned operator calls render without reasoning, as the operator rows train them
+
+A learned operator's call (ts-host `native/agent.ts` `operatorWrite`, on by default with learned compaction) rendered
+with the chat template's default `enable_thinking: true`: its prompt ended in `<think>` and the call allowed 2048
+reasoning tokens before the span cap. The operator rows (`scripts/neuralese_data/operator_rows.py`, the `operators`
+tier of every expert-iteration SFT mix) train the reply as an empty think block (zero-weight context) and then the
+summary, so the trained operator never reasons; live on the Colab actor (policy 6f19fe3a, 28k-character argument) the
+reply twice spent all 2432 tokens reasoning and the capture refused it, leaving the consumer the text cut. Now the call
+sets `ModelTurnRequest.thinking: false`, sent by the Neuralese transport as `chat_template_kwargs.enable_thinking:
+false` (merged into the profile's switches): the prompt ends in `<think></think>`, token for token the rows' prompt
+plus their first (zero-weight) reply token, and `max_tokens` is the span cap alone (384/512). Every engine renders the
+switch: the Python native engine and the SGLang actor front (`Engine.template_kwargs`, threaded through every
+rendering of the request: prompt plan, guidance span, write-template prefix, forced reply, text-write context, recorded
+objective replay; unknown switches are refused), the fork's llama-server (`server-common.cpp` per-request
+`chat_template_kwargs`) and wllama (`createChatCompletion` merges them). The grammar capture re-renders and forces the
+call with the same switch. Opt-out: none needed beyond the call site (a request without `thinking` renders as before).

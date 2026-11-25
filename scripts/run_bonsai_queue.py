@@ -1059,6 +1059,14 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             text_neuralese and remote and not neuralese_server and 'program_guidance_file' not in entry))
         if not isinstance(text_neuralese_emulation, bool):
             raise ValueError('entry text_neuralese_emulation must be a boolean')
+        # An authored teacher episode's replay (sft_sources replay) reads Neuralese as the engines do, each state as its
+        # text in place (ts-host model/in-context-neuralese.ts), instead of the teacher-text transport.
+        in_context_neuralese = entry.get('in_context_neuralese', False)
+        if not isinstance(in_context_neuralese, bool):
+            raise ValueError('entry in_context_neuralese must be a boolean')
+        if in_context_neuralese:
+            text_neuralese_emulation = False
+            command.append('--in-context-neuralese')
         if text_neuralese_emulation:
             command.append('--text-neuralese-emulation')
         case_seconds = entry.get('case_seconds', seconds)

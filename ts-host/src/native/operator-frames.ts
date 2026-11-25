@@ -25,19 +25,23 @@ export type CapturedCall = { messages: unknown[]; tools: unknown[]; prompt?: num
   select?: string;
   /** Write this text as the span after the whole reply (a Neuralese text write in its producing call,
    * `NeuralesePort.write`'s `context`), instead of capturing the reply's own tokens. */
-  write?: string };
+  write?: string;
+  /** The chat-template switches the call was rendered with (`{enable_thinking: false}` for an operator's call): a
+   * capture that renders or forces the call again renders it the same way. */
+  chat_template_kwargs?: Record<string, unknown> };
 
 /**
  * The producing context of one model call (`NativeWriteContext`): the request's messages and tools and, when the
  * server reported its RL capture, the exact prompt (token ids, or segments with the states it imported) and the
  * sampled reply ids. Shared by the operator capture (agent.ts `capturedRef`) and Neuralese text writes.
  */
-export function callContext(request: { messages: unknown[]; tools?: unknown[] },
+export function callContext(request: { messages: unknown[]; tools?: unknown[]; thinking?: false },
     response: { raw_response?: Record<string, unknown> }): import('./neuralese-store.js').NativeWriteContext {
   const sampled = response.raw_response?.x_natlang_rl_capture as { prompt?: { kind?: string; token_ids?: number[]; id?: string }[];
     generated_inputs?: { token_id?: number }[] } | undefined;
   const tokens = (segment: { kind?: string; token_ids?: number[] }) => segment.kind === 'tokens' && Array.isArray(segment.token_ids);
-  const base = { messages: request.messages, tools: request.tools ?? [] };
+  const base = { messages: request.messages, tools: request.tools ?? [],
+    ...(request.thinking === false ? { chat_template_kwargs: { enable_thinking: false } } : {}) };
   const exact = !!sampled?.prompt?.length && !!sampled.generated_inputs?.length &&
     sampled.prompt.every(segment => tokens(segment) || (segment.kind === 'native_state' && typeof segment.id === 'string')) &&
     sampled.generated_inputs.every(input => Number.isSafeInteger(input?.token_id));
@@ -84,9 +88,6 @@ export function framedState(operator: CompactSite['operator'] | 'compact-history
 /** The operators' reply caps in tokens (learned_operators.py `seed_cap`). */
 export const OPERATOR_SPAN_CAPS: Record<CompactSite['operator'] | 'compact-history', number> = {
   'compact-value': 512, 'compact-params': 384, 'compact-history': 1024, 'extract': 256 };
-
-/** Reasoning room of an operator call beyond its reply cap (tokens). */
-export const OPERATOR_REASONING_TOKENS = 2048;
 
 /**
  * With learned compaction selected, a tool output or argument longer than this many characters (~2k tokens) is cut and

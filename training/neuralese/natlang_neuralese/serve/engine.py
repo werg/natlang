@@ -132,6 +132,14 @@ class GenerationRequest:
     # Decode tool calls under their schemas (common.tool_grammar); False (`x_natlang_tool_grammar: false`, or
     # NATLANG_TOOL_GRAMMAR=0 on the server) leaves the reply unconstrained.
     tool_grammar: bool = True
+    # The request's chat-template switches (`chat_template_kwargs`, checked by Engine.template_kwargs): every rendering
+    # of this request's prompt (its plan, a write template's prefix, a forced reply) applies them. A learned operator's
+    # call sends {enable_thinking: false}: its prompt ends in an empty think block, as the operator rows train it.
+    chat_template_kwargs: dict | None = None
+
+
+# The chat-template switches a request may set; any other refuses the request (it would otherwise be ignored).
+TEMPLATE_KWARGS = ('enable_thinking', 'preserve_thinking')
 
 
 @dataclass
@@ -343,7 +351,7 @@ class Engine:
         # HTTP request threads can prepare CPU text while the scheduler advances
         # active GPU sequences. No embeddings, adapters or CUDA state cross here.
         try:
-            plan = self._prompt_plan(request.messages, request.tools)
+            plan = self._prompt_plan(request.messages, request.tools, request.chat_template_kwargs)
         except Exception as error:
             future.set_exception(error)
             return future
@@ -358,7 +366,8 @@ class Engine:
     def generate(self, request: GenerationRequest) -> dict:
         """Run one request to completion on the calling thread (no scheduler)."""
         request.request_id = request.request_id or f"chatcmpl-{next(self._ids)}"
-        sequence = Sequence(request, Future(), prompt_plan=self._prompt_plan(request.messages, request.tools),
+        sequence = Sequence(request, Future(), prompt_plan=self._prompt_plan(request.messages, request.tools,
+                                                                               request.chat_template_kwargs),
                             native_actor_export=self.actor_export_default)
         with torch.inference_mode():
             while not sequence.future.done():
@@ -479,12 +488,37 @@ class Engine:
         self._oom_requeues += 1
         return True
 
-    def _template(self, messages, tools):
+    def _template(self, messages, tools, **template_kwargs):
         return self.tokenizer.apply_chat_template(messages, tools=tools or None, tokenize=False,
-                                                  add_generation_prompt=True)
+                                                  add_generation_prompt=True, **template_kwargs)
 
-    def render_request(self, messages, tools=None, template=None, *, response_tools=None):
-        """Render an ordinary text or native-state prompt under the declared chat-template policy."""
+    def template_kwargs(self, value) -> dict | None:
+        """A request's `chat_template_kwargs`, checked: boolean switches among TEMPLATE_KWARGS, agreeing with what the
+        backbone's history-reasoning policy pins (chat.bind_history_reasoning). Unknown switches are refused."""
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise RequestError('bad-request', 'chat_template_kwargs must be an object')
+        unknown = sorted(set(value) - set(TEMPLATE_KWARGS))
+        if unknown:
+            raise RequestError('unsupported-request-field', f'chat_template_kwargs {", ".join(map(str, unknown))}: '
+                               f'this engine renders only {", ".join(TEMPLATE_KWARGS)}')
+        pinned = (getattr(self.tokenizer, 'natlang_history_reasoning', None) or {}).get('template_kwargs') or {}
+        for name, flag in value.items():
+            if type(flag) is not bool:
+                raise RequestError('bad-request', f'chat_template_kwargs.{name} must be a boolean')
+            if name in pinned and pinned[name] != flag:
+                raise RequestError('bad-request', f'chat_template_kwargs.{name}: this backbone\'s history-reasoning '
+                                   f'policy pins {name}={pinned[name]!r}')
+        return dict(value) or None
+
+    def render_request(self, messages, tools=None, template=None, *, response_tools=None, template_kwargs=None):
+        """Render an ordinary text or native-state prompt under the declared chat-template policy (and the request's
+        `template_kwargs`, checked by `template_kwargs`)."""
+        if template_kwargs:
+            if template is not None:
+                raise ValueError('render_request takes a template or template kwargs, not both')
+            template = lambda turns, schemas: self._template(turns, schemas, **template_kwargs)
         from ..data.prompt_rendering import apply_prompt_rendering
         from .chat import render_messages
 
@@ -552,15 +586,15 @@ class Engine:
                 if not isinstance(context.get('message'), dict):
                     raise ValueError('v2 guidance requests carry the guidance turn as one system message')
                 span = message_span(plan, self._prompt_plan(guidance_messages(request.messages, context['message']),
-                                                            request.tools),
+                                                            request.tools, request.chat_template_kwargs),
                                     self._privileged_rendering().insertion_point(own)[0])
             return guidance_plan(self._privileged_rendering(), context, token_ids=own, text=text, message_span=span)
         except ValueError as error:
             raise RequestError('bad-request', f'x_natlang_privileged_context: {error}') from error
 
-    def _prompt_plan(self, messages, tools) -> list:
+    def _prompt_plan(self, messages, tools, template_kwargs=None) -> list:
         """Render and tokenize on the caller's CPU thread; preserve segment boundaries."""
-        rendered = self.render_request(messages, tools)
+        rendered = self.render_request(messages, tools, template_kwargs=template_kwargs)
         plan = []
         for segment in rendered.segments:
             if isinstance(segment, str):
@@ -954,7 +988,8 @@ class Engine:
                 any(not isinstance(part, str) and type(part) is not int for part in argument_path)):
             raise RequestError('neuralese-template', 'argument_path must contain string or integer keys')
         apply = lambda messages, generation: self.tokenizer.apply_chat_template(
-            messages, tools=seq.request.tools or None, tokenize=False, add_generation_prompt=generation)
+            messages, tools=seq.request.tools or None, tokenize=False, add_generation_prompt=generation,
+            **(seq.request.chat_template_kwargs or {}))
         arguments = template.get('arguments') or {}
         argument = template.get('argument') or 'value'
         if mode == 'decode':
@@ -1129,7 +1164,7 @@ class Engine:
             if not capture_enabled(seq) or seq.request.native_recording is not True:
                 raise RequestError('forced-message','forced teacher replay requires native structural recording')
             seq.native_forced_tokens=self._forced_message_plan(seq.request.forced_message,seq.request.tools,
-                opening=seq.request.messages)
+                opening=seq.request.messages,template_kwargs=seq.request.chat_template_kwargs)
             if len(seq.native_forced_tokens)>seq.request.max_tokens:
                 raise RequestError('forced-message','exact teacher reply exceeds the request token allowance')
             seq.native_forced_replay=True
@@ -1416,7 +1451,7 @@ class Engine:
     def write_context(self, text, context):
         """(prompt ids, prompt segments, reply ids) of the producing call a text write ends: ``context`` is the producer
         call's exact prompt (``prompt_token_ids`` or its RL capture's ``prompt_segments``) and sampled reply
-        (``reply_token_ids``), or its ``messages`` and ``tools`` rendered here (no reply), or None for
+        (``reply_token_ids``), or its ``messages`` and ``tools`` rendered here (with its ``chat_template_kwargs``; no reply), or None for
         ``text_producer_messages``."""
         if context is None:
             context = {}
@@ -1430,18 +1465,19 @@ class Engine:
                 messages, reply = self.text_producer_messages(text), []
             elif not isinstance(messages, list) or not messages:
                 raise RequestError("neuralese-native-state-text", "a text write's context messages are a nonempty list")
-            segments = self.rendered_prompt_segments(messages, context.get("tools"))
+            segments = self.rendered_prompt_segments(messages, context.get("tools"),
+                                                     self.template_kwargs(context.get("chat_template_kwargs")))
         return prompt, segments, list(reply)
 
     def _capture_exact(self, block):
         return self._native_exact(block)
 
-    def rendered_prompt_segments(self, messages, tools):
+    def rendered_prompt_segments(self, messages, tools, template_kwargs=None):
         """A call's rendered prompt as capture segments (``capture_prompt``): a state the call reads in context
         (``reads_in_context``) stands as its tokens, as generation feeds it; another exact state is imported between
         the consume markers; a foreign state as its retokenized text (generation's best-effort fallback)."""
         segments = []
-        for kind, value in self._prompt_plan(messages, tools):
+        for kind, value in self._prompt_plan(messages, tools, template_kwargs):
             if kind == "tokens":
                 segments.append({"kind": "tokens", "token_ids": [int(t) for t in value]})
                 continue
@@ -1468,7 +1504,7 @@ class Engine:
         return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type, context=context),
                                 adapters)
 
-    def _forced_message_plan(self,forced,tools,*,opening):
+    def _forced_message_plan(self,forced,tools,*,opening,template_kwargs=None):
         """Render an exact assistant response against its actual prompt, forcing text spans through native roles."""
         if (not isinstance(forced,dict) or forced.get('schema')!='natlang.native-teacher-forced-turn/1'
                 or not isinstance(forced.get('assistant'),dict) or not isinstance(forced.get('source_receipt'),dict)):
@@ -1618,7 +1654,7 @@ class Engine:
             from .chat import normalize_tool_call_arguments
             prepared=normalize_tool_call_arguments(prepared)[0]
             return self.tokenizer.apply_chat_template(prepared,tools=tools or None,
-                tokenize=False,add_generation_prompt=generation)
+                tokenize=False,add_generation_prompt=generation,**(template_kwargs or {}))
         segments=assistant_reply_segments(apply,target,self.specials,opening=opening,
             call_format=getattr(self,"tool_call_format",None),tools=tools)
         if segments is None:raise RequestError('forced-message','assistant response does not continue this exact actual prompt')
