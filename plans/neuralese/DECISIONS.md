@@ -13955,3 +13955,37 @@ The live campaign ingested all402 useful episodes; later native-state housekeepi
 The active Vibe source cutover strengthened review declarations while remote catalog metadata stayed at its prior release: drive synchronized status/reused but never catalog.jsonl. Publish the validated current catalog before archival/model work through the existing checkpoint-aware idempotent transport; the WORK held registry stays immutable and its explicit compatibility check owns metadata evolution. NATLANG_CAMPAIGN_SYNC_CATALOG=0 is the externally-managed-index opt-out. Fresh campaigns now create their owned waves/jobs parents.
 
 The same inventory found fixed temporary names in both campaign publish and common durable JSON publication. Concurrent derivative/live archive-health writers can clobber the same pending inode or unlink another publisher's file. Use operation-unique O_EXCL files in the shared byte writer, preserve original encodings/fsync/rename, and clean up only a file actually created by this operation. Campaign publication uses that shared primitive. All23 Python helper consumers inherit the correction; unrelated independent writers are not claimed audited. Actual139 campaign/provider/JSON controls passed, including forced concurrent writes, failed-writer cleanup and temporary collision refusal. No model calls; live immutable drivers remain unchanged until their normal resume. Inventories: VIBE_CATALOG_PUBLICATION_20261125.md and ATOMIC_STATE_OWNERSHIP_20261125.md.
+
+## 2026-11-25 18:45 Natlang compiler: review fixes, first real-data runs (compiler-owner agent)
+
+Owner (2026-11-25): "review the implementation and improve it." The first implementation (another agent, committed
+unchanged as 454e70353 / hindsight-kb 084a43d) was reviewed; decisions taken and why:
+
+- **Mode P is the native state the engines splice** (fork agent, af7f47e6c..603f5d541, hindsight-kb 29b952a). The first
+  version trained a tanh-gated memory at positions -M..-1 that no engine splice computes. Now a compiled site is the
+  header's text-initialized native state (written in its real call, `native_init_body`) plus a zero-init residual from
+  Z, trained through `native_graph_gradient` (the executor the engines match), released in the `tune.build` layout;
+  hindsight-kb keeps only Mode W (research). ENGINE_PARITY row rewritten to what is measured (1cf4fe16d); the old
+  "already serves on all four engines" claim was unverified.
+- **Top-k distillation keeps a tail bucket on both sides** (`stable_softmax.topk_tail_divergence`, default of
+  `topk_forward_kl`, `tail=False` opts out); compiler context distillation uses full distributions by default. The
+  renormalized top-k forms let the student put mass outside the teacher's head for free.
+- **OPSD is the shared privileged-context mechanism** (`privileged_context.case_facts(answers='withhold')`, the declared
+  guidance turn after the leading system turn, i.e. JOLT+'s text-twin placement), per call, forward KL by default (JOLT+
+  students since 2026-11-20), CE only on verified continuations. A wrong-answer verdict never becomes feedback: the first
+  real build had twins saying `verifier detail: "pass"` on pass/fail decisions (412c525fb).
+- **FO-MAML** returns `z_init + sg(z_K - z_init)`: the query loss reaches HeaderEncoder (tested).
+- **Experience KB** is hindsight-kb's SQLiteKB behind scopes + `training_exclusion_ids` admission (1471ac656); the TS
+  parallel store was removed. **Call-level engine** reads real rollouts and authored pools (921f560ea).
+- hindsight-kb is a declared dependency (`NATLANG_HINDSIGHT_KB` / logical root), no machine paths.
+- Plan corrections the owner approved are in `plans/NATLANG_COMPILER.md` (bbe8c6fc7).
+
+**Runs (real data, policy r0010 cde55352685b, v0009 collections).** T0 build (DGX `cmp-t0-build-2`): 1,518 scored
+rollouts, 3,869 sequences, 18,022 boundaries, 0 held-excluded. Features on g4b: 1 of ~5 shards (4,097 boundaries) before
+the L4 went to program tuning's rerun (an unadmitted job of mine there was stopped; resume is queued as a preemptible
+admission claim `cmp-t0-features`). Head on that shard: train AUROC 0.69, validation 0.48 (347 boundaries, ~2
+families; label-permuted control 0.53): no signal yet; the validation slice is too narrow to judge, and per-boundary
+episode labels are weak early in an episode. Criterion (0.78) not met; diagnosis waits for the full features. T1 build
+(DGX `cmp-t1-build-4`): 2,052 rollouts, 178 twins / 47 episodes after removing answer-verdict feedback (681 failed
+episodes have no diagnostic fact): OPSD supply from these worlds is thin; richer diagnostic facts (verifier diffs that
+name no answer) are the lever. T1 training queued on g4b (`cmp-t1-opsd`).
