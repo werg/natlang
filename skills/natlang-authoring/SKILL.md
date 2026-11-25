@@ -6,12 +6,27 @@ description: Write, check, run, test and debug natlang programs — named `.nl` 
 # Write natlang programs
 
 Natlang is TypeScript with natural-language functions: typed functions whose bodies are instructions a model
-carries out, checked like any other code. Use it to automate repeat agentic work on a small local model: the
-program's types, data and exact steps are TypeScript, each judgment is a small typed function, and the runtime makes
-finite judgments calibrated decisions, compiles repeated paths to code and checks every result against its type.
+carries out, checked like any other code. Use typed semantic functions for both focused judgments and domain-specific
+composition. A function responsible for an open-ended goal can choose and delegate subgoals through its hierarchical
+callable scope, carry observations forward and reconsider its plan. TypeScript supplies exact computation, native
+effects and application state boundaries; the runtime checks function results against their types.
 
 `natlang check` and the installed declarations are the authority. If this skill disagrees with them, trust the tool
 and say so.
+
+## Choose the owner of composition
+
+For an open-ended goal, give the responsible semantic function the relevant domain operations and reusable semantic
+helpers as a hierarchical callable scope. Let it decide which subproblem needs which helper, pass actual observations
+and use the results to decide what remains. Keep exact effects, version checks and deterministic algorithms in
+TypeScript. A TS entry can bind application state and delegate the goal to such a semantic function; the entry's
+filename does not decide who owns the work.
+
+Pure decision leaves are useful when the caller needs a classification, plan value or policy judgment. Their caller
+owns the effects named by that returned value. Use them alongside semantic composition rather than making every
+open-ended goal a fixed TS sequence of leaf judgments. Check actual traces for model-selected calls and subgoals;
+a deep TS-generated call tree or a large available scope alone does not establish that behavior. The
+[tutorial revision example](references/composition.md#let-a-semantic-function-own-a-domain-goal) illustrates the split.
 
 ## The working loop
 

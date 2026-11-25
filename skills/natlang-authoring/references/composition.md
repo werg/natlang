@@ -3,11 +3,26 @@
 A natlang program is TypeScript in which every judgment is a typed function value. Those values compose like any
 other functions: map them over data, pass them to other functions, gate on their probabilities, rebind them to another
 context, put them behind a setting, iterate them until a check holds, and let them write files only through a
-transaction the program checks. Each section below quotes a program in the natlang repository, so every form shown
-builds and runs: [`examples/refunds`](https://github.com/werg/natlang/tree/main/examples/refunds) (a refund desk for
+transaction the program checks. The repository examples below quote programs whose forms build and run: [`examples/refunds`](https://github.com/werg/natlang/tree/main/examples/refunds) (a refund desk for
 several shops), [`examples/triage`](https://github.com/werg/natlang/tree/main/examples/triage) and the curated
 applications, and [`examples/release`](https://github.com/werg/natlang/tree/main/examples/release) (a release
 desk built on the standard library's combinators).
+
+## Let a semantic function own a domain goal
+
+Vibestudio's working tutorial-revision program, `reviseFromPublicResearch`, illustrates model-owned composition.
+Its semantic parent owns the user's original request. Its callable folder provides `inspectRevisionContext` and
+`identifyResearchQuestion`; declared `uses` also makes `investigatePublicQuestion` and `reviseWorkspaceDocument`
+available. The research hierarchy owns public-source investigation and grounded evidence. The revision hierarchy
+owns a proposal and reconciliation with the current document. Exact native reads and versioned writes stay behind
+their typed operations.
+
+An original recorded run shows the parent model invoking those named children, with further model-selected calls
+inside the research and revision hierarchies. This is evidence of delegation in that run, not a mandatory route for
+other goals. The parent carries the original goal and actual observations across calls, and can leave a change
+unmade when the evidence does not justify it. A small pure decision function remains appropriate for one policy
+question within that larger program. Keep authority in authored scopes; expose required operations by callable-folder
+structure or explicit `uses`, without granting access to unrelated siblings.
 
 ## Map judgments; keep the exact work in code
 
