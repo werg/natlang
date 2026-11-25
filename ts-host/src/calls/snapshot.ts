@@ -8,13 +8,14 @@ import type { ValueRef } from './types.js';
 /** A snapshot ready to store: the reference, and the JSON text when it is complete. */
 export type Snapshot = { ref: ValueRef; text?: string };
 
-const typeLabel = (value: unknown): string => {
-  if (value === null) return 'null';
-  if (Array.isArray(value)) return 'array';
-  if (typeof value !== 'object') return typeof value;
-  const name = (value as object).constructor?.name;
-  return name && name !== 'Object' ? name : 'object';
-};
+const typeLabel = (value: unknown): string => {try{return value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;}catch{return typeof value;}};
+
+/** Read only data properties. Observation must never execute application getters. */
+export function dataEntries(value: object): [string, unknown][] {
+  return Object.entries(Object.getOwnPropertyDescriptors(value))
+    .filter(([, descriptor]) => descriptor.enumerable && Object.hasOwn(descriptor, 'value'))
+    .map(([key, descriptor]) => [key, descriptor.value]);
+}
 
 const objectConstructorSource = Function.prototype.toString.call(Object);
 
@@ -28,25 +29,44 @@ function plainPrototype(prototype: object | null): boolean {
     Function.prototype.toString.call(constructor) === objectConstructorSource;
 }
 
-/** Plain JSON data only: no class instances, functions, cycles, non-finite numbers or undefined fields. */
-function portable(value: unknown, seen: Set<object>, depth: number): boolean {
-  if (depth > 64) return false;
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (typeof value !== 'object' || seen.has(value)) return false;
+/** Realm-neutral plain-data classification without Symbol.toStringTag or constructor access. */
+export function isPlainDataObject(value:unknown):value is Record<string,unknown>{
+  return value!==null&&typeof value==='object'&&!Array.isArray(value)&&plainPrototype(Object.getPrototypeOf(value));
+}
+
+/** Encode data descriptors directly: JSON.stringify on an application object can execute toJSON. */
+function portableText(value: unknown, seen: Set<object>, depth: number): string | undefined {
+  if (depth > 64) return undefined;
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'number') return Number.isFinite(value) ? JSON.stringify(value) : undefined;
+  if (typeof value !== 'object' || seen.has(value)) return undefined;
   seen.add(value);
   try {
+    const descriptors=Object.getOwnPropertyDescriptors(value);
     if (Array.isArray(value)) {
-      // JSON turns holes into null and drops extra array fields. Neither is an
-      // exact snapshot of the actual call input, so never certify it complete.
-      if (Object.keys(value).length !== value.length) return false;
-      for (let index = 0; index < value.length; index++)
-        if (!Object.hasOwn(value, index) || !portable(value[index], seen, depth + 1)) return false;
-      return true;
+      const length=descriptors.length?.value;
+      if(typeof length!=='number'||Object.values(descriptors).filter(item=>item.enumerable).length!==length)return undefined;
+      const items:string[]=[];
+      for(let index=0;index<length;index++){
+        const item=descriptors[String(index)];
+        if(!item||!Object.hasOwn(item,'value'))return undefined;
+        const text=portableText(item.value,seen,depth+1);
+        if(text===undefined)return undefined;
+        items.push(text);
+      }
+      return `[${items.join(',')}]`;
     }
-    if (!plainPrototype(Object.getPrototypeOf(value))) return false;
-    return Object.entries(value).every(([, item]) => item !== undefined && portable(item, seen, depth + 1));
-  } finally { seen.delete(value); }
+    if(!plainPrototype(Object.getPrototypeOf(value)))return undefined;
+    const items:string[]=[];
+    for(const [key,item] of Object.entries(descriptors)){
+      if(!item.enumerable)continue;
+      if(!Object.hasOwn(item,'value'))return undefined;
+      const text=portableText(item.value,seen,depth+1);
+      if(text===undefined)return undefined;
+      items.push(`${JSON.stringify(key)}:${text}`);
+    }
+    return `{${items.join(',')}}`;
+  } finally {seen.delete(value);}
 }
 
 const preview = (text: string) => text.length > 200 ? `${text.slice(0, 200)}…` : text;
@@ -55,12 +75,9 @@ const preview = (text: string) => text.length > 200 ? `${text.slice(0, 200)}…`
 export function snapshot(value: unknown, maxBytes: number, excluded = false): Snapshot {
   if (excluded) return { ref: { complete: false, reason: 'excluded', type: typeLabel(value) } };
   if (value === undefined) value = null;
-  if (!portable(value, new Set(), 0)) {
-    let shown: string | undefined;
-    try { shown = preview(String(value)); } catch { /* opaque */ }
-    return { ref: { complete: false, reason: 'nonportable', type: typeLabel(value), ...(shown ? { preview: shown } : {}) } };
-  }
-  const text = JSON.stringify(value);
+  let text:string|undefined;
+  try {text=portableText(value,new Set(),0);}catch{/* Reflection can fail for revoked proxies. */}
+  if(text===undefined)return {ref:{complete:false,reason:'nonportable',type:typeLabel(value)}};
   const bytes = new TextEncoder().encode(text).byteLength;
   const hash = hexDigest(text);
   if (bytes > maxBytes) return { ref: { complete: false, reason: 'oversize', hash, bytes, type: typeLabel(value), preview: preview(text) } };
@@ -105,17 +122,17 @@ export function inputFeatures(inputs: Record<string, unknown>): Record<string, s
     if (typeof value === 'boolean') { put(`bool:${path}`, value); return; }
     if (Array.isArray(value)) {
       put(`arr:${path}`, value.length);
-      value.slice(0, 3).forEach((item, index) => visit(item, `${path}[${index}]`, depth + 1));
+      for (const [index,item] of dataEntries(value)) if (/^(0|[1-9]\d*)$/.test(index) && Number(index)<3) visit(item, `${path}[${index}]`,depth+1);
       return;
     }
     if (typeof value === 'object') {
       const prototype = Object.getPrototypeOf(value);
       if (prototype !== Object.prototype && prototype !== null) { put(`type:${path}`, typeLabel(value)); return; }
       put(`keys:${path}`, Object.keys(value).sort().join(','));
-      for (const [key, item] of Object.entries(value))
+      for (const [key, item] of dataEntries(value))
         visit(item, /^[A-Za-z_$][\w$]*$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`, depth + 1);
     }
   };
-  for (const [name, value] of Object.entries(inputs)) visit(value, name, 0);
+  for (const [name, value] of dataEntries(inputs)) visit(value, name, 0);
   return out;
 }

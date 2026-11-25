@@ -5,7 +5,7 @@
  */
 import { hexDigest } from '../native/hash.js';
 import { graphCustodyDigest } from './graph-custody.js';
-import { inputFeatures, snapshot } from './snapshot.js';
+import { dataEntries, inputFeatures, snapshot } from './snapshot.js';
 import { approachHash } from './normalize.js';
 import { CALLS_VERSION, type CallRecord, type CallStoreSettings, type CaseStats, type CompilationRow, type DefinitionIdentity,
   type CodeRevisionRecord, type EffectRecord, type ExecutorKind, type FolderRecord, type ValueRef } from './types.js';
@@ -185,12 +185,13 @@ export class CallCapture {
 
   setInputs(values: Record<string, unknown>, captures: Record<string, unknown> = {}): void {
     const definition = { name: this.base.definition.name, source: this.base.definition.source };
-    this.hostInputs = { ...captures, ...values };
-    this.inputs = Object.fromEntries(Object.entries(values).map(([name, value]) =>
-      [name, this.ref(value, excluded(this.base.exclude, definition, name))]));
-    this.captures = Object.fromEntries(Object.entries(captures).map(([name, value]) =>
-      [name, this.ref(value, excluded(this.base.exclude, definition, name))]));
-    const visible = Object.fromEntries(Object.entries(this.hostInputs).filter(([name]) => !excluded(this.base.exclude, definition, name)));
+    this.hostInputs = Object.fromEntries([...dataEntries(captures),...dataEntries(values)]);
+    const refs=(record:Record<string,unknown>):Record<string,ValueRef>=>Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(record))
+      .filter(([,item])=>item.enumerable).map(([name,item])=>[name,Object.hasOwn(item,'value')
+        ?this.ref(item.value,excluded(this.base.exclude,definition,name))
+        :{complete:false,reason:excluded(this.base.exclude,definition,name)?'excluded':'nonportable'}]));
+    this.inputs=refs(values);this.captures=refs(captures);
+    const visible = Object.fromEntries(dataEntries(this.hostInputs).filter(([name]) => !excluded(this.base.exclude, definition, name)));
     try { this.features = inputFeatures(visible); } catch { this.features = {}; }
     this.backgroundCheckpoint();
   }
