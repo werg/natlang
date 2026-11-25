@@ -529,31 +529,50 @@ def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, 
     return rows
 
 
-def next_wave(cases, rows, size, *, epoch_first_retries=False):
+def next_wave(cases, rows, size, *, epoch_first_retries=False, concurrency=None, strict_priority_waves=False):
     pending = [name for name, row in rows.items() if row['status'] == 'pending']
-    if not pending:
+    if not pending or size <= 0:
         return []
     attempts = Counter()
     def priority(name):
         row = rows[name]
         cumulative = row.get('cumulative_teacher_attempts', row['attempts'])
         return (row['attempts'],) if epoch_first_retries else (cumulative, row['attempts'])
+    def group(name):
+        case = cases[name]
+        return case['workspace'], bool(case.get('requiresReview'))
     for name, row in rows.items():
         attempts[cases[name]['workspace']] += row['attempts'] if epoch_first_retries else row.get('cumulative_teacher_attempts', row['attempts'])
-    first = min(pending, key=lambda name: (*priority(name), attempts[cases[name]['workspace']]))
-    scope = cases[first]
-    families = {}
-    for name in pending:
-        case = cases[name]
-        if (priority(name) == priority(first) and case['workspace'] == scope['workspace'] and
-                bool(case.get('requiresReview')) == bool(scope.get('requiresReview'))):
-            families.setdefault(case['family'], []).append(name)
+    best = min(map(priority, pending))
+    if strict_priority_waves:
+        first = min(pending, key=lambda name: (*priority(name), attempts[cases[name]['workspace']]))
+        chosen = [name for name in pending if group(name) == group(first) and priority(name) == best]
+    else:
+        groups = {}
+        for name in pending:
+            groups.setdefault(group(name), []).append(name)
+        eligible = [key for key, names in groups.items() if any(priority(name)[0] == best[0] for name in names)]
+        workers = min(size, concurrency if concurrency is not None else size)
+        def group_priority(key):
+            available = sum(priority(name)[0] == best[0] for name in groups[key])
+            return (available < workers, -min(available, workers),
+                    min(priority(name) for name in groups[key]), attempts[key[0]])
+        chosen = groups[min(eligible, key=group_priority)]
+    # Later exposure bands fill idle workers, never pad an already productive
+    # wave to its maximum size at the expense of fresh work in other groups.
+    target = size if strict_priority_waves else min(size, max(workers,
+        sum(priority(name)[0] == best[0] for name in chosen)))
     names = []
-    for offset in range(size):
-        names.extend(family[offset] for family in families.values() if len(family) > offset)
-        if len(names) >= size:
-            break
-    return names[:size]
+    for rank in sorted({priority(name) for name in chosen}):
+        families = {}
+        for name in chosen:
+            if priority(name) == rank:
+                families.setdefault(cases[name]['family'], []).append(name)
+        for offset in range(target - len(names)):
+            names.extend(family[offset] for family in families.values() if len(family) > offset)
+            if len(names) >= target:
+                return names[:target]
+    return names
 
 
 def collection_environment(release_pins):
@@ -671,7 +690,10 @@ def _drive(args, checkpoint):
             return
         started = unfinished_wave(plans, waves, attempt_epoch, provenance, rows)
         if not started:
-            names = next_wave(cases, rows, args.wave_size, epoch_first_retries=getattr(args, 'epoch_first_retries', False))
+            names = next_wave(cases, rows, args.wave_size,
+                              epoch_first_retries=getattr(args, 'epoch_first_retries', False),
+                              concurrency=args.concurrency,
+                              strict_priority_waves=getattr(args, 'strict_priority_waves', False))
             if not names:
                 if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required') for row in rows.values()):
                     return
@@ -759,6 +781,8 @@ def main():
     run.add_argument('--attempts', type=int, default=2, help='teacher attempts per goal in the current release epoch')
     run.add_argument('--epoch-first-retries', action='store_true',
                      help='use the former epoch-only retry ordering (default: cumulative fresh coverage first)')
+    run.add_argument('--strict-priority-waves', action='store_true',
+                     help='restore exact-priority group waves rather than filling worker slots and group tails')
     run.add_argument('--attempt-epoch', help='explicit retry epoch; defaults to the pinned release manifest SHA-256')
     run.add_argument('--infrastructure-hold-threshold', type=int, default=2,
                      help='hold after this many structural failures, or provider failures also reaching the fraction limit; 0 disables holds')

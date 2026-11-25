@@ -12579,3 +12579,19 @@ while historical captured bytes remain bound and unchanged. Void declarations
 remain typed contracts; an errored executor cannot fabricate an actual return
 witness. No teacher was rerun and no original packet/manifest/IR was rewritten.
 Inventory and remaining scope are in `plans/OBSERVED_DECISION_PARITY_20261125.md`.
+
+## 2026-11-25 — fill campaign workers while preserving homogeneous worlds
+
+Actual V29 bulk concurrency8 selected a two-task Spectrolite tail despite1498
+pending goals. The scheduler unnecessarily required the first task's exact
+exposure/attempt tuple across an entire wave. New default chooses a workspace /
+review group in the best primary exposure band that can fill configured workers;
+if none fills them, it takes the largest tail. Equally fillable groups retain
+exact rank and workspace exposure fairness. Within the selected group, exact
+ranks remain ordered, families rotate within ranks, and later exposure ranks fill
+remaining worker slots without padding a productive wave to its wave-size cap. Fresh groups precede entirely retried groups; verified/held/nonpending
+cases never enter selection. All1748 goals and original retry limits remain.
+Explicit `--strict-priority-waves` restores the old exact-band policy; existing
+saved wave plans resume unchanged. Inventory is in
+`VIBESTUDIO_WAVE_FILL_20261125.md`. No current useful case is stopped, and the
+updated driver enters at a natural cohort boundary.

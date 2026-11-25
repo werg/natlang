@@ -15,7 +15,8 @@ def test_new_release_fresh_coverage_precedes_historical_genuine_failures():
     rows = {'old': {'status': 'pending', 'attempts': 0, 'cumulative_teacher_attempts': 2},
             'new-a': {'status': 'pending', 'attempts': 0, 'cumulative_teacher_attempts': 0},
             'new-b': {'status': 'pending', 'attempts': 0, 'cumulative_teacher_attempts': 0}}
-    assert vibestudio_campaign.next_wave(cases, rows, 64) == ['new-a', 'new-b']
+    assert vibestudio_campaign.next_wave(cases, rows, 64) == ['new-a', 'new-b', 'old']
+    assert vibestudio_campaign.next_wave(cases, rows, 64, strict_priority_waves=True) == ['new-a', 'new-b']
     assert vibestudio_campaign.next_wave(cases, rows, 64, epoch_first_retries=True) == ['old', 'new-a', 'new-b']
 
 
@@ -146,7 +147,8 @@ def test_release_epochs_reset_failures_without_losing_verified_history(tmp_path)
     assert rows['retry']['cumulative_attempts'] == 3
     assert rows['reset']['attempts'] == 0
     assert rows['reset']['epoch_infrastructure_failures'] == 1
-    assert vibestudio_campaign.next_wave(cases, rows, 6) == ['reset']
+    assert vibestudio_campaign.next_wave(cases, rows, 6) == ['reset', 'retry']
+    assert vibestudio_campaign.next_wave(cases, rows, 6, strict_priority_waves=True) == ['reset']
     summary = vibestudio_campaign.read(tmp_path / 'status.json')
     assert summary['attempts'] == 6
     assert summary['epoch_attempts'] == 2
@@ -709,3 +711,81 @@ def test_mixed_single_structural_and_sparse_transport_only_hold_in_legacy_mode()
 def test_invalid_provider_hold_fraction_rejected(fraction):
     with pytest.raises(ValueError, match='fraction'):
         vibestudio_campaign.wave_infrastructure_hold({}, {}, provider_transport_fraction=fraction)
+
+
+def wave_candidates(spec):
+    cases, rows = {}, {}
+    for workspace, review, exposures in spec:
+        for index, exposure in enumerate(exposures):
+            name = f'{workspace}-{review}-{index}'
+            cases[name] = {'workspace': workspace, 'requiresReview': review, 'family': f'family-{index % 3}'}
+            rows[name] = {'status': 'pending', 'attempts': 0, 'cumulative_teacher_attempts': exposure}
+    return cases, rows
+
+
+def test_full_fresh_group_precedes_tiny_fresh_group_tail():
+    cases, rows = wave_candidates([('spectrolite', False, [0]*2), ('system', False, [0]*64)])
+    result = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8)
+    assert len(result) == 64
+    assert {cases[name]['workspace'] for name in result} == {'system'}
+    assert len(vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8, strict_priority_waves=True)) == 2
+
+
+def test_same_group_tail_uses_next_ranks_without_displacing_fresh_tasks():
+    cases, rows = wave_candidates([('system', False, [2, 0, 1, 0, 3, 1])])
+    result = vibestudio_campaign.next_wave(cases, rows, 5, concurrency=4)
+    assert [rows[name]['cumulative_teacher_attempts'] for name in result] == [0, 0, 1, 1]
+
+
+def test_retried_full_group_cannot_displace_any_fresh_group():
+    cases, rows = wave_candidates([('system', False, [1]*64), ('spectrolite', True, [0]*2)])
+    result = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8)
+    assert len(result) == 2
+    assert {cases[name]['workspace'] for name in result} == {'spectrolite'}
+
+
+def test_full_groups_preserve_workspace_exposure_fairness_and_homogeneity():
+    cases, rows = wave_candidates([('system', False, [0]*8), ('personal', True, [0]*8)])
+    cases['done'] = {'workspace':'system','family':'other'}
+    rows['done'] = {'status':'verified','attempts':1,'cumulative_teacher_attempts':4}
+    result = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8)
+    assert {(cases[name]['workspace'], cases[name].get('requiresReview',False)) for name in result} == {('personal',True)}
+    assert 'done' not in result
+    for name in result:rows[name]['status']='verified'
+    assert len(vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8)) == 8
+
+
+def test_workers_are_actual_fill_target_and_smallest_tails_do_not_win():
+    cases, rows = wave_candidates([('a', False, [0]*2), ('b', False, [0]*7), ('c', False, [0]*8)])
+    assert {cases[name]['workspace'] for name in vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8)} == {'c'}
+    for name in list(rows):
+        if cases[name]['workspace']=='c':rows[name]['status']='verified'
+    assert len(vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8)) == 7
+    assert {cases[name]['workspace'] for name in vibestudio_campaign.next_wave(cases, rows, 64, concurrency=2)} == {'a'}
+
+
+def test_same_workspace_review_groups_stay_separate_and_families_rotate():
+    cases, rows = wave_candidates([('system', False, [0]*3), ('system', True, [0]*9)])
+    result = vibestudio_campaign.next_wave(cases, rows, 8, concurrency=8)
+    assert all(cases[name]['requiresReview'] for name in result)
+    assert [cases[name]['family'] for name in result[:3]] == ['family-0','family-1','family-2']
+    assert len(set(result)) == len(result) == 8
+
+
+def test_fresh_group_fill_can_cross_epoch_attempt_bands_without_preferring_retries():
+    cases, rows = wave_candidates([('a', False, [0]*2), ('b', False, [0]*8)])
+    for name, row in rows.items():
+        if cases[name]['workspace']=='b':row['attempts']=1
+    result = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8)
+    assert {cases[name]['workspace'] for name in result} == {'b'}
+
+
+def test_tail_fallback_only_fills_workers_without_padding_with_retries():
+    cases, rows = wave_candidates([('a',False,[0]*2+[1]*62),('b',False,[0]*1)])
+    result = vibestudio_campaign.next_wave(cases,rows,64,concurrency=8)
+    assert len(result)==8
+    assert [rows[name]['cumulative_teacher_attempts'] for name in result]==[0,0]+[1]*6
+    cases, rows = wave_candidates([('a',False,[0]*9+[1]*55)])
+    result = vibestudio_campaign.next_wave(cases,rows,64,concurrency=8)
+    assert len(result)==9
+    assert all(rows[name]['cumulative_teacher_attempts']==0 for name in result)
