@@ -268,7 +268,8 @@ def core_tensors(engine, adapter_id, cores):
     out = {}
     for name, stored in record.artifact.tensors.items():
         core = cores[name]
-        out[name] = core.reshape(stored.shape).to(dtype=torch.float32)
+        # the device of the stored coefficients, as the tuner's leaves are (the executor places them)
+        out[name] = core.reshape(stored.shape).to(device=stored.device, dtype=torch.float32)
     return out
 
 
@@ -279,7 +280,8 @@ def site_loss(engine, head, site, *, adapter_id, init_block, z_slots=None, slot_
     from ..serve.native_grad import native_graph_gradient
     compiled = head(init_block_values(init_block), z_slots=z_slots, slot_valid=slot_valid, kv=kv, adapter=adapter)
     state_id = site['state_id']
-    device = engine.device if hasattr(engine, 'device') else None
+    # the device of the stored state's tensors, as the tuner's state leaves are (``_leaf_block``)
+    device = next(iter(init_block_values(init_block).values())).device
     block = compiled_block(init_block, compiled.state_values, device)
     coefficients = core_tensors(engine, adapter_id, compiled.cores)
     body = {'schema': 'natlang.native-gradient-request/1', 'native_identity': engine.native_identity,
@@ -328,6 +330,7 @@ def compile_release(engine, head, *, adapter_id, init_block, out, site_id, prove
     persist_artifacts(engine, [state], out / 'artifacts', out / 'states')
     result = {'schema': 'natlang.tune.build-result/1', 'compiler': COMPILED_SITE_SCHEMA,
               'artifacts': [{'artifact': artifact, 'node': node or f'lambda:{site_id}'}],
-              'softStates': {STATE_NAME: {'state': state, 'site': site_id}}, 'provenance': provenance}
+              'softStates': {STATE_NAME: {'state': state, 'site': site_id}}, 'provenance': provenance,
+              'receipt': {'base_native_identity': dict(engine.native_identity)}}
     (out / 'result.json').write_text(json.dumps(result, indent=1, sort_keys=True))
     return result

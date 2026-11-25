@@ -149,6 +149,8 @@ def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0
 #        and a wrong-world control: the same divergence against twins carrying another world's facts.
 
 T1_SCHEMA = 'natlang.compiler.t1-opsd/1'
+# verdicts that say only that the produced value was wrong (their detail is the value itself)
+ANSWER_VERDICT_OUTCOMES = frozenset({'semantic_mismatch', 'wrong_answer'})
 
 
 def lfm3_rendering(tokenizer, *, consume_open=0, consume_close=0, fingerprint='0' * 64):
@@ -211,11 +213,18 @@ def build_t1_twins(collections, out, *, policy_sha256, tokenizer, max_tokens=163
                             funnel['no_case'] += 1
                             continue
                         detail = details.get((task_id, rollout.get('group'), rollout.get('sample')))
-                        feedback = f"the run ended with outcome {rollout['outcome']}" + (f'; verifier detail: {detail}'
-                                                                                         if detail else '')
+                        # A wrong-answer verdict is not a diagnosis: "your value X was wrong" names the answer outright
+                        # on a two-way decision (pass/fail) and narrows it elsewhere. Only structural outcomes
+                        # (repetition, invalid actions, budget) become attempt feedback; a semantic mismatch's twin
+                        # carries only the world's own diagnostic facts.
+                        feedback = [] if rollout['outcome'] in ANSWER_VERDICT_OUTCOMES else [
+                            {'case_id': task_id, 'attempt': int(rollout.get('sample') or 0),
+                             'feedback': f"the run ended with outcome {rollout['outcome']}"
+                                         + (f'; verifier detail: {detail}' if detail else '')}]
+                        if feedback:
+                            funnel['structural_feedback'] = funnel.get('structural_feedback', 0) + 1
                         try:
-                            receipt, facts = opsd_facts(case, custody=custody, attempt_feedback=[
-                                {'case_id': task_id, 'attempt': int(rollout.get('sample') or 0), 'feedback': feedback}])
+                            receipt, facts = opsd_facts(case, custody=custody, attempt_feedback=feedback)
                         except Exception:
                             funnel['custody_refused'] += 1
                             continue

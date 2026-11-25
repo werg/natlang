@@ -13960,3 +13960,37 @@ The same inventory found fixed temporary names in both campaign publish and comm
 ## 2026-11-25 — Explicit adapter defaults preserve held task identity
 
 The current catalog gained a source-declared nullable supplementary-research argument on five existing entries. Strict ingestion correctly refused treating an unknown non-goal input change as metadata. The Base producer now records descriptor-backed adapter defaults separately; the shared Python catalog projection validates all three actual argument encodings and source-path/hash structure, and removes only explicitly declared null adapter context from task identity. Actual invocation arguments stay unchanged. Non-null evidence, undeclared null fields, goals, splits, IDs and source groups remain strict; opt-out NATLANG_CATALOG_ADAPTER_DEFAULTS=0 restores strict old input comparison. This is not authentication of a self-asserted source hash: the pinned producer supplies provenance. NativeIR/engines/masks do not consume this catalog-only field. Source38 predates the new producer field and uses source-descriptor-checked execution-only archive metadata projection, preserving historical user-input bindings while captures retain actual runtime bindings. No raw or immutable WORK snapshot is rewritten. Inventory VIBE_ENTRY_ADAPTER_DEFAULTS_20261125.md. All41 meaningful ingestion/held/forgery/opt-out controls passed (1.61s,443MB); required quick passed.
+
+## 2026-11-25 18:45 Natlang compiler: review fixes, first real-data runs (compiler-owner agent)
+
+Owner (2026-11-25): "review the implementation and improve it." The first implementation (another agent, committed
+unchanged as 454e70353 / hindsight-kb 084a43d) was reviewed; decisions taken and why:
+
+- **Mode P is the native state the engines splice** (fork agent, af7f47e6c..603f5d541, hindsight-kb 29b952a). The first
+  version trained a tanh-gated memory at positions -M..-1 that no engine splice computes. Now a compiled site is the
+  header's text-initialized native state (written in its real call, `native_init_body`) plus a zero-init residual from
+  Z, trained through `native_graph_gradient` (the executor the engines match), released in the `tune.build` layout;
+  hindsight-kb keeps only Mode W (research). ENGINE_PARITY row rewritten to what is measured (1cf4fe16d); the old
+  "already serves on all four engines" claim was unverified.
+- **Top-k distillation keeps a tail bucket on both sides** (`stable_softmax.topk_tail_divergence`, default of
+  `topk_forward_kl`, `tail=False` opts out); compiler context distillation uses full distributions by default. The
+  renormalized top-k forms let the student put mass outside the teacher's head for free.
+- **OPSD is the shared privileged-context mechanism** (`privileged_context.case_facts(answers='withhold')`, the declared
+  guidance turn after the leading system turn, i.e. JOLT+'s text-twin placement), per call, forward KL by default (JOLT+
+  students since 2026-11-20), CE only on verified continuations. A wrong-answer verdict never becomes feedback: the first
+  real build had twins saying `verifier detail: "pass"` on pass/fail decisions (412c525fb).
+- **FO-MAML** returns `z_init + sg(z_K - z_init)`: the query loss reaches HeaderEncoder (tested).
+- **Experience KB** is hindsight-kb's SQLiteKB behind scopes + `training_exclusion_ids` admission (1471ac656); the TS
+  parallel store was removed. **Call-level engine** reads real rollouts and authored pools (921f560ea).
+- hindsight-kb is a declared dependency (`NATLANG_HINDSIGHT_KB` / logical root), no machine paths.
+- Plan corrections the owner approved are in `plans/NATLANG_COMPILER.md` (bbe8c6fc7).
+
+**Runs (real data, policy r0010 cde55352685b, v0009 collections).** T0 build (DGX `cmp-t0-build-2`): 1,518 scored
+rollouts, 3,869 sequences, 18,022 boundaries, 0 held-excluded. Features on g4b: 1 of ~5 shards (4,097 boundaries) before
+the L4 went to program tuning's rerun (an unadmitted job of mine there was stopped; resume is queued as a preemptible
+admission claim `cmp-t0-features`). Head on that shard: train AUROC 0.69, validation 0.48 (347 boundaries, ~2
+families; label-permuted control 0.53): no signal yet; the validation slice is too narrow to judge, and per-boundary
+episode labels are weak early in an episode. Criterion (0.78) not met; diagnosis waits for the full features. T1 build
+(DGX `cmp-t1-build-4`): 2,052 rollouts, 178 twins / 47 episodes after removing answer-verdict feedback (681 failed
+episodes have no diagnostic fact): OPSD supply from these worlds is thin; richer diagnostic facts (verifier diffs that
+name no answer) are the lever. T1 training queued on g4b (`cmp-t1-opsd`).

@@ -23,7 +23,7 @@ class LatentTTTConfig:
     clip_norm: float = 1.0
     eval_every: int = 4
     min_query_gain: float = 1e-4
-    memory_mode: str = "positioned"
+    memory_mode: str = "window_exempt"  # Mode W research head; Mode P sites refine via compiled_site
 
 
 @dataclass
