@@ -277,9 +277,15 @@ def _twin_rows(path):
                 yield json.loads(line)
 
 
+ACTIVATION_GIB = 4.0   # saved activations of a student forward; layers beyond this recompute (lfm3_fast.set_checkpointing)
+
+
 def _positions_hidden(learner, ids, positions, *, grad):
     from ..train import lfm3_fast
     tensor = torch.tensor(ids, device=learner.device)
+    if grad:
+        # the learner core's recompute plan: a 16k-token student forward kept every layer's activations and OOMed the L4
+        lfm3_fast.set_checkpointing(learner.model, len(ids), ACTIVATION_GIB, parameterization='lora+rows')
     with torch.set_grad_enabled(grad):
         h = lfm3_fast.hidden(learner.model, tensor, adapters=learner.bundles, trainable_rows=learner.trainable_rows)
         return h[torch.tensor(positions, device=learner.device)]
