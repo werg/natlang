@@ -1,170 +1,137 @@
-"""On-Policy Privileged Self-Distillation (OPSD) for LFM3-1.7B (`plans/NATLANG_COMPILER.md` §8.2, §9.3).
+"""On-policy privileged self-distillation (OPSD) on per-call sequences of failed rollouts (`plans/NATLANG_COMPILER.md`
+§8.2, Recipe T1), on the shared privileged-context mechanism.
 
-Generates dense, voice-matched token-level supervision over BOTH reasoning and action tokens
-from LFM3's own privileged-context forward pass on failed on-policy student rollouts—with
-strict anti-shortcut safeguards:
-1. Literal expected answers are NEVER placed in the privileged hindsight block (only verifier
-   diffs, violated spec clauses, and structural failure diagnoses).
-2. Tokens whose privileged-to-student log-ratio exceeds `max_log_ratio` (default 6.0 nats)
-   are masked out of the JSD loss unless marked as structural syntax tokens, preventing
-   hindsight-only answer jumps from corrupting unprivileged policy gradients.
-3. Held-v3 / held-v4 closures are rejected before any privileged context is constructed.
+Privileged context has one implementation: ``rl/privileged_context.py`` (custody, fact extraction with answers
+withheld, the declared guidance turn and its placement) and ``rl/privileged_scoring.py`` (whole-graph twins). This module
+binds it to one model call of an archived rollout, where the learner's unit is a (prompt, completion) sequence:
+
+1. Facts: ``case_facts(case, custody=..., attempt_feedback=..., answers='withhold')``, restricted to the diagnostic
+   kinds ``OPSD_FACT_KINDS`` (verifier feedback on the failed attempt, recorded reference failures, decisive evidence)
+   and to what the call may see (``applicable``). Answer kinds never enter, and procedure facts that still carry an
+   answer leaf are dropped by ``case_facts``.
+2. Twin: the call's exact prompt token ids with the text guidance turn (``PrivilegedRendering.turn``) inserted at the
+   declared place (``insertion_point``: after the leading system turn, else after BOS), followed by the student's exact
+   sampled completion ids. This is the ``text-twin`` form the JOLT+ learner inserts; the runtime renders the same turn
+   (``guidance_messages``; tested in ``test_jolt_privileged_context``). The twin scores exactly the student's tokens at
+   exactly the student's prefix (plus the turn), checked by ``twin_sequences``.
+3. Loss (``opsd_loss``): divergence between the student's distribution and the stop-gradient twin at every completion
+   position, on full distributions by default (``common.stable_softmax``; ``topk`` uses top-k plus a tail bucket for
+   both sides). The direction defaults to forward KL(twin || student), the JOLT+ student default (DECISIONS
+   2026-11-20: its gradient does not vanish on tokens the student finds unlikely); ``'jsd'`` is the plan's symmetric
+   form. The anti-shortcut mask drops positions whose sampled token the twin prefers by more than ``max_log_ratio``
+   nats (outside declared syntax positions). Cross-entropy applies only where ``verified`` marks a verified
+   continuation: a failed episode's own tokens are never CE targets.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-import re
-import torch
-import torch.nn.functional as F
 
-OPSD_PRIVILEGED_HEADER = (
-    "[HINDSIGHT DIAGNOSTIC — INTERNAL GUIDANCE ONLY]\n"
-    "The previous attempt failed verification. Use the structural diagnosis below to reason "
-    "carefully from the visible specification and inputs:"
-)
+import torch
+
+from .privileged_context import ANSWER_KINDS, applicable, case_facts
+
+OPSD_SCHEMA = 'natlang.opsd-call-twin/1'
+# Diagnostic facts only (the plan: verifier diff, violated clause, structural diagnosis; never the expected answer).
+OPSD_FACT_KINDS = ('attempt_feedback', 'reference_failure', 'decisive')
+DIVERGENCES = ('forward_kl', 'jsd', 'reverse_kl')
+
+
+def opsd_facts(case, *, custody, attempt_feedback=(), invocation=None, kinds=OPSD_FACT_KINDS):
+    """``(custody receipt, facts)`` the twin of one call may carry: diagnostic kinds, answers withheld, visible to it.
+
+    ``invocation``: ``{name, role, text}`` of the call (default: the root). Raises ``CustodyError`` for a protected
+    world (custody fails closed)."""
+    if set(kinds) & set(ANSWER_KINDS):
+        raise ValueError('OPSD twins never carry answer facts')
+    receipt, facts = case_facts(case, custody=custody, attempt_feedback=attempt_feedback, answers='withhold')
+    invocation = invocation or {'name': 'root', 'role': 'root', 'text': ''}
+    return receipt, tuple(fact for fact in facts if fact.kind in kinds and applicable(fact, invocation))
 
 
 @dataclass(frozen=True)
-class VerifierDiagnosis:
-    task_id: str
-    failure_kind: str                  # e.g. "misread_spec", "tool_idiom", "wrong_files", "contract_violation"
-    verifier_diff: str                 # structural diff / violated contract description
-    violated_clauses: tuple[str, ...] = ()
-    diverging_turn: int | None = None
-    forbidden_literals: tuple[str, ...] = ()  # exact expected answer strings that MUST NOT leak
+class CallTwin:
+    """Student and twin token sequences of one call, with the completion positions aligned 1:1."""
+    student_ids: tuple
+    twin_ids: tuple
+    student_positions: tuple   # logits rows predicting each completion token in the student sequence
+    twin_positions: tuple      # the same rows in the twin sequence
+    targets: tuple             # the completion token ids (the student's own samples)
+    insert_at: int
+    placement: str
+    turn_ids: tuple
+    receipt: dict
 
 
-def _scrub_forbidden_literals(text: str, forbidden: tuple[str, ...]) -> str:
-    """Reject or scrub any accidental literal expected-answer echo in verifier diagnostics."""
-    cleaned = text
-    for lit in forbidden:
-        s = str(lit).strip()
-        if len(s) >= 4 and s in cleaned:
-            cleaned = cleaned.replace(s, "[REDACTED_EXPECTED]")
-    return cleaned
+def twin_sequences(rendering, prompt_ids, completion_ids, fact_texts, *, receipt=None):
+    """The call's student sequence and its privileged twin (the guidance turn inserted at the declared place)."""
+    prompt, completion = list(map(int, prompt_ids)), list(map(int, completion_ids))
+    if not prompt or not completion:
+        raise ValueError('an OPSD twin needs a prompt and a sampled completion')
+    if not fact_texts:
+        raise ValueError('an OPSD twin needs at least one privileged fact')
+    turn = list(rendering.turn(list(fact_texts)))
+    at, placement = rendering.insertion_point(prompt)
+    student = prompt + completion
+    twin = prompt[:at] + turn + prompt[at:] + completion
+    s_pos = tuple(range(len(prompt) - 1, len(student) - 1))
+    t_pos = tuple(position + len(turn) for position in s_pos)
+    if [student[p + 1] for p in s_pos] != completion or [twin[p + 1] for p in t_pos] != completion:
+        raise AssertionError('twin positions do not score the student completion')
+    if twin[:at] != student[:at] or twin[at + len(turn):] != student[at:]:
+        raise AssertionError('the twin changed the student prefix outside the inserted turn')
+    return CallTwin(tuple(student), tuple(twin), s_pos, t_pos, tuple(completion), at, placement, tuple(turn),
+                    {'schema': OPSD_SCHEMA, 'rendering': rendering.digest, 'placement': placement,
+                     'insert_at': at, 'turn_tokens': len(turn), **(receipt or {})})
 
 
-def build_opsd_privileged_block(
-    diagnosis: VerifierDiagnosis,
-    *,
-    excluded_task_ids: set[str] | frozenset[str] = frozenset(),
-) -> str:
-    """Build a shortcut-safe privileged hindsight system block for OPSD.
+def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0.5, topk=None, syntax_mask=None,
+              max_log_ratio=6.0, verified=None, ce_weight=0.3):
+    """Masked OPSD divergence at aligned completion positions, plus CE on verified continuations only.
 
-    Raises ValueError if task_id belongs to held exclusions or if diagnosis carries no actionable info.
-    """
-    if diagnosis.task_id in excluded_task_ids:
-        raise ValueError(f"Refusing to build OPSD privileged block for held-excluded task {diagnosis.task_id!r}")
-    diff_clean = _scrub_forbidden_literals(diagnosis.verifier_diff.strip(), diagnosis.forbidden_literals)
-    clauses_clean = [
-        _scrub_forbidden_literals(c.strip(), diagnosis.forbidden_literals)
-        for c in diagnosis.violated_clauses
-        if c and c.strip()
-    ]
-    if not diff_clean and not clauses_clean:
-        raise ValueError("VerifierDiagnosis must include a non-empty verifier_diff or violated_clauses")
-    # Also collapse repeated whitespace to keep the privileged block compact.
-    diff_clean = re.sub(r"\n{3,}", "\n\n", diff_clean)
-    lines = [OPSD_PRIVILEGED_HEADER, f"- Failure kind: {diagnosis.failure_kind}"]
-    if diagnosis.diverging_turn is not None:
-        lines.append(f"- First diverging turn: {diagnosis.diverging_turn}")
-    if clauses_clean:
-        lines.append("- Violated specification clauses:")
-        for clause in clauses_clean:
-            lines.append(f"  * {clause}")
-    if diff_clean:
-        lines.append(f"- Verifier diagnosis: {diff_clean}")
-    return "\n".join(lines)
-
-
-def opsd_jsd_loss(
-    student_logits: torch.Tensor,
-    privileged_logits: torch.Tensor,
-    labels: torch.Tensor,
-    *,
-    syntax_mask: torch.Tensor | None = None,
-    topk: int = 64,
-    beta: float = 0.5,
-    max_log_ratio: float = 6.0,
-    ce_weight: float = 0.3,
-) -> tuple[torch.Tensor, dict[str, float]]:
-    """Anti-shortcut-masked top-k JSD(p_student || p_privileged) + optional verified CE.
-
-    Args:
-        student_logits: [B, T, V] unprivileged student logits (requires grad)
-        privileged_logits: [B, T, V] privileged-context logits (detached)
-        labels: [B, T] target token ids (-100 for prompt/tool-output context)
-        syntax_mask: optional [B, T] bool marking structural/tool-syntax positions exempt from shortcut clip
-        topk: number of privileged nucleus/top logits used for JSD (memory-safe on 128k vocab)
-        beta: interpolation weight in JSD_beta (0.5 = symmetric JSD)
-        max_log_ratio: mask non-syntax tokens where log(p_priv(y_t) / p_student(y_t)) > max_log_ratio
-        ce_weight: weight of verified-target cross-entropy alongside JSD
-    """
-    if not 0.0 < beta < 1.0:
-        raise ValueError(f"beta must be in (0, 1), got {beta}")
-    valid = labels != -100
-    n_valid = int(valid.sum().item())
-    if n_valid == 0:
-        zero = student_logits.sum() * 0.0
-        return zero, {"n_valid": 0.0, "n_kept": 0.0, "shortcut_masked_frac": 0.0, "jsd": 0.0, "ce": 0.0}
-
-    s_sel = student_logits[valid].float()
-    p_sel = privileged_logits[valid].detach().float()
-    y_sel = labels[valid]
-
-    s_logp_full = F.log_softmax(s_sel, dim=-1)
-    p_logp_full = F.log_softmax(p_sel, dim=-1)
-
-    # Anti-shortcut log-ratio check on target tokens (detached mask so gradients don't game the mask)
+    ``student_logits`` [N, V] (with gradient) and ``twin_logits`` [N, V] (detached) at the N aligned completion
+    positions; ``targets`` [N] the student's sampled tokens there. ``verified`` [N] bool marks positions of verified
+    continuations (a verified repair or success; default: none, so no CE). Returns ``(loss, metrics)``; the loss is the
+    mean divergence over kept positions plus ``ce_weight`` times the mean CE over verified positions."""
+    from ..common import stable_softmax as S
+    if kind not in DIVERGENCES:
+        raise ValueError(f'OPSD divergence is one of {DIVERGENCES}')
+    if twin_logits.requires_grad:
+        raise ValueError('the OPSD twin is a stop-gradient target')
+    n = int(targets.numel())
+    zero = student_logits.sum() * 0.0
+    if n == 0:
+        return zero, {'n': 0., 'n_kept': 0., 'shortcut_masked_frac': 0., 'divergence': 0., 'n_verified': 0., 'ce': 0.}
+    targets = targets.long()
     with torch.no_grad():
-        s_y = s_logp_full.gather(-1, y_sel.unsqueeze(-1)).squeeze(-1)
-        p_y = p_logp_full.gather(-1, y_sel.unsqueeze(-1)).squeeze(-1)
-        log_ratio = p_y - s_y
+        s_y = S.token_logprobs(student_logits.detach(), targets)
+        t_y = S.token_logprobs(twin_logits, targets)
+        log_ratio = (t_y - s_y).float()
         shortcut = log_ratio > float(max_log_ratio)
         if syntax_mask is not None:
-            syn_sel = syntax_mask[valid].to(torch.bool)
-            shortcut = shortcut & (~syn_sel)
+            shortcut &= ~syntax_mask.to(torch.bool)
         kept = ~shortcut
-
-    n_kept = int(kept.sum().item())
-    masked_frac = 1.0 - (float(n_kept) / float(n_valid))
-    if n_kept == 0:
-        zero = student_logits.sum() * 0.0
-        return zero, {
-            "n_valid": float(n_valid),
-            "n_kept": 0.0,
-            "shortcut_masked_frac": masked_frac,
-            "jsd": 0.0,
-            "ce": 0.0,
-        }
-
-    s_k = s_sel[kept]
-    p_k = p_sel[kept]
-    y_k = y_sel[kept]
-    s_logp_k = s_logp_full[kept]
-
-    k_eff = min(int(topk), s_k.shape[-1])
-    p_top_vals, top_idx = torch.topk(p_k, k_eff, dim=-1)
-    p_top_logp = F.log_softmax(p_top_vals, dim=-1)
-    # Renormalize student log-probs onto the same top-k support for well-posed JSD
-    s_top_logp = F.log_softmax(s_k.gather(-1, top_idx), dim=-1)
-    p_prob = p_top_logp.exp()
-    s_prob = s_top_logp.exp()
-
-    m_prob = (beta * s_prob + (1.0 - beta) * p_prob).clamp_min(1e-12)
-    m_logp = m_prob.log()
-    kl_s_m = (s_prob * (s_top_logp - m_logp)).sum(dim=-1)
-    kl_p_m = (p_prob * (p_top_logp - m_logp)).sum(dim=-1)
-    jsd = (beta * kl_s_m + (1.0 - beta) * kl_p_m).mean()
-
-    ce = F.nll_loss(s_logp_k, y_k, reduction="mean") if ce_weight > 0.0 else (jsd * 0.0)
-    total = (1.0 - float(ce_weight)) * jsd + float(ce_weight) * ce
-    metrics = {
-        "n_valid": float(n_valid),
-        "n_kept": float(n_kept),
-        "shortcut_masked_frac": masked_frac,
-        "jsd": float(jsd.detach().item()),
-        "ce": float(ce.detach().item()),
-        "mean_log_ratio": float(log_ratio[kept].mean().item()),
-    }
-    return total, metrics
+    n_kept = int(kept.sum())
+    if n_kept:
+        if topk is None:
+            values = S.divergence(student_logits[kept], twin_logits[kept], kind, beta=beta)
+        else:
+            t_logp = torch.log_softmax(twin_logits[kept].float(), -1)
+            head, ids = torch.topk(t_logp, min(int(topk), t_logp.shape[-1]), -1)
+            tail = torch.logsumexp(t_logp.scatter(-1, ids, float('-inf')), -1)
+            values = S.topk_tail_divergence(student_logits[kept], ids, head, kind, beta=beta, teacher_log_tail=tail)
+        divergence = values.float().mean()
+    else:
+        divergence = zero
+    loss = divergence
+    n_verified = 0
+    ce = zero
+    if verified is not None and ce_weight > 0:
+        mask = verified.to(torch.bool)
+        n_verified = int(mask.sum())
+        if n_verified:
+            ce = -S.token_logprobs(student_logits[mask], targets[mask]).float().mean()
+            loss = loss + float(ce_weight) * ce
+    metrics = {'n': float(n), 'n_kept': float(n_kept), 'shortcut_masked_frac': 1. - n_kept / n,
+               'divergence': float(divergence.detach()), 'n_verified': float(n_verified), 'ce': float(ce.detach()),
+               'mean_log_ratio': float(log_ratio[kept].mean()) if n_kept else 0.}
+    return loss, metrics

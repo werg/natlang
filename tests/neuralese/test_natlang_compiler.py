@@ -45,7 +45,6 @@ from natlang_neuralese.compiler.train_compiler import (
     gate_floor_for_step,
     header_dropout_prob,
 )
-from natlang_neuralese.rl.opsd_privileged import VerifierDiagnosis, build_opsd_privileged_block, opsd_jsd_loss
 from natlang_neuralese.train.step_verifier import (
     BranchCandidate,
     StepVerifierHead,
@@ -241,39 +240,6 @@ def test_tier15_latent_ttt_accepts_gain_and_rejects_regression():
     assert torch.allclose(res_bad.z_best, z0)
 
 
-def test_opsd_anti_shortcut_and_held_isolation():
-    diag = VerifierDiagnosis(
-        task_id="train-task-1",
-        failure_kind="misread_spec",
-        verifier_diff="Wrote to claims/paid/ instead of root paid/; expected secret_answer_42.",
-        violated_clauses=("Move files rather than copy",),
-        diverging_turn=2,
-        forbidden_literals=("secret_answer_42",),
-    )
-    with pytest.raises(ValueError):
-        build_opsd_privileged_block(diag, excluded_task_ids={"train-task-1"})
-
-    block = build_opsd_privileged_block(diag, excluded_task_ids={"held-99"})
-    assert "secret_answer_42" not in block
-    assert "[REDACTED_EXPECTED]" in block
-    assert "Move files rather than copy" in block
-
-    # Construct one normal token (log-ratio ~ 2.0) and one extreme-shortcut token (log-ratio > 6 nats)
-    student_base = torch.zeros(1, 2, 10)
-    student_base[0, 1, 5] = -8.0     # student assigns ~ -10.2 nats to token 5
-    student = student_base.clone().requires_grad_(True)
-    priv = torch.zeros(1, 2, 10)
-    priv[0, 0, 3] = 2.0      # modest shift (~1.4 nats) -> kept
-    priv[0, 1, 5] = 10.0     # privileged assigns ~ 0.0 nats -> log-ratio ~ 10.2 > 6.0 -> masked
-    labels = torch.tensor([[3, 5]])
-    loss, metrics = opsd_jsd_loss(student, priv, labels, topk=8, max_log_ratio=6.0)
-    assert metrics["n_valid"] == 2.0
-    assert metrics["n_kept"] == 1.0
-    assert metrics["shortcut_masked_frac"] == pytest.approx(0.5)
-    loss.backward()
-    assert student.grad is not None and float(student.grad.abs().sum()) > 0
-
-
 def test_step_verifier_and_branch_ranking():
     torch.manual_seed(3)
     head = StepVerifierHead(hidden_dim=16, mlp_dim=32)
@@ -384,27 +350,10 @@ def test_call_level_engine_extraction_and_held_exclusion(tmp_path: Path):
     assert parsed["teacher_reasoning_weight"] == 0.0
 
 
-def test_hkb_bridge_warmstart_extractor_and_prep_bundle(tmp_path: Path):
-    from natlang_neuralese.compiler.hkb_bridge import ExperienceEntry, ScopedExperienceKB
+def test_warmstart_extractor_and_prep_bundle(tmp_path: Path):
     import run_compiler_prep
     sys.path.insert(0, str(hkb_dependency.checkout() / "scripts"))
     import extract_lfm3_warmstart
-
-    kb = ScopedExperienceKB(key_dim=4, value_dim=8, excluded_held_ids={"held-x"})
-    with pytest.raises(ValueError):
-        kb.add(ExperienceEntry("e-held", "natlang:global", torch.ones(4), torch.ones(8), "bad", ("held-x",)))
-
-    kb.add(ExperienceEntry("e-self", "group:sql", torch.tensor([1.0, 0.0, 0.0, 0.0]), torch.ones(8), "self", ("t1",)))
-    kb.add(ExperienceEntry("e-peer", "group:sql", torch.tensor([0.9, 0.4, 0.0, 0.0]), torch.full((8,), 2.0), "peer", ("t2",)))
-    z_kb, k_kb, w_kb, v_kb = kb.retrieve_unified_slots(
-        torch.tensor([1.0, 0.0, 0.0, 0.0]),
-        scopes=["natlang:global", "group:sql"],
-        exclude_tasks={"t1"},
-        max_slots=4,
-    )
-    assert int(v_kb.sum().item()) == 1
-    assert torch.allclose(z_kb[0, 0], torch.full((8,), 2.0))
-    assert float(w_kb[0, 0].item()) > 0.0
 
     # Synthetic 000000002 warm-start extraction check
     ckpt_path = tmp_path / "ckpt.pt"

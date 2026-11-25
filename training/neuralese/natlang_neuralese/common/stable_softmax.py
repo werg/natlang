@@ -592,9 +592,78 @@ def generalized_jsd(student_logits, teacher_logits, beta=0.5, **kw):
     return divergence(student_logits, teacher_logits, 'jsd', beta=beta, **kw)
 
 
-def topk_forward_kl(student_logits, teacher_ids, teacher_logits, **kw):
-    """KL over a teacher's top-k (renormalized over the k) against the full-vocab student."""
+def topk_forward_kl(student_logits, teacher_ids, teacher_logits, *, tail=True, teacher_log_tail=None, **kw):
+    """KL(teacher || student) from a teacher's top-k against the full-vocab student.
+
+    ``tail`` (default): the teacher's mass outside its top-k is kept as one tail bucket and compared with the
+    student's mass outside the same k ids (``topk_tail_divergence``); ``teacher_logits`` are then the teacher's
+    full-vocabulary log-probabilities at ``teacher_ids`` (or pass ``teacher_log_tail``). ``tail=False`` opts out to the
+    old definition, which renormalizes the teacher over its k and so moves its tail mass onto the head."""
+    if tail:
+        return topk_tail_divergence(student_logits, teacher_ids, teacher_logits, 'forward_kl',
+                                    teacher_log_tail=teacher_log_tail, **kw)
     return divergence(student_logits, teacher_logits, 'forward_kl', teacher_ids=teacher_ids, **kw)
+
+
+def _log1mexp(x):
+    """log(1 - exp(x)) for x <= 0, stable on both ends (-inf at x = 0)."""
+    x = x.clamp(max=0.)
+    return torch.where(x > -0.6931471805599453, torch.log(-torch.expm1(x)), torch.log1p(-torch.exp(x)))
+
+
+def topk_tail_logprobs(logits, ids):
+    """``(head [..., k], tail [...])`` log-probabilities of a full-vocab distribution over the k ``ids`` and one bucket
+    holding all its other mass. The tail is the log-sum-exp of the off-head logits minus the full normalizer (exact,
+    no 1 - sum cancellation). Differentiable in ``logits``."""
+    z = logits.float()
+    norm = torch.logsumexp(z, -1, keepdim=True)
+    head = z.gather(-1, ids.long()) - norm
+    off = z.scatter(-1, ids.long(), float('-inf'))
+    tail = torch.logsumexp(off, -1) - norm.squeeze(-1)
+    return head, tail
+
+
+def topk_tail_divergence(student_logits, teacher_ids, teacher_logprobs, kind, *, beta=0.5, teacher_log_tail=None,
+                         weights=None, reduction='none'):
+    """Divergence between teacher and student over k + 1 buckets: the teacher's top-k ids and one tail bucket.
+
+    ``teacher_logprobs`` [..., k] are the teacher's full-vocabulary log-probabilities at ``teacher_ids`` (recorded top-k
+    log-probs, or a gather from its log-softmax); ``teacher_log_tail`` [...] its log mass outside them (default
+    log(1 - sum exp(head)), stable). The student's buckets are its own probabilities at the same ids and its exact mass
+    outside them, so the student pays for mass it puts outside the teacher's head, and the teacher's tail mass is not
+    moved onto the head (the bias of renormalizing either side over the k). ``kind``: as ``divergence`` ('forward_kl',
+    'soft_ce', 'reverse_kl', 'jsd' = beta KL(p||m) + (1-beta) KL(q||m), m = beta p + (1-beta) q). Gradients flow to the
+    student only."""
+    if kind not in _KINDS:
+        raise ValueError(f'unknown divergence {kind!r}; expected one of {_KINDS}')
+    if kind == 'jsd' and not 0 < beta < 1:
+        raise ValueError('generalized JSD needs 0 < beta < 1')
+    if teacher_logprobs.requires_grad:
+        raise ValueError('divergence teacher must be detached (gradients flow to the student only)')
+    t_head = teacher_logprobs.float()
+    if teacher_log_tail is None:
+        t_tail = _log1mexp(torch.logsumexp(t_head.double(), -1).clamp(max=0.)).float()
+    else:
+        t_tail = teacher_log_tail.float()
+    s_head, s_tail = topk_tail_logprobs(student_logits, teacher_ids)
+    logp = torch.cat((t_head, t_tail.unsqueeze(-1)), -1)
+    logq = torch.cat((s_head, s_tail.unsqueeze(-1)), -1)
+    p, q = logp.exp(), logq.exp()
+
+    def kl(a_log, a, b_log):
+        # sum a (log a - log b), with 0 log 0 = 0
+        return torch.where(a > 0, a * (a_log - b_log), torch.zeros_like(a)).sum(-1)
+
+    if kind == 'forward_kl':
+        values = kl(logp, p, logq)
+    elif kind == 'soft_ce':
+        values = -torch.where(p > 0, p * logq, torch.zeros_like(p)).sum(-1)
+    elif kind == 'reverse_kl':
+        values = kl(logq, q, logp)
+    else:
+        logm = torch.logaddexp(logp + math.log(beta), logq + math.log1p(-beta))
+        values = beta * kl(logp, p, logm) + (1. - beta) * kl(logq, q, logm)
+    return _reduce(values, weights, reduction)
 
 
 # ---------------------------------------------------------------------------- score centering

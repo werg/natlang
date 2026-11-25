@@ -3,7 +3,7 @@
 Implements:
 - Dual LR optimizer groups (2e-4 fresh modules + re-fit value head; 2e-5 warm-started 000000002 H/Q backbone)
 - 4-part step objectives:
-  1. Context distillation (1st Futamura Projection, top-k KL + CE, additive -> header-free dropout curriculum)
+  1. Context distillation (1st Futamura Projection, full or top-k+tail KL + CE, additive -> header-free curriculum)
   2. Live-KB cross-task experience learning (differentiable positives + hard distractors + null-memory restraint)
   3. Judge / decision site calibration
   4. Tier-1.5 FO-MAML / Reptile inner loop on z_site [B, M_site, 256]
@@ -29,7 +29,7 @@ class CompilerTrainConfig:
     gate_floor_steps: int = 1000
     kv_drop: float = 0.1
     adapter_drop: float = 0.1
-    topk_kl: int = 64
+    topk_kl: int | None = None         # None: full-vocabulary KL; k: top-k + tail bucket
     ce_weight: float = 0.25
     meta_inner_steps: int = 4
     meta_inner_lr: float = 0.05
@@ -55,27 +55,33 @@ def header_dropout_prob(step: int, total_steps: int) -> float:
     return 0.5 + 0.5 * ramp
 
 
-def topk_kl_loss(
+def distillation_kl_loss(
     student_logits: torch.Tensor,
     teacher_logits: torch.Tensor,
     mask: torch.Tensor,
     *,
-    k: int = 64,
+    topk: int | None = None,
 ) -> torch.Tensor:
-    """Top-k KL(p_teacher || p_student) over output positions (mask True/1 = supervised token)."""
+    """Mean KL(p_teacher || p_student) over supervised positions (mask True/1).
+
+    ``topk`` None (default): the full distributions (``common.stable_softmax.forward_kl``, chunked, so it fits for the
+    LFM3 vocabulary). ``topk`` k: the teacher's top-k plus one tail bucket holding the rest of its mass, against the
+    student's mass at the same k ids and outside them (``stable_softmax.topk_tail_divergence``). Neither side is
+    renormalized over the k, so the student pays for mass it puts outside the teacher's head (the top-k-only form
+    this replaces renormalized the teacher and let that mass go unpenalized)."""
+    from ..common import stable_softmax as S
     valid = mask.to(torch.bool)
     if not bool(valid.any()):
         return student_logits.sum() * 0.0
-    s_sel = student_logits[valid].float()
-    t_sel = teacher_logits[valid].detach().float()
-    k_eff = min(int(k), s_sel.shape[-1])
-    t_top_vals, t_top_idx = torch.topk(t_sel, k_eff, dim=-1)
-    t_logp = F.log_softmax(t_top_vals, dim=-1)
-    t_prob = t_logp.exp()
-    s_full_logp = F.log_softmax(s_sel, dim=-1)
-    s_top_logp = s_full_logp.gather(-1, t_top_idx)
-    kl = (t_prob * (t_logp - s_top_logp)).sum(dim=-1)
-    return kl.mean()
+    s_sel = student_logits[valid]
+    t_sel = teacher_logits[valid].detach()
+    if topk is None:
+        return S.forward_kl(s_sel, t_sel, reduction='mean')
+    t_logp = torch.log_softmax(t_sel.float(), dim=-1)
+    k_eff = min(int(topk), t_logp.shape[-1])
+    head, ids = torch.topk(t_logp, k_eff, dim=-1)
+    tail = torch.logsumexp(t_logp.scatter(-1, ids, float('-inf')), dim=-1)
+    return S.topk_tail_divergence(s_sel, ids, head, 'forward_kl', teacher_log_tail=tail, reduction='mean')
 
 
 def context_distillation_loss(
@@ -83,12 +89,15 @@ def context_distillation_loss(
     teacher_logits: torch.Tensor,
     labels: torch.Tensor,
     *,
-    topk: int = 64,
+    topk: int | None = None,
     ce_weight: float = 0.25,
 ) -> torch.Tensor:
-    """1st Futamura Projection objective: dense top-k KL + output-only CE (prompt tokens have label -100)."""
+    """1st Futamura Projection objective: KL to the full-context teacher + output-only CE (prompt labels are -100).
+
+    ``labels`` are the verified continuation's tokens (the teacher answer or a verified own success); never pass a
+    failed sample as labels."""
     mask = labels != -100
-    kl = topk_kl_loss(student_logits, teacher_logits, mask, k=topk)
+    kl = distillation_kl_loss(student_logits, teacher_logits, mask, topk=topk)
     if ce_weight <= 0.0 or not bool(mask.any()):
         return kl
     ce = F.cross_entropy(student_logits[mask].float(), labels[mask], reduction="mean")
@@ -139,16 +148,22 @@ def fo_maml_inner_adapt_z(
     inner_lr: float = 0.05,
     prox_lambda: float = 0.01,
 ) -> torch.Tensor:
-    """Run K_inner SGD steps strictly on z_site (first-order MAML inner loop) with proximal pull to z_init."""
+    """First-order MAML inner loop: K SGD steps on z_site only (proximal pull to z_init), returning z_K for the query loss.
+
+    The inner updates are taken without second-order terms, and the returned tensor is
+    ``z_init + sg(z_K - z_init)``: its value is the adapted z_K, and its Jacobian with respect to ``z_init`` is the
+    identity (the first-order approximation). The query loss computed at the returned z therefore reaches
+    ``HeaderEncoder`` through ``z_init`` and the head through its own use of z, instead of stopping at a detached leaf.
+    """
     z_ref = z_init.detach()
-    z = z_init.detach().clone().requires_grad_(True)
+    z = z_ref.clone().requires_grad_(True)
     for _ in range(int(steps)):
         support_loss = loss_fn(z, k_slots.detach(), weights.detach())
         if prox_lambda > 0.0:
             support_loss = support_loss + 0.5 * float(prox_lambda) * (z - z_ref).pow(2).mean()
         (grad_z,) = torch.autograd.grad(support_loss, z, create_graph=False)
         z = (z - float(inner_lr) * grad_z).detach().requires_grad_(True)
-    return z
+    return z_init + (z.detach() - z_ref)
 
 
 @torch.no_grad()
