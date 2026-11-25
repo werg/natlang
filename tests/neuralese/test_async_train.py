@@ -3116,6 +3116,13 @@ def test_a_round_short_of_new_supervision_waits_and_rebuilds_until_the_wait_expi
     assert d.supply_wait(rd, short)                        # short: waits 45 min, then data and build run again
     assert clock[0] - 1_000_000 >= 45 * 60
     assert not (rd / 'stages' / 'data.done').exists() and not (rd / 'stages' / 'build.done').exists()
+    # the rerun is real: earlier outputs and a successful journal do not mark the step finished (r0012 2026-11-25)
+    (rd / 'neuralese-graph-own').mkdir()
+    (rd / 'neuralese-graph-own' / 'chains.pkl').write_bytes(b'x')
+    monkeypatch.setattr(ei, 'unit_last_run_succeeded', lambda unit: True)
+    assert d.step_finished(rd, 'data', 'aei-r0002-data', ['x']) is None
+    (rd / 'stages' / 'data.rerun').unlink()
+    assert d.step_finished(rd, 'data', 'aei-r0002-data', ['x']) == 'journal'
     record = json.loads((rd / 'stages' / 'supply.json').read_text())
     assert record['decision'] == 'wait' and record['builds'][0]['new_weighted_target_tokens'] == 1_200_000
     enough = {'mix': {'parts': {'rl-own': {'weighted_target_tokens': 4_800_000},

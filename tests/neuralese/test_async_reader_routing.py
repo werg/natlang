@@ -55,7 +55,14 @@ def test_async_readers_preserve_runtime_and_route_every_data_consumer(tmp_path,m
     launched=[]
     monkeypatch.setattr(d.c,'work_tokenizer',lambda:None)
     monkeypatch.setattr(d.c,'ledger',lambda *args,**kwargs:launched.append((args,kwargs)))
+    # the fill is standing: gone while the collection runs, it is launched again (2026-11-25 22:22 OOM)
+    monkeypatch.setattr(d.c,'present',lambda unit:False)
+    alive=iter([True,False])
+    monkeypatch.setattr(d.c,'active',lambda unit:next(alive))
+    monkeypatch.setattr(ei.time,'sleep',lambda s:None)
+    monkeypatch.setattr(ei.subprocess,'run',lambda *a,**k:None)
     d._fill_beside('aei-collect-v0000',work,d.controller.current)
+    assert len(launched)==2
     args,kwargs=launched[0]
     assert kwargs['repo']==fill and args[3][1]==str(fill/'scripts/neuralese_data/filled_reasoning.py')
     assert d.controller.current['checkpoint']=='/checkpoint/start.pt'

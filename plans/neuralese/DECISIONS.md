@@ -14128,3 +14128,16 @@ native and SGLang (documented best-effort); every production client found declar
 ### 2026-11-25: optional nonvoid application returns after a proven effect
 
 Inventoried the exporter `openOutcomeGoalEvidence`, Python `verify_application_return`/`semantic_goal_completed`/`load_episode`, Node disk verifier `verifyObservedWorkspaceEvidence`, and native materializer. Explicit `returnedValue.required=false` already separates a requested native effect from an optional typed application return. No production change or return-binding waiver was needed. Added TEST-only model-free coverage for declared `SourceAttributionReport`, root ERROR, no output witness, independently reviewed native note effect, and one executed child decision through Python NativeIR, Node disk verification, materialization and CLI. The root stays ERROR; no return is fabricated. Rejected meaning review or a missing required returned value does not complete the goal; fabricated void witness remains rejected. These synthetic review exchanges are test fixtures, never registered as teacher data. Genuine campaign post-effect-error recovery and training gain remain unchecked.
+
+## 2026-11-25 23:40 aei1: supply rechecks actually rerun data and build; the DGX fill is standing (coordinator)
+
+- **Bug.** `supply_wait` deleted `stages/{data,build}.{done,exit}` so a short round would rerun them, but the next
+  `step()` asked `step_finished`, which found the previous outputs and a successful last run in the journal and marked
+  the step done (`how: journal`). r0012 rechecked six times (18:56-23:02) on the same mix: 4,939,072 new tokens each
+  time, 61k short of 5M, while new fills arrived. Fix: `supply_wait` writes `stages/<step>.rerun`; `step_finished`
+  returns None while it exists; `step()` removes it when it launches the step. Test in
+  `test_a_round_short_of_new_supervision_waits_and_rebuilds_until_the_wait_expires`.
+- **DGX fill.** `aei1-collect-v0009-fill` was OOM-killed at its 4.5 GB cap (22:22; 4.5 GB peak) and nothing relaunched
+  it (only the Colab fill had a keeper). `FILL_GB` 4.5 -> 8; `_fill_beside` relaunches the fill every
+  `FILL_KEEPER_SECONDS` (300) while its collection runs (`NATLANG_EI_FILL_KEEPER=0` opts out). Test in
+  `test_async_reader_routing.py`.
