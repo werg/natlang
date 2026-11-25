@@ -1,3 +1,4 @@
+import {providerFailureEvidence} from '../model/operational-error.js';
 import { nativeProtocolFailure, nativeProtocolFeedback } from './native-protocol.js';
 import { aliasDeclaration } from './type-aliases.js';
 import { SECOND_THINK_CLOSE } from './tool-markup.js';
@@ -1996,6 +1997,7 @@ export class NativeToolAgent {
         reservation?.finish(response.completion_tokens);
       } catch (error) {
         reservation?.finish();
+        const failureEvidence=providerFailureEvidence(error);
         session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn,
           duration_ms: Math.round(performance.now() - started), error: String(error) });
         throw error;
@@ -2578,10 +2580,12 @@ export class NativeToolAgent {
         reservation?.finish();
         // What the failed request streamed belongs to an abandoned attempt, whether the turn is taken again or not.
         if (streamed) { streamed = false; this.options.onDelta!(turn, { type: 'reset' }); }
+        const failureEvidence=providerFailureEvidence(error);
         session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn,
           actor: currentActor,
           duration_ms: Math.round(performance.now() - started),
-          error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` });
+          error: `${failureEvidence.name}: ${failureEvidence.message}`,
+          ...(failureEvidence.diagnostics?{error_metadata:failureEvidence.diagnostics}:{}) });
         // A server that refuses the request as too long says how long it was: learn the true size and take the turn
         // again, which compacts it. Twice at most per turn; beyond that the estimate is not the problem.
         const measured = contextOverflow(error instanceof Error ? error.message : '');
