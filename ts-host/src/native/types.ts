@@ -20,8 +20,8 @@ export type Type =
   /** `Is<T, "predicate">`: values of `base` that a reader can judge to satisfy the natural-language `predicate`
    * (plans/REFINEMENT_TYPES.md). Structurally it is `base`; the predicate is checked where a value enters the slot. */
   | { kind: 'refined'; base: Type; predicate: string }
-  /** `A & B`: resolves (TypeEnv.resolve) to one merged record, dictionary or the common type. Object types written
-   * inline merge when parsed; an alias among the members merges when it is resolved. */
+  /** `A & B`: values admitted by both members. Resolution distributes unions and narrows shared fields;
+   * incompatible alternatives are the empty union (`never`). Record fields stay lazy for recursive aliases. */
   | { kind: 'intersection'; members: Type[] }
   /** `T['field']`: a record field, a dictionary element, or the union of the selected members. */
   | { kind: 'index'; base: Type; key: string }
@@ -256,6 +256,7 @@ class Parser {
     if (token.kind === 'str') return { kind: 'lit', value: token.value };
     if (token.kind === 'num') return { kind: 'lit', value: Number(token.value) };
     if (token.kind !== 'id') throw new TypeSyntaxError(`unexpected ${JSON.stringify(token.value)}`);
+    if (token.value === 'never') return { kind: 'union', members: [] };
     if (PRIMS.has(token.value)) return { kind: 'prim', name: token.value as Extract<Type, { kind: 'prim' }>['name'] };
     if (token.value === 'Record') {
       const [key, value] = this.args(2);
@@ -428,7 +429,7 @@ export function formatType(type: Type): string {
       }).join(', ')}]`;
     }
     case 'dict': return `Record<${type.keyType ? formatType(type.keyType) : type.key ?? 'string'}, ${formatType(type.element)}>`;
-    case 'union': return type.members.map(formatType).join(' | ');
+    case 'union': return type.members.length ? type.members.map(formatType).join(' | ') : 'never';
     case 'lambda': return `(${type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ` +
       formatType(field.type)).join(', ')}) => ${formatType(type.returns)}`;
     case 'host': return type.name;
@@ -866,35 +867,89 @@ function indexedType(base: Type, key: string, resolve: (type: Type) => Type, act
   throw new TypeSyntaxError(`${formatType(resolved)}[${JSON.stringify(key)}] requires a record, dictionary, or a union of indexable types`);
 }
 
-/** One type from `A & B`: records merge field by field, dictionaries merge their elements, equal types are that type. */
-function mergeIntersection(members: Type[], resolve: (type: Type) => Type): Type {
-  const parts = members.map(resolve);
-  if (parts.every(part => part.kind === 'record')) {
+/** The intersection of structural types. Record fields remain lazy so recursive aliases are not expanded eagerly. */
+function mergeIntersection(members: Type[], resolve: (type: Type) => Type, activeUnions = new Set<Type>()): Type {
+  const parts = members.map(resolve).filter(part => !(part.kind === 'prim' && part.name === 'unknown'));
+  if (!parts.length) return { kind: 'prim', name: 'unknown' };
+  const union = parts.find(part => part.kind === 'union');
+  if (union?.kind === 'union') {
+    if (activeUnions.has(union)) throw new TypeSyntaxError('cannot intersect through a recursive union');
+    activeUnions.add(union);
+    try {
+      const rest = parts.filter(part => part !== union);
+      const alternatives = union.members.flatMap(member => {
+        const narrowed = mergeIntersection([member, ...rest], resolve, activeUnions);
+        return narrowed.kind === 'union' ? narrowed.members : [narrowed];
+      });
+      const unique = [...new Map(alternatives.map(type => [JSON.stringify(type), type])).values()];
+      return unique.length === 1 ? unique[0]! : { kind: 'union', members: unique };
+    } finally { activeUnions.delete(union); }
+  }
+  if (parts.length === 1 || parts.every(part => JSON.stringify(part) === JSON.stringify(parts[0]))) return parts[0]!;
+  // This path also runs while parsing inline records, before their aliases can be resolved.
+  if (parts.some(part => part.kind === 'name' || part.kind === 'intersection' || part.kind === 'index' || part.kind === 'utility'))
+    return { kind: 'intersection', members: parts };
+  if (parts.some(part => part.kind === 'untrusted')) return { kind: 'untrusted',
+    base: mergeIntersection(parts.map(part => part.kind === 'untrusted' ? part.base : part), resolve, activeUnions) };
+  if (parts.some(part => part.kind === 'refined')) {
+    const predicates: string[] = [], bases: Type[] = [];
+    for (const part of parts) {
+      let base = part;
+      const seen = new Set<Type>();
+      while (base.kind === 'refined') {
+        if (seen.has(base)) throw new TypeSyntaxError('cannot intersect through a recursive refinement');
+        seen.add(base); predicates.push(base.predicate); base = resolve(base.base);
+      }
+      bases.push(base);
+    }
+    const base = mergeIntersection(bases, resolve, activeUnions);
+    if (base.kind === 'union' && !base.members.length) return base;
+    return [...new Set(predicates)].reduce<Type>((type, predicate) => ({ kind: 'refined', base: type, predicate }), base);
+  }
+  const scalar = (part: Type) => part.kind === 'lit' || part.kind === 'prim' && ['string', 'number', 'boolean', 'null'].includes(part.name);
+  if (parts.some(scalar)) {
+    // Live/soft values and the legacy Blob codec can transform their input representation. Do not infer disjointness
+    // from their type tag, or silently erase their contract when intersecting a scalar.
+    if (parts.some(part => part.kind === 'host' || part.kind === 'neuralese' || part.kind === 'prim' && part.name === 'Blob'))
+      throw new TypeSyntaxError(`${members.map(formatType).join(' & ')} has an unsupported structural intersection involving a live or encoded value`);
+    const literal = parts.find(part => part.kind === 'lit');
+    if (literal?.kind === 'lit' && parts.every(part => part.kind === 'lit' ? part.value === literal.value :
+      part.kind === 'prim' && part.name === typeof literal.value)) return literal;
+    return { kind: 'union', members: [] };
+  }
+  const atomic = (type: Type): boolean => type.kind === 'prim' || type.kind === 'lit' ||
+    type.kind === 'union' && type.members.every(atomic);
+  const combined = (types: Type[]): Type => types.every(type => JSON.stringify(type) === JSON.stringify(types[0]))
+    ? types[0]! : types.every(atomic) ? mergeIntersection(types, type => type) : { kind: 'intersection', members: types };
+  if (parts.every(part => part.kind === 'record' || part.kind === 'dict') && parts.some(part => part.kind === 'record')) {
     const fields: Extract<Type, { kind: 'record' }>['fields'] = [];
-    for (const part of parts as Extract<Type, { kind: 'record' }>[]) for (const field of part.fields) {
+    const dictionaries = parts.filter(part => part.kind === 'dict');
+    for (const part of parts) if (part.kind === 'record') for (const field of part.fields) {
       const at = fields.findIndex(item => item.name === field.name);
       if (at < 0) { fields.push({ ...field }); continue; }
       const had = fields[at]!;
-      fields[at] = { name: field.name, optional: had.optional && field.optional,
-        type: JSON.stringify(had.type) === JSON.stringify(field.type) ? had.type : { kind: 'intersection', members: [had.type, field.type] } };
+      fields[at] = { name: field.name, optional: had.optional && field.optional, type: combined([had.type, field.type]) };
     }
-    return { kind: 'record', fields };
+    const narrowed = fields.map(field => ({ ...field,
+      type: combined([field.type, ...dictionaries.map(part => part.element)]) }));
+    if (narrowed.some(field => !field.optional && field.type.kind === 'union' && !field.type.members.length))
+      return { kind: 'union', members: [] };
+    return { kind: 'record', fields: narrowed };
   }
-  if (parts.every(part => part.kind === 'dict'))
-    return { kind: 'dict', element: parts.length === 1 ? (parts[0] as never as { element: Type }).element :
-      { kind: 'intersection', members: parts.map(part => (part as { element: Type }).element) } };
-  if (parts.every(part => JSON.stringify(part) === JSON.stringify(parts[0]))) return parts[0]!;
-  // A refinement is its base plus predicates (TypeScript: \`T & brand\`), so \`Is<T, "a"> & T\` is \`Is<T, "a">\` and
-  // \`Is<T, "a"> & Is<T, "b">\` holds both predicates: members with one base intersect to that base with every predicate.
-  const chains = parts.map(part => {
-    const predicates: string[] = [];
-    let base = part;
-    while (base.kind === 'refined') { predicates.push(base.predicate); base = resolve(base.base); }
-    return { base, predicates };
-  });
-  if (chains.some(chain => chain.predicates.length) && chains.every(chain => JSON.stringify(chain.base) === JSON.stringify(chains[0]!.base))) {
-    const predicates = [...new Set(chains.flatMap(chain => chain.predicates))];
-    return predicates.reduce<Type>((type, predicate) => ({ kind: 'refined', base: type, predicate }), chains[0]!.base);
+  if (parts.every(part => part.kind === 'dict')) return { kind: 'dict', element: combined(parts.map(part => part.element)) };
+  if (parts.every(part => part.kind === 'list')) return { kind: 'list', element: combined(parts.map(part => part.element)) };
+  if (parts.every(part => part.kind === 'tuple' || part.kind === 'list') && parts.some(part => part.kind === 'tuple')) {
+    const tuples = parts.filter(part => part.kind === 'tuple');
+    const length = Math.min(...tuples.map(part => part.elements.length));
+    const required = Math.max(...tuples.map(part => part.minLength ?? part.elements.length));
+    if (required > length) return { kind: 'union', members: [] };
+    const elements = Array.from({ length }, (_, i) => combined(parts.map(part =>
+      part.kind === 'tuple' ? part.elements[i]! : part.element)));
+    if (elements.some((type, i) => i < required && type.kind === 'union' && !type.members.length))
+      return { kind: 'union', members: [] };
+    return { kind: 'tuple', elements, ...(required < length ? { minLength: required } : {}) };
   }
-  throw new TypeSyntaxError(`${members.map(formatType).join(' & ')} intersects types that are not all objects; intersect record types, or write one record with the fields you need`);
+  // Exact records, arrays and dictionaries have distinct native value representations.
+  if (parts.every(part => ['record', 'dict', 'list', 'tuple'].includes(part.kind))) return { kind: 'union', members: [] };
+  throw new TypeSyntaxError(`${members.map(formatType).join(' & ')} has an unsupported structural intersection; preserve its constraints in an explicit supported type`);
 }
