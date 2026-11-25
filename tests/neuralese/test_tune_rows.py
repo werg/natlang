@@ -128,6 +128,19 @@ def test_rejected_actions_never_become_targets(tmp_path):
     assert verify_action_evidence(done_action) == 'admissible', 'a completed native eval action uses the runtime status "done"'
 
 
+def test_an_empty_reply_is_recognised_in_turns_and_messages(monkeypatch):
+    # no text and no tool call: the only target would be an immediate end of turn at a full row's weight
+    from natlang_neuralese.tune.rows import empty_reply, empty_reply_message, train_empty_replies
+    empty = turn(reply={'text': ' ', 'calls': [], 'reasoning': 'thinking only'}, evidence={**turn()['evidence'], 'actionEvents': []})
+    assert empty_reply(empty) and not empty_reply(turn()) and not empty_reply(turn(reply={'text': 'HI', 'calls': []}))
+    assert not empty_reply({**empty, 'decision': {'options': ['a', 'b']}})   # a decision's choice is its target
+    assert empty_reply_message({'role': 'assistant', 'content': [{'type': 'text', 'text': ''}]})
+    assert not empty_reply_message({'role': 'assistant', 'content': '', 'tool_calls': [{'id': 'c'}]})
+    assert not train_empty_replies()
+    monkeypatch.setenv('NATLANG_TUNE_EMPTY_REPLIES', 'train')
+    assert train_empty_replies()
+
+
 @real_lfm
 def test_build_trains_from_collected_turns(tmp_path):
     engine, checkpoint = real_engine(tmp_path)

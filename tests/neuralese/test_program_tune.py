@@ -82,6 +82,25 @@ def test_a_nested_calls_last_turn_is_judged_by_the_episode():
     assert dispositions[0] != 'unverified'
 
 
+def test_an_empty_reply_is_no_target_unless_opted_in(tmp_path, monkeypatch):
+    # a reply with neither text nor a tool call would train an immediate end of turn at a full row's weight
+    # (2026-11-25: ext_decisions_verdict's fit ended every reply at once after 16 such rows)
+    turns = episode()
+    empty = {'role': 'assistant', 'content': '  ', 'reasoning_content': 'hm'}
+    turns.insert(2, {'messages': turns[2]['messages'], 'tools': TOOLS, 'target': empty, 'invocation_id': 'inv'})
+    rows, dispositions = P.episode_turns('task-1', 'k', turns)
+    assert dispositions == ['rejected', 'admissible', 'empty-reply', 'admissible']
+    assert [row['turn'] for row in rows] == [1, 3]
+    monkeypatch.setenv('NATLANG_TUNE_EMPTY_REPLIES', 'train')
+    rows, dispositions = P.episode_turns('task-1', 'k', turns)
+    assert dispositions[2] == 'admissible' and [row['turn'] for row in rows] == [1, 2, 3]
+    # the tuner's lowering drops such a row however it was produced (rows files written before the fix)
+    from natlang_neuralese.tune.rows import lower_rows
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    monkeypatch.delenv('NATLANG_TUNE_EMPTY_REPLIES')
+    assert [row['occurrence'].rsplit(':', 1)[1] for row in lower_rows(engine, rows, prompt_weight=0.)] == ['1', '3']
+
+
 def test_rows_lower_and_fit_through_the_tuner(tmp_path):
     from natlang_neuralese.tune.rows import lower_rows
     from natlang_neuralese.tune.trainer import JointTrainer, Recipe

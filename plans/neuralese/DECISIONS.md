@@ -12145,3 +12145,47 @@ behaviour does not change. Flipping the default is an OPEN_ITEMS row.
 alternative nodes (716a9d0fc) as invocations and compared raw option scores with the logsumexp readout; the recorded
 objective's prompt check refused a decision capture whose prompt holds the options' shared prefix
 (`native_learning._shared_into_prompt`). Its error now names the first differing item.
+
+## 2026-11-25 03:10 Program tuning: ext_decisions_verdict's merged arm 0/128 was a fit on empty-reply rows (fixed everywhere; five fits invalid)
+
+**Observation.** `progtune-l4-seq-3`, 02:42: ext_decisions_verdict merged vs base on dev64 (l4 series, de2b36add)
+0.0 vs 0.7266 (0/128 vs 93/128). Every merged episode ended `model_incomplete: terminated_without_result (repeated
+immediate EOS after one recovery turn)`: 0-1 completion tokens per call ("up", then EOS), 47 s for 128 episodes.
+
+**Cause.** The fit's `rows.jsonl` held 16 turns (of 1,280) whose reply had neither text nor a tool call (teacher turns
+of pool-progtune-decisions t000069/t000089 and pool-v2-rich t004625/t006207/t017043 that the runtime answered with a
+recovery turn). `program_tune.episode_turns` admitted them (no tool call, so no rejected or unverified event), and
+`tune.rows.turn_graph` lowered each to one weighted token, `<|im_end|>` (a teacher reply's think block is context).
+`tune.objective.program_loss` averages per row, so each such row weighed as much as a whole reply: the fit's row losses
+show them at 7.3-11.4 nats (steps 2, 13, 21, 30, 46). Evidence that the weights, not serving, ended the replies: HF
+forward on the DGX (independent of SGLang and the Colab export): P(`<|im_end|>`) at the first generated position 0.75-0.84
+on verdict and route prompts with the merged verdict checkpoint, e^-19..-22 with the base, e^-11 with the route merged
+checkpoint (route's rows: 0 empty replies, merged arm 0.8438 vs 0.8828). The prompts were identical (5,081 prompt tokens
+on both arms' first call), the actor attested 95df57f2 with the same export format and config as route's arm, and the
+episodes were scored as model failures (no infra losses, no timeouts). The release's factors were finite and of the
+usual size (per-family LoRA delta norms within 1.3x of route's).
+
+**Fix (default, opt-out `NATLANG_TUNE_EMPTY_REPLIES=train` / `--empty-replies train`).** One predicate
+(`tune.rows.empty_reply`, `empty_reply_message`): a reply with no visible text and no tool call (a decision turn never
+is) is no positive target. Where the mechanism lives:
+- `program_tune.episode_turns` (tune-turn producer): disposition `empty-reply`, counted in `rows.json`
+  `empty_reply_turns`.
+- `tune.rows.lower_rows` (every tune-turn consumer: program fits, the bank's `program_rows`, ts-host `tune
+  collect`/`pool`/`distill` rows, memetic and operator soft-state rows): drops them, so rows files written before the fix
+  are safe too.
+- `sft_sources build` (expert-iteration mixes: r0007 1,283 and r0008 1,382 such teacher rows of ~125k) and `sft_sources
+  neuralese-graph` (own calls): dropped, counted as `empty_reply_calls`.
+- Left out: GRPO (`lower_rollout_turns.episode_turns`, `grpo.py`): on-policy, an empty sampled reply trains with its
+  group advantage (negative in a failed episode), which is the signal RL wants, not a positive target.
+
+**Results invalidated and rerun.** Rows of five programs held empty replies: verdict 16/1,280, bgkit_pubmed_reading
+45/5,301, bgkit_searchqa_reading 336/12,568, composed_multihop_deep 173/11,718, composed_neuralese_iterate 247/7,146
+(route, tally, tree, apigen retail: 0). Their rows were repaired in place (the old file, fits and arms under
+`DIR/fit/invalid-empty-reply-20261125-025649/` with `INVALID.json`): verdict's release and merged arm (the 0/128),
+searchqa's A100 release (not yet measured), and the in-progress pubmed (step 40) and neuralese_iterate (step 11) fits,
+which I stopped with their lanes `progtune-l4-fits3-a/b` (they were producing invalid releases). No other measured arm
+was affected (route merged -3.9 pts and its adapter arms trained on 0 empty rows). The fits restart from scratch on the
+repaired rows at the same tenant commit 206b5ebd6 (`progtune-l4-fits4-a/b`: verdict, pubmed, neuralese_iterate,
+multihop, searchqa); `progtune-l4-seq-readd` relaunches the measurement lane as `progtune-l4-seq-4` with verdict back in
+its list once its new release is home and l4-seq-3 is idle. The bank stage (after l4-seq) lowers rows with the pinned
+pin-51cf1173c code, which predates the `lower_rows` guard, but it reads the repaired rows files.

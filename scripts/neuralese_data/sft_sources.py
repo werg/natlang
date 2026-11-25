@@ -2908,6 +2908,7 @@ def build(args):
                 except Exception as error:
                     calls.append(repr(error))
         from natlang_neuralese.data.decision_graph import reasoned_decision_plan
+        from natlang_neuralese.tune.rows import empty_reply_message
         reasoned_plan, reasoned_groups = reasoned_decision_plan(turns), set()
         for index, (turn, call) in enumerate(zip(turns, calls)):
             reasoned = reasoned_plan[index]
@@ -2918,6 +2919,12 @@ def build(args):
                 if not reasoned['train']:
                     stats[source][f"decision_reasoned_skipped:{reasoned['why']}"] += 1
                     continue
+            if getattr(args, 'empty_replies', 'drop') == 'drop' and empty_reply_message(turn.get('target')):
+                # no action (no text, no tool call): its only target is an immediate end of turn, which the runtime
+                # answers with a recovery turn (tune.rows.empty_reply; a program fit on 16 such rows ended every reply
+                # at once, 2026-11-25)
+                stats[source]['empty_reply_calls'] += 1
+                continue
             try:
                 if isinstance(call, str):
                     raise RenderError(call)
@@ -3818,6 +3825,12 @@ def neuralese_graph(args):
                 if row.get('sample') in samples and row.get('task_id') == samples[row['sample']]['task_id']:
                     counters = collections.Counter()
                     calls = episode_turns(row, counters, in_context=in_context)
+                    if getattr(args, 'empty_replies', 'drop') == 'drop':
+                        # an own reply with neither text nor a tool call is no action (tune.rows.empty_reply)
+                        from natlang_neuralese.tune.rows import empty_reply_message
+                        kept_calls = [c for c in calls if not empty_reply_message(row['turns'][c['index']].get('target'))]
+                        counters['empty_reply_calls'] += len(calls) - len(kept_calls)
+                        calls = kept_calls
                     for call in calls:      # SFT: the own sampled tokens are the target (no importance weights)
                         for field in ('logp', 'probabilities'):
                             call.pop(field, None)
@@ -3988,6 +4001,9 @@ def main():
     b.add_argument('--own-empty-think', choices=('context', 'train'), default='context',
                    help="an own reply without reasoning (a decision readout the actor scored, not sampled): its "
                         "template empty think block is context (default) or trains")
+    b.add_argument('--empty-replies', choices=('drop', 'train'), default='drop',
+                   help='calls whose reply has neither text nor a tool call (an immediate end of turn): drop '
+                        '(default) or train (opt-out)')
     b.add_argument('--teacher-forward-budget', type=int, default=0,
                    help='forward tokens of teacher episodes, taken breadth-first over tasks (0: every capped episode)')
     b.add_argument('--own-loss-share', type=float, default=0.25,
@@ -4088,6 +4104,8 @@ def main():
     g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
                    help='own runs left out (as build --exclude-run), matched against the episode run label')
     g.add_argument('--seed', type=int, default=20261117)
+    g.add_argument('--empty-replies', choices=('drop', 'train'), default='drop',
+                   help='own calls whose reply has neither text nor a tool call: drop (default) or train (opt-out)')
     g.add_argument('--tokenizer', default=None,
                    help='the policy tokenizer (its <think> ids; default: WORK/tokenizer): legacy context-free writes are '
                         'rewritten in context')
