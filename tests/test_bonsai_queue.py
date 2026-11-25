@@ -621,6 +621,18 @@ def test_entry_text_neuralese_choice_overrides_the_remote_default(tmp_path, monk
     assert '--text-neuralese-emulation' not in commands[0].command
 
 
+def test_entry_in_context_neuralese_replaces_the_text_transport(tmp_path, monkeypatch):
+    """An authored teacher episode's replay (sft_sources ``in_context_neuralese``) reads Neuralese in context, as its
+    trajectory was rendered, instead of the remote default's teacher-text transport."""
+    entry = {**queue_entry(tmp_path), 'in_context_neuralese': True}
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    queue.write_text(json.dumps(entry) + '\n')
+    commands = successful_child(monkeypatch)
+    run_queue(queue, journal, TS_HOST, seconds=1, server='http://127.0.0.1:43217')
+    assert '--in-context-neuralese' in commands[0].command
+    assert '--text-neuralese-emulation' not in commands[0].command
+
+
 def test_invalid_provider_controls_fail_before_attempt_start(tmp_path, monkeypatch):
     entry = queue_entry(tmp_path)
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'

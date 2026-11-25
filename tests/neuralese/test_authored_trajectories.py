@@ -83,6 +83,26 @@ def test_sft_sources_extracts_the_pool_as_teacher_episodes(tmp_path, monkeypatch
     assert answers == ['"remaining-urn"'] * 3 and replay.served.count(False) == 0
 
 
+def operator_turn():
+    """A learned operator's call (learned compaction): view's site, the authored summary as its reply."""
+    return {'invocation_id': 'call/1#operator-1', 'function': 'view', 'tools': [],
+            'messages': [{'role': 'system', 'content': 'view prompt'},
+                         {'role': 'user', 'content': 'instructions:\nThe call that receives this argument ...\n\nvalue:\n"..."'}],
+            'target': {'role': 'assistant', 'content': 'A heartbeat log; every line reports ok.'}}
+
+
+def test_an_operator_call_is_its_own_turn_not_a_readout_and_its_episode_replays_in_context(tmp_path, no_held):
+    """An operator call is one call (no reasoned-readout repeats), and the replay of an authored episode reads Neuralese
+    in context as its render did (run_bonsai_queue entry ``in_context_neuralese``)."""
+    assert at.operator_turn(operator_turn()) and not at.readout_turn(operator_turn()) and at.readout_turn(readout_turn())
+    at.write_pool([at.trajectory_row(task('ok'), source='t', turns=[operator_turn(), call_turn()])], tmp_path / 'pool')
+    manifest = at.read_jsonl(tmp_path / 'pool' / 'manifest.jsonl')
+    rollout = at.read_jsonl(manifest[0]['rollouts'])[0]
+    assert 'decision_reasoning' not in rollout['turns'][0] and rollout['turns'][0]['function'] == 'view'
+    assert s.authored_episode({'teacher': manifest[0]['teacher']})
+    assert not s.authored_episode({'teacher': {'model_id': 'gpt', 'provider': 'openai'}}) and not s.authored_episode({})
+
+
 def test_a_drifted_success_with_reasoned_readout_repeats_is_admitted():
     """``group-repeat`` entries are a reasoned readout's matched entry answering its repeats (as in ``exact``): they do
     not keep a drifted success out, and the turn count compares with the replay's calls."""

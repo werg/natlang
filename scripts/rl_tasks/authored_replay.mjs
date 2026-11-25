@@ -10,13 +10,19 @@
 // A call no entry answers gets a placeholder of its declared type (the first option of a decision, a value shaped by the
 // return type's schema) and is reported with `placeholder: true`, so one replay lists every missing entry instead of
 // stopping at the first stage that lacks one (`--stop-at-missing` restores the stop).
-// usage: node scripts/rl_tasks/authored_replay.mjs RUNTIME_TS_HOST CASES.jsonl OUT.json [--stop-at-missing]
+//
+// Neuralese is read as the serving engines read it by default (ts-host model/in-context-neuralese.ts): a value long
+// enough for learned compaction gets its operator call (`fn: "view"`, answered by the entry's summary text) and the
+// consumer reads the summary in place; a `Neuralese<T>` value is its producing call's text, read in place by its
+// consumers. `--no-neuralese` replays without a Neuralese transport (the crisp cut; a `Neuralese<T>` result fails).
+// usage: node scripts/rl_tasks/authored_replay.mjs RUNTIME_TS_HOST CASES.jsonl OUT.json [--stop-at-missing] [--no-neuralese]
 import fs from 'node:fs';
 const [runtime, input, out, ...flags] = process.argv.slice(2);
 if (!runtime || !input || !out) throw new Error('usage: authored_replay.mjs RUNTIME_TS_HOST CASES.jsonl OUT.json [--stop-at-missing]');
 const curriculum = await import(runtime + '/dist/teacher/curriculum.js');
 const { replayReference, NO_PLACEHOLDER } = curriculum;
 const { TOOLS_PROMPT } = await import(runtime + '/dist/native/prompt.js');
+const { createInContextNeuralese } = await import(runtime + '/dist/model/in-context-neuralese.js');
 const rows = fs.readFileSync(input, 'utf8').split('\n').filter(Boolean).map(JSON.parse);
 const placeholders = !flags.includes('--stop-at-missing') && NO_PLACEHOLDER !== undefined;
 
@@ -51,6 +57,7 @@ function sample(schema, depth = 0) {
 /** The placeholder answer of a call no entry matches: a decision readout's first option, else a value of the return
  * type. A call whose type gives no shape (a function result) keeps the failure. */
 function placeholder(request) {
+  if (/#operator-\d+$/.test(request.invocation_id ?? '')) return 'placeholder';   // a learned operator's summary
   const tools = Array.isArray(request.tools) ? request.tools : [];
   if (!tools.length) {
     const last = String(request.messages?.at(-1)?.content ?? '');
@@ -115,7 +122,8 @@ for (const record of rows) {
       return value;
     } : undefined;
     const { run, trajectory } = await replayReference(record, TOOLS_PROMPT, () => '',
-      { onChild: ({ name, entry, opening, shown }) => answers.push({ name, entry, opening, shown }), missing });
+      { onChild: ({ name, entry, opening, shown }) => answers.push({ name, entry, opening, shown }), missing,
+        ...(flags.includes('--no-neuralese') ? {} : { neuralese: createInContextNeuralese() }) });
     for (const index of filled) if (answers[index]) answers[index].placeholder = true;
     row.status = run.outcome.status;
     row.accepted = run.outcome.accepted === true;
