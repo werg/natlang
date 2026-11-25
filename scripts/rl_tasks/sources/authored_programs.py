@@ -63,7 +63,7 @@ from scripts.rl_tasks.common import CURRICULUM_VERSION, slug, text_digest  # noq
 
 SCHEMA = 'natlang.authored-program/1'
 GENERATOR = 'natlang.authored-programs/1'
-ENTRIES = frozenset({'program', 'submission.json', 'idea.json', 'NOTES.md'})
+ENTRIES = frozenset({'program', 'submission.json', 'idea.json', 'NOTES.md', 'review.json'})
 ANCHOR = 'You are inside this call: {}('
 
 # Campaign targets: statistics the wave report compares against, never admission checks (owner 2026-11-25:
@@ -94,7 +94,8 @@ COMBINATOR_KINDS = frozenset(STD_KIND.values()) | {'iterate-measure', 'iterate-n
                                                    'folder-transaction'}
 CODE_PATTERNS = {
     'partial': r'\.partial\s*\(',
-    'context-rebind': r'\.in\s*\(\s*(NatlangContext|Context)\b|\bwithContext\s*\(',
+    'context-rebind': r'\.in\s*\(\s*(NatlangContext|Context)\b',
+    'with-context': r'\bwithContext\s*\(',
     'decide': r'\bdecide\s*\(',
     'refine': r'\b(refine|assume)\s*\(',
     'folder-transaction': r'\bfolder\.(apply|propose|accept|iterateOn|snapshot|select)\s*\(|\bproposeAndVerify\s*\(|\bbranchAndSelect\s*\(',
@@ -254,44 +255,143 @@ def replay(cases: list[dict], runtime: Path) -> dict:
             return {'error': (run.stderr or run.stdout)[-2000:], 'results': []}
 
 
+def capture_cause(fragments: list[str], captured: list[str]) -> str:
+    """When a fragment matched a variable an inline `nl` call captured (authored_replay.mjs `captured`), say so: a
+    capture's declaration is part of every opening of that literal, so it matches calls the author meant apart."""
+    for fragment in fragments:
+        for text in captured:
+            if fragment in text:
+                line = next((ln for ln in text.splitlines() if fragment in ln), '')
+                name = re.match(r'\s*(?:const|let)\s+([A-Za-z_$][\w$]*)', line)
+                var = f'`{name.group(1)}`' if name else 'a variable'
+                return (f'; the fragment {fragment!r} matched {var}, a variable of the calling code that the inline nl '
+                        'captured (an inline nl captures each visible variable its instructions name, as a word too). '
+                        'Match a fragment of its instructions or arguments, or list the captures with nl.with({ … }).')
+    return ''
+
+
+def fragments_of(entry: dict) -> list[str]:
+    """An entry's match fragments as the replay tests them: the call anchor of `fn` first, then `match`."""
+    match = entry.get('match') or []
+    match = [match] if isinstance(match, str) else list(match)
+    return ([ANCHOR.format(entry['fn'])] if entry.get('fn') else []) + match
+
+
+def shows(opening: str, fragment: str) -> bool:
+    """curriculum.ts `shows`: the fragment as written, or as its JSON-escaped text."""
+    return fragment in opening or json.dumps(fragment, ensure_ascii=False)[1:-1] in opening
+
+
+def answer_of(entry: dict):
+    """What an entry answers: its value, or the value of its last return_result turn (None for other turns)."""
+    if 'value' in entry:
+        return entry['value']
+    for turn in reversed(entry.get('turns') or []):
+        if isinstance(turn, list) and turn and turn[0] == 'return_result':
+            return (turn[1] or {}).get('value')
+    return None
+
+
+def call_label(answer: dict, limit: int = 160) -> str:
+    shown = ' '.join(str(answer.get('shown', '')).split())
+    return f'{answer.get("name")}({shown[:limit]}{"..." if len(shown) > limit else ""})'
+
+
 def consistency(data: dict, rows: list[dict]) -> tuple[list[str], list[str]]:
-    """The only check: the authored trajectory is consistent with the program."""
+    """The only check: the authored trajectory is consistent with the program. Warnings name entries that may answer
+    calls they were not written for: the silent wrong answers (a fragment that also appears in a later call quoting an
+    earlier record, an entry without `fn` reaching another function's call)."""
     problems, warnings = [], []
     for inst, row in zip(data['instances'], rows):
         label = f'instance {inst["name"]}'
         if row.get('error'):
             problems.append(f'{label}: the replay did not run: {row["error"][:800]}')
             continue
+        missing = [a for a in row.get('answers') or [] if a.get('entry') == -1]
+        for a in missing:
+            problems.append(f'{label}: NO ENTRY for a call of {call_label(a)}'
+                            + (' (answered by a placeholder for the rest of this replay)' if a.get('placeholder') else ''))
         if row.get('status') != 'done':
             problems.append(f'{label}: the trajectory does not finish the root call: {str(row.get("detail"))[:1200]}')
         failed = row.get('failed_actions') or []
         allowed = int(inst.get('expected_failures') or 0)
         if len(failed) != allowed:
-            listed = '; '.join(f'{f["tool"]}: {f["result"][:300]}' for f in failed)
+            listed = '; '.join(f'{f["tool"]}: {f["result"][:600]}' for f in failed)
             problems.append(f'{label}: {len(failed)} actions failed where the trajectory declares {allowed}'
-                            f'{" (expected_failures)" if allowed else ""}: {listed}'[:1500])
+                            f'{" (expected_failures)" if allowed else ""}'
+                            f'{" (some may follow from placeholder answers to missing entries)" if missing else ""}: {listed}'[:3000])
         if inst.get('rl') is not None and row.get('status') == 'done' and not row.get('accepted'):
             problems.append(f'{label}: rl: the trajectory returns {json.dumps(row.get("value"))[:300]}, which the '
                             'declared oracle rejects')
         trajectory = inst.get('trajectory') or {}
+        entries = trajectory.get('calls') or []
         order = entry_order(trajectory)
-        answered = collections.defaultdict(set)
+        answered = collections.defaultdict(list)
         for a in row.get('answers') or []:
             if 0 <= a.get('entry', -1) < len(order):
-                answered[order[a['entry']]].add(a.get('shown', ''))
-        used = set(answered)
-        for index, shown in answered.items():
-            entry = (trajectory.get('calls') or [])[index]
-            fragments = len([entry['match']] if isinstance(entry.get('match'), str) else entry.get('match') or [])
-            if 'value' in entry and len(shown) > 1 and fragments + bool(entry.get('fn')) >= 2:
+                answered[order[a['entry']]].append(a)
+        for index, calls in answered.items():
+            entry = entries[index]
+            names = sorted({a.get('name') for a in calls})
+            if len(names) > 1:
+                warnings.append(f'{label}: trajectory.calls[{index + 1}] ({entry.get("fn") or entry.get("match")}) answers '
+                                f'calls of {len(names)} functions ({", ".join(names)}): its fragments also appear in other '
+                                'functions\' openings; give it `fn`')
+            shown = {a.get('shown', '') for a in calls}
+            if 'value' in entry and len(shown) > 1 and len(fragments_of(entry)) >= 2:
                 warnings.append(f'{label}: trajectory.calls[{index + 1}] ({entry.get("fn") or entry.get("match")}) '
-                                f'answers {len(shown)} different calls with one value: its fragments match more than '
-                                'its item (take the start of the argument\'s line: `message: Message = { messageId: "m3"`)')
-        for index, entry in enumerate(trajectory.get('calls') or []):
-            if index not in used:
+                                f'answers {len(shown)} calls with different arguments with one value, e.g. '
+                                f'{call_label(calls[0], 100)} and {call_label(calls[-1], 100)}: its fragments match more '
+                                'than its item; take the start of the argument\'s line (`message: Message = { messageId: '
+                                '"m3"`) or a passage only this call shows')
+        # A call that several written-for-an-item entries match is answered by the one with the most fragments (author
+        # order breaks ties): when they answer differently, one of them is answering a call it was not written for.
+        for a in row.get('answers') or []:
+            opening = a.get('opening') or ''
+            if not opening or a.get('entry', -1) < 0:
+                continue
+            fits = [i for i, e in enumerate(entries) if e.get('match')
+                    and all(shows(opening, f) for f in fragments_of(e))]
+            if len(fits) > 1:
+                answers = {json.dumps(answer_of(entries[i]), sort_keys=True, ensure_ascii=False)
+                           if answer_of(entries[i]) is not None else f'turns:{i}' for i in fits}
+                if len(answers) > 1:
+                    won = order[a['entry']] if a['entry'] < len(order) else None
+                    warnings.append(f'{label}: the call {call_label(a, 100)} is matched by trajectory.calls '
+                                    f'{", ".join(str(i + 1) for i in fits)}, which answer differently; '
+                                    f'{won + 1 if won is not None else "?"} answered it. A fragment of another entry '
+                                    'probably quotes this call (a later call showing an earlier record): make each '
+                                    'entry\'s fragments specific to its own call')
+        for index, entry in enumerate(entries):
+            if index not in answered:
                 warnings.append(f'{label}: trajectory.calls[{index + 1}] ({entry.get("fn") or entry.get("match")}) '
                                 'answered no call')
     return problems, warnings
+
+
+NUMBER = re.compile(r'(?<![\w.])\d+(?:[.,]\d+)?(?![\w])')
+NAME = re.compile(r'(?<=[a-z,;:] )[A-Z][a-z]+(?:[\'’][a-z]+)?')
+
+
+def ungrounded(row: dict, entries: list[dict], order: list[int]) -> list[dict]:
+    """Open answers that state numbers or names their call's opening does not show: the writer used what the author
+    knew about the instance rather than what the call received (a statistic and a list for the builder, not a check)."""
+    out = []
+    for a in row.get('answers') or []:
+        if not 0 <= a.get('entry', -1) < len(order) or not a.get('opening'):
+            continue
+        texts = [t for t in leaves(answer_of(entries[order[a['entry']]]), []) if len(WORD.findall(t)) >= 8]
+        if not texts:
+            continue
+        opening = a['opening']
+        lowered = opening.lower()
+        tokens = {m.group(0) for t in texts for m in NUMBER.finditer(t)} | \
+                 {m.group(0) for t in texts for m in NAME.finditer(t)}
+        absent = sorted(t for t in tokens if t not in opening and t.lower() not in lowered
+                        and t.replace(',', '.') not in opening)
+        if absent:
+            out.append({'call': call_label(a, 80), 'entry': order[a['entry']] + 1, 'absent': absent[:8]})
+    return out
 
 
 def check(submission: Path, runtime: Path, natlang: bool = True) -> dict:
@@ -300,7 +400,11 @@ def check(submission: Path, runtime: Path, natlang: bool = True) -> dict:
     if problems and any(p.startswith(('schema', 'root must')) for p in problems):
         return {'ok': False, 'problems': problems, 'warnings': [], 'rows': [], 'cases': []}
     if natlang:
-        problems += invented.natlang_check(submission / 'program')
+        program = submission / 'program'
+        problems += invented.natlang_check(program)
+        # `natlang check` writes declarations (`*.d.nl.ts`) beside the sources; load() never reads them as program files
+        for generated in program.rglob('*.d.nl.ts'):
+            generated.unlink(missing_ok=True)
     try:
         first = package(data, files)
     except (KeyError, TypeError, ValueError) as error:
@@ -387,7 +491,8 @@ def kind_of(definition: str) -> str:
     if definition.startswith('nl:'):
         rest = definition[3:]
         return 'nl' if rest.endswith('.nl') or '/' in rest else 'inline'
-    for prefix, kind in (('std:', 'std'), ('iterateOn:', 'iterate'), ('pluggable:', 'pluggable'), ('tiers:', 'tiers')):
+    for prefix, kind in (('std:', 'std'), ('iterateOn:', 'iterate'), ('pluggable:', 'pluggable'), ('tiers:', 'tiers'),
+                         ('refinement:', 'judge')):
         if definition.startswith(prefix):
             return kind
     return 'other'
@@ -406,12 +511,22 @@ def leaves(value, out: list[str]) -> list[str]:
     return out
 
 
+def squash(text: str) -> str:
+    return ' '.join(text.split()).lower()
+
+
 def output_kind(node: dict) -> str:
-    """closed: a decision or a value with no text; open: some text of eight words or more; structured: the rest."""
+    """closed: a decision or a value with no text; open: some text of eight words or more that the call wrote;
+    selection: every such text is copied from the call's arguments (a filter or pick that returns the items it was
+    given writes nothing new); structured: the rest."""
     if node.get('decision'):
         return 'closed'
     texts = leaves(node.get('value'), [])
-    if any(len(WORD.findall(t)) >= 8 for t in texts):
+    long = [t for t in texts if len(WORD.findall(t)) >= 8]
+    if long:
+        given = squash('\n'.join(leaves(node.get('args'), [])))
+        if given and all(squash(t) in given for t in long):
+            return 'selection'
         return 'open'
     if not texts or all(len(WORD.findall(t)) <= 1 for t in texts) and not isinstance(node.get('value'), (dict, list)):
         return 'closed'
@@ -426,8 +541,52 @@ def nl_literals(code: str) -> list[str]:
     return [m.group(1) for m in NL_LITERAL.finditer(code)]
 
 
+NL_KINDS = ('nl', 'inline', 'judge')
+INTERPOLATION = re.compile(r'\$\{([^}]*)\}')
+
+
+def interpolated_names(literal: str) -> set[str]:
+    """The leading identifiers the `${...}` interpolations of a literal read (`${rubric.text}` -> rubric)."""
+    return {m.group(0) for e in INTERPOLATION.findall(literal) for m in [re.match(r'[A-Za-z_$][\w$]*', e.strip())] if m}
+
+
+def caller_of(tree: list[dict], by_id: dict) -> None:
+    """A call runs in the frame its function was bound to, so a function made in one call and passed to another
+    records its calls under its maker (often the root). Place each such call under the call whose eval was running
+    when it started: a call holding a function argument, below the recorded parent, with an eval window around the
+    start (the innermost when several hold). Rewrites `parent` in place."""
+    holders = [n for n in tree if n.get('functional') and n.get('eval_windows')]
+    if not holders:
+        return
+
+    def ancestors(i):
+        seen = []
+        while i in by_id and i not in seen:
+            seen.append(i)
+            i = by_id[i].get('parent')
+        return seen
+
+    for n in tree:
+        start = n.get('started')
+        if start is None or n['id'] == '$root':
+            continue
+        best = None
+        for h in holders:
+            if h['id'] == n['id'] or n['parent'] == h['id']:
+                continue
+            windows = [w for w in h['eval_windows'] if w[0] <= start <= w[1]]
+            if not windows or n['parent'] not in ancestors(h['id']) or h['id'] in ancestors(n['id']):
+                continue
+            opened = max(w[0] for w in windows)
+            if best is None or opened > best[0] or (opened == best[0] and len(ancestors(h['id'])) > best[1]):
+                best = (opened, len(ancestors(h['id'])), h['id'])
+        if best:
+            n['parent'] = best[2]
+            n['moved_from_maker'] = True
+
+
 def instance_stats(row: dict, files: dict[str, str], item_kinds: dict[str, str], src: dict,
-                   root_actions: list | None = None, root: str = '') -> dict:
+                   root_actions: list | None = None, root: str = '', root_inputs: list[str] | None = None) -> dict:
     # The root call is not among the recorded invocations (its trace is the run's own): it is added as the tree's root,
     # with the authored root actions as its turns.
     root_node = {'id': '$root', 'parent': None, 'definition': 'nl:' + root, 'name': Path(root).stem, 'outcome': 'done',
@@ -438,11 +597,12 @@ def instance_stats(row: dict, files: dict[str, str], item_kinds: dict[str, str],
     ids = {n['id'] for n in recorded}
     tree = [root_node] + [{**n, 'parent': n['parent'] if n['parent'] in ids else '$root'} for n in recorded]
     by_id = {n['id']: n for n in tree}
-    nl_nodes = [n for n in tree if kind_of(n['definition']) in ('nl', 'inline')]  # the root included
+    nl_nodes = [n for n in tree if kind_of(n['definition']) in NL_KINDS]  # the root included
+    caller_of(tree, by_id)
     parent_nl = {}
     for n in tree:
         p = n.get('parent')
-        while p in by_id and kind_of(by_id[p]['definition']) not in ('nl', 'inline'):
+        while p in by_id and kind_of(by_id[p]['definition']) not in NL_KINDS:
             p = by_id[p].get('parent')
         parent_nl[n['id']] = p if p in by_id else None
 
@@ -469,6 +629,9 @@ def instance_stats(row: dict, files: dict[str, str], item_kinds: dict[str, str],
         if kind == 'std':
             constructs[STD_KIND.get(n.get('combinator') or n['definition'][4:], n['definition'][4:])] += 1
         elif kind == 'iterate':
+            # semanticRepair and fixedPoint run their own iterateOn: that loop is theirs, not an authored iterateOn
+            if kind_of(by_id.get(n.get('parent'), {}).get('definition', '')) == 'std':
+                continue
             predicate = (n.get('iteration') or {}).get('predicate') or ''
             constructs['iterate-nl-until' if predicate.startswith('nl:') else 'iterate-measure'] += 1
         elif kind == 'pluggable':
@@ -490,7 +653,15 @@ def instance_stats(row: dict, files: dict[str, str], item_kinds: dict[str, str],
     code = [a.get('code', '') for n in tree for a in n.get('actions') or [] if a.get('tool') == 'eval']
     joined = '\n'.join(code)
     literals = nl_literals(joined)
+    # Built from data: an interpolation that reads something the program derived. A literal whose interpolations read
+    # only the root's own inputs (`${unit}`) restates the input; it is counted apart.
+    root_code = '\n'.join(a.get('code', '') for a in root_node['actions'] if a.get('tool') == 'eval')
+    from_inputs = [t for t in nl_literals(root_code) if '${' in t and interpolated_names(t)
+                   and interpolated_names(t) <= set(root_inputs or ())]
     dynamic = [t for t in literals if '${' in t]
+    for t in from_inputs:
+        if t in dynamic:
+            dynamic.remove(t)
     inline_nodes = [n for n in nl_nodes if kind_of(n['definition']) == 'inline']
     through = set()
     for n in nl_nodes:
@@ -505,7 +676,7 @@ def instance_stats(row: dict, files: dict[str, str], item_kinds: dict[str, str],
     for name, pattern in CODE_PATTERNS.items():
         hits = len(re.findall(pattern, joined))
         if hits:
-            constructs[name] += hits
+            constructs[name] = max(constructs[name], hits) if name == 'with-context' else constructs[name] + hits
     if re.search(r'\bUntrusted<|\buntrusted\s*\(', joined) or 'untrusted' in src['declared']:
         constructs['untrusted'] += 1
     if 'refinement-type' in src['declared']:
@@ -518,10 +689,22 @@ def instance_stats(row: dict, files: dict[str, str], item_kinds: dict[str, str],
     answer_words = [sum(len(WORD.findall(t)) for t in leaves(n.get('value'), [])) for n in nl_nodes]
     eval_lines = sum(len([l for l in c.splitlines() if l.strip()]) for c in code)
     higher = sum(constructs[k] for k in ('higher-order', 'partial', 'context-rebind', 'function-result'))
-    higher += sum(constructs[k] for k in STD_KIND.values() if k != 'with-context')
+    higher += sum(constructs[k] for k in STD_KIND.values())
     higher += constructs['iterate-measure'] + constructs['iterate-nl-until'] + constructs['nl-literal-from-data']
+    # Judgments the runtime asks (refinements and `ensures:` predicates as `holds`, the shipped std judgments) and what
+    # they answered: a refinement that never fails trains only the happy path.
+    judgments = collections.defaultdict(collections.Counter)
+    for n in nl_nodes:
+        shipped = n['definition'].startswith('nl:/@natlang/std/') or kind_of(n['definition']) == 'judge'
+        if shipped and isinstance(n.get('value'), bool):
+            judgments[n['name']][str(n['value']).lower()] += 1
+    refusals = sum(1 for n in tree for a in n.get('actions') or [] if a.get('outcome') in ('rejected', 'refused'))
     return {
         'status': row.get('status'), 'model_calls': row.get('model_calls'), 'nl_calls': len(nl_nodes),
+        'judgments': {k: dict(v) for k, v in judgments.items()}, 'refused_actions': refusals,
+        'repair_fixes': sum(1 for n in tree if kind_of(n['definition']) == 'std' and n.get('combinator', n['definition'][4:])
+                            in ('semanticRepair', 'fixedPoint') for c in tree if c.get('parent') == n['id']
+                            and kind_of(c['definition']) in NL_KINDS),
         'nl_calls_by_function': dict(collections.Counter(n['name'] for n in nl_nodes).most_common()),
         'nl_depth': nl_depth, 'interior_functions': len(interior), 'crisp_helper_calls': crisp_calls,
         'nl_call_share': round(len(nl_nodes) / max(1, len(nl_nodes) + crisp_calls), 3),
@@ -532,7 +715,8 @@ def instance_stats(row: dict, files: dict[str, str], item_kinds: dict[str, str],
         'answer_words': {'median': statistics.median(answer_words) if answer_words else 0,
                          'p90': sorted(answer_words)[int(0.9 * (len(answer_words) - 1))] if answer_words else 0,
                          'total': sum(answer_words)},
-        'nl_literals': {'created': len(literals), 'built_from_data': len(dynamic), 'calls': len(inline_nodes),
+        'nl_literals': {'created': len(literals), 'built_from_data': len(dynamic), 'from_inputs_only': len(from_inputs),
+                        'calls': len(inline_nodes),
                         'call_tree_share': round(len(through) / max(1, len(nl_nodes)), 3)},
         'eval_turns': len(code), 'eval_code_lines': eval_lines,
         'eval_lines_per_turn': round(eval_lines / max(1, len(code)), 1),
@@ -550,9 +734,18 @@ def program_stats(data: dict, files: dict[str, str], rows: list[dict]) -> dict:
             item_kinds[name[:-3]] = 'ts'
             for m in re.finditer(r'^export\s+(?:async\s+)?function\s+(\w+)', files[path], re.M):
                 item_kinds[m.group(1)] = 'ts'
-    per = [instance_stats(r, files, item_kinds, src, (inst.get('trajectory') or {}).get('root'), data.get('root', ''))
+    per = [instance_stats(r, files, item_kinds, src, (inst.get('trajectory') or {}).get('root'), data.get('root', ''),
+                          list((inst.get('inputs') or {}).keys()))
            for inst, r in zip(data.get('instances') or [], rows)]
+    for inst, r, p in zip(data.get('instances') or [], rows, per):
+        trajectory = inst.get('trajectory') or {}
+        found = ungrounded(r, trajectory.get('calls') or [], entry_order(trajectory))
+        p['ungrounded_open_answers'] = {'count': len(found), 'examples': found[:12]}
     kinds = sorted({k for p in per for k in p['construct_kinds']})
+    judgments = collections.defaultdict(collections.Counter)
+    for p in per:
+        for name, counts in p['judgments'].items():
+            judgments[name].update(counts)
     return {'slug': data.get('slug'), 'source': src, 'instances': per, 'construct_kinds': kinds,
             'construct_kind_count': len(kinds),
             'nl_depth': statistics.median([p['nl_depth'] for p in per]) if per else 0,
@@ -562,8 +755,16 @@ def program_stats(data: dict, files: dict[str, str], rows: list[dict]) -> dict:
             'higher_order_per_instance': round(sum(p['higher_order_uses'] for p in per) / max(1, len(per)), 2),
             'combinators_per_instance': round(sum(p['combinator_uses'] for p in per) / max(1, len(per)), 2),
             'nl_calls_per_instance': round(sum(p['nl_calls'] for p in per) / max(1, len(per)), 1),
+            'judgments': {k: dict(v) for k, v in judgments.items()},
+            'refused_actions': sum(p['refused_actions'] for p in per),
+            'repair_fixes': sum(p['repair_fixes'] for p in per),
+            'selection_outputs': sum(p['outputs'].get('selection', 0) for p in per),
+            'ungrounded_open_answers': sum(p['ungrounded_open_answers']['count'] for p in per),
+            'ungrounded_share': round(sum(p['ungrounded_open_answers']['count'] for p in per)
+                                      / max(1, sum(p['outputs'].get('open', 0) for p in per)), 3),
             'nl_literals': {'created': sum(p['nl_literals']['created'] for p in per),
                             'built_from_data': sum(p['nl_literals']['built_from_data'] for p in per),
+                            'from_inputs_only': sum(p['nl_literals']['from_inputs_only'] for p in per),
                             'calls': sum(p['nl_literals']['calls'] for p in per),
                             'call_tree_share': round(sum(p['nl_literals']['call_tree_share'] * p['nl_calls'] for p in per)
                                                      / max(1, sum(p['nl_calls'] for p in per)), 3)}}
@@ -824,6 +1025,60 @@ def emphasis(report: dict) -> str:
 
 # ---- CLI -----------------------------------------------------------------------------------------------------------
 
+def suggest_fragment(answer: dict, answers: list[dict]) -> str | None:
+    """The start of the first argument line this call shows and no other call of its function shows: a fragment that
+    names this call's item (BUILD_BRIEF "The trajectory")."""
+    others = [a.get('shown', '') for a in answers if a is not answer and a.get('name') == answer.get('name')]
+    for line in str(answer.get('shown', '')).splitlines():
+        head = line[:80].rstrip()
+        if len(head) >= 6 and not head.startswith('Declared ') and not any(head in o for o in others):
+            return head
+    return None
+
+
+def no_entry_blocks(data: dict, rows: list[dict]) -> list[str]:
+    """Every call no entry answered, with the whole opening (instructions and arguments) and a suggested fragment."""
+    lines = []
+    for inst, row in zip(data.get('instances') or [], rows):
+        answers = row.get('answers') or []
+        for a in answers:
+            if a.get('entry') != -1:
+                continue
+            fragment = suggest_fragment(a, answers)
+            lines += [f'NO ENTRY in instance {inst.get("name")} for a call of {a["name"]}'
+                      + (' (a placeholder answered it so the replay could go on)' if a.get('placeholder') else ''),
+                      '  suggested entry: ' + json.dumps({'fn': a['name'], 'match': [fragment] if fragment else []},
+                                                         ensure_ascii=False),
+                      '  opening:']
+            lines += ['    ' + line for line in str(a.get('opening') or a.get('shown') or '').splitlines()]
+    return lines
+
+
+def dump(submission: Path, runtime: Path, out: Path, natlang: bool = False) -> dict:
+    """The whole replay of every instance, as JSON: each call's opening and the entry that answered it, the call tree
+    (calls through function arguments placed under the call that made them, as the statistics do) with arguments,
+    eval code and values in full, failed actions in full, and the statistics."""
+    result = check(submission, runtime, natlang=natlang)
+    data, files = load(submission)
+    instances = []
+    for inst, row in zip(data.get('instances') or [], result['rows']):
+        trajectory = inst.get('trajectory') or {}
+        order = entry_order(trajectory)
+        tree = [dict(n) for n in row.get('tree') or []]
+        by_id = {n['id']: n for n in tree}
+        caller_of(tree, by_id)
+        instances.append({'name': inst.get('name'), 'status': row.get('status'), 'detail': row.get('detail'),
+                          'value': row.get('value'), 'model_calls': row.get('model_calls'),
+                          'failed_actions': row.get('failed_actions'), 'error': row.get('error'),
+                          'answers': [{**a, 'entry': order[a['entry']] + 1 if 0 <= a.get('entry', -1) < len(order) else None}
+                                      for a in row.get('answers') or []],
+                          'tree': tree})
+    payload = {'submission': str(submission), 'ok': result['ok'], 'problems': result['problems'],
+               'warnings': result['warnings'], 'instances': instances, 'stats': result.get('stats')}
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + '\n')
+    return payload
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -834,6 +1089,10 @@ def main(argv=None) -> int:
     s = sub.add_parser('stats')
     s.add_argument('submission', type=Path)
     s.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
+    d = sub.add_parser('dump', help='the whole replay as JSON (default: SUBMISSION.dump.json beside SUBMISSION)')
+    d.add_argument('submission', type=Path)
+    d.add_argument('--out', type=Path)
+    d.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
     a = sub.add_parser('admit')
     a.add_argument('submission', type=Path)
     a.add_argument('--root', type=Path, default=invented.INVENTOR_ROOT)
@@ -850,34 +1109,59 @@ def main(argv=None) -> int:
         print(json.dumps(report['wave'], indent=1))
         return 0
     submission = args.submission.resolve()
+    if not (submission / 'submission.json').is_file():
+        print(json.dumps({'ok': False, 'problems': [
+            f'{submission}/submission.json is missing: SUBMISSION is the directory that holds submission.json and '
+            'program/ (a build script run from elsewhere may have written submission.json one directory up)']}, indent=1))
+        return 1
     if args.command == 'admit':
         result = admit(submission, root=args.root, runtime=runtime, idea_path=args.idea)
         print(json.dumps(result, ensure_ascii=False, indent=1))
         return 0 if result['admitted'] else 1
+    if args.command == 'dump':
+        out = args.out or submission.with_name(submission.name + '.dump.json')
+        payload = dump(submission, runtime, out)
+        print(json.dumps({'ok': payload['ok'], 'out': str(out), 'problems': len(payload['problems']),
+                          'warnings': len(payload['warnings'])}))
+        return 0
     result = check(submission, runtime, natlang=args.command == 'check' and not args.no_natlang_check)
     if args.command == 'stats':
         print(json.dumps(result.get('stats'), ensure_ascii=False, indent=1))
         return 0
     data, _ = load(submission)
-    for inst, row in zip(data.get('instances') or [], result['rows']):
+    blocks = no_entry_blocks(data, result['rows'])
+    if blocks:
+        print(f'{sum(1 for b in blocks if b.startswith("NO ENTRY"))} calls have no entry (all of them, in every stage: '
+              'missing ones were answered by placeholders so the replay could reach later stages)')
+        print('\n'.join(blocks))
+    for index, (inst, row) in enumerate(zip(data.get('instances') or [], result['rows'])):
         print(f'== instance {inst.get("name")}: {row.get("status")}, {row.get("model_calls")} model calls')
-        print('returned: ' + json.dumps(row.get('value'), ensure_ascii=False)[:600])
+        print('returned: ' + json.dumps(row.get('value'), ensure_ascii=False))
         for line in render_tree(row):
             print(line)
-        unanswered = [a for a in row.get('answers') or [] if a.get('entry') == -1]
-        for a in unanswered:
-            print(f'NO ENTRY for a call of {a["name"]}: {a["shown"][:2000]}')
+        for f in row.get('failed_actions') or []:
+            print(f'FAILED {f["tool"]}: {f["result"]}')
+        per = (result.get('stats') or {}).get('instances') or []
+        if index < len(per):
+            p = per[index]
+            print('instance statistics: ' + json.dumps({
+                'nl_calls': p['nl_calls'], 'nl_depth': p['nl_depth'], 'interior_functions': p['interior_functions'],
+                'outputs': p['outputs'], 'open_output_share': p['open_output_share'], 'judgments': p['judgments'],
+                'nl_literals': p['nl_literals'], 'construct_kinds': p['construct_kinds']}, ensure_ascii=False))
+            for u in p['ungrounded_open_answers']['examples']:
+                print(f'  open answer states what its call does not show: entry {u["entry"]} {u["call"]}: {", ".join(u["absent"])}')
     stats = result.get('stats')
     if stats:
         print('statistics: ' + json.dumps({k: stats[k] for k in ('nl_depth', 'interior_functions', 'construct_kinds',
                                                                   'open_output_share', 'nl_call_share',
-                                                                  'higher_order_per_instance', 'nl_calls_per_instance')},
+                                                                  'higher_order_per_instance', 'nl_calls_per_instance',
+                                                                  'judgments', 'ungrounded_open_answers')},
                                           ensure_ascii=False))
         print('NL literals: ' + json.dumps(stats['nl_literals']))
         print('source: ' + json.dumps({k: stats['source'][k] for k in ('nl_functions', 'ts_logic_lines',
                                                                        'crisp_line_share', 'ts_unjustified')}))
         print('short of the campaign targets (statistics, not checks): ' + ('; '.join(shortfalls(stats)) or 'none'))
-    print(json.dumps({'ok': result['ok'], 'problems': result['problems'][:40], 'warnings': result['warnings'][:40]},
+    print(json.dumps({'ok': result['ok'], 'problems': result['problems'][:60], 'warnings': result['warnings'][:60]},
                      ensure_ascii=False, indent=1))
     return 0 if result['ok'] else 1
 

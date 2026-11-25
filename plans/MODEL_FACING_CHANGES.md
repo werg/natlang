@@ -3,6 +3,20 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-25 — an `nl` literal's captured variable inferred from literals is declared with its base type
+
+- **What changed.** A local inferred from literals (`const aim = kind === 'a' ? '<text a>' : '<text b>'`) was
+  captured by an inline `nl` with TypeScript's literal type, so the opening declared
+  `const aim: "<text a>" | "<text b>" | ... = "<text a>";`: every call of a literal built from such a local listed every
+  branch's text (authored-w1 agent-run-blame-tree: one kind's instructions appeared in every other kind's call, and the
+  authored replay answered two calls with one entry). The compiler now declares such a capture (implicit and
+  `nl.with`) with the base type, as TypeScript does for `let` (`const aim: string = "<text a>";`); a declared type
+  (annotation, parameter, field) is kept. The eager-typing data rewrite uses the same rule. `inline.ts`
+  `shownBindingType`. Opt-out: `NATLANG_LITERAL_CAPTURE_TYPES=1`. DECISIONS 2026-11-25 "nl literal captures".
+- **What the model sees.** In a call of an inline `nl` whose capture was inferred from literals, the type in the
+  "Variables of the calling code, captured by this call" declaration is `string`/`number`/`boolean` instead of the
+  literal union. Nothing else changes.
+
 ### 2026-11-25 — the std combinators are eval built-ins
 
 - **What changed.** Eval in every call has the standard library's combinators by name (`semanticMap`,

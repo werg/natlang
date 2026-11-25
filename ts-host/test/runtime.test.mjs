@@ -357,9 +357,11 @@ test('a runtime shows services by their declarations and limits scoped ones to t
     serviceDeclarations: { records: '/** Look a question up in the records. */\nexport function find(question: string): string;' },
     serviceScopes: { records: ['answer/lookup.nl'] } });
   await runtime.run(() => loadNatlang(join(dir, 'answer.nl'))('x'));
-  assert.match(seen.answer.used, /records is not defined/, 'the caller cannot use a service scoped to its helper');
+  assert.match(seen.answer.used, /records is a host service unavailable in this call's authored scope/, 'the caller cannot use a service scoped to its helper');
   assert.match(seen.lookup.used, /found x/);
-  for (const name of ['answer', 'lookup'])
+  // cd0c8358e: a service scoped to a helper is not declared to the caller, so read_code there names what it can read.
+  assert.match(seen.answer.read, /records: no-such-function/);
+  for (const name of ['lookup'])
     assert.match(seen[name].read, /^declare namespace records \{\n {2}\/\*\* Look a question up in the records\. \*\/\n {2}export function find/);
 });
 
