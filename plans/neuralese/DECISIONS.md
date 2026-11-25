@@ -13616,3 +13616,62 @@ The Python engines store a reply captured in its own context as `producer_kind` 
   `exact-native-state`. Content ids match the Python engines' rule; the literal ids differ across engines only through
   the tensors (Q8_0 vs BF16). ts-host targeted tests pass. The page has no capture of its own yet (ENGINE_PARITY
   text-write table), so it gains only the read rule and validation; no page smoke ran.
+
+## 2026-11-25 15:22 Authored trajectories carry learned compaction and Neuralese values (authored-neuralese strand)
+
+- **Why.** A builder reported that BUILD_BRIEF has no Neuralese row and `check` cannot author a Neuralese value. Owner
+  direction: Neuralese compaction is the intended runtime design, and learned compaction (`compaction: nl`) is on by
+  default as of today (model-facing `learned-compaction`). Authored trajectories must teach what collection rollouts
+  contain.
+- **Before.** `curriculum.replayReference` ran with no Neuralese runtime and a driver without `neuralese: true`.
+  - A `Neuralese<string>` result failed with `NeuraleseNoWriterError` ("plain-text Neuralese<string> cannot be
+    written"), so `check` could not finish such a program.
+  - A long value kept the crisp cut: `compactRef` needs `neuralese.capture` and a Neuralese driver, so there was no
+    operator call and no state. The trajectory therefore differed from collection.
+  - The `sft_sources replay` of authored teacher episodes ran over the remote HTTP default with teacher-text emulation.
+    A Neuralese value would have rendered as `[[teacher-text Neuralese id=… body=…]]`, which is not the serving form.
+- **Now (one mechanism, `ts-host/src/model/in-context-neuralese.ts`).** It is a scripted transport for the engines'
+  default read (`in-context-text`: a state written in its producing context is read as its tokens in place, with no
+  markers). It has an in-memory store, a `capture` (operator replies, `compact_history` notes) and a `port` (typed
+  `Neuralese<T>` writes) that keep each state's text. Its `wrap(driver)` gives every request, `decide` included, the
+  consumer's messages with each state's text in place, and adds the engines' `in-context-text` import receipts. Under
+  replay the runtime's own paths run (`compactRef` → `operatorWrite` → capture; `writeNeuraleseText` → port), the same
+  code as in collection. The compaction setting is the agent's own (env, model-facing), as in collection.
+  - `replayReference(..., { neuralese })`. In `referenceDriver`, an operator request (`<call>#operator-<n>`) is a call
+    of `view` (`OPERATOR_CALL`): it is matched by its opening (instructions and value), and its entry's `value` is the
+    reply text.
+  - `authored_replay.mjs` (`check`/`dump`/`admit`) and `reference_episodes.mjs` (render) use it by default (opt-out
+    `--no-neuralese`). An operator call with no entry is `NO ENTRY … view` and gets a placeholder summary. The
+    statistics count `operator_calls` (construct `compaction`).
+  - `authored_trajectories.py`: an operator turn is its own per-call chain (function `view`, target = the summary) and
+    never a reasoned-readout group. Consumer turns carry the summary in place (plain text, as the learner sees an
+    in-context read).
+  - Replay for training: `sft_sources.replay_episode` marks authored episodes (teacher provider `authored`) with entry
+    `in_context_neuralese`. `run_bonsai_queue` passes `--in-context-neuralese` (in place of teacher-text emulation),
+    and the collector (`inContextNeuralese`) wraps its driver and records the inlined messages. The replay therefore
+    renders what the authored render did.
+  - BUILD_BRIEF: construct rows "Long value (learned compaction)" and "Neuralese value", plus `check`'s behaviour.
+- **Replay of a sample program** (`authored_programs.py check`/`dump`, `authored_trajectories.py render` on a
+  three-function program with a 15,890-character log input and a `Neuralese<string>` gist): the root's and the
+  receiving leaf's listings each made a `view` call. The root's had no entry, so it was listed as `NO ENTRY ... view`
+  with suggested fragment `The call that receives this argument as log (string) answers: ...`. The leaf's listing showed
+  `log: string = <summary>  // view of the value; log holds all of it`. The consumer of the gist showed
+  `gist: Neuralese<string> = <gist text>`, and no request carried a sentinel. The rendered rows came out as
+  [root, view (target: the summary, no tools), gistLog, writeBriefing].
+- **Interplay.** The operator-thinking strand renders operator calls with `thinking: false`. Authored operator turns
+  carry no reasoning, so they already match operator rows (empty think block, then the summary).
+- **Left out.**
+  - Other scripted replays (`verifyCases`, handoffs `build-handoffs.mjs`, native-forced replay) keep no Neuralese
+    transport. Their recorded turns have no operator replies to serve, so a run with operators would only drift.
+  - In-page wllama, the engines and the learners are unchanged: this mirrors the engines' existing default read and
+    adds no serving feature.
+  - A state inside tool-call `arguments` is inlined JSON-escaped, so the arguments stay valid JSON. The engine feeds
+    the raw tokens there. No authored path produces this today.
+- Tests: `ts-host/test/authored-in-context-neuralese.test.mjs` (2),
+  `tests/neuralese/test_authored_trajectories.py::test_an_operator_call_is_its_own_turn_not_a_readout_...`,
+  `tests/test_bonsai_queue.py::test_entry_in_context_neuralese_replaces_the_text_transport`. The ledger units
+  `authnz-tests-1` and `authnz-tests-2` ran them, plus `test_authored_programs.py`. In `test_bonsai_queue.py`, four
+  shared-collector tests fail because `cli.js --capabilities json` throws in its application-controller probe:
+  `NatlangContextError: The invocation that owns this callback has finished`, raised from `runtime-capabilities.ts` →
+  `executeProgram` → `callable.js invokeExport` (the invocation-lifetime check). This change does not touch that path.
+  Reported for the runtime strand.
