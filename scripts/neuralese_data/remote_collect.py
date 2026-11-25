@@ -76,6 +76,12 @@ PIN_EXCLUDE = ('applications/pi/',)
 # a work directory pushed to a fresh VM: what the collector resumes from (rewards, journals, queues), not the bulk
 PUSH_EXCLUDE = ('rollouts.jsonl', 'journal.jsonl', 'row-*/', '*.log', 'actor/', 'missing-paths.jsonl',
                 'remote-collect.exit')
+# never pulled: an episode's raw job files (the ts-host collector rewrites its partial and appends its evidence while the
+# episode runs and removes both when it ends; a pull without --delete kept every in-flight copy on the DGX: 2-3 GB/hour
+# for 64 slots on 2026-11-25), the result's byte copy of results.jsonl and atomic-write temp files. What a finished
+# episode keeps arrives compacted (``episode_files``: ``*.zst``). NATLANG_REMOTE_PULL_RAW_JOBS=1 opts out.
+PULL_EXCLUDE = ('/groups/*/row-*/*/jobs/*.partial.json', '/groups/*/row-*/*/jobs/*.partial.json.evidence-*.jsonl',
+                '/groups/*/row-*/*/jobs/*.result.json', '/groups/*/row-*/*/jobs/*.tmp-*')
 MISSING_RELAUNCHES = 3
 LOST_SECONDS = 1800         # a VM that answers no ssh this long is gone: the unit ends (rc 75) and the driver restarts it
 SESSION_LOST_RC = 75
@@ -386,6 +392,13 @@ def push_work(host, work):
     rsync(*[f'--exclude={e}' for e in PUSH_EXCLUDE], f'{work}/', f'{host}:{work}/', timeout=4 * 3600)
 
 
+def pull_job_excludes():
+    """rsync excludes of ``PULL_EXCLUDE`` (none with NATLANG_REMOTE_PULL_RAW_JOBS=1)."""
+    if os.environ.get('NATLANG_REMOTE_PULL_RAW_JOBS') == '1':
+        return []
+    return [f'--exclude={e}' for e in PULL_EXCLUDE]
+
+
 def pull(host, work, *, timeout=1800):
     """The VM's work directory into the DGX's: content first (markers left out), the markers into a staging tree, the
     content again, then each changed marker moved into place (``os.replace``: atomic), so a DGX reader sees a group's
@@ -395,7 +408,7 @@ def pull(host, work, *, timeout=1800):
     stage.mkdir(parents=True, exist_ok=True)
     content = ['--exclude=/.remote-stage', '--exclude=/.remote-scratch', '--exclude=/.remote-vm',
                '--exclude=/.remote-collect.lock', '--exclude=/remote-collector.json', '--exclude=/collector.json',
-               *[f'--exclude=/groups/*/{m}' for m in MARKERS]]
+               *[f'--exclude=/groups/*/{m}' for m in MARKERS], *pull_job_excludes()]
     rsync(*content, f'{host}:{work}/', f'{work}/', timeout=timeout)
     # only new or changed markers land in the stage (--compare-dest: one identical in WORK is not transferred)
     rsync('--include=/groups/', '--include=/groups/*/', *[f'--include=/groups/*/{m}' for m in MARKERS],

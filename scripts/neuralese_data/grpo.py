@@ -1010,6 +1010,7 @@ class Collector:
             self._record_seconds(directory, (row or {}).get('family') or self._case_family(directory))
         if self._teachers(group):
             return   # scored again with its teacher attempts once they finish
+        compact_group_files(directory)   # scored for the last time: its job files compacted (episode_files)
         self.ready.put(group)
 
     def _teachers(self, group):
@@ -1361,6 +1362,17 @@ def episode_advantages(episodes, stats=None):
     by_id = {id(e): value for e, value in zip(students, student or [None] * len(students))}
     by_id.update({id(e): (value or None) for e, value in zip(teachers, teacher or [None] * len(teachers))})
     return [by_id[id(e)] for e in episodes]
+
+
+def compact_group_files(directory):
+    """``episode_files.compact_group`` of a group no episode or scoring reads raw any more; never fails the caller."""
+    from natlang_neuralese.rl import episode_files
+    try:
+        return episode_files.compact_group(directory)
+    except Exception as error:
+        print(json.dumps({'event': 'episode compaction failed', 'dir': str(directory), 'error': repr(error)[:300]}),
+              flush=True)
+        return None
 
 
 def collect_blocks(store_dir, cutoff):

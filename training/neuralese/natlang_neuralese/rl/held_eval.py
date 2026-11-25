@@ -514,8 +514,9 @@ def infra_loss(entry, finish):
         return 'infrastructure_error'
     if outcome == 'budget_exhaustion' and finish.get('resource_limit_reason') == 'model_request_budget':
         jobs = Path(entry.get('jobs') or '')
+        from .episode_files import evidence_files, read_bytes   # raw, or compacted after the measurement
         if entry.get('jobs') and jobs.is_dir() and any(
-                RESEND_EVENT in path.read_bytes() for path in jobs.glob('*.evidence-*.jsonl')):
+                RESEND_EVENT in read_bytes(path) for path in evidence_files(jobs)):
             return 'request_budget_spent_on_resends'
     return None
 
@@ -843,6 +844,12 @@ def finalize(directory, spec, started, *, complete):
               'score': {'groups_with_spread': report.get('groups_with_spread')}}
     write_json_durable(directory / 'result.json', result)
     record_result(directory, spec)
+    if complete:    # nothing scores these episodes again: their job files compacted (episode_files; opt-out env)
+        from .episode_files import compact_group
+        try:
+            compact_group(directory)
+        except Exception as error:
+            print(json.dumps({'event': 'episode compaction failed', 'error': repr(error)[:300]}), flush=True)
     return result
 
 

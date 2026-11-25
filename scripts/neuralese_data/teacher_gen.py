@@ -646,6 +646,12 @@ class Generator:
                     merged.write(path.read_text())
         report = task_rollouts.score(directory, directory / 'rollouts.jsonl', neuralese_bonus=0., efficiency_weight=0.)
         rollouts = list(read_jsonl(directory / 'rollouts.jsonl'))
+        try:     # scored: the job files no reader needs raw any more, compacted (episode_files; opt-out env)
+            from natlang_neuralese.rl.episode_files import compact_group
+            compact_group(directory)
+        except Exception as error:
+            print(json.dumps({'event': 'episode compaction failed', 'dir': str(directory), 'error': repr(error)[:300]}),
+                  flush=True)
         record = {'index': index, 'task_id': row['id'], 'family': row.get('family'), 'base_rank': task['base_rank'],
                   'root_mode': a.root_mode,
                   'teacher': teacher_identity(teacher),

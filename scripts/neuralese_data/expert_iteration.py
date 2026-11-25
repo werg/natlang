@@ -675,6 +675,9 @@ def collect(args):
                                                  'pid': actor.pid if actor else None}) + '\n')
     (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(g.top_p, capture=True)) + '\n')
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
+    # earlier runs' groups are never run again (this run starts after them): what their stopped episodes left raw
+    # (partial + evidence sidecars, result copies; ~10 GB/hour on aei1) is compacted beside the collection
+    threading.Thread(target=compact_leftovers, args=(work, existing), daemon=True).start()
     collector = frontier_collector(grpo.Collector)(g, tasks, work, sha, REPO / 'ts-host',
                                                    first_group=max(existing, default=-1) + 1)
     g.neuralese_variants, g.neuralese_variant_share = args.neuralese_variants, args.neuralese_variant_share
@@ -698,6 +701,8 @@ def collect(args):
         done += len(taken)
         if time.time() - last > 300:
             last = time.time()
+            if actor is not None:
+                collect_actor_blocks(collector, work / 'actor', g.block_gc_grace)
             log({'event': 'progress', 'groups_done': done, 'tasks_left': len(collector.order),
                  'running': collector.running, 'outstanding': collector.outstanding,
                  'dynamic': dict(collector.dynamic)})
@@ -715,6 +720,45 @@ def collect(args):
     log(summary)
     if not summary['stopped']:
         record_collection(work)
+
+
+def compact_leftovers(work, groups, quiet_seconds=300):
+    """``episode_files.compact_sample`` over the samples of ``groups`` (numbers under WORK/groups) that no process
+    holds open and that are quiet ``quiet_seconds``: a stopped run's episodes. One event with the bytes freed."""
+    from natlang_neuralese.rl import episode_files
+    if not episode_files.enabled() or not groups:
+        return
+    try:
+        started, total = time.time(), collections.Counter()
+        held = episode_files.open_paths(Path(work) / 'groups')
+        for number in sorted(groups):
+            for sample in episode_files.samples_of(Path(work) / 'groups' / f'g{number:06d}'):
+                if episode_files.quiet_sample(sample, time.time(), quiet_seconds, held):
+                    total.update(episode_files.compact_sample(sample))
+        log({'event': 'episode files compacted', 'groups': len(groups), 'freed_gb': round(episode_files.freed(total) / 1e9, 2),
+             'seconds': round(time.time() - started), **dict(total)})
+    except Exception as error:
+        log({'event': 'episode compaction failed', 'error': repr(error)[:300]})
+
+
+def collect_actor_blocks(collector, store, grace):
+    """The collection actor's native-state cache: block files untouched since before the oldest live group (less
+    ``grace`` s) go (``grpo.collect_blocks``). Run every 5 minutes by ``collect`` for its own (local) actor. Each episode imports only states its own calls stored, the actor touches
+    a block file whenever it stores or reads it, and nothing reads the store after the episode (the build trains imports
+    as pass-through from the recorded write); aei1-collect-v0001 held 6-10 GB of them, one of 3.4 GB. ``--block-gc-grace``
+    < 0 opts out."""
+    import grpo
+    if grace < 0:
+        return
+    try:
+        with collector.lock:     # scored groups stay in ``groups`` here (no learner prunes them): only running ones
+            oldest = min([info['created'] for info in collector.groups.values()
+                          if not info.get('abandoned') and info.get('done', 0) < info.get('size', 0)], default=time.time())
+        files, freed = grpo.collect_blocks(store, oldest - grace)
+        if files:
+            log({'event': 'native states collected', 'files': files, 'freed_gb': round(freed / 1e9, 2)})
+    except Exception as error:
+        log({'event': 'native state collection failed', 'error': repr(error)[:300]})
 
 
 def record_collection(work, closed=True):
