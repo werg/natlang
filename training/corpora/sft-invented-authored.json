@@ -1,0 +1,41 @@
+{
+  "id": "sft-invented-authored",
+  "owner": "dgx",
+  "path": "data_nvme:sft-invented-authored",
+  "include": [
+    "*.jsonl.zst",
+    "*.json",
+    "*.jsonl",
+    "replay/*/rollouts.jsonl",
+    "replay/*/*.json"
+  ],
+  "kind": "trajectories",
+  "format": "sft_sources WORK: episodes*.jsonl.zst (extracted episodes), replay.jsonl (verdicts), replay/<episode>/rollouts.jsonl (verified replays)",
+  "rows": 26411,
+  "license": "derived: each input keeps its registered license (teacher providers, own rollouts, task sources)",
+  "protected": false,
+  "producer": {
+    "script": "sft_sources.py",
+    "argv": [
+      "replay",
+      "--work",
+      "/home/werg/data/sft-invented-authored",
+      "--workers",
+      "8",
+      "--runtime-repo",
+      "/home/werg/data/natlang-novel-programs/authored-pin-833daaf8f",
+      "--max-model-requests",
+      "1000"
+    ],
+    "git_commit": "833daaf8f8655e18876672b81cfe55968903c605",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "05b5009327a1448f5fa73665d702be59b51314e047367564230ba3f8bf6c9681",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "grpo-sd-teacher": {
+      "order": 4
+    }
+  }
+}
