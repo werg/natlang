@@ -37,7 +37,7 @@ reviewer reads a drawn sample afterwards, and what it finds changes this brief, 
    folder transactions), `examples/refunds/` (`.in(context)`, `decide`, a folder transaction).
 5. The worked mechanics example, small on purpose:
    `/home/werg/data/natlang-novel-programs/authored-examples/thread-digest/` (`program/` and `submission.json`). It
-   shows every trajectory form below (a reduce over messages, an interior function's own turns, a decision with
+   shows the trajectory forms below (a reduce over messages, an interior function's own turns, a decision with
    `decide`, a `.nl` function that synthesizes a judgment, NL literals built from data, `iterateOn` with an NL stopping
    predicate, an `ensures:` predicate). Your program is several times its size and depth.
 
@@ -99,9 +99,12 @@ The replay records every call. Your trajectory answers each call below the root 
 | Function as argument | `args: { judge: "(item: Item) => boolean" }` | the receiving call's eval calls `judge(item)`; the calls of `judge` appear under it |
 | Partial application | `meets.partial(rule)` in eval | the bound function is passed or mapped; its calls carry the bound argument |
 | Rebinding | `verdict.in(NatlangContext.empty().with({ policy }))` | calls of the rebound function see `policy` in their opening |
-| Map | `await Promise.all(items.map(item => assess(item)))` | one call per item, in any order |
-| Filter | `const keep = await Promise.all(items.map(test)); items.filter((_, i) => keep[i])` | one call per item |
-| Reduce, carrying state | ``for (const m of thread) gists.push(await readMessage(m, [...gists]))`` | one call per item, each seeing the state so far |
+| Map | `await semanticMap(items, assess)` | a `[semanticMap]` span, one call per item under it |
+| Filter | `await semanticFilter(items, test)` (a function, or a criterion string judged by the shipped `meets`) | a `[semanticFilter]` span, one call per item |
+| Partition | `await semanticPartition(items, classify)` → `{ groups, uncertain }` | a span, one call per item |
+| Reduce, carrying state | `await semanticReduce(thread, [], (gists, m) => readMessage(m, gists).then(g => [...gists, g]))` | a span, one call per item, each seeing the state so far |
+| Match, rank | `semanticMatch(left, right, { relation })`, `semanticRank(items, goal)` | a span; the shipped `relates` / `beats` judgments are calls you answer (match them by the relation or goal text) |
+| Repair, fixed point | `semanticRepair(draft, { check, fix, attempts })`, `fixedPoint(revise, first)` | the `fix` / step calls; `fixedPoint` asks the shipped `settled` judgment after each step |
 | `iterateOn` with an NL check | ``await iterateOn(draft => revise(draft, notes), first).until(nl<(d: Draft) => boolean>`...`)`` | the check is called on the first state and after every step (`false`, step, ..., `true`); each step's calls |
 | `iterateOn` with a measure | `.withMeasure(state => state.pending.length).until(state => state.pending.length === 0)` | each step's calls until the code check holds |
 | Structural recursion | `recursive: structural` (or `measure:`), the function calls itself on a part | one call per level, each with its own entry |
@@ -109,7 +112,7 @@ The replay records every call. Your trajectory answers each call below the root 
 | Refinement | `refine(value, 'predicate', { context })` in eval, or a result typed `Is<T, "...">` | a judge call, like `holds` |
 | Folder reducer | root `kind: directory-reducer` with `writes:`; the instance gives `folder_files` | the root's turns use `list_files`, `read_file`, `write_file`, `edit_file`; `folder.apply(reducer, ...)` runs a nested reducer |
 | `pluggable` | `pluggable({ crisp, nl }, setting)` in a helper | a `pluggable` span and the side it ran |
-| std combinators | `semanticMap`, `semanticFilter`, `semanticReduce`, `semanticMatch`, `semanticRank`, `semanticRepair`, `fixedPoint` | a `[semanticMap]` span with the calls it made (combinators in eval: see "Tools" for whether this runtime has them) |
+| Escalation, context | `escalate(fn, { to, floor })`, `withContext(fn, { policy })` | the wrapped function's calls |
 
 Eval code follows the iteration rules: `for...of`, counted loops, array methods, `iterateOn`; no `while`. Outside text
 is never interpolated into an NL literal's instructions: pass it as an argument (`untrusted-instruction`), and build
@@ -195,8 +198,8 @@ python3 /home/werg/natlang/scripts/memory_ledger.py run --unit <unit>-<what>-<n>
   campaign's ledger.
 - **`stats SUBMISSION`**: the statistics alone (JSON).
 
-`semanticMap` and the other std combinators: if `check` reports `semanticMap is not bound in this call's eval scope`,
-this runtime does not have them in eval yet. Use `Promise.all` maps, `for...of` reductions and `iterateOn` there.
+The std combinators are built into every call's eval scope by name (no import). They pass a `.nl` function only the
+arguments it declares, so `semanticMap(items, assess)` works with a one-parameter `assess`.
 
 ## Statistics, not checks
 
