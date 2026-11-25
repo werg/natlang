@@ -1,0 +1,40 @@
+{
+  "id": "natlang-rl-broad-external-real-20261125",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-broad-external-real-20261125",
+  "include": [
+    "cases.jsonl",
+    "receipt.json",
+    "verification.json",
+    "funnel.json",
+    "held-checks.json"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.broad-rl-task-source/1: cases.jsonl (train), receipt.json, verification.json, funnel.json, held-checks.json",
+  "rows": 21098,
+  "license": "mixed (recorded per row in `license`; upstream provenance as natlang-rl-broad-external-20261031-v2)",
+  "protected": false,
+  "note": "The rest of natlang-rl-broad-external-20261031-v2 from real upstream datasets: 21,098 train rows over 19 sources not already in grpo-pool (bird/spider at their ordered-result-set oracle correction from broad-rl-tasks-20261031/full-core-effects-20261102). Procedurally generated sources left out (reasoning-gym, inline curriculum, bAbI, CLUTRR, Knights and Knaves). Held: training_exclusion_ids 0, held-v3/v4/inv id and group overlap 0, held_texts content hits removed before qualification (funnel.json). Requalified on pin 30d164222fd8 (with fb11b6359 hedge-aware QA containment) by its own verify.mjs: 21,219 -> 21,098. DECISIONS 2026-11-25 \"broad-external real datasets admitted\".",
+  "admission": "grpo-task-pool",
+  "inputs": [
+    {
+      "id": "natlang-rl-broad-external-20261031-v2",
+      "manifest_sha256": null
+    }
+  ],
+  "producer": {
+    "script": "/home/werg/data/natlang-rl-broad-external-real-20261125/tools/{funnel,admit}.py + scripts/rl_tasks/verify.mjs",
+    "argv": [],
+    "git_commit": "207112c6b4cc5fff30a4dcdf1303f0c6026ddbd7",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "f01624b8d1c63766298edd265e663c0dc249e04c8a7291f20df20c08c6635c13",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "grpo-pool": {
+      "order": 26,
+      "file": "cases.jsonl"
+    }
+  }
+}
