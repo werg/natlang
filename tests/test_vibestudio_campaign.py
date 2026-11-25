@@ -553,6 +553,9 @@ def test_cohort_exports_are_resumable_for_ledger_backfill(monkeypatch, tmp_path)
 
 @pytest.mark.parametrize('cause', [
     'fetch failed',
+    'upstream HTTP 502',
+    'upstream HTTP 429',
+    'Circuit breaker is open; last failure: POST https://chatgpt.com/backend-api/codex/responses: upstream HTTP 503',
     'Circuit breaker is open; last failure: POST https://chatgpt.com/backend-api/codex/responses: fetch failed',
     'Circuit breaker is open; last failure: GET https://chatgpt.com/backend-api/codex/responses: Client network socket disconnected before secure TLS connection was established',
     'connect ECONNRESET',
@@ -579,6 +582,9 @@ def test_provider_transport_errors_do_not_spend_goal_retries(tmp_path, cause):
     'natlang describeIncident: failed: The document says fetch failed',
     'natlang chooseScope: failed: schema validation failed: fetch failed',
     'natlang chooseScope: failed: unauthorized',
+    'natlang describeIncident: failed: The document says upstream HTTP 502',
+    'natlang chooseScope: failed: schema validation failed: upstream HTTP 502',
+    'natlang chooseScope: failed: upstream HTTP 400',
     'natlang chooseScope: failed: Circuit breaker is open',
     'natlang chooseScope: failed: The document says getaddrinfo EAI_AGAIN chatgpt.com',
     'natlang chooseScope: failed: schema validation failed: getaddrinfo EAI_AGAIN chatgpt.com',

@@ -1,0 +1,39 @@
+{
+  "id": "natlang-sft-invented-authored-20261125-101744",
+  "owner": "dgx",
+  "path": "data_nvme:natlang-novel-programs/authored/20261125-101744",
+  "include": [
+    "manifest.jsonl",
+    "authored.jsonl",
+    "pool.json",
+    "episodes/*/cases.jsonl",
+    "episodes/*/rollouts.jsonl"
+  ],
+  "kind": "teacher-demos",
+  "format": "natlang.authored-trajectory/1 teacher pool (teacher_gen layout: manifest.jsonl, episodes/<e>/{cases,rollouts}.jsonl): 2396 authored reference trajectories, 4899 model calls (scripts/neuralese_data/authored_trajectories.py)",
+  "rows": 2396,
+  "license": "invented (project-authored by frontier models)",
+  "protected": false,
+  "note": "authored execution trajectories of admitted invented programs (train split): every judgment call with its runtime-rendered input and the scripted answer; no reasoning (filled_reasoning fills it); programs: anatomical-character-tree-scorer, assurance-case-defeater-grounder, campaign-npc-knowledge-ledger, commissary-allergen-residue-simulator, deposition-impeachment-aligner, flashcard-deck-history-merger, household-move-service-cutover, incident-contributing-factor-counterfactual, performance-cut-score-navigator, randomization-law-reconstructor, reagent-substitution-protocol-replanner, statute-amendment-consolidator, suppressed-count-reconstruction-auditor",
+  "producer": {
+    "script": "authored_trajectories.py",
+    "argv": [
+      "feed",
+      "--workers",
+      "8",
+      "--resume-pool",
+      "/home/werg/data/natlang-novel-programs/authored/20261125-101744"
+    ],
+    "git_commit": "833daaf8f8655e18876672b81cfe55968903c605",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "990b3f43779ad58044b1578a6e282a32d4362d76fc98a41b8c8d17c70dd1f4fe",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "ei-authored-teacher": {
+      "order": 0,
+      "file": "manifest.jsonl"
+    }
+  }
+}
