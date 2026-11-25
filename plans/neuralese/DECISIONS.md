@@ -13241,6 +13241,10 @@ canonical checkout with one `git worktree list` per path: 6,446 subprocesses, 40
 - extract (warm page cache, teacher-r0011 left out as it was still growing): pin 12.0 min, workers 8 3.7 min, serial
   main 8.8 min; episodes, extract.json and rl-group-rates.json identical.
 - replay's scan of the WORK: 376 s -> 47 s.
+- neuralese-graph (r0011's arguments): pin 11.8 min -> 4.5 min; chains.pkl, rows and cases identical (peak RSS
+  11.6 -> 11.3 GB: the lowered calls of the admitted episodes, untouched).
+- for scale: the production r0011 rerun (pin 30d16) took extract 60 min, replay 28 min, filled build 104 min,
+  neuralese-graph 11 min (10:02-13:26; unit peak 23.4 GB).
 Tests: `test_segment_tokens.py`, `test_filled_reasoning.py::test_build_renders_episodes_in_worker_processes_...`,
 `test_sft_sources.py::test_repeated_lines_are_skipped_unparsed...`, `::test_extract_by_worker_processes_...`.
 **Pickup:** the aei1 driver takes it at its next round boundary on a new pin (no driver change needed beyond the pin;
