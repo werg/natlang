@@ -118,6 +118,9 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
    each step uses. Children get distinct sub-questions and the inputs they need, and a parent gets its children's
    results, not their raw inputs. A judgment reads meaning, a whole passage when the meaning is spread over it, and
    maps words to referents (`{ side: 'right', ordinal: 2 }`); code counts, ranks and finds the item they pick.
+   Quantities are read, not computed: the judgment returns `{ amount: 6, unit: 'lb/gal', substance: 'glucose' }` or
+   `{ value: 15, approx: true }`, and code converts units, adds durations, compares amounts and dates, and applies
+   tolerances, also when the judgment compares two statements (pass it the code's comparison).
 4. **Finite answers are decisions.** `readout: decision` on a literal-union, boolean or finite-record result: the
    model reasons, then every value is scored, and `decide(fn, ...args)` returns the probabilities. Gate actions and
    escalate unsure or high-risk cases with `escalate(fn, { to: 'teacher', floor, risk?, policy? })` from

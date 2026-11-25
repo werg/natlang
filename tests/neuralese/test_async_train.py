@@ -2926,3 +2926,28 @@ def test_a_collection_launched_at_the_prep_share_asks_the_ledger_for_a_shrunk_ad
     monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (70, 70))
     d.ensure_collection(d.controller.current)
     assert calls[-1][2] is False
+
+
+def test_async_driver_retention_pass_and_opt_out(tmp_path, monkeypatch):
+    """The driver runs ei_round_tier.retain on its root in the background (each publication, each collection stop,
+    its start), one pass at a time, and records what it freed; --no-retention opts out (DECISIONS 2026-11-25)."""
+    import threading
+    import expert_iteration as ei
+    root = tmp_path / 'aei9'
+    lineage = [{'round_id': None, 'sha256': 'a' * 64, 'version': 0}, {'round_id': 'r0001', 'sha256': 'b' * 64, 'version': 1}]
+    root.mkdir()
+    (root / 'phase-state.json').write_text(json.dumps({'lineage': lineage, 'trained_rounds': ['r0001'],
+                                                      'active_round': None}))
+    actor = root / 'collect' / f'v0000-{"a" * 12}' / 'actor' / 'blocks'
+    actor.mkdir(parents=True)
+    (actor / 'b.safetensors').write_bytes(b'b' * 10)
+    notes = []
+    d = ei.AsyncRoundDriver.__new__(ei.AsyncRoundDriver)
+    d.a, d.root, d.lock = SimpleNamespace(no_retention=True), root, threading.RLock()
+    d.note = lambda **r: notes.append(r)
+    assert d.retain('r0001 published') is None and actor.exists()
+    d.a.no_retention = False
+    monkeypatch.setenv('NATLANG_OPS_ROOT', str(tmp_path / 'ops'))
+    d.retain('r0001 published').join(60)
+    assert not actor.exists() and notes and notes[-1]['retention'] == 'r0001 published', notes
+    assert notes[-1]['errors'] == 0 and notes[-1]['actions'] == 1

@@ -1127,6 +1127,25 @@ def live_holdout_registry(live_works):
     return next(iter(found.values()), None)
 
 
+AUTHORED_TEACHER_ROLE = 'ei-authored-teacher'
+
+
+def authored_teacher_pools():
+    """The authored-trajectory teacher pools (registry role ``ei-authored-teacher``, written by
+    ``authored_trajectories.py feed``: admitted invented programs' reference runs, every judgment call with its rendered
+    input and the authored answer, no reasoning), read from the registry owner's git layer (a pin's own layer predates
+    later pools). A round extracts them with its teacher campaigns, so they enter the mix as teacher episodes (own
+    successes first by the frontier; filled reasoning stands in where the fill reached them).
+    ``--no-authored-teacher`` opts out."""
+    from natlang_neuralese.common import data_registry
+    try:
+        paths = data_registry.role_paths(AUTHORED_TEACHER_ROLE, repo=data_registry.registry_owner_repo())
+    except (OSError, ValueError) as error:
+        log({'event': 'authored_teacher_pools_unavailable', 'error': repr(error)[:300]})
+        return []
+    return [Path(p) for p in paths if (Path(p) / 'manifest.jsonl').exists()]
+
+
 def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None,
                       live_registry=None, max_target_tokens=0, registry_repo=None, registry_ref=None,
                       max_forward_tokens=0, unfilled_live_teacher=None, extra=()):
@@ -3353,6 +3372,7 @@ class AsyncRoundDriver:
                 if self.c.present(u):
                     self.c.stop_unit(u)
                     self.note(collection_stopped=u)
+                    self.retain(f'collection {u} stopped')
         if self.c.present(unit):           # running, or preempted and requeued (the ledger relaunches it)
             if not self.collector_on_old_dir(unit, policy):
                 return unit
@@ -3844,6 +3864,34 @@ class AsyncRoundDriver:
             except Exception as error:
                 self.note(teacher_check_failed=repr(error)[:300])
 
+    RETAIN_LOCK = threading.Lock()
+
+    def retain(self, why):
+        """Retention in the background (``ei_round_tier.retain``: trained rounds' learner states, chains pickles and
+        superseded exports, closed collections' actor exports and blocks, off-lineage checkpoints; teacher episode
+        compaction), one pass at a time; a pass already running covers this call. aei1 2026-11-25: ~30 GB per round
+        reached the NVMe (9-13 GiB/h) with only the sweep's HDD moves behind it. ``--no-retention`` opts out."""
+        if getattr(self.a, 'no_retention', False) or not self.RETAIN_LOCK.acquire(blocking=False):
+            return None
+
+        def work():
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location('ei_round_tier', REPO / 'scripts' / 'ei_round_tier.py')
+                tier = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(tier)
+                summary = tier.retain(self.root)
+                self.note(retention=why, freed_gb=round((summary['deleted_bytes'] + summary.get('compacted_bytes', 0))
+                                                        / 2**30, 2), actions=summary['actions'],
+                          skipped=summary['skipped'], errors=summary['errors'])
+            except Exception as error:
+                self.note(retention_failed=repr(error)[:300], why=why)
+            finally:
+                self.RETAIN_LOCK.release()
+        thread = threading.Thread(target=work, daemon=True)
+        thread.start()
+        return thread
+
     def lineage_policies(self):
         """The policies whose collections a round reads: the current and the previous published policy."""
         return [p for p in (self.controller.previous, self.controller.current) if p]
@@ -3939,6 +3987,8 @@ class AsyncRoundDriver:
         lines = []
         rl = [*collections_, *[d for d in sorted(self.root.glob('r*/grpo')) if (d / 'groups').exists()]]
         teachers = [d for d in sorted(self.root.glob('teacher-*')) if (d / 'manifest.jsonl').exists()]
+        if not getattr(self.a, 'no_authored_teacher', False):
+            teachers += authored_teacher_pools()
         lines.append(self.c.data_py('sft_sources.py', 'extract', '--work', w,
                                *[x for d in rl for x in ('--rl', f'{d}:{d}')], *[x for d in teachers for x in ('--teacher', d)],
                                '--out-name', f'episodes-{self.a.name}-{round_dir.name}'))
@@ -4935,6 +4985,7 @@ class AsyncRoundDriver:
         self.record_reader_sources()
         self.c.pin_stage()
         self.drop_off_lineage()         # a lineage an earlier driver changed: nothing measures its dropped policies
+        self.retain('driver start')
         threading.Thread(target=self.held_loop, daemon=True).start()
         self.held_wake.set()
         if self.pop_target() is not None:
@@ -5006,6 +5057,7 @@ class AsyncRoundDriver:
             except Exception as error:      # the remote actor keeps serving the old policy; its collection drops it
                 self.note(rebind_failed=repr(error)[:300])
             self.note(round=rid, published=new['sha256'], version=new['version'])
+            self.retain(f'{rid} published')
             completed += 1
         return 0
 
@@ -5393,11 +5445,17 @@ def main():
                     help='a round prepared while a Colab session fit for SFT answers is sized to this many hours of '
                          'its learner (forward tokens at its measured throughput, round-speed.json; the target cap and '
                          'teacher budget scaled alike, never below the DGX round); 0: every round is the DGX size')
+    ad.add_argument('--no-authored-teacher', action='store_true',
+                    help='no authored-trajectory teacher pools (registry role ei-authored-teacher, '
+                         'authored_trajectories.py feed) in the round extraction')
     ad.add_argument('--no-fallow22-aux', action='store_true',
                     help='leave the fallow-22 reference-program fan-in part (FALLOW22_AUX, share 0.01) out of the mix')
     ad.add_argument('--no-dgx-recap', action='store_true',
                     help='a round sized for a session that starts on the DGX trains its whole mix there (default: '
                          'recapped to --round-target-tokens first, sft_sources recap)')
+    ad.add_argument('--no-retention', action='store_true',
+                    help='no retention pass (scripts/ei_round_tier.py retain: what no consumer reads once a round '
+                         'published or a collection closed is deleted) at each publication and collection change')
     ad.add_argument('--no-prefer-inflight', action='store_true',
                     help='a round prepared while another trains does not prefer unseen over that round\'s mix')
     ad.add_argument('--unfilled-live-teacher', choices=('auto', 'drop', 'train'), default=None,

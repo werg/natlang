@@ -1523,14 +1523,16 @@ def drifted_success(record, turns=None, ambiguous=None):
     The actions are the teacher's and the oracle accepted them under today's runtime; the training rows render the
     replayed (today's) prompts (``replayed_turns``). With the episode's recorded ``turns``, an episode whose sibling calls
     a replay without ``siblings_resolved`` (the matcher before its best-opening choice) could have swapped is refused."""
-    served = {k: v for k, v in (record.get('served') or {}).items() if k != 'scoring-declined'}
+    # a reasoned readout's repeats (its reasoning samples and answer request, ``group-repeat``) are answered by the
+    # readout's matched entry, as in ``exact`` (replay_episode); they count neither as calls nor as a mismatch
+    served = {k: v for k, v in (record.get('served') or {}).items() if k not in ('scoring-declined', 'group-repeat')}
     if ambiguous is None:     # ``ambiguous``: sibling_ambiguous(turns) computed already (``episode_facts``)
         ambiguous = turns is not None and sibling_ambiguous(turns)
     if ambiguous and not record.get('siblings_resolved'):
         return False
     return (record.get('outcome') == SUCCESS and not record.get('exact') and record.get('unserved') == 0
             and 'missing' not in served and set(served) <= {'exact', 'reworded', 'drifted'}
-            and record.get('replayed_turns') == record.get('recorded_turns'))
+            and record.get('replayed_turns') == record.get('replay_calls', record.get('recorded_turns')))
 
 
 def derived_superset(current, stored, path=''):

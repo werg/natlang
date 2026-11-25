@@ -21,6 +21,12 @@ deleted with a ``.removed.json`` note; ``sft/learner-state*`` (a finished round'
 policy is unprotected (rollback needs the last measured policy's checkpoint, the next merges the head's factors).
 ``mix/rows.jsonl.zst``, ``trained-units.json``, ``build.json`` and every small file stay.
 
+Retention (``drop_plan``, default; ``--no-drop`` opts out; DECISIONS 2026-11-25 "EI retention") runs first and deletes
+what no consumer reads: closed collections' actor exports and native-state blocks (every policy but the lineage head),
+trained rounds' learner states, chains pickles (mix with trained-units.json, filled, own Neuralese graph) and
+superseded exports, and the checkpoint of a policy that left the lineage unprotected; teacher campaigns' quiet episodes
+are compacted. The async driver runs the same deletions itself at each publication (``retain``).
+
 Each item is skipped while any process (cwd, exe, fds, maps, command line, environment) or an active or
 timer-triggered unit names it, or a ``.keep-on-nvme`` marker covers it. A move copies (hashing), syncs, re-reads the
 copy from disk and compares every file's size and SHA-256, checks the source did not change and that no process
@@ -39,6 +45,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO / 'training' / 'neuralese'), str(REPO)]
@@ -90,15 +97,112 @@ def protected_policies(state: dict, current_policy: dict | None) -> set[str]:
     for key in ('active_round', 'measuring', 'reference_policy', 'start_policy'):
         keep |= _shas(state.get(key))
     verdicts = state.get('applied_verdicts') or []
-    if verdicts:
-        keep |= _shas(verdicts[-1])
+    if verdicts:        # PhaseController records each applied verdict as its policy's sha256 string
+        last = verdicts[-1]
+        keep |= {last} if isinstance(last, str) and len(last) == 64 else _shas(last)
     if current_policy:
         keep |= _shas(current_policy)
     return keep
 
 
-def plan(driver: Path, state: dict, current_policy: dict | None) -> list[dict]:
-    """The actions for one driver directory, oldest first: {'op': 'delete'|'move', 'path', 'why'}."""
+def _round_sha(r: Path) -> str | None:
+    try:
+        return json.loads((r / 'policy' / 'published.json').read_text()).get('checkpoint_sha256')
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[dict]:
+    """Retention (DECISIONS 2026-11-25 "EI retention"): what no consumer reads once a round is trained or a collection
+    is closed is deleted, on the NVMe or through an earlier move's link on the HDD. Every action is a 'delete'; an
+    action's 'guard' paths must be unreferenced too.
+
+    - Collections of every policy but the lineage head: ``actor/sglang-hf`` (``serve_native_checkpoint`` re-exports it
+      from the checkpoint when the policy is served again) and ``actor/blocks`` (an episode imports only states its own
+      calls stored; a resumed partial never continues past a Neuralese write, ``episode_files.partial_continuable``;
+      the SFT build trains imports as pass-through). Guarded by ``actor`` (the running actor names ``--store-dir``).
+    - Rounds that trained (``trained_rounds``, ``discarded.json``, or older than the active round), never the active
+      one: ``sft/learner-state*`` (the round's resume state: read by ``--resume``, ``recap_for_dgx``, ``sft_handback``
+      and ``rebuild_round`` only before publication); ``*.pkl`` of a mix directory whose ``trained-units.json`` exists
+      (``--prefer-unseen`` reads rows.jsonl.zst and trained-units.json, ``sft_sources.trained_units``) or of a
+      ``mix.pre-rebuild-*`` copy; ``filled/chains.pkl`` and ``neuralese-graph-own/chains.pkl`` (inputs of that
+      round's build only; the fill store stays). Their small files stay.
+    - Exports of a trained round whose policy is not the lineage head: ``policy/sglang-hf`` and ``policy/gguf``
+      (``publish-round`` writes them; ``rebind_remote`` reads the head's, lfm-latest and Pop serve from the checkpoint).
+    - ``policy/checkpoint.pt`` of a trained round whose policy left the lineage (a rollback or a discard) and is
+      protected by nothing (``protected_policies``): ``sft/factors`` and ``published.json`` (base + factors) stay.
+    """
+    keep = protected_policies(state, current_policy)
+    lineage = state.get('lineage') or []
+    head = (lineage[-1].get('sha256') or '') if lineage else ''
+    on_lineage = {e.get('sha256') for e in lineage}
+    trained = set(state.get('trained_rounds') or [])
+    active = (state.get('active_round') or {}).get('round_id')
+    active_n = int(active[1:]) if active and ROUND.match(active) else None
+    actions = []
+    collect = driver / 'collect'
+    if collect.is_dir():
+        for d in sorted(collect.iterdir(), key=lambda p: p.name):
+            m = COLLECTION.match(d.name)
+            if not m or not d.is_dir() or not head or head.startswith(m.group(2)):
+                continue
+            base = d.resolve() if d.is_symlink() else d
+            for name in ('sglang-hf', 'blocks'):
+                path = base / 'actor' / name
+                if path.is_dir() and not path.is_symlink():
+                    actions.append({'op': 'delete', 'path': str(path), 'guard': [str(d / 'actor'), str(base / 'actor')],
+                                    'why': f'closed collection of {m.group(2)} (not the lineage head): actor {name}'})
+    for r in sorted((p for p in driver.iterdir() if ROUND.match(p.name) and p.is_dir()), key=lambda p: p.name):
+        if r.name == active:
+            continue
+        discarded = (r / 'discarded.json').exists()
+        if not (r.name in trained or discarded or (active_n is not None and int(r.name[1:]) < active_n)):
+            continue
+        paths = [*(r / 'sft').glob('learner-state*'), r / 'filled' / 'chains.pkl',
+                 r / 'neuralese-graph-own' / 'chains.pkl']
+        for mix in [r / 'mix', *sorted(r.glob('mix.*'))]:
+            if mix.is_dir() and ((mix / 'trained-units.json').exists() or mix.name.startswith('mix.pre-rebuild-')):
+                paths += sorted(mix.glob('*.pkl'))
+        sha = _round_sha(r)
+        if (r.name in trained or discarded) and sha and sha != head:
+            paths += [r / 'policy' / 'sglang-hf', r / 'policy' / 'gguf']
+            if sha not in on_lineage and sha not in keep:
+                paths.append(r / 'policy' / 'checkpoint.pt')
+        for path in paths:
+            if path.name.endswith(('.removed.json', '.partial')) or not (path.exists() or path.is_symlink()):
+                continue
+            if path.is_symlink() and not _under_dest(path):
+                continue        # a link to something not ours (a hand-made pointer): left alone
+            actions.append({'op': 'delete', 'path': str(path),
+                            'why': f'{r.name} trained' + (' (policy off the lineage)' if path.name == 'checkpoint.pt'
+                                                          else '') + ': no consumer reads ' + path.name})
+    return actions
+
+
+def _under_dest(link: Path) -> bool:
+    try:
+        target = link.resolve()
+    except OSError:
+        return False
+    return str(target).startswith(str(DEST) + '/') or str(target).startswith(str(link.parent.resolve()) + '/')
+
+
+def plan(driver: Path, state: dict, current_policy: dict | None, drop: bool = True) -> list[dict]:
+    """The actions for one driver directory, oldest first: {'op': 'delete'|'move'|'trim'|'compact', 'path', 'why'}.
+    ``drop`` (default; ``--no-drop`` opts out) puts the retention deletions (``drop_plan``) and the teacher campaigns'
+    episode compaction first; the moves then tier what is left."""
+    actions = drop_plan(driver, state, current_policy) if drop else []
+    if drop:
+        for t in sorted(driver.glob('teacher-r*')):
+            if t.is_dir() and not t.is_symlink() and (t / 'episodes').is_dir() and not (t / COMPACTED).exists():
+                actions.append({'op': 'compact', 'path': str(t),
+                                'why': 'teacher campaign: quiet episodes compacted (episode_files.compact_sample)'})
+    dropped = {a['path'] for a in actions}
+    return actions + [a for a in _tier_plan(driver, state, current_policy) if a['path'] not in dropped
+                      and not any(a['path'].startswith(p + '/') for p in dropped)]
+
+
+def _tier_plan(driver: Path, state: dict, current_policy: dict | None) -> list[dict]:
     keep = protected_policies(state, current_policy)
     lineage = state.get('lineage') or []
     # round builds read only the current and previous policy's collections (and the active round's base); the
@@ -300,13 +404,40 @@ def move(path: Path, dest: Path) -> int:
     return copied
 
 
-def delete(path: Path) -> int:
-    size = size_of(path)
+def delete(path: Path, why: str = 'regenerable export (scripts/ei_round_tier.py)') -> int:
+    """PATH (file or directory; a link an earlier move left: its HDD target too) removed, with PATH.removed.json
+    noting what and why. Returns the bytes freed."""
+    target = path.resolve() if path.is_symlink() else path
+    size = size_of(target) if target.exists() else 0
     note = path.with_name(path.name + '.removed.json')
-    note.write_text(json.dumps({'removed': str(path), 'bytes': size, 'at': time.time(),
-                                'why': 'regenerable export (scripts/ei_round_tier.py)'}) + '\n')
-    shutil.rmtree(path)
+    note.write_text(json.dumps({'removed': str(path), **({'target': str(target)} if target != path else {}),
+                                'bytes': size, 'at': time.time(), 'why': why}) + '\n')
+    if target != path:
+        path.unlink()
+    if target.is_dir():
+        shutil.rmtree(target)
+    elif target.exists():
+        target.unlink()
     return size
+
+
+COMPACTED = '.episodes-compacted'
+
+
+def compact_campaign(campaign: Path, quiet_seconds: int = 3600) -> dict:
+    """``episode_files.compact_sample`` over a teacher campaign's quiet samples (unchanged ``quiet_seconds``, none
+    open). Once every sample was quiet, ``COMPACTED`` marks the campaign done (later passes skip it). Returns the
+    compaction counters with 'freed' and 'skipped' (samples still live)."""
+    held = episode_files.open_paths(campaign / 'episodes')
+    total, skipped, now = collections.Counter(), 0, time.time()
+    for sample in episode_files.samples_of(campaign / 'episodes'):
+        if episode_files.quiet_sample(sample, now, quiet_seconds, held):
+            total.update(episode_files.compact_sample(sample))
+        else:
+            skipped += 1
+    if not skipped:
+        (campaign / COMPACTED).write_text(json.dumps({'at': time.time(), **dict(total)}) + '\n')
+    return {**dict(total), 'freed': episode_files.freed(total), 'skipped': skipped}
 
 
 # ---------- collection trim ----------
@@ -419,13 +550,9 @@ def keep_marker(path: Path, root: Path) -> bool:
 
 def run(args) -> dict:
     deadline = time.time() + args.max_minutes * 60
-    current = None
-    try:
-        current = json.loads((OPS / 'current-policy.json').read_text())
-    except (OSError, ValueError):
-        pass
+    current = current_policy()
     procs, units = process_references(), unit_commands()
-    summary = {'deleted_bytes': 0, 'moved_bytes': 0, 'actions': 0, 'skipped': 0, 'errors': 0, 'applied': args.apply}
+    summary = new_summary(args.apply)
     for state_path in sorted(OPS.glob('ei/*/phase-state.json')):
         driver = state_path.parent
         if driver.is_symlink():
@@ -435,59 +562,110 @@ def run(args) -> dict:
         except (OSError, ValueError) as error:
             log(event='state unreadable: driver skipped', driver=str(driver), error=repr(error)[:200])
             continue
-        for action in plan(driver, state, current):
-            if time.time() > deadline:
-                log(event='time budget reached', driver=str(driver))
-                return summary
-            path = Path(action['path'])
-            why = references(str(path), procs, units, [])
-            if why or keep_marker(path, driver):
-                summary['skipped'] += 1
-                log(event='kept', path=str(path), reason=(why or ['marker .keep-on-nvme'])[:3])
-                continue
-            if action['op'] == 'trim':
-                try:
-                    kinds = trim(path, args.apply)
-                except Exception as error:      # open, unreadable or odd: the whole collection stays
-                    summary['skipped'] += 1
-                    log(event='trim skipped', path=str(path), reason=repr(error)[:200])
-                    continue
-                if kinds:
-                    freed = sum(kinds.values())
-                    summary['trimmed_bytes'] = summary.get('trimmed_bytes', 0) + freed
-                    summary['actions'] += 1
-                    log(event='trimmed' if args.apply else 'would trim', path=str(path), gb=round(freed / GIB, 2),
-                        kinds={k: round(v / GIB, 2) for k, v in kinds.items()}, why=action['why'])
-                continue
-            size = size_of(path)
+        actions = plan(driver, state, current, drop=getattr(args, 'drop', True))
+        if not apply_plan(driver, actions, args, procs, units, summary, deadline):
+            break
+    return summary
+
+
+def current_policy() -> dict | None:
+    try:
+        return json.loads((OPS / 'current-policy.json').read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def new_summary(apply: bool) -> dict:
+    return {'deleted_bytes': 0, 'moved_bytes': 0, 'actions': 0, 'skipped': 0, 'errors': 0, 'applied': apply}
+
+
+def retain(driver: Path, *, apply: bool = True, ops=('delete', 'compact'), max_minutes: float = 30.) -> dict:
+    """The retention of one driver directory, run by the driver itself (``expert_iteration.py async-drive`` at each
+    publication and when a collection closes; ``--no-retention`` opts out): ``plan``'s ``ops`` actions (deletions and
+    the teacher compaction by default; the HDD moves stay with the sweep) under the same reference checks."""
+    state = json.loads((Path(driver) / 'phase-state.json').read_text())
+    summary = new_summary(apply)
+    actions = [a for a in plan(Path(driver), state, current_policy()) if a['op'] in ops]
+    apply_plan(Path(driver), actions, SimpleNamespace(apply=apply, hdd_floor_gb=100.), process_references(),
+               unit_commands(), summary, time.time() + max_minutes * 60)
+    return summary
+
+
+def apply_plan(driver, actions, args, procs, units, summary, deadline) -> bool:
+    """Run ``actions`` of one driver (each skipped while referenced, its guards included, or under a keep marker);
+    False once the time budget ran out."""
+    for action in actions:
+        if time.time() > deadline:
+            log(event='time budget reached', driver=str(driver))
+            return False
+        path = Path(action['path'])
+        # a compaction checks each sample itself (quiet, none open); a live campaign names the earlier ones on its
+        # command line (--covered-by) without reading their job files, so only open files and working dirs count
+        refs = ([r for r in procs if r[1] not in ('cmdline', 'environ')], []) if action['op'] == 'compact' else (procs, units)
+        why = [w for p in [str(path), *action.get('guard', ())] for w in references(p, *refs, [])]
+        if why or keep_marker(path, driver):
+            summary['skipped'] += 1
+            log(event='kept', path=str(path), reason=(why or ['marker .keep-on-nvme'])[:3])
+            continue
+        if action['op'] == 'compact':
             if not args.apply:
-                log(event='would ' + action['op'], path=str(path), gb=round(size / GIB, 2), why=action['why'])
-                summary[('deleted' if action['op'] == 'delete' else 'moved') + '_bytes'] += size
-                summary['actions'] += 1
                 continue
             try:
-                if action['op'] == 'delete':
-                    summary['deleted_bytes'] += delete(path)
-                else:
-                    dest = DEST / driver.name / path.relative_to(driver)
-                    probe = dest.parent
-                    while not probe.exists():
-                        probe = probe.parent
-                    free = shutil.disk_usage(probe).free
-                    if free - size < args.hdd_floor_gb * GIB:
-                        log(event='HDD floor: move refused', path=str(path), gb=round(size / GIB, 2),
-                            hdd_free_gb=round(free / GIB, 1))
-                        summary['errors'] += 1
-                        continue
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    summary['moved_bytes'] += move(path, dest)
-                summary['actions'] += 1
-                log(event=action['op'] + 'd' if action['op'] == 'delete' else 'moved', path=str(path),
-                    gb=round(size / GIB, 2), why=action['why'])
-            except Exception as error:      # one item failing keeps its path and the pass going
+                stats = compact_campaign(path)
+            except Exception as error:
                 summary['errors'] += 1
                 log(event='error: kept', path=str(path), error=repr(error)[:300])
-    return summary
+                continue
+            if stats['freed']:
+                summary['compacted_bytes'] = summary.get('compacted_bytes', 0) + stats['freed']
+                summary['actions'] += 1
+                log(event='compacted', path=str(path), gb=round(stats['freed'] / GIB, 2), skipped=stats['skipped'],
+                    why=action['why'])
+            continue
+        if action['op'] == 'trim':
+            try:
+                kinds = trim(path, args.apply)
+            except Exception as error:      # open, unreadable or odd: the whole collection stays
+                summary['skipped'] += 1
+                log(event='trim skipped', path=str(path), reason=repr(error)[:200])
+                continue
+            if kinds:
+                freed = sum(kinds.values())
+                summary['trimmed_bytes'] = summary.get('trimmed_bytes', 0) + freed
+                summary['actions'] += 1
+                log(event='trimmed' if args.apply else 'would trim', path=str(path), gb=round(freed / GIB, 2),
+                    kinds={k: round(v / GIB, 2) for k, v in kinds.items()}, why=action['why'])
+            continue
+        target = path.resolve() if path.is_symlink() else path
+        size = size_of(target) if target.exists() else 0
+        if not args.apply:
+            log(event='would ' + action['op'], path=str(path), gb=round(size / GIB, 2), why=action['why'])
+            summary[('deleted' if action['op'] == 'delete' else 'moved') + '_bytes'] += size
+            summary['actions'] += 1
+            continue
+        try:
+            if action['op'] == 'delete':
+                summary['deleted_bytes'] += delete(path, action['why'])
+            else:
+                dest = DEST / driver.name / path.relative_to(driver)
+                probe = dest.parent
+                while not probe.exists():
+                    probe = probe.parent
+                free = shutil.disk_usage(probe).free
+                if free - size < args.hdd_floor_gb * GIB:
+                    log(event='HDD floor: move refused', path=str(path), gb=round(size / GIB, 2),
+                        hdd_free_gb=round(free / GIB, 1))
+                    summary['errors'] += 1
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                summary['moved_bytes'] += move(path, dest)
+            summary['actions'] += 1
+            log(event=action['op'] + 'd' if action['op'] == 'delete' else 'moved', path=str(path),
+                gb=round(size / GIB, 2), why=action['why'])
+        except Exception as error:      # one item failing keeps its path and the pass going
+            summary['errors'] += 1
+            log(event='error: kept', path=str(path), error=repr(error)[:300])
+    return True
 
 
 def _own_tree() -> set[int]:
@@ -517,10 +695,20 @@ def main(argv=None):
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--max-minutes', type=float, default=20.0)
     parser.add_argument('--hdd-floor-gb', type=float, default=100.0)
+    parser.add_argument('--no-drop', dest='drop', action='store_false',
+                        help='opt out of the retention deletions and teacher compaction (drop_plan): moves only')
     parser.add_argument('--trim', action='append', default=[], metavar='COLLECTION',
                         help='trim only these closed collections (e.g. an earlier cycle\'s, outside any driver state); '
                              'no other action runs')
+    parser.add_argument('--retain', metavar='DRIVER', help='only the driver-side retention of DRIVER (retain: '
+                        'deletions and teacher compaction, no moves); a dry run lists the paths unless --apply')
     args = parser.parse_args(argv)
+    if args.retain:
+        summary = retain(Path(args.retain), apply=args.apply, max_minutes=args.max_minutes)
+        log(event='retain summary', driver=args.retain, **summary,
+            deleted_gb=round(summary['deleted_bytes'] / GIB, 2),
+            compacted_gb=round(summary.get('compacted_bytes', 0) / GIB, 2), root_free_gb=round(shutil.disk_usage('/').free / GIB, 1))
+        return 0
     if args.trim:
         # the paths are on this pass's own command line (and its ledger unit's): those never count as readers
         own_pids, own_unit = _own_tree(), _own_unit()
@@ -542,6 +730,7 @@ def main(argv=None):
     root_free = shutil.disk_usage('/').free
     log(event='summary', **summary, deleted_gb=round(summary['deleted_bytes'] / GIB, 1),
         trimmed_gb=round(summary.get('trimmed_bytes', 0) / GIB, 1),
+        compacted_gb=round(summary.get('compacted_bytes', 0) / GIB, 1),
         moved_gb=round(summary['moved_bytes'] / GIB, 1), root_free_gb=round(root_free / GIB, 1))
     return 0
 

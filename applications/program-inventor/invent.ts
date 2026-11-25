@@ -1,9 +1,10 @@
 /**
  * The program inventor (DECOMPOSITION.md): one attempt turns the atlas of existing ideas into a new idea, checks that it
  * is new, has it built into a program with literal instances and an exact checker, qualifies it, has a teacher run it,
- * and records it so every later attempt sees it in the atlas.
+ * and records it so every later attempt sees it in the atlas. Qualification admits: the judged requirements are read by
+ * a review of a random sample of admitted programs outside the round (REVIEW_BRIEF.md, owner 2026-11-25).
  *
- * Judgments are `.nl` functions on frontier models (inventIdea, isNew, meetsBar, adjudicate). Exact checks, packaging,
+ * Judgments are `.nl` functions on frontier models (inventIdea, isNew, adjudicate). Exact checks, packaging,
  * replay and the coding agent that writes files are services: they touch the repository, the runtime and the outside
  * world.
  */
@@ -11,9 +12,8 @@ import { decide, nl } from '@natlang/node';
 import { semanticRepair } from '@natlang/node/std';
 import inventIdea from './inventIdea.nl';
 import isNew from './isNew.nl';
-import meetsBar from './meetsBar.nl';
 import adjudicate from './adjudicate.nl';
-import type { Atlas, AtlasEntry, AttemptResult, Disagreement, IdeaCard, LiveRun, ProgramView, Qualification, RejectedIdea, Requirement } from './types.js';
+import type { Atlas, AtlasEntry, AttemptResult, Disagreement, IdeaCard, LiveRun, ProgramView, Qualification, RejectedIdea } from './types.js';
 
 /** What the inventor needs from the outside world. */
 export type InventorServices = {
@@ -27,13 +27,12 @@ export type InventorServices = {
   revise(submission: string, problems: string[]): Promise<string>;
   /** Crisp qualification (scripts/rl_tasks/sources/invented.py qualify). */
   qualify(submission: string): Promise<Qualification>;
-  /** The program's files and first instance, for review. */
+  /** The program's files and first instance, for adjudication. */
   view(submission: string, idea: IdeaCard, metrics: string): Promise<ProgramView>;
   /** A teacher model runs every instance through the collector; one row per instance. */
   liveRun(submission: string): Promise<LiveRun[]>;
   /** Append an accepted idea to the ledger the atlas reads. */
   record(idea: IdeaCard, submission: string): Promise<void>;
-  requirements: Requirement[];
 };
 
 /** Exact checks of an idea card before anything is built. */
@@ -76,13 +75,8 @@ export async function attempt(services: InventorServices, rejected: RejectedIdea
   if (!built.ok) return { slug: idea.slug, status: 'build-failed', reason: built.problems.slice(0, 8).join('; '), submission: built.value };
   const submission = built.value;
 
-  // The judged requirements, each by a model of another family than the inventor.
   const qualification = await services.qualify(submission);
   const program = await services.view(submission, idea, qualification.metrics);
-  const judged = services.requirements.filter(requirement => requirement.check === 'judged' && requirement.id !== 'N1');
-  const verdicts = await Promise.all(judged.map(async requirement => ({ requirement, met: (await decide(meetsBar, requirement, program)).value })));
-  const unmet = verdicts.filter(verdict => !verdict.met).map(verdict => verdict.requirement.id);
-  if (unmet.length) return { slug: idea.slug, status: 'below-bar', reason: `judged unmet: ${unmet.join(', ')}`, submission };
 
   // A teacher runs the program; a disagreement is settled before anything is recorded.
   const runs = await services.liveRun(submission);

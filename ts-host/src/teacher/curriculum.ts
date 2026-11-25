@@ -525,10 +525,14 @@ export function actionNote(calls: [string, Record<string, unknown>][]): string {
 
 /** Replay a case's reference solution through the collector's execution path, recording a trajectory. */
 export async function replayReference(record: CurriculumRecord, systemPrompt: string, reasoningFor?: ReasoningHook,
-    options: { onChild?: (answer: ChildAnswer) => void } = {}): Promise<{ run: ProgramRun; trajectory: Turn[] }> {
+    options: { onChild?: (answer: ChildAnswer) => void;
+      /** Every model request and the scripted reply as the runtime sent and received them (authored-trajectory export:
+       * scripts/rl_tasks/reference_episodes.mjs; a decision readout's reply is its `text`). */
+      onTurn?: (request: ModelTurnRequest, response: ModelTurn) => void } = {}): Promise<{ run: ProgramRun; trajectory: Turn[] }> {
   const trajectory: Turn[] = [], reference = referenceDriver(record, reasoningFor, options.onChild);
   const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
     const response = await reference(request);
+    options.onTurn?.(structuredClone(request), structuredClone(response));
     trajectory.push({ context: structuredClone(request.messages) as Message[],
       assistant: { calls: (response.calls ?? []).map(([tool, args]) => ({ tool, arguments: args })),
         ...(response.reasoning ? { reasoning: response.reasoning } : {}) } });

@@ -12736,3 +12736,156 @@ and collection) was not rerun for these sources: the rows are new to the pool, s
 ### 2026-11-25: preserve JavaScript code units at JSON data boundaries
 
 The standing DGX86 campaign ingestion repeatedly failed UTF-8 encoding on the legitimate wrapping-graphemes capture; process liveness had concealed stalled ingestion since08:23. Main73b already added text replacement, but JSON must preserve recorded string values and keys: U+FFFD replacement also conflated canonical identities. JSON serializers now join valid surrogate pairs and escape lone UTF-16 units. Plain text encoding retains existing JavaScript-compatible U+FFFD behavior; `NATLANG_KEEP_LONE_SURROGATES=1` retains strict opt-out. Shared boundary inventory: `JSON_SURROGATE_BOUNDARIES_20261125.md`. Actual focused JSON/writer/hashing tests20PASS under0.6GiB ledger; original data is unchanged. Deploy the official current reader to archive/export/ingest/fill at their safe boundaries; actor/learner state remains intact. This is an archive-reader repair, independent of live runtime Core207.
+
+## 2026-11-25 10:10 Invented programs: quality at the top of the funnel; reviews only on a drawn sample (program-inventor agent)
+
+**Owner (2026-11-25):** "our qualification and admittance process is too heavy ... we need to create masses of data. So
+it's fine if individual samples are not perfect ... optimize how we generate ... so that at the top of the funnel, we
+start generating high quality stuff on average." "I think reviews should only be on a drawn sample."
+
+**Why.** Wave 1 (8 Sonnet builds, about 25 review rounds) spent most of its inference on review-fix loops, and the
+same seven failures recurred across rounds: text stating its judgment's answer, arithmetic and comparison inside
+judgments, scripted answers following a rule written nowhere (or only in NOTES) or applied unevenly, items with two
+readings where rules overlap or a definition has no direction, types that cannot hold what the text says, hand-derived
+expected answers wrong by the code's order, and fixes by deleting the trap. Each is cheaper to prevent in the brief and
+a builder self-check than to find in review.
+
+**Process change.**
+- Qualification admits (1a884f706). A review is one sampled pass (`invented.py sample-reviews N`; `REVIEW_BRIEF.md`):
+  grades, `wrong_expected` (only answers a careful reader rejects), and up to five `funnel_findings` for the brief and
+  skill. No requests to the builder, no rounds. `invented.py publish` withholds a program whose review of the admitted
+  version lists `wrong_expected`. The program-inventor app's per-program judged gate (`meetsBar.nl`) is removed for the
+  same reason (DECOMPOSITION part 10).
+- `BUILD_BRIEF.md`: a "One answer per item" section teaches the seven failures as positive habits with short worked
+  examples, and a self-check runs before qualify (`<slug>.SELFCHECK.md`: re-answer every scripted item from the
+  instruction and types without NOTES; every text a judgment sees against its answer; every number, date and
+  comparison with the TypeScript line doing it). Review rounds and the "expect two or three rounds" loop are gone;
+  ledger commands use medium priority, `--no-resumable`, `--wait-exit`. Skill: patterns.md (overlaps and directions,
+  leave the answer to the judgment, types hold what the text says), SKILL.md step 3 (quantities read, code computes),
+  language/refinements facts builders hit (`Date`, exported signature types, `untrusted(...)` through `decide`).
+- Tooling (c5f116d44): `invented.py dry-run [--controls]` (no model; 35 s with every control on a wave-1 submission,
+  against 5-40 min for qualify), qualify never leaves a stale `report.json`, a warning when an item-fragment entry
+  answers several different calls, C4 accepts a quoted phrase, S6 case-insensitive, S7 skips unit/id fields,
+  `memory_ledger.py run --wait-exit`. Bar `2026-11-25.4` for wave 2 (checks only loosened).
+- Wave 2: `/home/werg/data/natlang-novel-programs/wave2-20261125/BRIEF.md` (take, build, dry-run, self-check, qualify,
+  admit, report; friction log kept; ~190 cards unclaimed).
+
+**Success and failure.** Judged on a drawn sample of wave-2 admissions against wave 1's final grades: success is mean
+grades no lower than wave 1's final ones (semantic depth 3-4) with `wrong_expected` on at most one sampled program in
+four, at well under wave 1's builder-plus-reviewer inference per admitted program. Failure: a sampled wrong-expected
+rate above one in three, or a recurring finding the brief already covers; then the funnel findings change the brief
+again before wave 3.
+
+**2026-11-25 10:00, EI retention: the driver and the sweep delete what no consumer reads (`ei_round_tier.drop_plan`).**
+`/` fell 9-13 GiB/h while aei1 ran, and the HDD (136 GB free) fell behind it: `ei_round_tier` only *moved* old rounds
+and collections to the HDD, and kept the last two lineage rounds and the protected policies whole.
+- **Measured per round** (r0009/r0010; a round every ~2-2.5 h), about 30 GB on the NVMe:
+  - round directory, 14 GB: `policy/checkpoint.pt` 3.22, `policy/sglang-hf` 3.71, `policy/gguf` 1.72,
+    `filled/chains.pkl` 1.25-1.32, `mix/chains.pkl` 0.93-1.08, `sft/learner-state` 1.44 (optimizer 0.96 + a factors
+    copy 0.48), `sft/factors` 0.48, `neuralese-graph-own/chains.pkl` 0.21-0.26;
+  - DGX collection of the policy: `actor/sglang-hf` 3.71, native-state blocks left at the stop 2-3 (v0008 3.01, v0001
+    2.04), episodes ~6.5 (v0008); remote collectors' pulled episodes on top (v0001: remote0 9.2, Pop 12; their trim
+    alone would free 6.7 and 3.5);
+  - teacher campaign 3-4.6 GB (teacher-r0010 4.6: byte-identical `jobs/*.result.json` 0.94, raw partials and evidence
+    1.45, traces 0.30; campaigns from pins before 69193e82b were never compacted);
+  - held measurement ~0.9 GB per measured policy.
+- **Rules (default; `ei_round_tier --no-drop`, `SWEEP_EI_DROP=0`, `async-drive --no-retention` opt out).** Deletions
+  leave `<name>.removed.json` (what, HDD target, bytes, why) and, through an earlier move's link, remove the HDD target
+  too. Every item passes the sweep's reference checks first (process cwd/exe/fds/maps/cmdline/environ, active units).
+  - Collections of every policy but the lineage head lose `actor/sglang-hf` (`serve_native_checkpoint` re-exports it
+    when the policy is served again, `export_loaded`) and `actor/blocks`. An episode imports only states its own calls
+    stored, and `episode_files.partial_continuable` never continues past a Neuralese write. The SFT build trains
+    imports as pass-through. The live actor's `--store-dir` guards both.
+  - Rounds that trained (`trained_rounds`, `discarded.json`, or older than the active round; never the active round or
+    one prepared ahead) lose:
+    - `sft/learner-state*`: read only before publication, by `--resume`, `recap_for_dgx`, `sft_handback` and
+      `rebuild_round`, which refuses once SFT started;
+    - `*.pkl` of a mix with `trained-units.json`, or of a `mix.pre-rebuild-*`: `--prefer-unseen` reads rows.jsonl.zst
+      and trained-units.json, and `sft_sources.trained_units` falls back to chains.pkl only without the json;
+    - `filled/chains.pkl` and `neuralese-graph-own/chains.pkl`: inputs of that round's build only; the fill store
+      `/home/werg/data/filled-reasoning-20261120` stays.
+  - Trained rounds whose policy is not the lineage head lose `policy/sglang-hf` and `policy/gguf`. `rebind_remote` and
+    `ensure_remote_policy` read only the head's. Pop `serve-checkpoint`, the held series and lfm-latest
+    (`natlang setup --native`) build from the checkpoint.
+  - A trained round whose policy left the lineage and is protected by nothing (`protected_policies`) loses
+    `policy/checkpoint.pt`. `sft/factors` and `published.json` (base sha + factors) stay, so a merge rebuilds it.
+  - Teacher campaigns: `episode_files.compact_sample` over quiet samples (unchanged for 1 h, none open);
+    `.episodes-compacted` marks a finished campaign. Only open files count as readers here: the live campaign names
+    the earlier ones in `--covered-by`.
+  - Stay: lineage checkpoints (the sweep tiers them as before), every `sft/factors`, the head's exports and
+    collection, episodes, rows.jsonl.zst / trained-units.json / build.json, held measurements.
+- **Where it runs.**
+  - The driver (`AsyncRoundDriver.retain`, a background thread, one pass at a time) runs it at its start, after each
+    publication and after it stops an older collection.
+  - The sweep runs the same plan every 30 minutes, ahead of its moves.
+  - By hand: `ei_round_tier.py --retain DRIVER [--apply]`.
+  - Tests: `tests/test_ei_round_tier.py` (drop plan, protection, links, references, compaction, opt-out) and
+    `test_async_driver_retention_pass_and_opt_out`.
+- **Bug fixed on the way:** `protected_policies` never protected the last applied verdict. `applied_verdicts` holds
+  sha strings, and `_shas` reads only dicts. aei1's r0005 (3eb3f435, the verdict that rolled back to r1) was therefore
+  unprotected: its checkpoint went to the HDD at 06:19, and this pass deleted it. It is rebuildable as r0004 (on Drive,
+  `checkpoint.pt.ondrive.json`) merged with r0005's factors (HDD). r0006 and r0007 (off the lineage) can be rebuilt the
+  same way from their factors.
+- **Applied:** the 09:43 sweep ran this code from the working tree before the commit, so the deletions above happened
+  before a path list was written. The tier log `~/.local/state/natlang/ei-round-tier.jsonl` (09:43-09:46) lists every
+  path, and each has a `.removed.json`.
+  - NVMe: 31 -> 55 GiB free. Freed: v0001 and v0008 actor exports and blocks (12.5); learner states r0006/7/9/10
+    (5.8); filled, mix and own-graph pickles r0001-r0010 (~14); r0009 exports (5.5); off-lineage checkpoints
+    r0005-r0007 on the HDD (9.7).
+  - The teacher compaction then ran by hand (`--retain --apply`, ledger unit `eiret-apply-1`; its path list is in
+    the session scratchpad).
+- **Expected steady state.** Per round, the NVMe keeps checkpoint and factors (3.7 GB, tiered once two rounds old),
+  the head's exports and actor (~11 GB, freed at the next publication), episodes (~6.5 GB DGX plus remote, tiered
+  with their collection), the compacted teacher campaign (~2 GB) and a held measurement (~0.9 GB).
+  - Not addressed: teacher campaigns and held measurements stay on the NVMe for good, since every build reads the
+    teacher pools (recalled to NVMe 2026-11-23), about +3 GB per round.
+  - Not addressed: episodes of collections tiered to the HDD (~6-10 GB per policy after compaction) grow the HDD,
+    and the Drive tier drains it.
+
+## 2026-11-25 10:20 Authored trajectories enter expert iteration as a teacher tier (authored-trajectory agent)
+
+- **Why.** The owner (2026-11-25) asked why authored trajectories are not trained directly: "Just have the author write
+  the entire execution trajectory to train on and then all we need to do is collect the reasoning in between the
+  actions". An admitted invented program's reference run is such a trajectory. Its root actions and the scripted answer
+  of every judgment call are authored, and the runtime renders each call's input exactly as the model sees it.
+- **Format.** `natlang.authored-trajectory/1` (`scripts/neuralese_data/authored_trajectories.py`): a task row
+  (natlang.program/2 with its oracle) plus optional `turns` ({invocation_id, function, messages, tools, target}).
+  - Without turns, the task's `curriculum.reference` is the trajectory. `scripts/rl_tasks/reference_episodes.mjs`
+    renders it through the collector's own path (`replayReference`, new `onTurn` hook), so iteration, folder
+    reducers and decision readouts come out as the runtime issues them.
+  - Producer-neutral. The campaign redesign's authored trajectories (deep natlang codebases, natlang-specific calls)
+    enter through the same format: either a task row whose reference holds the authored actions, or pre-rendered
+    turns.
+  - Targets carry no reasoning, and a row with `reasoning_content` is refused.
+- **How it enters training.** No parallel mechanism; this extends the existing teacher path.
+  - `pool` writes a teacher_gen-layout pool (`manifest.jsonl`, `episodes/<e>/{cases,rollouts}.jsonl`), which
+    `sft_sources extract --teacher` reads unchanged.
+  - The async driver's round extraction (`prepare_plan`) adds every pool of registry role `ei-authored-teacher` to its
+    `teacher-*` campaigns. Opt-out: `async-drive --no-authored-teacher`.
+  - The replay re-runs each task under the pin's runtime and oracle. The build then takes the replays as teacher
+    episodes, own successes first per the frontier. An empty think block is zero-weight context and the actions are
+    the targets.
+  - The reasoning between actions comes from the existing fill. `feed` also extracts and replays the pools into the
+    WORK `data_nvme:sft-invented-authored`, which is promoted to role `grpo-sd-teacher`, so `filled_reasoning.py
+    generate` draws them. Their `filled` units replace the teacher rows (`replaces=teacher`) under the filled build's
+    existing weighting.
+  - Decision readouts: the authored answer is marked as a reasoned group (`decision_reasoning`, 16 repeats), so the
+    replay serves the collector's reasoning samples and the answer request.
+- **Continuous.** `invented.py publish` runs `authored_trajectories.py feed` after each batch (opt-out `--no-authored`).
+  - The feed takes every admitted program of the train split that no review withheld and that has no export at its
+    admitted digest (`ROOT/authored/exported.jsonl`).
+  - Each feed writes `ROOT/authored/<stamp>/` and records registry dataset `natlang-sft-invented-authored-<stamp>`
+    (role `ei-authored-teacher`).
+- **Held separation.** The feed reads only train-split admissions. `pool` refuses any row whose task split is not
+  train, and every task `held_eval.training_exclusion_ids` names: held-v3/v2, held-inv (`held-eval-invented`) and every
+  `held-eval*` role, with siblings.
+- **Fix found on the way (`sft_sources.drifted_success`).** A drifted success whose replay served a reasoned readout's
+  repeats (`group-repeat`) was refused, although `exact` already treats those repeats as answered by the matched
+  entry. The turn count now compares with `replay_calls`.
+  - Effect: drifted teacher episodes with reasoned readouts were silently dropped from every build. That covers
+    authored whole programs, whose reference render uses a 16k display budget and so drifts on long arguments.
+- **Reaches aei1 at its next driver restart** (the pin must include this commit). The fill takes the WORK at its next
+  launch, since a fill unit reads the role at launch.
+- **Left out:** `expert_iteration.py cycle` (being replaced by async-drive; its data stage extracts no teacher pools).
+- Tests: `tests/neuralese/test_authored_trajectories.py`; the `onTurn` case in
+  `ts-host/test/scripted-decision-reply.test.mjs`.
