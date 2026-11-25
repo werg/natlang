@@ -41,7 +41,7 @@ head may preempt it (resumable, lower priority) or it fits within a quarter of t
 same head within BACKFILL_HOLD (no backfill/preemption livelock); `status` marks backfilled claims. Units are resumable by default (tests, checks and data jobs are rerunnable; `--no-resumable` only for long non-checkpointed jobs; services and adopted units are protected); a
 stopped resumable unit (preemption or pressure, not an over-budget stop) re-enters the queue with the spec it was
 launched from and the guard relaunches it when room returns. `status` lists claims with priority, budget, use and
-reservation, and the queue with the units that would be preempted for each entry and the non-preemptible units blocking it (`blocked_by`). A stopped unit's docker containers (named by the command, `run --container`, a `docker run --name` client in its cgroup, or the unit name) are stopped by name too, and a requeued unit is not relaunched while one still runs. The guard's kill threshold is still
+reservation, and the queue with the units that would be preempted for each entry and the non-preemptible units blocking it (`blocked_by`). Claims are measured outside the allocator lock and the measurement is shared for USAGE_TTL seconds (shared_usage). A stopped unit's docker containers (named by the command, `run --container`, a `docker run --name` client in its cgroup, or the unit name) are stopped by name too, and a requeued unit is not relaunched while one still runs. The guard's kill threshold is still
 the original budget.
 """
 import argparse
@@ -75,7 +75,7 @@ PRIORITY_NAMES = {v: k for k, v in PRIORITIES.items()}
 # Kernel OOM score adjust by priority: the safety net when memory really runs out faster than the guard polls.
 PRIORITY_OOM = {'high': 200, 'medium': 600, 'low': 900}
 DEFAULT_PRIORITY = {'experiment': 'medium', 'collection': 'medium', 'service': 'high'}
-WAITER_TTL = 90  # a waiting `run` refreshes its queue entry every 30 s; older entries are abandoned
+WAITER_TTL = 90  # a waiting `run` refreshes its queue entry every RUN_POLL_SECONDS; older entries are abandoned
 REQUEUE_DELAY = 120  # seconds after a preemption/pressure stop before the unit may be relaunched
 REQUEUE_DELAY_MAX = 3600  # a unit stopped again soon after its relaunch waits twice as long each time, up to this
 REQUEUE_SETTLED = 1800  # a relaunched unit that ran this long starts its backoff over
@@ -84,6 +84,16 @@ REQUEUE_SETTLED = 1800  # a relaunched unit that ran this long starts its backof
 # head while 25-43 GB stood free (only 'spare' backfills ran behind it)
 REQUEUE_PREEMPT_DELAY_MAX = 600
 STALE_WAITING_SECONDS = 3600  # a non-requeued queue entry no `run` refreshed for this long is dropped from the file
+# Measuring the claims (systemctl and docker per unit, smaps_rollup per process) took 6-10 s on 2026-11-25 and ran inside
+# the allocator lock in every `run` poll and guard cycle: with ~20 waiting builder checks a poll waited ~60 s for the
+# lock, admissions went one per ~8 s machine-wide, and 2 GB checks waited minutes with 20+ GB free. Measurement now runs
+# outside the lock into a shared cache (shared_usage) that `run`, `status` and the guard reuse for USAGE_TTL seconds;
+# only claims admitted after the cached measurement are measured under the lock. NATLANG_LEDGER_SHARED_USAGE=0 restores
+# measuring under the lock.
+USAGE_TTL = 15
+USAGE_LOCK_WAIT = 15  # longest wait for another process's measurement before measuring alone
+RUN_POLL_SECONDS = 5  # a waiting `run` retries this often (was 30 while each try held the lock for seconds)
+FAMILY_PEAKS_MAX = 4000  # learned peaks kept, most recently updated first (36k one-off families made the file 1.9 MB)
 # A unit backfilled behind a waiting head is not preempted for that same head for this long (see backfill_hold).
 BACKFILL_HOLD = RAMP_SECONDS
 # Conservative backfill (may_backfill): a job the queue head cannot preempt may borrow at most this share of the
@@ -537,22 +547,107 @@ def unit_cuda(unit, gpu, command=None, containers=()):
     return total
 
 
-def live_claims(state, gpu):
+def record_family_peak(state, unit, peak):
+    """Remember the family's measured peak (it sizes the family's next admission); the most recently updated
+    FAMILY_PEAKS_MAX families are kept."""
+    peaks = state.setdefault('family_peaks', {})
+    name = family(unit)
+    peaks[name] = max(peaks.pop(name, 0), peak)
+    for stale in list(peaks)[:max(0, len(peaks) - FAMILY_PEAKS_MAX)]:
+        del peaks[stale]
+
+
+def measure_claims(claims, gpu):
+    """Each claim's measured use (None when its unit is not running) and whether its processes hold CUDA memory
+    (checked only for claims not yet marked as GPU units)."""
+    measured = {}
+    for unit, claim in claims.items():
+        declared = claim.get('spec', {}).get('containers') or ()
+        used = unit_usage(unit, gpu, claim.get('command'), declared, cuda_separate=bool(claim.get('cuda_budget')))
+        cuda = bool(gpu and used is not None and not claim.get('gpu')
+                    and unit_cuda(unit, gpu, claim.get('command'), declared))
+        measured[unit] = {'used': used, 'cuda': cuda}
+    return measured
+
+
+def usage_cache_path():
+    return STATE + '.usage.json'
+
+
+def read_usage_cache(max_age=USAGE_TTL):
+    """The shared measurement when it is younger than ``max_age`` seconds, else None."""
+    try:
+        with open(usage_cache_path()) as stream:
+            usage = json.load(stream)
+        if time.time() - usage['time'] < max_age:
+            usage['gpu'] = {int(pid): size for pid, size in usage.get('gpu', {}).items()}
+            return usage
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass
+    return None
+
+
+def shared_usage(force=False, observer=False):
+    """(gpu, usage): the claims' measured use, taken outside the allocator lock and shared between processes for
+    USAGE_TTL seconds (one measurement at a time; others wait for it, at most USAGE_LOCK_WAIT seconds, and reuse it).
+    ``usage`` is None when sharing is off (NATLANG_LEDGER_SHARED_USAGE=0) or the ledger is unreadable: live_claims
+    then measures under the lock. ``force`` (the guard) always measures afresh; an ``observer`` (status) never waits
+    for another measurement, so a stuck probe of its own cannot hold admissions either."""
+    if os.environ.get('NATLANG_LEDGER_SHARED_USAGE', '1') == '0':
+        return gpu_usage(), None
+    if not force and (usage := read_usage_cache()):
+        return usage['gpu'], usage
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    with contextlib.ExitStack() as held:
+        if not observer:
+            lock = held.enter_context(open(STATE + '.usage.lock', 'w'))
+            deadline = time.time() + USAGE_LOCK_WAIT
+            while True:  # bounded: a measurement stuck in a probe must not hold every waiter
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.time() >= deadline:
+                        break
+                    time.sleep(0.2)
+            if not force and (usage := read_usage_cache()):
+                return usage['gpu'], usage
+        at = time.time()
+        try:
+            claims = read_snapshot().get('claims') or {}
+        except (OSError, ValueError):
+            return gpu_usage(), None
+        gpu = gpu_usage()
+        usage = {'time': at, 'gpu': gpu, 'units': measure_claims(claims, gpu)}
+        tmp = usage_cache_path() + f'.{os.getpid()}.{id(usage)}.tmp'
+        with contextlib.suppress(OSError):
+            with open(tmp, 'w') as stream:
+                json.dump(dict(usage, gpu={str(pid): size for pid, size in gpu.items()}), stream)
+            os.replace(tmp, usage_cache_path())
+    return gpu, usage
+
+
+def live_claims(state, gpu, usage=None):
     """Claims whose unit still runs, with measured use and the highest use measured so far; claims of finished
-    units are released."""
+    units are released. ``usage`` (shared_usage) supplies measurements taken after a claim's admission; other claims
+    are measured now."""
     live = {}
+    measured_units = (usage or {}).get('units') or {}
     for unit, claim in list(state['claims'].items()):
         declared = claim.get('spec', {}).get('containers') or ()
-        used = unit_usage(unit, gpu, claim.get('command'), declared,
-                          cuda_separate=bool(claim.get('cuda_budget')))
-        if used is None and time.time() - claim['admitted'] > 30:  # give systemd a moment to start the unit
+        if unit in measured_units and usage['time'] >= claim['admitted']:
+            used, at, cuda = measured_units[unit]['used'], usage['time'], measured_units[unit].get('cuda')
+        else:
+            used, at, cuda = unit_usage(unit, gpu, claim.get('command'), declared,
+                                        cuda_separate=bool(claim.get('cuda_budget'))), time.time(), None
+        if used is None and at - claim['admitted'] > 30:  # give systemd a moment to start the unit
             if claim.get('peak'):  # the family's measured peak sizes its next admission
-                peaks = state.setdefault('family_peaks', {})
-                peaks[family(unit)] = max(peaks.get(family(unit), 0), claim['peak'])
+                record_family_peak(state, unit, claim['peak'])
             del state['claims'][unit]
             state['events'].append({'time': time.time(), 'event': 'released', 'unit': unit})
             continue
-        if gpu and not claim.get('gpu') and unit_cuda(unit, gpu, claim.get('command'), declared):
+        if not claim.get('gpu') and (cuda if cuda is not None else
+                                     gpu and unit_cuda(unit, gpu, claim.get('command'), declared)):
             claim['gpu'] = True
         claim['peak'] = max(claim.get('peak', 0), used or 0)
         claim.setdefault('peak_since', time.time())
@@ -589,8 +684,8 @@ def outstanding(claim, now=None):
     return int(unspent * RESERVE_FRACTION['gpu' if claim.get('gpu') and not claim.get('cuda_budget') else 'cpu'])
 
 
-def headroom(state, gpu):
-    live = live_claims(state, gpu)
+def headroom(state, gpu, usage=None):
+    live = live_claims(state, gpu, usage) if usage else live_claims(state, gpu)
     return mem_available() - sum(outstanding(c) for c in live.values()), live
 
 
@@ -949,6 +1044,7 @@ def run(args):
     since = time.time()
     request_generation = None
     while True:
+        measured_gpu, usage = shared_usage()  # outside the allocator lock
         with ledger() as state:
             generation = state.get('cancel_generations', {}).get(unit, 0)
             if request_generation is None:
@@ -957,8 +1053,8 @@ def run(args):
                 # Do not remove anything: a deliberate newer run may already
                 # own this unit's queue entry or admitted claim.
                 raise SystemExit(f'{unit} admission request cancelled')
-            gpu = gpu_usage()
-            free, live = headroom(state, gpu)
+            gpu = measured_gpu
+            free, live = headroom(state, gpu, usage)
             cuda_free = cuda_headroom(live, gpu) if cuda_budget is not None else None
             if unit in live:
                 raise SystemExit(f'{unit} already holds a claim')
@@ -1001,7 +1097,7 @@ def run(args):
                     state['claims'][unit].update(backfilled_behind=head, backfill=backfill)
                 waiting.pop(unit, None)
                 state['events'].append({'time': now, 'event': 'admitted', 'unit': unit, 'budget': budget,
-                                        'free': free, 'priority': priority,
+                                        'free': free, 'priority': priority, 'waited_s': round(now - since, 1),
                                         **({'backfilled_behind': head, 'backfill': backfill} if head != unit else {})})
                 break
             blockers = blocked_by(live, {'priority': priority}) + ('' if head == unit else f' (queue head: {head})')
@@ -1016,7 +1112,7 @@ def run(args):
                            ', CUDA headroom unavailable' if cuda_budget is not None else '')
             raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after reservations{blockers}, '
                              f'{args.budget_gb} GiB requested, {reserve / GIB:.1f} GiB reserve{cuda_detail}')
-        time.sleep(30)
+        time.sleep(RUN_POLL_SECONDS)
     if (cuda_cache_reclaim_enabled(args, auto=priority == 'high' and cuda_budget is None)
             and mem_free() < budget + reserve and reclaimable() >= GIB):
         start_release()
@@ -1107,8 +1203,8 @@ def adopt(args):
 def status(args):
     # Probes may wait on drivers/systemd; they must never hold the allocator lock.
     state = read_snapshot()
-    gpu = gpu_usage()
-    free, live = headroom(state, gpu)
+    gpu, usage = shared_usage(observer=True)
+    free, live = headroom(state, gpu, usage)
     driver_cuda_free = cuda_free_bytes()
     cuda_free = cuda_headroom(live, gpu) if driver_cuda_free is not None else None
     queue = waiting_order(state)
@@ -1229,7 +1325,8 @@ def admissible(budget_gb, reserve_gb=None, state_path=None):
     except (OSError, ValueError):
         return False
     state.setdefault('claims', {})
-    free, _ = headroom(state, gpu_usage())
+    gpu, usage = shared_usage()
+    free, _ = headroom(state, gpu, usage)
     budget = int(budget_gb * GIB)
     return fits(free, budget, int(reserve_gb * GIB) if reserve_gb is not None else default_reserve(budget))
 
@@ -1521,9 +1618,10 @@ def guard(args):
                 release_started = time.time()
                 if release is None:
                     next_release = retry_release = release_started + 60
+        measured_gpu, usage = shared_usage(force=True)  # measured outside the allocator lock
         with ledger() as state:
-            gpu = gpu_usage()
-            all_live = live_claims(state, gpu)
+            gpu = measured_gpu
+            all_live = live_claims(state, gpu, usage) if usage else live_claims(state, gpu)
             live = {u: c for u, c in all_live.items() if time.time() - stopped.get(u, 0) > 60}
             available = mem_available()
             free = available - sum(outstanding(c) for c in all_live.values())

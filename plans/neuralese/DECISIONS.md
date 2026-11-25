@@ -13179,3 +13179,23 @@ it does not fit.
 least half the programs with a `holds` answered false, ungrounded open answers <= 0.1, folder reducers and structural
 recursion each in at least a quarter of programs, open share >= 0.35 in most programs. Failure: planted defects or
 ungrounded writers again dominate the drawn sample's bad answers; then the brief changes again.
+
+## 2026-11-25 13:20 Memory ledger measures claims outside the allocator lock; waiters poll every 5 s (ops strand)
+
+**Observation.** ~13:00: eight 2 GB `pauth-aw2-*-check-*` jobs (reserve 3 GB) waited 6-8 min with 22 GB headroom and
+an empty `cannot_fit`; a builder reported ~40 min of ledger queueing in a 1 h 50 min build.
+
+**Cause.** Neither the reserve, learned peaks (every `pauth-*-check-N` is its own family, peaks <= 1 GB) nor backfill
+explains it: the jobs fit. Every ledger transaction measured all claims under the exclusive flock (`live_claims`:
+per unit `systemctl show` twice, `docker inspect` up to twice, `smaps_rollup` per process: 225 reads at 22 ms). One
+pass took 6.6-9.5 s for 15 claims; the guard repeated it every 1 s (`--interval 1`, 12 h CPU in 25 h), and each
+waiting `run` every 30 s. A fresh flock waited 62 s; admissions ran ~1 per 8-10 s machine-wide (243 in 103 min), so a
+waiter got one try per minute and only the queue head (or a spare backfill) could start on it.
+
+**Fix (default, opt-out `NATLANG_LEDGER_SHARED_USAGE=0`).** `shared_usage` measures outside the allocator lock into a
+cache (`memory-ledger.json.usage.json`) reused for 15 s by `run`, `status` and `admissible`; the guard measures afresh
+each cycle and refreshes it. Under the lock only claims admitted after the measurement are measured; a finished claim is
+released only when measured >30 s after its admission. Waiters poll every 5 s (`RUN_POLL_SECONDS`); a waiter does not
+wait more than 15 s on another's measurement; `status` never waits. `family_peaks` (36k one-off families, 1.6 of the
+1.9 MB file) keeps the 4000 most recently updated. Admitted events record `waited_s`. GB10 accounting, the 15 GB
+default reserve, ramp reservations and priorities are unchanged. After the guard restart a flock waits 0 s.

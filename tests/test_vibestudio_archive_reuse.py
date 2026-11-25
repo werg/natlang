@@ -108,7 +108,7 @@ def test_real_transfer_reuse_corruption_repair_and_opt_out(tmp_path, monkeypatch
                            archive_repo=Path(__file__).resolve().parents[1])
     receipt = {'goal': {'status': 'verified'}}
     commands = []
-    def local_transport(command, **kwargs):
+    def local_transport(command, checkpoint=None, health_path=None, **kwargs):  # owner-checkpoint options of the real one
         commands.append(command)
         if command[0] == 'ssh':
             argv = shlex.split(command[-1])
@@ -165,8 +165,8 @@ def test_reused_seed_still_reaches_export(archived, monkeypatch, tmp_path):
 
 def test_mutable_index_uses_checksum_repair_with_explicit_opt_out(monkeypatch):
     calls = []
-    monkeypatch.setattr(vibestudio_campaign, 'archive_transport', lambda command: calls.append(command))
-    args = SimpleNamespace(archive_host='dgx', archive=Path('/archive'))
+    monkeypatch.setattr(vibestudio_campaign, 'archive_transport', lambda command, **_owner: calls.append(command))
+    args = SimpleNamespace(archive_host='dgx', archive=Path('/archive'), root=Path('/campaign'))
     vibestudio_campaign.sync_index(args, [Path('/status.json')])
     assert '--checksum' in calls[-1]
     monkeypatch.setenv('NATLANG_ARCHIVE_CHECKSUM_TRANSFER', '0')
