@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {reassessLocalPresentation,validatePresentationReview} from './reassess_local_presentation.mjs';
+import {reassessLocalPresentation,validateWorkflowReview} from './reassess_local_presentation.mjs';
 import {modelOracleJudge} from '../../ts-host/dist/teacher/model-judge.js';
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const ref=value=>({complete:true,hash:sha(JSON.stringify(value)),bytes:Buffer.byteLength(JSON.stringify(value))});
@@ -51,9 +51,9 @@ test('meaning review must bind the actual source/artifact and exact independentl
  const reply={calls:[['grade',grade]],raw_calls:[{function:{name:'grade',arguments:JSON.stringify(grade)}}],raw_response:{provider:'openai-codex',model:'gpt-5.6-terra'}};
  let request;const verdict=await modelOracleJudge(async actual=>{request=actual;return reply;})(input);
  const review={schema:'natlang.live-workflow-review/1',model:'openai-codex:gpt-5.6-terra',teacher,input,exchange:{request,reply},verdict};
- await validatePresentationReview(review,input,teacher,modelOracleJudge);
+ await validateWorkflowReview(review,input,teacher,modelOracleJudge);
  for(const alter of [r=>r.input.actual.artifacts.report={views:[]},r=>r.exchange.request.messages[0].content='Different rubric',
   r=>r.exchange.reply.raw_calls[0].function.arguments='{}',r=>r.model=teacher,r=>r.verdict.accepted=false]){
-  const changed=structuredClone(review);alter(changed);await assert.rejects(validatePresentationReview(changed,input,teacher,modelOracleJudge));
+  const changed=structuredClone(review);alter(changed);await assert.rejects(validateWorkflowReview(changed,input,teacher,modelOracleJudge));
  }
 });
