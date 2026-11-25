@@ -43,6 +43,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO / 'training' / 'neuralese'), str(REPO)]
 from natlang_neuralese.common.paths import resolve  # noqa: E402
+from natlang_neuralese.rl import episode_files  # noqa: E402
 from natlang_neuralese.train.checkpoint_offload import replace_with_link, verified_copy  # noqa: E402
 from scripts.prune_stale_checkouts import process_references, references, unit_commands  # noqa: E402
 
@@ -310,8 +311,9 @@ def delete(path: Path) -> int:
 
 # ---------- collection trim ----------
 # What a closed collection keeps: the episodes (results.jsonl, rollouts.jsonl, rewards, journals, partial episodes and
-# their evidence, error records), memetic evaluations, task and rate files, collect.log. What goes once its policy has
-# left the last two lineage entries (reproducible or diagnostic only; readers checked 2026-11-24, DECISIONS):
+# their evidence, compacted to .zst by natlang_neuralese.rl.episode_files, error records), memetic evaluations, task and
+# rate files, collect.log. What goes once its policy has left the last two lineage entries (reproducible or diagnostic
+# only; readers checked 2026-11-24, DECISIONS):
 TRIM_KINDS = {
     # byte copy of the sample's results.jsonl; the run-time job accounting the scorer checks lives in the journal's
     # finish record (task_rollouts output_accounting), and exp1_collect already drops this copy when an episode ends
@@ -374,8 +376,13 @@ def trim(collection: Path, apply: bool) -> dict:
     by_kind = collections.Counter()
     for _, kind, size in planned:
         by_kind[kind] += size
-    if not apply or not planned:
-        return dict(by_kind)
+    if not apply:
+        raw = sum(p.stat().st_size for p in collection.glob('groups/**/jobs/*')
+                  if p.is_file() and not p.is_symlink() and episode_files.RAW.search(p.name))
+        return {**dict(by_kind), **({'episode-raw (compacts ~30x)': raw} if raw else {})}
+    if not planned:
+        compacted = episode_files.freed(episode_files.compact_group(collection / 'groups'))
+        return {'episode-compaction': compacted} if compacted else {}
     record = collection / 'trimmed.json'
     previous = json.loads(record.read_text()) if record.exists() else {'schema': 'natlang.ei-collection-trim/1',
                                                                           'passes': []}
@@ -392,6 +399,9 @@ def trim(collection: Path, apply: bool) -> dict:
             removed[kind] += size
         except FileNotFoundError:
             pass
+    compacted = episode_files.freed(episode_files.compact_group(collection / 'groups'))
+    if compacted:
+        removed['episode-compaction'] += compacted
     return dict(removed)
 
 

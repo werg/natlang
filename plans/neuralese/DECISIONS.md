@@ -12268,3 +12268,42 @@ import, and a VM's different home/storage cannot silently change its audit scope
 Directory scanning, canonical pin placement and symlink replication are unchanged;
 no VibeStudio build or collection moved. Existing mirror/VM/driver tests and the
 machine-path ratchet cover the change.
+
+## 2026-11-25 04:00 Episode files compacted once nothing reads them raw; the EI collection collects its native-state cache
+
+**Observed.** aei1's live collections grew ~10 GB/hour on the DGX root NVMe (40 GB floor, 48 GB free at 03:20).
+`v0001-8e634a0f46ce` (192 slots) 21 GB, `-remote0` 11 GB, `-pop` 6.2 GB after 4 h. Per kind (DGX collection): 4.3 GB
+`jobs/*.partial.json.evidence-*.jsonl`, 1.9 GB `jobs/*.partial.json`, 1.65 GB `jobs/*.result.json` (byte copies of
+`results.jsonl`), 6.3 GB `actor/blocks` (one native state of 21,648 tokens is 3.4 GB), then the episode records
+(`results.jsonl` 1.65 GB, `rollouts.jsonl` 1.16 GB).
+
+**Writers and readers.** ts-host `teacher/collector.ts` writes the partial (every turn with its raw response and RL
+capture) and the evidence sidecar (`appendEvidence`, l. 1318-1381: provider exchanges and action frames, each again with
+the raw response: three copies of every capture) and removes both when a job ends normally (l. 1622-1625). A job that
+ends otherwise keeps them: a call-budget stop (read once by `task_rollouts._budget_terminated_prefix` at scoring) and every
+episode a collection stop kills (the collector stops at round boundaries and yields; each new run starts at the next
+group number and never resumes them: 558 of the DGX collection's 578 sidecars). Other readers: `held_eval.infra_loss`
+(resume and `relabel`), nothing in the build, lowering, teacher, fill or health (`collection_health` reads `results.jsonl`
+and `jobs/*.error.json`). `remote_collect.pull` (rsync without --delete) copied every in-flight partial to the DGX and
+kept it after the VM removed it. `actor/blocks`: the collection actor's store; the GRPO learner collects it
+(`grpo.collect_blocks`), the EI collection never did, and nothing reads it after an episode (the build trains imports as
+pass-through from the recorded write).
+
+**Done** (default on, opt-outs, `tests/neuralese/test_episode_files.py`). `natlang_neuralese.rl.episode_files`:
+`compact_sample` keeps every recorded byte zstd-compressed (`<name>.zst`, verified round trip, ~20-35x) and removes only
+`result.json` byte copies and dead writers' temp files; `read_bytes`/`evidence_files` read both forms; opt-out
+`NATLANG_EPISODE_COMPACT=0`. It runs: in `grpo.Collector._score` when a group is scored for the last time (after its
+teacher attempts); at `expert_iteration collect` start over earlier runs' groups (quiet, not held open); in `teacher_gen`
+after a task is scored; in `held_eval.finalize` of a complete measurement (`infra_loss` reads compacted evidence); in
+`ei_round_tier --trim` of closed collections. The EI collection collects its actor's native states every 5 min (blocks
+untouched since the oldest running group, less `--block-gc-grace`; < 0 opts out). `remote_collect.pull` no longer copies
+raw job files (`NATLANG_REMOTE_PULL_RAW_JOBS=1` opts out); finished episodes arrive compacted. ts-host and the scoring
+sources are untouched (no new held series).
+
+**Trimmed now.** Earlier runs' groups of the three live collections (quiet 30 min, not open): 13.5 GB (DGX 5.9, remote0
+4.9, Pop 2.7), and the DGX actor's blocks untouched since its run started 6.5 GB: root 43 -> 58 GB free.
+**Growth** (GB/hour per slot): before 0.022 DGX (collection running part of the time), 0.050 remote0, 0.032 Pop;
+estimated after from the compacted groups 0.008, 0.025, 0.010, now mostly the episode records (`results.jsonl` and
+`rollouts.jsonl` hold each episode twice: the next lever).
+**Restart needs:** the collections on a pin containing this commit (the driver's next collection launch); the remote0
+unit's pull runs the canonical checkout's `remote_collect.py` and takes the exclusion at its next start.
