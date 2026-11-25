@@ -85,3 +85,28 @@ def test_checkpoint_before_admission_starts_no_collector(tmp_path):
         result = owner.run(['must-not-start'], request_file=tmp_path/'request.json')
     launch.assert_not_called()
     assert result.returncode == 130
+
+
+def test_generic_owned_io_communicates_without_managed_request_file(tmp_path):
+    with checkpoint.CollectorCheckpoint() as owner:
+        result = owner.run([sys.executable, '-c', 'import sys;print(sys.stdin.read());print("diagnostic",file=sys.stderr)'],
+                           input='immutable inventory', capture_output=True, text=True)
+    assert result.returncode == 0 and result.stdout == 'immutable inventory\n' and result.stderr == 'diagnostic\n'
+    assert owner.child is None and list(tmp_path.iterdir()) == []
+
+
+def test_generic_owned_io_forwards_checkpoint_and_joins(tmp_path):
+    retained = tmp_path/'retained'
+    code = """import os,signal,sys
+from pathlib import Path
+def stop(sig,frame):
+ Path(sys.argv[1]).write_text('retained original IO')
+ raise SystemExit(130)
+signal.signal(signal.SIGTERM,stop)
+os.kill(os.getppid(),signal.SIGTERM)
+signal.pause()
+"""
+    with checkpoint.CollectorCheckpoint() as owner:
+        result = owner.run([sys.executable, '-c', code, str(retained)], capture_output=True, text=True)
+        assert owner.requested and result.returncode == 130
+    assert owner.child is None and retained.read_text() == 'retained original IO'

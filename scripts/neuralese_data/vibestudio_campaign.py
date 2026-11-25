@@ -21,7 +21,7 @@ from natlang_neuralese.common.code_provenance import code_provenance
 from live_teacher_sources import load_episode, has_training_manifest
 from observed_graph_metrics import graph_metrics, aggregate_graph_metrics
 from retained_state_archive import prepare_retained_state_packs
-from scripts.vibestudio.managed_checkpoint import CollectorCheckpoint
+from scripts.vibestudio.managed_checkpoint import CollectorCheckpoint, CheckpointRequested
 from sft_sources import ZstdWriter, held_closure, held_hit, live_holdout_registry, require_registered_open_goal
 
 
@@ -263,39 +263,58 @@ def archive_send_flags():
     return [] if os.environ.get('NATLANG_ARCHIVE_CHECKSUM_TRANSFER', '1') == '0' else ['--checksum']
 
 
-def archive_transport(command, *, capture_output=False, input=None):
-    """Retry only idempotent archive IO, never teacher calls or remote job submission."""
+def archive_transport(command, *, capture_output=False, input=None, checkpoint=None, health_path=None):
+    """Retry idempotent archive IO; a standing owner waits for connectivity, never repeats a teacher."""
     attempts = int(os.environ.get('NATLANG_ARCHIVE_TRANSPORT_ATTEMPTS', '4'))
     if attempts < 1 or attempts > 20:
         raise ValueError('archive transport attempts must be between 1 and 20')
-    for attempt in range(attempts):
+    durable = checkpoint is not None and os.environ.get('NATLANG_CAMPAIGN_DURABLE_ARCHIVE', '1') != '0'
+    failures = 0
+    while True:
+        if checkpoint is not None and checkpoint.requested:
+            raise CheckpointRequested('archive retained locally at owner checkpoint')
         try:
             kwargs = {'input': input} if input is not None else {}
-            return subprocess.run(command, check=True, capture_output=capture_output, text=True, **kwargs)
+            if checkpoint is None:
+                completed = subprocess.run(command, check=True, capture_output=capture_output, text=True, **kwargs)
+            else:
+                completed = checkpoint.run(command, capture_output=capture_output, text=True, **kwargs)
+                if checkpoint.requested:
+                    raise CheckpointRequested('archive retained locally at owner checkpoint')
+                completed.check_returncode()
+            if health_path is not None:
+                publish(health_path, {'phase': 'archive-connected', 'transport_failures': failures, 'time': time.time()})
+            return completed
         except subprocess.CalledProcessError as error:
-            # 23/24 (incomplete/vanished source) and 11 (file IO) are not network failures.
+            # File IO, missing sources and failed integrity checks are not network outages.
             retryable = {255} if command[0] == 'ssh' else {10, 12, 30, 35, 255}
-            if error.returncode not in retryable or attempt + 1 == attempts:
+            failures += 1
+            if error.returncode not in retryable or (failures >= attempts and not durable):
                 raise
-            time.sleep(min(30, 2 ** (attempt + 1)))
+            if health_path is not None:
+                publish(health_path, {'phase': 'archive-network-wait', 'operation': command[0],
+                                     'returncode': error.returncode, 'transport_failures': failures,
+                                     'archive_operation_pending': True, 'teacher_execution_repeated': False, 'time': time.time()})
+            time.sleep(min(30, 2 ** min(failures, 5)))
 
 
-def transfer(source, remote, destination):
-    archive_transport(['ssh', *ARCHIVE_SSH_OPTIONS, remote, shlex.join(['mkdir', '-p', str(destination)])])
+def transfer(source, remote, destination, *, checkpoint=None, health_path=None):
+    archive_transport(['ssh', *ARCHIVE_SSH_OPTIONS, remote, shlex.join(['mkdir', '-p', str(destination)])], checkpoint=checkpoint, health_path=health_path)
     target = f'{remote}:{destination}/'
     exclusions = prepare_retained_state_packs(source)
     common = [*ARCHIVE_RSYNC, *[f'--exclude={name}' for name in exclusions]]
     # Repair same-size corruption even when a remote file's mtime was restored.
     flags = [*common, *archive_send_flags(), f'{source}/', target]
-    archive_transport(flags)
+    archive_transport(flags, checkpoint=checkpoint, health_path=health_path)
     comparison = archive_transport([*common, '--dry-run', '--checksum', '--itemize-changes',
-                                    '--delete', f'{source}/', target], capture_output=True).stdout
+                                    '--delete', f'{source}/', target], capture_output=True, checkpoint=checkpoint, health_path=health_path).stdout
     if comparison.strip():
         raise RuntimeError(f'archive differs after transfer: {comparison[:400]}')
 
 
-def remote_archive(args, destination, receipt, capture, *, wave=None):
+def remote_archive(args, destination, receipt, capture, *, wave=None, checkpoint=None):
     root = args.root.resolve()
+    health_path = root / 'archive-health.json'
     metadata = root / 'waves' / f'{destination.name}-archive'
     metadata.mkdir(exist_ok=True)
     publish_immutable(metadata / 'receipt.json', receipt)
@@ -311,14 +330,14 @@ def remote_archive(args, destination, receipt, capture, *, wave=None):
         command = [str(args.archive_repo / '.venv-neuralese/bin/python'), '-', str(args.archive_repo),
                    json.dumps(request, separators=(',', ':'))]
         result = archive_transport(['ssh', *ARCHIVE_SSH_OPTIONS, args.archive_host, shlex.join(command)],
-                                   capture_output=True, input=Path(archive_reuse.__file__).read_text())
+                                   capture_output=True, input=Path(archive_reuse.__file__).read_text(), checkpoint=checkpoint, health_path=health_path)
         reused = json.loads(result.stdout)
         if not isinstance(reused, bool):
             raise ValueError('archive reuse helper returned a non-boolean result')
     if not reused:
-        transfer(capture, args.archive_host, destination / 'capture')
+        transfer(capture, args.archive_host, destination / 'capture', checkpoint=checkpoint, health_path=health_path)
         archive_transport([*ARCHIVE_RSYNC, *archive_send_flags(), *map(str, records),
-                           f'{args.archive_host}:{destination}/'])
+                           f'{args.archive_host}:{destination}/'], checkpoint=checkpoint, health_path=health_path)
     if args.defer_export:
         return
     repo = args.archive_repo
@@ -345,9 +364,9 @@ def remote_archive(args, destination, receipt, capture, *, wave=None):
             raise RuntimeError(f'remote export did not complete for {destination}')
 
 
-def sync_index(args, paths):
+def sync_index(args, paths, *, checkpoint=None):
     archive_transport([*ARCHIVE_RSYNC, *archive_send_flags(), *map(str, paths),
-                       f'{args.archive_host}:{args.archive}/'])
+                       f'{args.archive_host}:{args.archive}/'], checkpoint=checkpoint, health_path=args.root / 'archive-health.json')
 
 
 def export_trajectories(archive, receipt, held, training):
@@ -650,7 +669,11 @@ def unfinished_wave(plans, waves, attempt_epoch, provenance, rows=None):
 
 def drive(args):
     with CollectorCheckpoint() as checkpoint:
-        return _drive(args, checkpoint)
+        try:
+            return _drive(args, checkpoint)
+        except CheckpointRequested:
+            return  # Original packets remain available to unfinished_wave; no failed verdict.
+
 
 
 def _drive(args, checkpoint):
@@ -678,7 +701,7 @@ def _drive(args, checkpoint):
     for index, (name, path) in enumerate(seeds.items()):
         source = Path(path).parent
         remote_archive(args, args.archive / f'seed-{index:04d}',
-                       {name: {'status': 'verified', 'manifest': 'manifest.json'}}, source)
+                       {name: {'status': 'verified', 'manifest': 'manifest.json'}}, source, checkpoint=checkpoint)
     holds = prerequisite_holds(cases, args.host)
     completed_waves = 0
     while True:
@@ -686,7 +709,7 @@ def _drive(args, checkpoint):
         receipts, epochs = receipt_history(waves, jobs)
         rows = publish_status(root, cases, seeds, receipts, args.review_model, args.attempts, holds,
                               attempt_epoch=attempt_epoch, receipt_epochs=epochs)
-        sync_index(args, [root / 'status.json', root / 'reused.json'])
+        sync_index(args, [root / 'status.json', root / 'reused.json'], checkpoint=checkpoint)
         if checkpoint.requested or (root / 'stop-after-wave').exists() or completed_waves == args.max_waves:
             return
         started = unfinished_wave(plans, waves, attempt_epoch, provenance, rows)
@@ -700,7 +723,7 @@ def _drive(args, checkpoint):
                     return
                 publish(root / 'finished.json', {'collection_exhausted': True, 'attempt_epoch': attempt_epoch,
                                                  'all_goals_verified': all(row['status'] == 'verified' for row in rows.values())})
-                sync_index(args, [root / 'finished.json'])
+                sync_index(args, [root / 'finished.json'], checkpoint=checkpoint)
                 return
             started = jobs / f'{int(plans[-1].stem) + 1 if plans else 0:04d}.json'
             publish_immutable(started, {'cases': names, 'attempt_epoch': attempt_epoch, 'provenance': provenance})
@@ -744,7 +767,7 @@ def _drive(args, checkpoint):
         receipt = outcomes(capture, names, held, training, cases)
         destination = args.archive / started.stem
         remote_archive(args, destination, receipt, capture,
-                       wave={'plan': plan, 'execution': read(execution) if execution.exists() else None})
+                       wave={'plan': plan, 'execution': read(execution) if execution.exists() else None}, checkpoint=checkpoint)
         publish_immutable(waves / f'{started.stem}-result.json', receipt)
         completed_waves += 1
         # The remote capture and receipt are durable. Deferred exports read those copies.
@@ -752,7 +775,7 @@ def _drive(args, checkpoint):
         if checkpoint.requested:
             publish_status(root, cases, seeds, [*receipts, receipt], args.review_model, args.attempts, holds,
                            attempt_epoch=attempt_epoch, receipt_epochs=[*epochs, plan.get('attempt_epoch')])
-            sync_index(args, [root/'status.json', root/'reused.json'])
+            sync_index(args, [root/'status.json', root/'reused.json'], checkpoint=checkpoint)
             return
         runtime_hold = wave_infrastructure_hold(
             receipt, cases, getattr(args, 'infrastructure_hold_threshold', 2),
