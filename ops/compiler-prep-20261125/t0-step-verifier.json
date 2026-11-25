@@ -1,0 +1,19 @@
+{
+  "recipe": "natlang.compiler.t0-step-verifier/1",
+  "backbone": "LiquidAI/LFM3-1.7B",
+  "backbone_revision": "40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd",
+  "target_host": "dgx-gb10",
+  "ledger_budget_gb": 40,
+  "verifier": {
+    "epochs": 2,
+    "batch_size": 256,
+    "lr": 0.0003,
+    "weight_decay": 0.01,
+    "error_loss_weight": 0.3,
+    "clip_norm": 1.0
+  },
+  "declared_success_criteria": {
+    "val_auroc_min": 0.78,
+    "branch4_held_gain_pp": 8.0
+  }
+}
