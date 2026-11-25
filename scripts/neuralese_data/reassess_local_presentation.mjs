@@ -52,7 +52,7 @@ export function reassessLocalPresentation(packet,pins,task,source,project,entryB
  return {prior,native,prepared,preview,witness,reviewInput,checks:{...prior.checks,independentlyVerifiedPresentationDom:true}};
 }
 
-export async function validatePresentationReview(review,input,teacher,judge,model='openai-codex:gpt-5.6-terra'){
+export async function validateWorkflowReview(review,input,teacher,judge,model='openai-codex:gpt-5.6-terra'){
  if(review?.schema!=='natlang.live-workflow-review/1'||review.model!==model||review.teacher!==teacher||model===teacher||
     !same(review.input,input)||!review.exchange?.request||!review.exchange?.reply)throw Error('review does not bind exact native presentation and independent model');
  const colon=model.indexOf(':'),reply=review.exchange.reply;
@@ -87,7 +87,7 @@ async function main(){
  if(!args.review){console.log(JSON.stringify({task_id:task.taskId,pending_independent_review:true,review_input:join(out,'review-input.json'),teacher_rerun:false}));return;}
  const review=JSON.parse(await readFile(args.review,'utf8'));
  const {modelOracleJudge}=await import(pathToFileURL(resolve(fileURLToPath(new URL('../..',import.meta.url)),'ts-host/dist/teacher/model-judge.js')));
- await validatePresentationReview(review,result.reviewInput,pins.teacher,modelOracleJudge,args['review-model']);
+ await validateWorkflowReview(review,result.reviewInput,pins.teacher,modelOracleJudge,args['review-model']);
  const sources=[await store('original-native-renderer.ts',source),bundle,await store('entry-binding.mjs','export '+applicationEntryBinding.toString()+'\n'),await store('assessor.mjs',await readFile(fileURLToPath(import.meta.url)))];
  for(const [index,path]of Object.keys(bundled.metafile.inputs).filter(path=>path!=='<stdin>').entries())sources.push(await store(`checker-source-${index}-${basename(path)}`,await readFile(resolve(path))));
  sources.push(await store('model-judge.ts',await readFile(new URL('../../ts-host/src/teacher/model-judge.ts',import.meta.url))));
