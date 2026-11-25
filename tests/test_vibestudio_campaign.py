@@ -1112,3 +1112,64 @@ def test_unreadable_raw_capture_is_preserved_and_does_not_erase_other_results(tm
     rows = vibestudio_campaign.outcomes(tmp_path, ['bad', 'unstarted'], None, {}, {'bad': {}, 'unstarted': {}})
     assert rows['bad']['interrupted']
     assert vibestudio_campaign.wave_infrastructure_hold(rows, {}, 1) is None
+
+
+def lifecycle_packet(started):
+    return {'result': {'passed': False}, 'execution': {
+        'error': 'Native fixture policy exceeded its finite deadline',
+        'failure': {'phase': 'orchestration', 'error': {'name': 'Error', 'message': 'Native fixture failed',
+            'errorData': {'authoredLifecycle': {
+                'schema': 'vibestudio.authored-lifecycle/1',
+                'runId': 'system-test-runner:teacher:00000000-0000-0000-0000-000000000001',
+                'runtimeId': 'do:vibestudio/internal:EvalDO:' + 'a' * 40,
+                'boundary': 'assigned-program-load', 'teacherStarted': started}}}}}}
+
+
+@pytest.mark.parametrize('started', [False, True, None])
+def test_authoritative_lifecycle_preserves_no_capture_uncertainty_and_attempt_budget(tmp_path, started):
+    packet = lifecycle_packet(started)
+    if started is None:
+        del packet['execution']['failure']['error']['errorData']
+    raw = tmp_path / 'st_original' / 'trajectory-example-full.json.gz'
+    raw.parent.mkdir()
+    with gzip.open(raw, 'wt') as stream:
+        json.dump(packet, stream)
+    original = raw.read_bytes()
+    outcome = vibestudio_campaign.outcomes(tmp_path, ['example'], None, {}, {'example': {}})['example']
+    assert outcome['teacher_started'] is started
+    assert outcome['teacher_model_sampled'] is (False if started is False else None)
+    assert bool(vibestudio_campaign.infrastructure_failure(outcome, {})) is (started is False)
+    rows = vibestudio_campaign.publish_status(tmp_path, {'example': {'workspace': 'examples', 'family': 'native'}},
+        {}, [{'example': outcome}], None, 2, {}, attempt_epoch='release', receipt_epochs=['release'])
+    assert rows['example']['attempts'] == (0 if started is False else 1)
+    assert rows['example']['cumulative_teacher_attempts'] == (0 if started is False else 1)
+    assert raw.read_bytes() == original
+
+
+@pytest.mark.parametrize('damage', ['nested-guest', 'unknown-version', 'wrong-boundary', 'foreign-runtime',
+                                    'unbound-run', 'truthy-string', 'malformed-error'])
+def test_guest_or_malformed_lifecycle_does_not_prove_pre_teacher(damage):
+    packet = lifecycle_packet(False)
+    error = packet['execution']['failure']['error']
+    evidence = error['errorData']['authoredLifecycle']
+    if damage == 'nested-guest':
+        packet['execution']['failure']['error'] = {'message':'outer', 'cause': error}
+    elif damage == 'unknown-version': evidence['schema'] = 'vibestudio.authored-lifecycle/999'
+    elif damage == 'wrong-boundary': evidence['boundary'] = 'after-root'
+    elif damage == 'foreign-runtime': evidence['runtimeId'] = 'some-other-runtime'
+    elif damage == 'unbound-run': evidence['runId'] = 'unrelated'
+    elif damage == 'truthy-string': evidence['teacherStarted'] = 'false'
+    else: packet['execution']['failure']['error'] = []
+    assert vibestudio_campaign.authored_lifecycle(packet) is None
+
+
+def test_retained_teacher_call_contradicts_no_start_marker_as_integrity_failure(tmp_path):
+    packet = lifecycle_packet(False)
+    packet['execution']['diagnostics'] = {'natlangTeacher': {'rootCallIds':['actual'], 'calls':[]}}
+    raw = tmp_path / 'st_original' / 'trajectory-example-full.json.gz'
+    raw.parent.mkdir()
+    with gzip.open(raw, 'wt') as stream: json.dump(packet, stream)
+    outcome = vibestudio_campaign.outcomes(tmp_path, ['example'], None, {}, {'example': {}})['example']
+    assert outcome['teacher_started'] is True
+    assert 'authored_lifecycle' not in outcome
+    assert outcome['capture_errors'] == ['Authored lifecycle contradicts retained teacher calls']
