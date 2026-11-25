@@ -283,7 +283,7 @@ PERMANENT_PROVIDER_FAILURES = ('credit balance is too low', 'insufficient_quota'
 # passes, so the teacher cools down instead of retiring; and it can hit a nested child call mid-episode, after which the
 # teacher's root answers "failed" or a wrong value: that is the provider's verdict, not the teacher's, so an episode
 # whose logs carry it and that did not succeed is no verdict (deferred and retried)
-TEMPORARY_PROVIDER_LIMITS = ('You have hit your ChatGPT usage limit',)
+TEMPORARY_PROVIDER_LIMITS = ('You have hit your ChatGPT usage limit', 'Claude Code usage limit')   # the latter: scripts/claude_code_endpoint.py
 # decide() collection needs the actor's exact native capture, which a hosted teacher endpoint does not give
 UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 

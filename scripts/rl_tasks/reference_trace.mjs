@@ -26,12 +26,16 @@ for (const record of rows) {
       if (!String(trace.definitionId).startsWith('nl:') || trace.parentCallId === null) continue;
       const initial = trace.events.find(event => event.kind === 'state' && event.phase === 'initial');
       const lambda = initial?.value?.$lambda ?? {};
+      // The call's value as the host received it (a decision readout returns through no return_result action)
+      const output = trace.events.filter(event => event.kind === 'host_capture' &&
+        event.capture_kind === 'invocation_output' && event.complete === true).at(-1);
       const returned = trace.events.filter(event => event.kind === 'action' && event.name === 'return_result' &&
         event.outcome === 'completed').at(-1);
+      const done = trace.outcome === 'done' && (output !== undefined || returned?.arguments?.status === 'success');
       row.children.push({ path: String(trace.definitionId).slice(3), name: trace.name, outcome: trace.outcome,
         args: lambda.args ?? null, functional: holdsFunction(lambda.args ?? {}),
-        returned: returned !== undefined, value: returned?.arguments?.value ?? null,
-        status: returned?.arguments?.status ?? null,
+        returned: done, value: output !== undefined ? output.value : returned?.arguments?.value ?? null,
+        status: done ? 'success' : returned?.arguments?.status ?? null,
         turns: trace.events.filter(event => event.kind === 'model_turn').length });
     }
   } catch (e) { row.error = String(e).slice(0, 400); }

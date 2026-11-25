@@ -434,6 +434,11 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
       calls = [['eval', { code: record.semantics.failure_seed!.code }]];
     } else if (name === rootName) {
       const call = record.curriculum.reference.root[step++];
+      // A root that is a decision readout gets a tool-free request: its scripted return_result value answers as the
+      // decision's JSON text, as a child's value answer does (stage tasks of invented programs, decision gates).
+      const value: ReturnType<typeof scriptedSuccess> | undefined = call?.[0] === 'return_result' && (call[1] as { status?: string }).status === 'success' ?
+        scriptedSuccess(request, (call[1] as { value?: unknown }).value) : undefined;
+      if (value && value.calls.length === 0) return value as { text: string; calls: [] };
       calls = [call ? [call[0], call[1]] :
         ['return_result', { status: 'failed', reason: 'The reference solution ended without finishing the call.' }]];
     } else {
