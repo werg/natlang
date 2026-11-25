@@ -13783,8 +13783,8 @@ API models."
 |---|---|
 | OpenCode Zen | Our key lists 11 free models (`deepseek-v4.1-flash-free`, `big-pickle`, `mimo-v2.6-flash-free`, `beam-free`, `nemotron-3.5-super-vl-free`, ...). Every direct request answers 429 `FreeUsageLimitError` "Free models work in OpenCode": they are free only through the official client (plans/OPENCODE_GENERATION.md; the client is never spoofed). All 11 rejected. |
 | AI Studio Gemini 3.5 Flash, 3.6 Flash, 3 Flash preview | Answer tool calls, but the free tier allows **20 requests/day and 5 RPM per model** (about half an episode a day). Rejected after 1 verdict each. |
-| AI Studio Gemini 3.7 Flash, 3.8 Flash | 503 "high demand"; qualifications running (presumably the same 20/day). |
-| AI Studio Gemma 4 31B | Probed ok; qualification running (the 26B ran 2/14 at 1,446 s per episode). |
+| AI Studio Gemini 3.8 Flash | 20 requests/day as well: rejected. 3.7 Flash: 503 "high demand", qualification running. |
+| AI Studio Gemma 4 31B | Probed ok, but 16,000 input tokens/min on the free tier: below one request. Rejected (the check now also rejects a free tier whose named input-token limit cannot hold a request). |
 | AI Studio Gemini 3.1 Flash-Lite, 4 Hydrogen | 503 today; probed again every 6 h. 3.1 Flash-Lite would be a second independent ~500 RPD quota. |
 | AI Studio 3.1 Pro, 4.x, Omni | limit 0 on the free tier. Rejected. |
 | Z.ai GLM-5.3 Flash/FlashX | 1113 "Insufficient balance". Rejected. |
@@ -13800,8 +13800,7 @@ API models."
 | Others (Together, Fireworks, DeepInfra, Nebius, Novita, SiliconFlow, OVH, Vercel, Moonshot, Alibaba intl) | No usable free API for 100k-token episodes (research agent, sources in its report). |
 
 **Added to `teachers.json` today:** nothing new. No model with our keys passed: the strong new free models are either
-client-only (OpenCode) or capped at 20 requests/day (AI Studio Flash). The running qualifications (Gemma 4 31B,
-Gemini 3.7/3.8 Flash) and the 6-hourly probes of 3.1 Flash-Lite and Hydrogen are admitted automatically if they
+client-only (OpenCode) or capped at 20 requests/day (AI Studio Flash). The running Gemini 3.7 Flash qualification and the 6-hourly probes of 3.1 Flash-Lite and Hydrogen are admitted automatically if they
 qualify.
 
 **Free-teacher supply in production** (r0010/r0011): Nemotron 3.5 Super about 3-6 successes/h, Nemotron 3 Ultra

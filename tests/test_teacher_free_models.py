@@ -146,3 +146,18 @@ def test_a_free_tier_of_a_few_requests_a_day_is_rejected_and_its_qualification_s
     decided = t.adopt_all(out, tmp_path / 'teachers.json', active=lambda unit: True, stop=stopped.append)
     assert stopped == ['tq-x'] and decided[0]['status'] == 'rejected' and '20 requests/day' in decided[0]['note']
     assert not (tmp_path / 'teachers.json').exists()
+
+
+def test_a_free_tier_whose_tokens_per_minute_hold_no_request_is_rejected(tmp_path, monkeypatch):
+    out = tmp_path / 'free'
+    t.add('ai-studio', 'gemma-4-31b-it', out=out, now='T')
+    work = tmp_path / 'qual'
+    (work / 'episodes' / 't000000').mkdir(parents=True)
+    (work / 'episodes' / 't000000' / 's7.log').write_text(
+        'free_tier_input_token_count, limit: 16000, model: gemma-4-31b, description: Generate content input tokens per '
+        'minute limit exceeded on Free Tier.')
+    assert t.daily_request_limit(work) is None
+    t.update_candidates(out, lambda row: row.update(status='qualifying', work=str(work), unit='tq-g'))
+    stopped = []
+    decided = t.adopt_all(out, tmp_path / 'teachers.json', active=lambda unit: True, stop=stopped.append)
+    assert stopped == ['tq-g'] and '16000 input tokens/min' in decided[0]['note']

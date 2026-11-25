@@ -603,19 +603,25 @@ def qualification_result(work):
 # a free tier that serves fewer requests a day than MIN_DAILY_EPISODES episodes cannot pay for its qualification (AI
 # Studio's Gemini 3.x Flash: 20 requests/day per model on 2026-11-25, half an episode)
 MIN_DAILY_EPISODES = 4
-DAILY_LIMIT = re.compile(r'limit: (\d+), model: [^,]+, description: [^.]*per day')
+DAILY_LIMIT = re.compile(r'limit: (\d+), model: [^,]+, description: [^.]*requests per day')
+# and one whose input tokens per minute cannot hold one request (AI Studio's Gemma 4: 16,000)
+TOKEN_LIMIT = re.compile(r'limit: (\d+), model: [^,]+, description: [^.]*input tokens per minute')
 
 
-def daily_request_limit(work):
-    """The smallest requests-per-day limit a provider named in a qualification's episode logs (AI Studio's free-tier
-    429), or None."""
-    limits = []   # the episode logs, and a running episode's per-call evidence (the 429 bodies)
+def named_limit(work, pattern):
+    """The smallest limit of ``pattern`` a provider named in a qualification's logs (AI Studio's free-tier 429 bodies,
+    in the episode logs and a running episode's per-call evidence), or None."""
+    limits = []
     for path in [*Path(work).glob('episodes/*/*.log'), *Path(work).glob('episodes/*/row-*/sample-*/jobs/*evidence*.jsonl')]:
         try:
-            limits += [int(n) for n in DAILY_LIMIT.findall(path.read_text(errors='replace'))]
+            limits += [int(n) for n in pattern.findall(path.read_text(errors='replace'))]
         except OSError:
             continue
     return min(limits) if limits else None
+
+
+def daily_request_limit(work):
+    return named_limit(work, DAILY_LIMIT)
 
 
 def stop_unit(unit):
@@ -684,9 +690,13 @@ def adopt_all(out=OUT, teachers_file=TEACHERS_FILE, active=unit_active, now=None
         rpd = daily_request_limit(row['work'])
         if rpd is not None:
             result['requests_per_day'] = rpd
+        tpm = named_limit(row['work'], TOKEN_LIMIT)
         if rpd is not None and rpd < MIN_DAILY_EPISODES * REQUESTS_PER_EPISODE:
             stop(row['unit'])
             ok, reason = False, f'free tier {rpd} requests/day (~{rpd / REQUESTS_PER_EPISODE:.1f} episodes a day)'
+        elif tpm is not None and tpm < MIN_TPM:
+            stop(row['unit'])
+            ok, reason = False, f'free tier {tpm} input tokens/min: below one request'
         elif result['verdicts'] < QUAL_TASKS and active(row['unit']):
             return
         else:
