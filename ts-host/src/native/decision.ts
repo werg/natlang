@@ -30,7 +30,7 @@ export function finiteValues(type: Type, env: TypeEnv): DecisionValue[] | null {
   const out: DecisionValue[] = [];
   const visit = (item: Type, depth: number): boolean => {
     if (depth > 32) return false;
-    const resolved = item.kind === 'name' ? env.resolve(item) : item;
+    const resolved = env.resolve(item);
     switch (resolved.kind) {
       case 'refined': case 'untrusted': return visit(resolved.base, depth + 1);
       case 'lit': out.push(resolved.value); return true;
@@ -71,7 +71,7 @@ export function decisionDomain(type: Type, env: TypeEnv): DecisionDomain | null 
   const arms: DecisionArm[] = [];
   const visit = (item: Type, depth: number): boolean => {
     if (depth > 32) return false;
-    const resolved = item.kind === 'name' ? env.resolve(item) : item;
+    const resolved = env.resolve(item);
     switch (resolved.kind) {
       case 'refined': case 'untrusted': return visit(resolved.base, depth + 1);
       case 'union': return resolved.members.every(member => visit(member, depth + 1));

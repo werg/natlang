@@ -1670,6 +1670,7 @@ export class NativeToolAgent {
     const wanted = lam.readout === 'decision' || lam.readout === 'instant' || this.options.decisionReadout === 'finite-returns';
     if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
     const domain = decisionDomain(lam.type.returns, session.env);
+    if (domain?.size === 0) return 'decision-empty-domain: the result type has no possible value.';
     const callId = session.runtime.currentCallId ?? null;
     const bounded = this.options.modelBudget?.maxRequests !== undefined || this.options.modelBudget?.maxTokens !== undefined;
     const decide = bounded ? undefined : decisionScorer(this.driver);

@@ -566,7 +566,8 @@ and a request to take the next step with a tool call in a new turn.
 
 Signatures use TypeScript types: `string`, `number`, `boolean`, `null`,
 records, arrays, `Record<string, T>` (also written `{ [key: string]: T }`),
-intersections of object types (`A & { extra: string }`, merged into one record),
+structural intersections (`A & { extra: string }`, merged into one record, with overlapping fields narrowed conjunctively),
+`never` for an impossible intersection,
 indexed access with a literal key (`State['status']`), literal unions, optional fields and
 parameters, aliases, `Folder`, `Live<"T", kind, detail>` for host values, and
 `Neuralese<T, D>` for soft values (see [Neuralese](ext/neuralese.md)). Built-in host classes (`Date`, `Map`,
