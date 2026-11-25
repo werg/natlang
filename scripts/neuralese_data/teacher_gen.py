@@ -342,6 +342,20 @@ def teacher_identity(teacher):
             'reasoning': reasoning_kind(teacher)}
 
 
+def resumable_attempt(directory, identity, row):
+    """Whether an attempt directory a stopped launch left may resume: the same teacher (``teacher.json``, written at its
+    start), the same task row, a prepared queue, and not yet scored. NATLANG_RESUME_UNFINISHED=0 opts out (redone
+    whole, as before)."""
+    if os.environ.get('NATLANG_RESUME_UNFINISHED', '1') == '0' or (directory / 'rollouts.jsonl').exists():
+        return False
+    try:
+        same_teacher = (directory / 'teacher.json').read_text().strip() == identity
+        same_row = json.loads((directory / 'cases.jsonl').read_text().splitlines()[0]) == row
+    except (OSError, ValueError, IndexError):
+        return False
+    return same_teacher and same_row and (directory / 'queue.jsonl').is_file()
+
+
 def episode_env(teacher, env):
     """The environment of one episode's collector: a teacher with `api_key_command` (a short-lived bearer token, e.g.
     Vertex AI's `gcloud auth application-default print-access-token`) gets a freshly minted key in `api_key_env`, so a
@@ -606,18 +620,27 @@ class Generator:
         row = task['row']
         attempt = self.recorded.get(index, 0)   # a later attempt keeps the earlier ones' episodes (voided included)
         directory = self.work / 'episodes' / (f't{index:06d}' if not attempt else f't{index:06d}-a{attempt}')
-        if directory.exists():   # an unscored attempt (stopped mid-episode) is redone whole
-            shutil.rmtree(directory)
-        directory.mkdir(parents=True)
-        (directory / 'cases.jsonl').write_text(json.dumps(row) + '\n')
-        task_rollouts.prepare(SimpleNamespace(
-            cases=directory / 'cases.jsonl', out=directory, rows=1, offset=0, group=max(2, a.samples), temperature=a.temperature,
-            case_seconds=a.case_seconds, max_model_requests=a.max_model_requests, max_turns=a.max_turns,
-            seed_base=a.seed_base + 100 * index, root_mode=a.root_mode, match_seeds_from=None,
-            policy_checkpoint_sha256=None))
-        # prepare builds GRPO groups (>= 2 samples); a teacher may want one: the queue keeps the first `samples`
-        entries = list(read_jsonl(directory / 'queue.jsonl'))[:a.samples]
-        (directory / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
+        identity = json.dumps(teacher_identity(teacher), sort_keys=True)
+        if directory.exists() and not resumable_attempt(directory, identity, row):
+            shutil.rmtree(directory)   # an unscored attempt of another teacher (or task) is redone whole
+        if directory.exists():
+            # the same teacher's stopped attempt resumes (DECISIONS 2026-11-25 "collectors resume their unfinished
+            # groups"): finished episodes stay (their journals' finish rows), a stopped one continues from its partial
+            # jobs (the collector replays the recorded replies by exact request; their provenance names the teacher)
+            entries = list(read_jsonl(directory / 'queue.jsonl'))
+            print(json.dumps({'event': 'teacher attempt resumed', 'index': index, 'dir': str(directory)}), flush=True)
+        else:
+            directory.mkdir(parents=True)
+            (directory / 'cases.jsonl').write_text(json.dumps(row) + '\n')
+            task_rollouts.prepare(SimpleNamespace(
+                cases=directory / 'cases.jsonl', out=directory, rows=1, offset=0, group=max(2, a.samples),
+                temperature=a.temperature, case_seconds=a.case_seconds, max_model_requests=a.max_model_requests,
+                max_turns=a.max_turns, seed_base=a.seed_base + 100 * index, root_mode=a.root_mode, match_seeds_from=None,
+                policy_checkpoint_sha256=None))
+            # prepare builds GRPO groups (>= 2 samples); a teacher may want one: the queue keeps the first `samples`
+            entries = list(read_jsonl(directory / 'queue.jsonl'))[:a.samples]
+            (directory / 'queue.jsonl').write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries))
+            (directory / 'teacher.json').write_text(identity + '\n')
         started = time.time()
         for entry in entries:
             entry.update(prompt_rendering='full', context_tokens=a.context_tokens, request_retries=a.request_retries)

@@ -164,6 +164,21 @@ def group_summary(gdir):
                'constructs': sorted(set(external.get('constructs') or [])), 'episodes': []}
     rewards = _jsonl(gdir / 'rewards.jsonl')
     summary['state'] = 'scored' if rewards else 'pending'
+    # collection resume (grpo Collector.resume_unfinished): episodes a restart kept, continued or ran again, and episodes
+    # lost in a run that ran again (``sample-NN.lost-N``); none of them is an infrastructure loss of the group's verdict
+    resumes = _jsonl(gdir / 'resumed.jsonl')
+    summary['resumed'] = {'resumes': len(resumes), 'kept': sum(len(r.get('kept') or ()) for r in resumes[-1:]),
+                          'continued': sum(len(r.get('continued') or ()) for r in resumes),
+                          'restarted': sum(len(r.get('rerun') or ()) for r in resumes),
+                          'rerun_lost': len(list(gdir.glob('row-*/sample-*.lost-*')))}
+    if not rewards and (gdir / 'lost.json').exists():
+        try:
+            reason = json.loads((gdir / 'lost.json').read_text()).get('reason') or ''
+        except (OSError, ValueError):
+            reason = ''
+        # a restart left it: its task was measured in another group (superseded), or its policy changed or it was
+        # abandoned in its run (no verdict: an infrastructure loss)
+        summary['state'] = 'superseded' if reason.startswith('superseded') else 'abandoned'
     for row in rewards:
         summary['task_id'] = summary['task_id'] or row.get('task_id')
         if row.get('family'):
@@ -333,11 +348,17 @@ def aggregate(collections_):
     families, constructs, total = collections.defaultdict(_bucket), collections.defaultdict(_bucket), _bucket()
     no_episodes = []
     endpoint_dropped = 0
+    resume = collections.Counter()
     for coll in collections_:
         endpoint_dropped += coll.get('endpoint_dropped') or 0
         for g in coll['groups']:
-            if g['state'] in ('pending', 'memetic_not_admitted'):
-                continue                    # still running, or a memetic group with nothing to improve: no episodes due
+            for key, value in (g.get('resumed') or {}).items():
+                resume[key] += value
+            resume['groups_resumed'] += bool((g.get('resumed') or {}).get('resumes'))
+            if g['state'] in ('pending', 'memetic_not_admitted', 'superseded'):
+                # still running (or waiting for a restart's resume), a memetic group with nothing to improve, or a
+                # stopped group whose task another group measured: no episodes due
+                continue
             buckets = [families[g['family']], total, *(constructs[c] for c in g['constructs'])]
             own = [e for e in g['episodes'] if not e['guided']]
             scored = [e for e in own if e['category'] != 'unscored']
@@ -384,6 +405,13 @@ def aggregate(collections_):
                                'crashed_episodes': total['categories'].get('crash', 0),
                                'abandoned_groups': abandoned, 'scoring_failed_groups': scoring_failed,
                                'endpoint_dropped': endpoint_dropped,
+                               # telemetry, never in the rate: the work restarts and in-run losses cost, recovered
+                               'resumed_groups': resume['groups_resumed'], 'resumed_kept_episodes': resume['kept'],
+                               'resumed_continued_episodes': resume['continued'],
+                               'resumed_restarted_episodes': resume['restarted'],
+                               'rerun_lost_episodes': resume['rerun_lost'],
+                               'superseded_groups': sum(1 for c in collections_ for g in c['groups']
+                                                        if g['state'] == 'superseded'),
                                'rate': round((infra + abandoned + scoring_failed) / started, 4) if started else None},
             'no_episodes': no_episodes,
             'pending_groups': sum(1 for c in collections_ for g in c['groups'] if g['state'] == 'pending'),

@@ -603,6 +603,8 @@ def test_cycle_collect_on_colab_stops_for_a_recollection_and_still_stops_its_act
 class _ShardBase:
     """The parts of grpo.Collector around its ``slot`` (grpo's own slot, ``_abandon``, versions and lag)."""
     _abandon = grpo.Collector._abandon
+    _episode_lost = grpo.Collector._episode_lost
+    _mark_done = grpo.Collector._mark_done
     slot = grpo.Collector.slot
     episode_valid = grpo.Collector.episode_valid
     served_version = grpo.Collector.served_version
@@ -617,6 +619,7 @@ class _ShardBase:
         self.env, self.groups, self.version, self.running, self.active_slots = {}, {}, 0, 0, 2
         self.actor_versions = {}
         self.policy_sha, self.scored, self.made = 'p' * 64, [], 0
+        self.dynamic = collections.Counter()
 
     def _learnable(self):
         pass
@@ -628,7 +631,7 @@ class _ShardBase:
         directory.mkdir()
         self.groups[group] = {'dir': directory, 'size': 1, 'done': 0, 'versions': [], 'task_id': row['id']}
         self.outstanding += 1
-        self.pending.append((group, {'key': f'k{group}'}))
+        self.pending.append((group, {'key': f'k{group}', 'output': str(directory / 'row-000/sample-00/results.jsonl')}))
 
     def _score(self, group):
         self.scored.append(self.groups[group]['task_id'])
@@ -637,8 +640,9 @@ class _ShardBase:
         return True
 
 
-def test_sharded_slots_abandon_a_dead_endpoints_episodes_and_requeue_the_task(tmp_path, monkeypatch):
-    """A dead endpoint's episodes exited nonzero and were counted done: all-fail groups burned the task order."""
+def test_sharded_slots_rerun_a_dead_endpoints_episodes_on_a_live_one(tmp_path, monkeypatch):
+    """A dead endpoint's episodes exited nonzero and were counted done: all-fail groups burned the task order. Such an
+    episode is no verdict: its files are set aside and it runs again (Collector._episode_lost) on a live endpoint."""
     collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}, {'id': 't2'}], tmp_path)
     collector.setup(['t1', 't2'], time.time() + 3600, endpoints=[('http://a', 1), ('http://b', 1)])
     seen = []
@@ -658,10 +662,11 @@ def test_sharded_slots_abandon_a_dead_endpoints_episodes_and_requeue_the_task(tm
     b = threading.Thread(target=collector.slot, args=(1,))
     b.start()
     for _ in range(200):
-        if 'http://b' in collector.dead:
+        if 'http://b' in collector.dead and collector.pending:
             break
         real_sleep(0.01)
-    assert collector.dead == {'http://b'} and list(collector.order) == ['t1', 't2'] and not collector.scored
+    assert collector.dead == {'http://b'} and list(collector.order) == ['t2'] and not collector.scored
+    assert [g for g, _ in collector.pending] == [0]                              # the lost episode waits for a rerun
     assert ei.endpoint_for_slot(collector.live_endpoints(), 1) is None          # slot 1 idles; a is not overloaded
     a = threading.Thread(target=collector.slot, args=(0,))
     a.start()
@@ -673,14 +678,23 @@ def test_sharded_slots_abandon_a_dead_endpoints_episodes_and_requeue_the_task(tm
     a.join(5)
     b.join(5)
     assert collector.scored == ['t1', 't2'] and seen.count('http://b') == 1
-    assert collector.groups.get(0) is None          # the dead endpoint's group was dropped, never scored
+    assert collector.groups[0]['done'] == 1 and (tmp_path / 'g0/workers/k0.done.json').exists()   # rerun on a
+    with_reruns_off = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path / 'off')
+    (tmp_path / 'off').mkdir()
+    with_reruns_off.args.episode_reruns = 0
+    with_reruns_off.setup(['t1'], time.time() + 3600, endpoints=[('http://a', 1), ('http://b', 1)])
+    with_reruns_off._new_group()
+    with_reruns_off._episode_lost(0, with_reruns_off.pending[0][1], 1, 'endpoint')
+    assert 0 not in with_reruns_off.groups and list(with_reruns_off.order) == ['t1']   # abandoned, its task first
+    assert (tmp_path / 'off/g0/lost.json').exists()
 
 
 def test_a_single_remote_actor_serving_another_policy_is_no_verdict_and_its_slots_wait(tmp_path, monkeypatch):
     """One remote actor (a Colab session) shares nothing with the collector: the keeper may replace the session and
     serve it again at another policy, or the driver rebind it. Each finished episode checks the actor still serves the
-    collected policy; one that does not is abandoned (never scored under the wrong identity), its task goes back to
-    the front of the order and the slots idle until the actor serves the policy again. A local actor is not checked."""
+    collected policy; one that does not is no verdict (never scored under the wrong identity): its files are set
+    aside, it waits to run again (``_episode_lost``) and the slots idle until the actor serves the policy again. A
+    local actor is not checked."""
     collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}, {'id': 't2'}], tmp_path)
     collector.setup(['t1', 't2'], time.time() + 3600, endpoints=[('http://a', 2)], verify=True)
     serves = {'policy': 'q' * 64}                     # the session came back serving another policy
@@ -698,10 +712,10 @@ def test_a_single_remote_actor_serving_another_policy_is_no_verdict_and_its_slot
     a = threading.Thread(target=collector.slot, args=(0,))
     a.start()
     for _ in range(300):
-        if 'http://a' in collector.dead:
+        if 'http://a' in collector.dead and collector.pending:
             break
         real_sleep(0.01)
-    assert collector.dead == {'http://a'} and not collector.scored and list(collector.order)[0] == 't1'
+    assert collector.dead == {'http://a'} and not collector.scored and [g for g, _ in collector.pending] == [0]
     assert collector.endpoint_for_slot(0) is None and collector.endpoint_for_slot(1) is None   # slots idle
     serves['policy'] = 'p' * 64                       # served again at the collected policy: back after its retry
     collector.dead_checked['http://a'] = 0

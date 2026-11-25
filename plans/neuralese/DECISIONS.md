@@ -12388,3 +12388,114 @@ operator and fallow22 builders unchanged (the mix enforces on their output); no 
 ### 2026-11-25 — Bind Android teacher launch to its owned emulator route
 
 Full-tail readiness inspection found the canonical controller launched console port 5580 while its current fixture module declared emulator-5582. Launch now derives and validates the even emulator console port from that owned serial; physical devices and invalid console ports are refused, and the frozen recipe records both values. Explicit owner hold exits cleanly before any device work. This changes no goals, teacher models or trajectory admission. Inventory: the sole emulator launch in vibestudio_android_tail.py, its subsequent ADB/lease/fixture consumers, and native-support SERIAL agree through the existing fixture authority. Eight actual tail tests passed under LOW0.5GiB (no models/emulators). Live tail remains pending normal full-bulk completion.
+## 2026-11-25 05:30 Collectors resume their unfinished groups instead of abandoning them (default on)
+
+**Observed.** aei1 r0009 health (`ops/ei/aei1/r0009/health.json`): infrastructure rate 0.38, 39 abandoned groups,
+`outcome:unresolved` 0.04 -> 0.37, while scored episodes stayed healthy. The collectors were stopped and restarted many
+times on 2026-11-24/25 (driver restarts, ledger preemptions, remote0's move onto the VM, OOM kills).
+
+**Mechanism (HEAD before this entry).** A stop kills each running episode and returns (`grpo.py` `Collector.slot`
+l. 875-882: no verdict, no record); a restarted `expert_iteration collect` starts after the last group number
+(`expert_iteration.py` l. 682) and only filters tasks with scored groups out of its order (l. 462), so a dead group's
+task ran again as a new group with new seeds (`seed_base + 100 * group`, `grpo.py` l. 558) and every episode of the dead
+group, finished or partial, was thrown away (and compacted at the next start, l. 680). `grpo.py train --resume` offers
+only scored groups again (`reuse_scored`, l. 1063). The same restart casualty showed in-run: an episode killed by a
+signal or whose remote actor stopped serving the policy abandoned its whole group (`_abandon`; Pop and remote0's 71
+abandon events). `teacher_gen` redid a stopped task whole (l. 609, `rmtree`). Not affected: `held_eval collect` already
+skips finished entries and restarts unfinished ones in place (`held_eval.py` `_pending`, l. 601-616; `journal.unlink`
+l. 672), the runtime continuing their partial jobs; the ReplayCollector runs no episodes.
+
+**Tonight's losses** (v0001 collections of policy 8e634a0f, groups created since 2026-11-24 18:00, DGX + -hdd0, Pop +
+-pop-hdd0, remote0 + -remote0-hdd0): 565 dead groups (71 with an abandon event, 10 memetic) over only 233 tasks (137
+tasks died in 2+ groups: each restart took the same front of the order again; 57 tasks never got a verdict). Their
+episodes: 638 finished, 1,416 killed in flight (holding 11,778 recorded model turns), 156 unstarted. **What this fix
+recovers** of them: all 638 finished episodes kept; 1,238 killed episodes continue from their partials (all 11,778 turns
+replayed, not resampled); 178 rerun from scratch (122 had read or written Neuralese state, 54 unreadable partials, 12
+without partial or capture); one group per task instead of up to 6. **Health correction:** of the 1,198 unscored
+episodes in r0009's report, 686 are unresolved episodes of `v0001-...-hdd0` scored 2026-11-24 02:00-05:00 (565 of them
+`OSError: [Errno 24] Too many open files` from the actor, 84 URLError): that collection is part of r0009's "current"
+because it served the same policy. Restart losses were invisible to health (dead groups stayed `pending`, skipped).
+
+**Done** (default on; `NATLANG_RESUME_UNFINISHED=0` or `--no-resume-unfinished` opts out; `--episode-reruns 0` keeps the
+in-run abandon):
+- `grpo.Collector`: an accepted episode writes `workers/<key>.done.json` (start version, policy, endpoint). A stop no
+  longer abandons. `resume_unfinished()` (EI collect after `setup`, grpo train after `reuse_scored`) takes every
+  unfinished, unretired group of WORK whose `preparation.json` names the served policy: accepted episodes stay (EI: also
+  pre-marker finishes whose journal finish row has no signal exit and whose captures all name the policy;
+  grpo: only markers within `--max-staleness` of the resumed step, since versions change in a run), a killed EI episode
+  continues from its partial only if `episode_files.partial_continuable` (every recorded turn carries its RL capture
+  of this policy and sampling law, no Neuralese reads or writes, no ended job; a compacted partial is restored raw;
+  the collector replays recorded replies by exact request, `collector.ts` l. 1312-1411, as its shared-server failover
+  does), every other episode is set aside (`<sample>.stopped-N`) and rerun from scratch under its queue entry (task,
+  seed, budget). Memetic groups, other policies, and (EI) tasks measured in another group or no longer eligible are
+  left with `lost.json` (EI keeps one group per task, the one with most accepted episodes, and drops its task from the
+  order). A scored group with stopped JOLT+ teacher attempts resumes them; one with every episode finished is scored.
+- In a run, an episode killed by a signal (after a 5 s grace for a unit stop) or whose remote actor no longer serves the
+  policy is set aside (`.lost-N`) and runs again first, up to `--episode-reruns` (2) times; then its group is abandoned
+  (`lost.json`; EI puts the task first again). EI `all_dead` also ends with nothing running.
+- `episode_files`: `finish_of`, `set_attempt_aside` (labels `lost`/`stopped`), `lost_attempts` moved from `held_eval`
+  (one implementation), `partial_continuable`, `recorded_policies`. EI's start-time compaction skips resumed groups.
+- `collection_health`: `lost.json` groups are `superseded` (no loss) or `abandoned`; `infrastructure` reports
+  `resumed_groups`, `resumed_kept/continued/restarted_episodes`, `rerun_lost_episodes`, `superseded_groups` as telemetry,
+  never in the rate (set-aside attempts never enter rewards).
+- `teacher_gen`: a stopped attempt of the same teacher and task (`teacher.json`) keeps its directory: finished episodes
+  stay, a stopped one continues from its partial (its provenance names the teacher); otherwise redone whole.
+- `remote_collect` needs no change: a fresh VM gets no `row-*/` workspaces (PUSH_EXCLUDE), so its kept check finds no
+  sample and those episodes rerun; on the same VM the work directory and its partials persist.
+
+**Tests:** `tests/neuralese/test_grpo_collector.py` (reruns, stop, resume, versions, policy/memetic, teachers, EI
+continuation/legacy/one-per-task, partial checks, set-aside labels), `test_colab_and_profiles.py` (dead and replaced
+remote endpoints rerun), `test_collection_health.py`, `test_teacher_admission.py`.
+**Restart needs:** none beyond the round-boundary restart: each collector takes it at its next start on a pin with this
+commit, and that first start resumes every dead group the earlier runs of the same policy left (tonight's v0001 groups
+included, if v0001 is still the collected policy). The canonical-checkout `remote_collect.py` is unchanged.
+**Not checked:** a live restart end to end (the next round-boundary restart is the check: its `resumed unfinished
+groups` event and the health telemetry); whether a continued episode's 3600 s wall clock should count the stopped time
+(it restarts, as the shared-server failover's does); grpo train keeps no partials (versions are not in the capture's
+policy digest).
+
+## 2026-11-25 05:30 SearchSwarm (D02) as collection tasks: `natlang-rl-web-research-20261125` (2,869 rows) in grpo-pool (task-supply agent)
+
+The D02 conversion scoped in `SUBAGENT_NEURALESE_20261124.md` is built (`scripts/rl_tasks/sources/web_research.py`,
+SOURCES `searchswarm`; 0e6a11cbe). One real SearchSwarm item per task, no templates beyond the one program.
+- **Program.** Root `research(question): string` with a callable-folder child `investigate(brief):
+  Neuralese<{ findings; sources: { url; title }[]; open }>`. Both use a crisp `web` service over the item's own frozen
+  corpus: every search result and page reading its recorded trajectory saw (lead and kept sub-agents).
+  - `web.search(query)` is BM25 over title, snippet and reading text, CJK as character bigrams, top 10.
+  - `web.visit(url, goal)` returns the recorded reading. Its header names the caller's goal, so a teacher's goal (often a
+    guessed answer) never reaches the model. An unrecorded url cannot be opened.
+  - Assets: `natlang-rl-web-research-assets-20261125` (3,493 corpora, 2.0 GB, NVMe; `NATLANG_RL_WEB_ASSETS`
+    overrides). The service keeps at most 12 corpora per process.
+- **Funnel** (6,732 rows): 2,011 teacher answer misses the gold; 684 duplicate questions; 226 gold in no recorded
+  output; 29 gold in the question; 0 held-content hits (`subagent_neuralese.held_texts`, every held-eval role).
+  3,782 built. Reference replay (`web_research_replay.mjs`, collection pin edb3cba95b7e): 308,898 of 308,899 recorded
+  visits reproduced exactly, gold reachable through the teacher's own calls in 3,779, silent on an empty corpus in all.
+  Our BM25 returns 41% of the urls the dataset's search engine returned for the same query (not a keep condition).
+- **verify.mjs** (same pin; 4 shards): 3,779 references accepted, 0 other-item golds accepted, 1 alias of 11,055
+  rejected. Dropped: 287 whose keyword baseline (the top search hit's title or first snippet sentence, no model call)
+  passes, and 497 whose generic perturbation `"<gold> and something else entirely"` passes. That second one is an oracle
+  defect (below). Kept 3,057: 2,869 train; held dev 100 and confirmation 88, registered evaluation-only as
+  `natlang-rl-web-research-{dev,confirmation}-20261125`. Families: latin short 2,383, CJK short 246, latin number 222,
+  CJK number 18 (phrase golds were all lost to the perturbation).
+  - The shards' verification.json was rebuilt from partial.jsonl. verify.mjs refused to write it because main's
+    verify.mjs changed on disk mid-run (c68cf8b66). The processes had loaded f8e62950c once, at start. Next time run the
+    pin's own verify.mjs.
+- **Checks.** held-v3 and held-v4 verify 0/0 (ids and groups); `training_exclusion_ids` 0; custody 0 before and after
+  the held registration; question overlap with every grpo-pool input 0 exact, 0 by half of the 10-word shingles.
+- **Repetition** (`measure_repetition` against the 38,139-row pool): 1 program and 1 structure, both new to the pool;
+  all 4 families are new; 2,869 distinct questions, each with its own corpus. EI collection caps a program shape at 1% of
+  groups, so this source gets at most about 1% of a collection's groups until that cap changes.
+- **CJK oracle.** `qaAnswerText` and span F1 keep CJK characters. A Han/kana/hangul run is one token, so a CJK answer must
+  match its run exactly; aliases with `。` and `「」` pass.
+- **Oracle defect found, fixed (fb11b6359).** `containsQaSpan` accepted any answer holding the gold span within twice
+  its length, including "X and Y" and "not X". Words outside the span that are QA hedges (and/or/not/maybe…) absent from
+  the gold now reject. Opt-out `NATLANG_QA_CONTAINMENT_HEDGES=0`, tests in `ts-host/test/oracle.test.mjs`. This is a
+  scoring change for every QA family: a pin with it is a new held scoring series. The 435 cases whose only failure was the
+  perturbation (`build/searchswarm/requalify-ids.json`) are requalified on a runtime with the fix as a second supply. They
+  are not admitted before then, because older pins score them leniently.
+- **Enters:** EI collections that draw the grpo-pool role after this commit (order 24). Opt-out: drop the role.
+- **Not checked:** the policy's pass rate (the questions are BrowseComp-style chains; the teacher used a median of 169
+  search/visit calls including its sub-agents, and only 310 train items kept every sub-agent's evidence); episode length
+  against the 40-call budget; visits with a goal other than the recorded one (they return the closest recorded reading);
+  merging the corpora of duplicate questions; these same items are SFT rows in `sft-rows-sa2nl-20261124-searchswarm-*`,
+  so an SFT round that trains them makes these tasks partly seen.

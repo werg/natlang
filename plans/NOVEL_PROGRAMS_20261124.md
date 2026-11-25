@@ -431,6 +431,14 @@ friction logs and the brief they read, each with its change (commit after `f8e62
    `c3b2d3472` every `report.json` records `bar` (`BAR_VERSION` and the requirements digest), and the checks change only
    between waves. The card's size binds the inputs' prose; the 800-word floor is on items read by an entry of their own
    (a card's cue budget caps judged words below its word count).
+10. **Bar 2026-11-25.3** (after the second Opus review, which admitted campaign): C2 counted a default-answered call
+    whenever one of its fields (a shared datasheet) appeared in an own-entry call; it now counts only calls answered by
+    an entry of their own that the result depends on (qualify gives each entry another answer of its judgment and
+    replays, `entry_dependence.mjs`); entries no answer depends on are warnings. S7 skips words in texts several calls
+    share. `admit` qualifies again unless the stored report is of this submission under the current bar (household's
+    older report passed a since-added F4). A fragment NOTES.md or a `mistake` quotes must still occur (C4, F4); on
+    campaign it finds one stale quote ("hears every word") and three paraphrases written as quotes. REVIEW_BRIEF: an
+    expected answer a careful reader rejects fails S4, and a state change the types cannot express is a program defect.
 
 ## 13. What is not built or not checked
 

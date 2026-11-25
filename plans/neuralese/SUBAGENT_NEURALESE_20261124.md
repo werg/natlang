@@ -143,3 +143,13 @@ was too large to build in a 14 GB claim and to load per round.
 
 **D10 evidence-subagent:** not built. Its rows are child-only conversations with no lead, so there is no handoff to
 make Neuralese.
+
+## Conversion built (2026-11-25): `natlang-rl-web-research-20261125`
+
+The D02 conversion above is built as collection tasks: `scripts/rl_tasks/sources/web_research.py` (program, `web`
+service, corpus extraction), `scripts/rl_tasks/web_research_replay.mjs` (reference replay of the teacher's own calls
+and the empty-corpus control) and `tests/test_rl_web_research_source.py`. 2,869 train rows are in `grpo-pool`; held
+dev/confirmation packets hold 100 and 88. Funnel, checks and the oracle defect found on the way: DECISIONS 2026-11-25
+05:30. Build directory: `/home/werg/data/natlang-rl-web-research-20261125/build` (`step1.sh`, `step1b.sh`, `step2.sh`,
+`step3.sh`). The source D02 parquet is streamed once to `source/D02_train.jsonl.zst`. Without `pre_buffer` the parquet
+needs 0.4 GB; with it, its single 6.9 GB row group needs 10 GB.
