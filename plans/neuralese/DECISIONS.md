@@ -13299,3 +13299,7 @@ line (the trained readout format; changing it is a separate model-facing change)
 still previews as "live value, use it in eval" (no std judgment takes one). Python `operator_rows.py` does not yet pass
 `sealed` (no sealed rows are generated; readouts with cut values were not compacted before).
 Tests: `ts-host/test/sealed-readout-values.test.mjs` (8). MODEL_FACING_CHANGES 2026-11-25.
+
+### 2026-11-25 — Correct conditional eval local binding types
+
+Actual joint-program replay on frozen Core7091 completed a native draft, then rejected `const handoff = await predicate(...) ? await stage(...) : null` as boolean. The runtime inferred the first call-like prefix's return type for the entire initializer. Replace that prefix match with the complete TypeScript expression boundary, infer conditional types from their branches rather than predicate, preserve explicit annotations and existing actual-value fallback. This is a first-principles interpreter correction for all TS-host platforms, independent of model quality or original Workerd OOM. Official Node build and19 Node/Workerd/field controls passed without inference; SDKs and the exact application replay enter the next coherent source boundary while current collection continues. No serving policy/retry/model changes or original trajectory rewrites.

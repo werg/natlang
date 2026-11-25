@@ -2655,9 +2655,37 @@ export class NativeSession {
     const source = expression.trim();
     // A reduce result has the accumulator's type, which need not match its list.
     if (/\.(?:reduce|reduceRight)\s*\(/.test(source)) return;
-    const directCall = /^(?:await\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/.exec(source);
-    const directReturns = directCall ? returnTypeOf(this.lam.codebase, directCall[1]!, this.env) : undefined;
-    if (directReturns) return directReturns;
+    // A call's type belongs to the entire initializer only when that expression
+    // is the call itself. A prefix call can instead be a predicate, logical
+    // operand or receiver, whose result is not the value assigned to the local.
+    const parsed = ts.createSourceFile('initializer.ts', `(${source}\n)`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const statement = parsed.statements[0];
+    const unwrap = (node: ts.Expression): ts.Expression =>
+      ts.isParenthesizedExpression(node) || ts.isAwaitExpression(node) ? unwrap(node.expression) : node;
+    const expressionNode = statement && ts.isExpressionStatement(statement) ? unwrap(statement.expression) : undefined;
+    if (expressionNode?.kind === ts.SyntaxKind.NullKeyword) return { kind: 'prim', name: 'null' };
+    if (expressionNode && (ts.isStringLiteral(expressionNode) || ts.isNoSubstitutionTemplateLiteral(expressionNode)))
+      return { kind: 'prim', name: 'string' };
+    if (expressionNode && ts.isNumericLiteral(expressionNode)) return { kind: 'prim', name: 'number' };
+    if (expressionNode?.kind === ts.SyntaxKind.TrueKeyword || expressionNode?.kind === ts.SyntaxKind.FalseKeyword)
+      return { kind: 'prim', name: 'boolean' };
+    if (expressionNode && ts.isConditionalExpression(expressionNode)) {
+      const branches = [expressionNode.whenTrue, expressionNode.whenFalse].map(branch =>
+        this.scopeInitializerType(branch.getText(parsed), locals));
+      if (branches.every((branch): branch is Type => branch !== undefined)) {
+        const members = branches.flatMap(branch => branch.kind === 'union' ? branch.members : [branch]);
+        const unique = [...new Map(members.map(member => [formatType(member), member])).values()];
+        return unique.length === 1 ? unique[0] : { kind: 'union', members: unique };
+      }
+      return;
+    }
+    if (expressionNode && ts.isCallExpression(expressionNode)) {
+      const callee = expressionNode.expression.getText(parsed);
+      if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(callee)) {
+        const directReturns = returnTypeOf(this.lam.codebase, callee, this.env);
+        if (directReturns) return directReturns;
+      }
+    }
     // Only a map callback that is the call itself (`x => f(x)`, optionally async/await) gives the list the callee's
     // return type; a callback that wraps the call in an object or expression has a type this cannot see.
     const mappedCall = /^await\s+Promise\.all\(\s*[\s\S]*?\.map\(\s*(?:async\s+)?(?:\([\w$,\s]*\)|[A-Za-z_$][\w$]*)\s*=>\s*(?:await\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/.exec(source);
