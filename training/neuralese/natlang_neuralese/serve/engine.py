@@ -45,12 +45,15 @@ def reads_in_context(block, *, marked=lambda: False):
     checks) with no adapter binding and no derivation whose header says it is the plain forward of its own tokens
     (`producer_kind` 'text' or 'span'), or, for a header without the field, a text write this store marked
     (``marked()``). Opt-outs: NATLANG_NEURALESE_TEXT_IN_CONTEXT=0 (text writes), NATLANG_NEURALESE_SPAN_IN_CONTEXT=0
-    (produce spans)."""
+    (produce spans). A 'capture' (a compaction operator's reply or a note captured in its own context) splices unless
+    NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1."""
     if getattr(block, 'adapter_binding', None) is not None or getattr(block, 'derivation', None) is not None:
         return False
     kind = getattr(block, 'producer_kind', None)
     if kind == 'span':
         return os.environ.get('NATLANG_NEURALESE_SPAN_IN_CONTEXT', '1') != '0'
+    if kind == 'capture':
+        return os.environ.get('NATLANG_NEURALESE_CAPTURE_IN_CONTEXT', '0') == '1'
     if os.environ.get('NATLANG_NEURALESE_TEXT_IN_CONTEXT', '1') == '0':
         return False
     return kind == 'text' or (kind is None and marked())
@@ -1213,8 +1216,8 @@ class Engine:
 
     def _native_store_capture(self, token_ids, chunks, *, text, owner=None, producer_kind=None):
         """Store one actual producer span through the common versioned native-state path. ``producer_kind``
-        (`state_block.PRODUCER_KINDS`): 'text' for a text write, 'span' for a produce span in its producer's call;
-        None for a contextual body."""
+        (`state_block.PRODUCER_KINDS`): 'text' for a text write, 'span' for a produce span in its producer's call,
+        'capture' for a reply captured in its own context (`native.capture`); None for a contextual body."""
         from ..model.state_block import NativeStateBlock
         from ..model.shared_state import concatenate_captures
         fields = concatenate_captures(chunks)
@@ -1393,9 +1396,12 @@ class Engine:
                 last = at
             opened = native_step(self.shared_model, tensor(prefix[last:]), cache)
             capture = native_step(self.shared_model, tensor(span), opened["cache"], producing=True)
+        # A reply captured in its own context is a 'capture' (spliced when read); a value's text written after its
+        # producing call is a 'span' (read in context).
+        kind = 'capture' if text is None else 'span'
         if text is None:
             text = self.tokenizer.decode(span, skip_special_tokens=False)
-        block, record = self._native_store_capture(span, [capture], text=text, producer_kind='span')
+        block, record = self._native_store_capture(span, [capture], text=text, producer_kind=kind)
         return self._capture_result(block, record, prefix, span, value_type, imports, blocks, text=text)
 
     @staticmethod

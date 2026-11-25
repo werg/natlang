@@ -478,8 +478,9 @@ def test_an_unmeasured_start_is_judged_against_the_given_reference_and_rolls_bac
     assert ctrl.current['sha256'] == ref[1] and not ctrl.in_lineage('0' * 64)
 
 
-def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tmp_path):
+def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tmp_path, monkeypatch):
     import expert_iteration as ei
+    monkeypatch.setattr(ei, 'AUTO_PHASE_SWITCH', True)
     ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
                                          held_every=1)
     def publish_and_judge(i, verdict, adopt):
@@ -495,6 +496,31 @@ def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tm
     publish_and_judge(3, 'neutral', True)
     ev = publish_and_judge(4, 'neutral', True)
     assert ev['switch_phase'] == {'from': 'grpo', 'to': 'sft'} and ctrl.current['sha256'] == _policy(4)[1]
+
+
+
+def test_neutral_rounds_do_not_switch_phase_by_default(tmp_path):
+    import expert_iteration as ei
+    ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
+                                         held_every=1)
+    for i in (1, 2, 3):
+        ctrl.record_round_published(f'r{i}', *_policy(i), base_sha256=ctrl.current['sha256'])
+        ctrl.start_measurement()
+        ev = ctrl.record_verdict({'verdict': 'neutral', 'adopt': True, 'checkpoint': _policy(i)[0],
+                                  'sha256': _policy(i)[1]})
+        assert ev['action'] == 'adopt' and 'switch_phase' not in ev
+    assert ctrl.phase == 'sft' and ctrl.current['sha256'] == _policy(3)[1]
+
+
+def test_judge_adopts_neutral_and_rolls_back_only_a_significant_regression(monkeypatch):
+    import expert_iteration as ei
+    vs = lambda d, p, ran_out=0.0: {'primary': {'delta': d, 'permutation_p': p}, 'ran_out_rate_delta': ran_out}
+    assert ei.judge(vs(-0.018, 0.49, 0.02), 3, 3) == ('neutral', True)
+    assert ei.judge(vs(0.021, 0.39, 0.0235), 3, 3) == ('neutral', True)
+    assert ei.judge(vs(-0.05, 0.01), 3, 3) == ('failure', False)
+    assert ei.judge(vs(0.05, 0.01), 3, 3) == ('success', True)
+    monkeypatch.setattr(ei, 'NEUTRAL_ADOPT', False)
+    assert ei.judge(vs(-0.018, 0.49), 3, 3) == ('neutral', False)
 
 
 def _driver(tmp_path, monkeypatch, **over):

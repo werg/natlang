@@ -8,7 +8,10 @@ For every consumer chain of `operator_rows.py` (a test split), the consumer's ta
 * ``standalone``: the same reply content written from position 0 (`[produce_open] + span`, the context-free text write engines made before 2026-11-25):
   whether the in-context capture carries more than its tokens;
 * ``shuffled``: the state of another case of the same source (a derangement), its span spliced in at the import;
-* ``text-cut``: the runtime's text cut of the value instead of any state (`*.test-textcut.pkl`).
+* ``text-cut``: the runtime's text cut of the value instead of any state (`*.test-textcut.pkl`);
+* ``inline``: the reply's tokens as ordinary tokens where the state stood, no import and no consume markers: what the
+  engines serve by default since 2026-11-23 (``engine.reads_in_context``, receipt ``in-context-text``), i.e. the
+  operator's summary read as text.
 
 Reported per source: mean NLL per arm, the paired per-case differences against ``actual`` with a sign-flip
 permutation p and a case-bootstrap 95% CI, by seed provenance where the rows record it.
@@ -31,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import exp0_sft  # noqa: E402
 from natlang_neuralese.train import lfm3_fast as lfm3_fast_train  # noqa: E402
 
-ARMS = ('actual', 'standalone', 'shuffled', 'text-cut')
+ARMS = ('actual', 'standalone', 'shuffled', 'text-cut', 'inline')
 
 
 def with_span(chain, key, span, document):
@@ -59,6 +62,23 @@ def standalone(chain, produce_open):
                     'stop': 1 + len(span)}
         out = {**out, 'sources': {**out['sources'], key: document}}
     return out
+
+
+def inline(chain, consume_open, consume_close):
+    """``chain`` with every import read in context: its span's tokens stay where they stood, the import and the
+    consume markers around it are removed (the serving default `in-context-text` read)."""
+    ids = chain['ids']
+    drop = set()
+    for at, key in chain['imports']:
+        source = chain['sources'][key]
+        n = source['stop'] - source['start']
+        if at < 1 or ids[at - 1] != consume_open or ids[at + n] != consume_close:
+            raise ValueError(f"{chain.get('task')}: import {key} is not between consume markers")
+        drop.update((at - 1, at + n))
+    keep = np.asarray([i for i in range(len(ids)) if i not in drop])
+    shift = lambda position: position - sum(1 for d in drop if d < position)
+    segs = [(shift(start), length, row) for start, length, row in chain['segs']]
+    return {**chain, 'ids': ids[keep], 'segs': segs, 'imports': [], 'sources': {}}
 
 
 def shuffled(chains, seed=0):
@@ -104,11 +124,13 @@ def paired(diffs, rounds=10000, seed=0):
             'better_share': float((diffs > 0).mean()), 'n': len(diffs)}
 
 
-def measure(model, consumers, cuts, produce_open, limit=0):
+def measure(model, consumers, cuts, role_ids, limit=0):
+    produce_open, _produce_close, consume_open, consume_close = role_ids
     consumers = consumers[:limit] if limit else consumers
     cut_by_task = {chain['task']: chain for chain in cuts}
     arms = {'actual': consumers, 'standalone': [standalone(c, produce_open) for c in consumers],
-            'shuffled': shuffled(consumers), 'text-cut': [cut_by_task.get(c['task']) for c in consumers]}
+            'shuffled': shuffled(consumers), 'text-cut': [cut_by_task.get(c['task']) for c in consumers],
+            'inline': [inline(c, consume_open, consume_close) for c in consumers]}
     scores = {arm: [] for arm in ARMS}
     with torch.no_grad():
         for index in range(len(consumers)):
@@ -122,6 +144,10 @@ def measure(model, consumers, cuts, produce_open, limit=0):
         pairs = [other - actual for actual, other in zip(scores['actual'], scores[arm]) if other is not None]
         if len(pairs) >= 2:
             report[f'{arm}_minus_actual'] = paired(pairs)
+    # What serving reads (inline) against the crisp text cut alone: does the operator's summary help a consumer?
+    pairs = [cut - line for line, cut in zip(scores['inline'], scores['text-cut']) if cut is not None and line is not None]
+    if len(pairs) >= 2:
+        report['text-cut_minus_inline'] = paired(pairs)
     report['per_case'] = [{'task': c['task'], **{arm: scores[arm][i] for arm in ARMS}} for i, c in enumerate(consumers)]
     return report
 
@@ -137,7 +163,7 @@ def main():
     args = parser.parse_args()
     rows = Path(args.rows)
     manifest = json.loads((rows / 'manifest.json').read_text())
-    produce_open = manifest['role_ids'][0]
+    role_ids = manifest['role_ids']
     from natlang_neuralese.train.lfm3_learner import load_effective_policy
     model, state, _learner = load_effective_policy(args.checkpoint, args.base, device='cuda', dtype=torch.bfloat16)
     if state and sorted(k for k in state['interface_state'] if k.startswith('adapter.')):
@@ -151,7 +177,7 @@ def main():
         chains = pickle.load(open(files['test']['path'], 'rb'))['chains']
         consumers = [c for c in chains if c['segs'][0][2].get('kind') == 'consumer']
         cuts = pickle.load(open(files['test-textcut']['path'], 'rb'))['chains'] if 'test-textcut' in files else []
-        report['sources'][name] = measure(model, consumers, cuts, produce_open, args.limit)
+        report['sources'][name] = measure(model, consumers, cuts, role_ids, args.limit)
         summary = {k: v for k, v in report['sources'][name].items() if k != 'per_case'}
         print(json.dumps({name: summary}), flush=True)
     Path(args.out).write_text(json.dumps(report, indent=1) + '\n')

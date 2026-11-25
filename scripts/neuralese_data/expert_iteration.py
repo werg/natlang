@@ -1091,8 +1091,9 @@ def launch_teacher(runner, work, frontier_path, student_groups, unit, covered_ex
                       f'cd {runner.pin}\nexec ' + ' '.join(map(_quote, command)) + '\n')
     script.chmod(0o755)
     # CPU/API-bound, ~4 GB at 20 slots: medium so medium-priority smokes and evals do not preempt it (each preemption
-    # kills its running paid episodes); a high-priority training run still can
-    runner.ledger(unit, 6, 'medium', ['/bin/bash', str(script)], work / 'launch.log', detach=True)
+    # kills its running paid episodes); a high-priority training run still can. 10 GB: the standing campaign grows over
+    # hours and was OOM-killed at its 6 GB cap (aei1 2026-11-25 14:21, 6.1 GB peak after 6 h)
+    runner.ledger(unit, 10, 'medium', ['/bin/bash', str(script)], work / 'launch.log', detach=True)
     return len(rare)
 
 
@@ -1218,10 +1219,19 @@ def placement_round_size(*, round_target_tokens, teacher_budget, hours, gpu_name
             'forward_per_target': round(forward_per_target, 3)}
 
 
+NEUTRAL_ADOPT = os.environ.get('NATLANG_EI_NEUTRAL_ADOPT', '1') != '0'
+# Two consecutive neutral rounds switch SFT <-> GRPO only when this is set: the phase is a deliberate choice recorded in
+# DECISIONS, not an automatic consequence of underpowered held results (owner 2026-11-25).
+AUTO_PHASE_SWITCH = os.environ.get('NATLANG_EI_AUTO_PHASE_SWITCH', '0') == '1'
+
+
 def judge(vs_start, success_pts, fail_pts):
     """(verdict, adopt) of a held comparison against the reference (the declared criteria, DECISIONS): failure below
     -``fail_pts`` with p < 0.05, success at +``success_pts`` without more ran-out episodes, else neutral; a neutral
-    candidate is adopted when it is ahead and does not run out more."""
+    candidate is adopted: only a significant regression rolls back (owner 2026-11-25, DECISIONS "neutral rounds
+    continue"; a round's gain is often below what one held measurement resolves, and neutral rounds still train
+    capabilities held-v3 does not measure, Neuralese among them). ``NATLANG_EI_NEUTRAL_ADOPT=0`` restores adopting
+    a neutral candidate only when it is ahead and does not run out more."""
     d, p = vs_start['primary']['delta'], vs_start['primary']['permutation_p']
     ran_out = vs_start.get('ran_out_rate_delta') or 0
     if d < -fail_pts / 100 and p < 0.05:
@@ -1230,6 +1240,8 @@ def judge(vs_start, success_pts, fail_pts):
         verdict = 'success'
     else:
         verdict = 'neutral'
+    if verdict == 'neutral' and NEUTRAL_ADOPT:
+        return verdict, True
     return verdict, verdict == 'success' or (verdict == 'neutral' and d > 0 and ran_out <= 0.02)
 
 
@@ -2941,8 +2953,9 @@ class PhaseController:
     - A candidate held does not adopt (failure, or neutral without gain) rolls the lineage back to the reference: the
       candidate and everything trained from it leave the lineage, so the previous policy is the reference's own
       predecessor, never the rejected one.
-    - Two consecutive neutral measured rounds switch the phase (sft -> grpo, grpo -> sft), restarting from the
-      reference (the newest held-adopted policy)."""
+    - With ``NATLANG_EI_AUTO_PHASE_SWITCH=1``, two consecutive neutral measured rounds switch the phase (sft -> grpo,
+      grpo -> sft), restarting from the reference (the newest held-adopted policy). Off by default: the phase is a
+      deliberate choice (``phase`` in the state file, DECISIONS)."""
 
     def __init__(self, state_path, *, state=None):
         self.path = Path(state_path)
@@ -3171,7 +3184,7 @@ class PhaseController:
             self._rollback()
             self.state['since_held'] = 0
             event.update(action='rollback', rollback_to=dict(self.state['reference_policy']))
-        if self.state['consecutive_neutral'] >= 2:
+        if AUTO_PHASE_SWITCH and self.state['consecutive_neutral'] >= 2:
             old = self.state['phase']
             self.state['phase'] = 'grpo' if old == 'sft' else 'sft'
             self.state['consecutive_neutral'] = 0
