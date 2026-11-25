@@ -11969,3 +11969,60 @@ Codex's `reasoning.summary: auto`, and natlang records both. One leak is fixed: 
 **Not checked.** Whether the filled reasoning should give way to real teacher reasoning for the raw models; it does
 not today. Whether richer Codex summaries (`reasoningSummary: detailed`) would carry more; they would still be summaries.
 Round 9's funnel: its build was still replaying when this entry was written.
+
+## 2026-11-25 03:00 Program inventor to production: pilot admitted, held-inv slice, stage tasks, per-task episode budgets, campaign pipeline (program-inventor strand)
+
+Owner decisions of 2026-11-25 on plans/NOVEL_PROGRAMS_20261124.md §14, then the change of plan: generation runs as a
+coordinator-launched campaign of Claude subagents (Sonnet first, Opus where needed) from a central idea bank of ~200
+cards; this strand does not run the 30-50 idea round and builds what the campaign needs.
+
+**Episode budget (decision 5).** Inventory of the mechanism: the whole-case model-request budget is enforced in one place,
+ts-host `teacher/collector.ts` (`nativeJobRunner`); grpo.py, expert_iteration collect, teacher_gen, held_eval measure,
+memetic_workspace and sft_sources replays all hand it a run budget (`max_model_requests`). A case now declares
+`semantics.episode_model_calls`; `caseModelRequestBudget` raises the run budget to it for that case and never lowers it
+(opt-out `NATLANG_CASE_MODEL_CALLS=0`; test). Held measurement goes through the same collector, so held-inv tasks get
+their declared budgets. `invented.py qualify` replays each reference call by call (`scripts/rl_tasks/reference_trace.mjs`)
+and declares twice the reference run's model calls: pilot whole-program tasks declare 42-102 (reference runs 21-51
+calls). No other engine executes episodes (the serving engines serve calls, not episodes).
+
+**Stage tasks (decision 4).** Every distinct leaf judgment call of a reference run (no callable folder of its own, no
+function among its arguments) becomes a task: the same program files with that judgment as the root, the call's own
+arguments as inputs, the reference's answer as the exact expected value; same split and world as the program. Two
+defects found and fixed on the way: the reference driver answered a decision-readout root with return_result, so every
+decision-root stage task failed replay with decision-generation-invalid (now the scripted value answers as the
+decision's JSON text, as for children; test); and decision readouts return through no return_result action, so their
+values are read from the call's invocation_output host capture. All 324 stage tasks of the four train programs replay
+to accepted answers.
+
+**Admission (decision 1).** Admitted through the new per-submission pipeline (`invented.py admit`: qualify + review
+gate on S4/C3/D3/N1 for the submission's digest + split + ledger): anatomical-character-tree-scorer,
+assurance-case-defeater-grounder, randomization-law-reconstructor, suppressed-count-reconstruction-auditor (train) and
+nonvisual-interaction-parity-auditor (dev). Published as one batch: `natlang-rl-invented-20261125-020600` in grpo-pool
+(271 rows: 8 whole-program tasks, 263 stage tasks; repetition against the 37,868-row pool: 0 shared instruction texts,
+programs or structures; 21 distinct instruction texts, top-10 share 0.79) and the held slice (below). Fixes first: the
+suppressed-count display string is `Untrusted` now; the causal-adjustment notes are reworded as explicit influence in
+both instances. Not admitted: **causal-adjustment-auditor**: its final review (gpt-6-luna) keeps a real S4 finding
+(`isConditionedBySelection` receives `candidate.causes` it does not need, and C3's pass rests on them; fixing it needs a
+redesign of that judgment). suppressed-count: the final Luna review answered S4 and D3 false with findings that
+contradict the files (the cited fields are `Untrusted<string>` in types.ts lines 14/46/60/70/139; the D3 finding objects
+to exact work in TypeScript); I checked and overrode them, recorded in its review.json. Live runs (F5) for the pilot
+programs not run cleanly in the pilot were not run in this strand (below).
+
+**Held slice (decision 2).** `ops/held-inv/<stamp>/` beside held-v3, pinned with `held_eval pin --all-rows` (also
+excluding held-v3), registry role `held-eval-invented`, so `held_eval.training_exclusion_ids` keeps every row of its
+ideas (whole programs and stage tasks: 63 of 63 for the parity auditor) out of training. `held_eval verify` against
+every row of grpo-pool and grpo-memetic-tasks (38,391 ids, 61,917 groups): no overlap. First manifest
+`held-inv-20261125-020600`: 2 whole-program tasks of one idea. Each publish pins a new cumulative manifest that
+supersedes the previous. held-v3 untouched.
+
+**Campaign pipeline.** `program_atlas.py bank-check BANK` (each card against the atlas, accepted/claimed ideas and the
+bank's earlier cards; TF-IDF cosine >= 0.25 refuses: distinct pilot ideas score 0.06-0.10, a card against its own
+text 0.85-0.90), `take BANK --by AGENT` (one builder per card under a lock; near duplicates of taken cards recorded
+`duplicate` and skipped), `release SLUG --status failed`; `invented.py admit SUBMISSION` and `publish` (batched pool
+dataset + cumulative held manifest); `applications/program-inventor/REVIEW_BRIEF.md` for reviewer agents.
+
+**Not checked.** F5 live runs of anatomical, suppressed-count, parity a and assurance a (Codex window shared with the
+teacher campaign; Anthropic API has no credits; `scripts/claude_code_endpoint.py` serves Claude Code's models as an
+OpenAI-compatible teacher endpoint for them). Reviewer reliability (one review per program; Luna's final findings
+contradicted the files twice). Stage-task learnability and whether 263 stage tasks crowd 8 whole-program tasks in
+selection. The held slice's baseline measurement (2 tasks: not yet a useful measure).
