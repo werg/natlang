@@ -397,6 +397,12 @@ def extract(args):
     out.mkdir(parents=True, exist_ok=True)
     held_manifest = args.held_manifest or data_registry.role_path('held-eval')
     colls, pools, works = collections_of(args), authored_pools(args), [Path(w) for w in args.work or ()]
+    unregistered = []
+    if not args.collection:   # a discovered collection no registry entry holds is left out (and listed), never read
+        registry = data_registry.load()
+        unregistered = [c for c in colls
+                        if (registry.find(c) or {'admission': data_registry.INVENTORY}).get('admission') == data_registry.INVENTORY]
+        colls = [c for c in colls if c not in unregistered]
     data_registry.require_registered([*map(str, colls), *map(str, pools), *map(str, works)])
     units = []
     for coll in colls:
@@ -482,7 +488,8 @@ def extract(args):
                'distinct_sites': len({b[0] for b in per_site}), 'site_headers': len(per_site),
                'funnel': dict(sorted(funnel.items())),
                'sources': {k: dict(sorted(v.items())) for k, v in by_source.items()},
-               'collections': [str(c) for c in colls], 'authored_pools': [str(p) for p in pools],
+               'collections': [str(c) for c in colls], 'unregistered_collections': [str(c) for c in unregistered],
+               'authored_pools': [str(p) for p in pools],
                'works': [str(w) for w in works]}
     (out / 'extract.json').write_text(json.dumps(summary, indent=1) + '\n')
     if not args.no_register:
