@@ -866,7 +866,7 @@ def main(argv=None) -> int:
             print(line)
         unanswered = [a for a in row.get('answers') or [] if a.get('entry') == -1]
         for a in unanswered:
-            print(f'NO ENTRY for a call of {a["name"]}: {a["shown"][:300]}')
+            print(f'NO ENTRY for a call of {a["name"]}: {a["shown"][:2000]}')
     stats = result.get('stats')
     if stats:
         print('statistics: ' + json.dumps({k: stats[k] for k in ('nl_depth', 'interior_functions', 'construct_kinds',

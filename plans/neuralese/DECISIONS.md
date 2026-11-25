@@ -12981,3 +12981,25 @@ bad authored answers in more than one call in ten, or statistics flat across two
 Actual V30 `image-candidate-format-disagrees-native` answered the user's query correctly from a captured native original: PNG bytes despite a WebP activity label, therefore held. Eight native/answer checks passed; only `groundedImageAssessment` rejected empty planner reasons. Source SST `02942fec` removes that hidden queue/exhaustiveness/reason gate from required outcomes and masks, retaining its false diagnostic. Base `53a6cecc` clarifies native receipt identity and authorized held private diagnostics; the actual owned-task contradictory answer and missing Chat private note remain genuine failures. Arbitrary Image/Chat prose caps are removed; native resource limits and required artifact checks remain.
 
 Mechanism inventory before recovery: the SST image verifier emits captured originals, exact native checks, role dimensions and return masks; Host `openOutcomeGoalEvidence`/bound workflow review admit actual goal meaning; `reassess_image_answer.mjs` binds the original clean source hash, entry, root output, all actor-visible image effect bytes and every corrected exclusion. Existing `live_teacher_sources.validate_reassessment_check_roles` checks an exhaustive source-bound required/optional partition, `recheck_live_trajectories.recover` preserves raw captures, and Node `observed-workspace-evidence` rechecks IR ingestion. No engine execution/scoring protocol changes: managed llama, wllama, Python native and SGLang produce no archived image-fixture role decisions; the shared captured native IR admission path consumes this derivative proof. Original data and failed checks are immutable. This offline correction requires an independent exact-bound workflow review; without it the tool emits only pending review input. Optional planner bookkeeping must not become an invalid-return mask. Targeted custody negatives cover changed source/root/native readback, missing checks, unrelated exclusions, different teacher and held split. No teacher rerun.
+
+**2026-11-25 11:30, authored-program calibration (program-inventor strand).** Two Sonnet builders, one card each,
+`/home/werg/data/natlang-novel-programs/authored-cal-20261125/` (`REPORT.md`): both admitted, ~30-70 min each.
+- negotiation-standing-offer-tracker: 15 `.nl`, 0 TS lines, NL depth 4, 6 interior functions, 9 construct kinds, 209
+  NL calls per instance, 23 NL literals (18 built from data, 0.42 of the call tree), open share 0.30.
+- guidebook-route-to-trail-graph: 17 `.nl`, 0 TS lines, depth 5, 8 interior, 10 kinds, 152 NL calls per instance, 51
+  literals (47 from data, 0.44 of the tree), open share 0.31.
+- Drawn-sample review (both, by the coordinator): the negotiation program has the target shape (`.partial`, `.in`,
+  per-issue tests synthesized from issue descriptions, a 25-line offer-state transition in the root's eval). The
+  trail program's ~100 exit-test answers were computed by a builder script from angles (`build-cal2/sim.py`): rote,
+  mechanistic rows. Brief tuned once: every answer written by the builder from the call's opening, a call a script
+  could answer is eval code; instance size by what the builder can answer with care (10-25 items, 800-2,000 words);
+  synthesized writers, not only boolean tests; YAML `: ` note; per-agent log names in the wave brief (two builders'
+  `take-1.log` collided).
+- Fixed on the way (default, tests): the reference driver counted a child's scripted turns per opening, so a second
+  call with the same opening started at turn 2 (`curriculum.ts`: now per invocation id; `reference-child-turns.test.mjs`);
+  function-valued arguments are recorded as live-value previews and are now counted as higher-order; `check` shows
+  2,000 characters of an unanswered call.
+- Open: a saved eval helper annotated with `Untrusted<string>` fails `invalid-binding` (builder report; not yet
+  reproduced).
+- Wave 1 brief: `/home/werg/data/natlang-novel-programs/authored-w1-20261125/BRIEF.md` with `EMPHASIS.md` (open text,
+  std combinators, recursion, folder reducers, refinements, judgments that need reading).

@@ -62,7 +62,8 @@ at the edges.
   holds; recursion on a smaller argument; repair and fixed point; folder reducers and transactions for programs that
   read and write documents.
 - **Open-ended outputs.** Most functions write something: a summary, a reply, a rewritten passage, a plan, an
-  explanation, an extracted record with text fields. A decision (`readout: decision`) is right where the honest
+  explanation, an extracted record with text fields. Synthesized functions write too: a writer built from the voice
+  of the source, a reply drafted for this customer's history, not only tests that return a boolean. A decision (`readout: decision`) is right where the honest
   answer is one of a few values. The root returns what the user actually needs, which is usually a document with
   structure, not a single label.
 - **Crisp TypeScript only where exactness or the outside world requires it.** By default a program has no `.ts` file
@@ -114,17 +115,24 @@ The replay records every call. Your trajectory answers each call below the root 
 | `pluggable` | `pluggable({ crisp, nl }, setting)` in a helper | a `pluggable` span and the side it ran |
 | Escalation, context | `escalate(fn, { to, floor })`, `withContext(fn, { policy })` | the wrapped function's calls |
 
-Eval code follows the iteration rules: `for...of`, counted loops, array methods, `iterateOn`; no `while`. Outside text
+Front matter is YAML: a `description:` containing `: ` goes in double quotes. Eval code follows the iteration rules: `for...of`, counted loops, array methods, `iterateOn`; no `while`. Outside text
 is never interpolated into an NL literal's instructions: pass it as an argument (`untrusted-instruction`), and build
 instructions from values the program derived (a category name, a rubric a call wrote, a field's id).
 
 ## The instances
 
-Two or three instances, each one real working session of the card's user at the card's size: the whole thread, the
-day's calls, the week's letters, as people write them. Every input is literal data written for this program: no
-generator, no template, no variants.
+Two or three instances, each one real working session of the card's user: the whole thread, the day's calls, the
+week's letters, as people write them. Every call in the trajectory is yours to write, so size an instance by the items
+you can read and answer with care: typically 10-25 items and 800-2,000 words of prose. The card's size is an upper
+sketch. Every input is literal data written for this program: no generator, no template, no variants.
 
 ## The trajectory
+
+**Write every answer yourself, reading that call's opening as the model would.** A script may assemble the JSON from
+answers you wrote (and lay out data you typed), but no script computes an answer. If a script could compute a call's
+answer from the call's arguments (a turn is "left" because its angle is negative, an item matches because two ids are
+equal), that step is exact: it belongs in eval code, and the natural-language call should ask something only reading
+can answer.
 
 For each instance you write the whole execution: what the root does, turn by turn, and what every call below it
 answers, including the open text a function writes (the summary, the reply, the rewritten passage). Write what a
