@@ -31,3 +31,28 @@ for(const[label,change]of[
  ['held split',s=>{s.task.split='test';}],
  ['review waiver',s=>{s.checker.observedContentReview=()=>({semanticReviewRequired:false});}],
 ])test(`refuses ${label}`,()=>{const s=fixture();change(s);assert.throws(()=>run(s));});
+
+function authorityFixture(){
+ const s=fixture(), prior=s.packet.execution.diagnostics.openGoalVerification, native=s.packet.execution.diagnostics.natlangTeacher;
+ s.source=Buffer.from('binding.services.assignedAuthorityRead.preflight(operationId) snapshots.push(observation)');s.pins.validator_sha256=sha(s.source);
+ const observation={operationId:'site',decision:'acquirable',leaves:[{capability:'external.open',resourceKey:'https://review.example.invalid',tier:'gated',status:'acquirable'}]};
+ prior.caseId='route-authority-case';prior.offer={request:{operations:[{id:'site'}],ceiling:[{capability:'external.open',resourceKey:'https://review.example.invalid'}]}};prior.snapshots=[observation];
+ prior.authority={status:'needs-acquisition',protectedLeaves:prior.offer.request.ceiling,held:[],reviews:[{observation,outside:[],disposition:'needs-acquisition'}]};prior.choice=null;prior.readback=null;prior.artifact=null;
+ const report={outcome:{status:'needs-approval',summary:'Native approval remains acquirable; no visit occurred.'},readback:null,handoff:null};prior.actualResult=native.report=report;native.calls[0].record.output=ref(report);
+ native.calls[0].record.effects=[['routeEvidenceRead','discover',[],prior.offer],['assignedAuthorityRead','preflight',['site'],observation]].map(([service,method,args,result])=>({service,method,by:'crisp',args:ref(args),result:ref(result)}));
+ s.checker.observedRouteAuthority=(rows,ceiling)=>({status:'needs-acquisition',protectedLeaves:ceiling,held:[],reviews:rows.map(observation=>({observation,outside:[],disposition:'needs-acquisition'}))});s.checker.routeAuthorityReviewGuidance='Exact acquirable preflight requires approval; do not visit to report it.';
+ const keys=['offer','snapshots','authority','choice','readback'];
+ prior.semanticReviewInput=s.checker.observedContentReview(prior,prior.outcomeContract,report,keys,['artifact']).semanticReviewInput;s.review.input=structuredClone(prior.semanticReviewInput);
+ s.bindInput=proof=>{assert.deepEqual(proof.semanticReviewInput.actual.observations,Object.fromEntries(keys.map(key=>[key,proof[key]])));return proof.semanticReviewInput;};return s;
+}
+const authorityRun=s=>reassessNativeReview(s.packet,s.pins,s.task,s.review,s.source,'route-authority',s.checker,entry=>entry,s.bindInput);
+test('binds an approval-state query to actual native offer, exact preflights and unchanged answer without a visit',()=>{const s=authorityFixture(),before=structuredClone(s.packet),r=authorityRun(s);assert.deepEqual(s.packet,before);assert.deepEqual(r.projected.checks, before.execution.diagnostics.openGoalVerification.checks);assert.deepEqual(r.reviewInput.actual.requestedReturn,s.packet.execution.diagnostics.natlangTeacher.report);assert.match(r.reviewInput.rubric,/do not visit/);assert.equal(s.review.verdict.accepted,false);});
+for(const[label,change]of[
+ ['missing native offer',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.shift();}],
+ ['missing native preflight',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.pop();}],
+ ['unobserved approval',s=>{s.packet.execution.diagnostics.openGoalVerification.snapshots[0].decision='allowed';}],
+ ['forged aggregate authority',s=>{s.packet.execution.diagnostics.openGoalVerification.authority.status='eligible';}],
+ ['duplicate preflight',s=>{const p=s.packet.execution.diagnostics.openGoalVerification;p.snapshots.push(structuredClone(p.snapshots[0]));}],
+ ['foreign operation',s=>{s.packet.execution.diagnostics.openGoalVerification.offer.request.operations=[];}],
+ ['missing domain guidance',s=>{delete s.checker.routeAuthorityReviewGuidance;}],
+])test(`rejects approval reassessment with ${label}`,()=>{const s=authorityFixture();change(s);assert.throws(()=>authorityRun(s));});
