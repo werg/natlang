@@ -13299,3 +13299,166 @@ line (the trained readout format; changing it is a separate model-facing change)
 still previews as "live value, use it in eval" (no std judgment takes one). Python `operator_rows.py` does not yet pass
 `sealed` (no sealed rows are generated; readouts with cut values were not compacted before).
 Tests: `ts-host/test/sealed-readout-values.test.mjs` (8). MODEL_FACING_CHANGES 2026-11-25.
+
+## 2026-11-25 14:20 aei1: why rounds after round 1 show no held gain; clean re-measurement launched; zero-call rows left out of pass rates (ei-diagnosis agent)
+
+**Observation (brief).** Held-v3 verdicts on Pop (2 samples): r1 8e634a0f +4.47 vs base e15b (p 0.05, success);
+3eb3f435 (rounds 2-5) +2.15 vs r1 (p 0.39, 18 lost); 6f19fe3a (round 9 from r1) -1.83 vs r1 (p 0.49, 56 lost). Both
+later ones rolled back to r1. Raw successes /512: base 294, r1 293, 3eb3 307, 6f19 312.
+
+**1. The raw counts and the 56 lost pairs.** All 52 of r1's lost episodes never called the model (18
+`infrastructure_error`, 34 `unresolved`, 0 model calls): the Pop actor was lost at the start, one resume crashed on an
+engine-identity refusal, and the rest ran on a second pin (0076be6 then a034dbf: r1's result spans two code pins).
+The 52 are a random draw (base solved 25 of them, 3eb3 22, 6f19 28), so r1's raw 293 has 52 automatic zeros, and that
+gap explains the raw 293 vs 307/312. The 56 in 6f19's compare are those 52 plus 4 budget stops spent on resends,
+relabelled from the episodes (DECISIONS 11-24 19:00). The 3eb3 compare read the 34 `unresolved` as r1 failures, which
+inflates its +2.15. On the 456 pairs every policy measured: base 267, r1 291, 3eb3 284, 6f19 283.
+**2. All three trained policies are indistinguishable; r1's lead is selection on noise.** Same 456 pairs (245 tasks),
+mean per-task change, task bootstrap, sign-flip p: base->r1 +4.90 (CI +0.2..+9.8, p 0.05), base->3eb3 +3.47 (p 0.16),
+base->6f19 +4.08 (p 0.06), r1->3eb3 -1.43 (p 0.57), r1->6f19 -0.82 (p 0.79), 3eb3->6f19 +0.61 (p 0.87). SE of a
+paired delta at 2 samples is 2.2-2.5 pts. Per task, the changes regress to the mean: on the 47 tasks where r1 beat the
+base (0.19 -> 0.84), 3eb3 and 6f19 score 0.56/0.52; on the 30 where r1 lost (0.85 -> 0.23) they score 0.55/0.58;
+corr(r1-base, r9-r1) = -0.56, corr(r1-base, r5-r1) = -0.50 (-0.5 is the value for pure noise). So r1 was adopted on a
+favourable draw, and later rounds were judged against that draw. Each of r1, 3eb3 and 6f19 is about +4 vs the base.
+After r1, no round measurably added to it. Held does not show that any round lost ground either. Per family (456
+pairs; base/r1/3eb3/6f19): auth 0.49/0.58/0.54/0.54 (175), ext_codebase 0.69/0.81/0.73/0.69 (48), curriculum
+0.60/0.62/0.68/0.72 (40), natlang-codebase 0.44/0.49/0.51/0.46 (39); the rest are flat. At these n the family moves
+are within noise.
+**3. The update reaches the model (ruled out: merge, LR, nothing trained).** Exact FP32 LoRA delta vs what the BF16
+merge (`merge_policy_state`) kept: r1 |dW|/|W| 9.98e-3, projection of realized on exact 0.999, cos 0.987; r9 6.35e-3,
+projection 0.995, cos 0.969 (w2 the weakest: 0.961/0.920), so >= 96% of each update survives. Rounding adds orthogonal noise of
+0.16-0.25 of |dW|, at BF16-ULP level. Checkpoint deltas: |r1->r9| = 0.64 x |base->r1|, cos(base->r1, r1->r9) = 0.008
+(new direction); r9->r10 another 0.58 x. LR reaches 5e-5 in every round (cosine to 5e-6). r1 ran 1,150 steps,
+rounds 2-7 ran 439-576, and rounds 9-10 ran 332-353, all at about 32k loss tokens per step. The 3eb3 checkpoint
+(deleted as off-lineage) was rebuilt from r0004 (Drive) + r0005 factors: sha 3eb3f435 exactly.
+**4. What later rounds trained on: new supervision collapsed after r1.** Weighted target tokens by part:
+r1 37.4M (filled 16.8M, rl-own 12.5M, teacher 2.8M); r2-r7 14-19M (filled 6.4-8.1M, but 78-98% of the filled and
+up to 93% of the teacher repeats, DECISIONS 11-24 19:00); with no repetition (max-prior-exposures 1) r9 11.6M (rl-own
+4.97M 43%, operators 2.69M, teacher 1.42M, filled 1.07M), r10 11.0M (teacher 0.39M), r11 6.2M (rl-own 4.83M, 78%).
+Teacher-derived tokens never seen before: r1 19.6M, r9 2.5M, r11 1.2M. Fresh teacher successes per round are
+16-1,002 episodes, run on 124 frontier tasks a round. Of r9's 625 own episodes, 131 come from tasks r1 already solves
+(>= 0.75), 359 from 'sometimes' (median r1 rate 0.56) and 105 from pre-aei1 runs. So with repetition (r2-7) a round
+re-trained what r1 had already learned. Without it (r9 on), a round is mostly self-imitation of successes the policy
+already gets about half the time, plus 1-2.5M fresh teacher tokens. Neither gives a gain that 2-sample held resolves.
+**5. On its own training distribution: the same picture once phantom failures are left out.** Matched-task
+collection pass rates (per-task mean change, task bootstrap; rows with 0 model calls left out, the defect below):
+base -> r1 +5.1 pts (257 tasks, CI +1.2..+8.8), r1 -> 3eb3 +0.4 (47, CI -6.0..+7.9), r1 -> 6f19 -3.9 (95, CI
+-10.3..+2.6), 6f19 -> r10 +3.4 (84, CI -2.9..+9.9). Read as recorded, the same data showed base -> r1 at -10.6 and every
+later round at +12 to +17. Caveat: each collection ran on its own pin (the ts-host tree changed every round), and
+selection draws tasks by earlier rates.
+**Defect found and fixed: phantom failures in training pass rates.** r1's main DGX collection (v0001-hdd0, pin
+edb3cba) has 686 of 1,142 student rows `unresolved` with 0 model calls (actor outages, written before the scorer
+labelled transport failures `infrastructure_error`); v0000 has 168 more. `task_rollouts.infra_lost` left only
+`infrastructure_error` out, so `pass_rate_counts` counted them as failures. In r0009's frontier, 853 phantom failures
+on 257 of 782 tasks: 34 'sometimes' tasks are really solved and 26 have no real measurement. The frontier picks the
+teacher's tasks and the own-success exclusions. Fix (default on, `NATLANG_ZERO_CALL_UNSCORED_LOST=0` opts out): an
+unscored row with 0 model calls is lost to infrastructure. Consumers: `expert_iteration.group_outcomes` (frontier),
+`grpo._record_outcome` (pass band), `exp1_pass_rates`. Not affected: `sft_sources._extract_rl_group` (leaves every
+unscored row out, sft_sources.py L321-324), held (`held_eval.infra_loss` classifies from the journals; `relabel` for
+legacy results). Test `test_group_outcomes_leave_unscored_rows_without_a_model_call_out`. Enters at the driver's next pin.
+**Also observed.** (a) Validation is uninformative: r4-r7's `val-teacher` loss is 0.003-0.03 and moves 1-4% a round,
+and r9/r10 log no validation at all, though `--val-episodes 40` was passed. (b) The driver's `aei1-r0012-grpo` asks
+100 GB: need 115 with the reserve, while at most 110.9 is obtainable (8.3 GB outside the ledger). It cannot start,
+and as queue head it holds 0.1 GB of backfill, so every medium job waits behind it.
+
+**Clean re-measurement (running).** base e15b, r1 8e63, 3eb3 (rebuilt) and 6f19 on one pin (edd23ec451d3), the DGX
+held series (`dgx-held`), 4 samples, 32 slots, KV 6 GB, medium priority. Results in
+`ops/ei/aei1-remeasure-20261125/policy-*`; pairs by `held_eval compare`. Predicted from (2): r1, 3eb3 and 6f19 within
+about 2 pts of each other, all 2-6 pts over the base. If instead r1 leads by > 4 pts (p < 0.05), the rounds after r1
+lost ground, which would point at a learner or data defect.
+
+**Recommendations (ranked by expected held gain per machine-hour).**
+1. Measurement, at no training cost. Adopt neutral rounds (`NATLANG_EI_NEUTRAL_ADOPT`, in the working tree 11-25).
+   Re-measure the reference on the candidate's pin, in the same window, at 4 samples on the DGX series, never against a
+   stored draw. Judge cumulatively against the base every 3 rounds. At SE 2.3 pts, a per-round gate rolls back real
+   +2-3 pt rounds about 70% of the time.
+2. Fresh teacher-derived supply per round, at least 5-10M weighted tokens of supervision the policy has not seen
+   (r1's gain came with 19.6M; r9 had 2.5M). Widen the teacher frontier beyond 124 tasks a round, keep filled reasoning
+   in production, and put the fixed frontier to work choosing the tasks. Until supply keeps up, make rounds larger
+   and less frequent instead of 2.5 h rounds of 6-11M dominated by self-imitation.
+3. Own successes: drop or down-weight episodes from tasks the policy solves at >= 0.75 (21% of r9's own episodes).
+   Prefer the newest policy's successes on 'sometimes' and 'never' tasks.
+4. Telemetry: a fixed held-like validation set (non-held siblings of held families; teacher and own), scored before
+   and after every round. Restore validation on Colab rounds.
+5. Not recommended now: LR or rank changes (the update is there, 0.6% relative a round); FP32 residual across merges
+   (rounding noise about 1 BF16 ULP a round, predicted negligible). Neither has evidence behind it.
+
+**Dragnet.** Checked: held pairing and infrastructure (1), noise and regression (2), LoRA merge and precision (3), LR
+schedule and steps (3), mix composition, repetition and freshness (4), held-family coverage of the mix (44-63% of
+target mass on held families, 84-104 of 111 covered), pass-rate bookkeeping (defect fixed). Not checked: forward-only
+NLL of each policy on held-like rows and KL to the start policy (no fixed row set exists; see 4), one-pin
+train-distribution pass rates, the content quality of filled and operator units, and the GRPO phase now queued.
+
+## 2026-11-25 15:00 Learned compaction on by default; compaction captures splice; product operator writes fixed (compaction strand)
+
+Owner, 2026-11-25: "Wait. Are long values not summarized and encoded using neuralese? That is such an important
+opportunity." AGENTS.md: "learned operators compact and summarize large values … and carry compressed state between
+model runs."
+
+**State of the operator inventory (OPERATORS_RESTORE_20261117.md §1) today.** Everything the 11-17 inventory listed as
+stale was closed on 11-17..11-20 and never switched on:
+- R1/R2 runtime sites and frames: current (agent.ts `compactRef`, `views`, `noteRef`; operator-frames.ts). Crisp by
+  default until today.
+- R3 operator client: an ordinary sampled call at view's site (`<call>#operator-<n>`, RL-captured), then the in-context
+  capture of its reply as a `block_write` with `source_capture` (d306de499). The greedy `/v1/neuralese/operator`
+  endpoint is gone, so the unlearned close marker plays no part: the reply ends at the ordinary end of turn.
+- E1 Python and E2 SGLang: `native.capture` (SGLang through the fork's capture request, no resident model).
+- E3/E4 managed llama-server and page: the grammar capture (`native-operator.ts grammarCapture`), parity at the Q8
+  floor (11-17 §7).
+- M1 use ablation: `operator_ablation.py` (now also an `inline` arm: what the engines served). M2 held: the variant is
+  in the series key.
+- Training: operator rows v2 (runtime-rendered sites, held-filtered) are the `operators` aux tier of every round mix;
+  the learners lower an operator call as a call of the episode and its capture document through the pass-through.
+
+**Use ablation on aei1's policy 8e634a0f** (unit `opabl-8e63-1`, 48 test consumers per source of
+`natlang-operator-rows-20261117-v2`, consumer-target NLL in nats/token; report
+`/home/werg/data/natlang-operator-rows-20261117-v2/ablation-8e634a0f-20261125.json`). Arms: actual = the in-context
+state spliced; inline = the same reply tokens read in the consumer's context (what every engine served since 11-23,
+`reads_in_context`); standalone = the reply written context-free and spliced; text-cut = the cut text alone; shuffled =
+another case's state. Differences are paired (sign-flip p).
+
+| source | n | actual | inline | standalone | text-cut | shuffled | inline-actual | text-cut-inline | shuffled-actual |
+|---|---|---|---|---|---|---|---|---|---|
+| compact-params/s1-qa-long-context | 48 | 4.56 | 5.16 | 5.52 | 6.05 | 6.14 | +0.61 (p 0.000) | +0.88 (p 0.000) | +1.59 (p 0.000) |
+| compact-params/s1-qa-mcq | 48 | 7.89 | 8.46 | 7.11 | 9.19 | 7.73 | +0.57 (p 0.000) | +0.73 (p 0.000) | -0.15 (p 0.146) |
+| compact-params/s1-qa-multihop | 27 | 4.54 | 4.58 | 5.02 | 5.27 | 6.23 | +0.04 (p 0.736) | +0.69 (p 0.000) | +1.68 (p 0.000) |
+| compact-params/s1-qa-trivia | 48 | 5.68 | 5.61 | 5.82 | 6.15 | 6.80 | -0.08 (p 0.251) | +0.54 (p 0.000) | +1.12 (p 0.000) |
+| compact-params/s1-repo-qa | 48 | 3.88 | 4.15 | 4.42 | 4.79 | 4.94 | +0.27 (p 0.000) | +0.64 (p 0.000) | +1.06 (p 0.000) |
+| compact-value/agent-tool-slots-repo-qa | 48 | 5.53 | 5.73 | 4.79 | 5.54 | 5.63 | +0.20 (p 0.001) | -0.19 (p 0.004) | +0.10 (p 0.176) |
+| compact-value/tool-digest | 48 | 0.32 | 0.37 | 0.60 | 0.75 | 0.79 | +0.05 (p 0.000) | +0.37 (p 0.000) | +0.47 (p 0.000) |
+| compact-value/web-miroverse | 48 | 4.63 | 4.85 | 4.53 | 4.93 | 4.73 | +0.22 (p 0.000) | +0.08 (p 0.104) | +0.10 (p 0.146) |
+| compact-value/web-openresearcher | 9 | 5.34 | 5.76 | 4.67 | 5.99 | 5.42 | +0.43 (p 0.098) | +0.22 (p 0.111) | +0.08 (p 0.760) |
+| compact-value/web-openseeker | 26 | 5.29 | 5.79 | 4.94 | 6.08 | 6.25 | +0.50 (p 0.000) | +0.29 (p 0.069) | +0.96 (p 0.000) |
+| compact-value/web-sds | 2 | 5.15 | 5.35 | 4.95 | 6.32 | 6.15 | +0.20 (p 0.488) | +0.97 (p 0.488) | +1.00 (p 0.488) |
+
+- The consumer uses the state: shuffled is worse than actual on 10 of 11 sources (6 at p < 0.05; mcq the exception).
+- The spliced in-context state beats the same reply read inline on 10 of 11 (7 at p < 0.05): the in-context-text read
+  threw away what the capture's rows carry from the value they attend to.
+- The reply read inline beats the text cut alone on 10 of 11 (6 at p < 0.05); agent-tool-slots-repo-qa is the
+  exception (-0.19, p 0.004).
+- Caveats: the replies are the rows' seeds (checked or mechanical summaries), not the policy's own operator replies;
+  mechanical seeds carry answer lines.
+- **Open surprise, not diagnosed:** the context-free standalone write beats the in-context state on 6 sources (mcq,
+  agent-tool-slots and the web sources), where shuffled is also close to actual. The 11-17 step-0 ablation on 5ff07638
+  had in-context ahead of standalone on 17 of 21. Not checked: RoPE positions of rows captured at ~8k positions and read
+  at another position, the operators tier's actual exposure per source, the seed provenance per source.
+
+**Decisions.**
+1. `learned-compaction` is adopted (model-facing.ts ADOPTED): `nl` compaction by default in collection, held eval
+   and the product runtime. Opt-outs `NATLANG_NEURALESE_COMPACTION=crisp` or `NATLANG_MODEL_FACING` without it.
+   MODEL_FACING_CHANGES 2026-11-25. It enters aei1 at its next pin; the series key changes, so the base is re-measured
+   there, and the next held eval shows any regression.
+2. A reply captured in its own context is a new `producer_kind`, `capture` (state_block.py), stored by
+   `native.capture` on the Python engine and SGLang; it splices as stored (`reads_in_context`; opt-out
+   `NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1`). A value's text written after its producing call stays a `span`, read in
+   context. The learners already lower a spliced capture through the pass-through (graph_replay binds `block_read`s
+   that are not `in-context-text`), so GRPO and SFT now train the operator's state through the consumer.
+   The fork and the page: a capture-kind strand is changing the fork (validation, read rule, a request field for the
+   grammar capture) with a release and pin move; until it lands their grammar captures stay `span` and read inline
+   (ENGINE_PARITY row).
+3. Bug fixed: outside collection an operator call's reply carried no exact ids, so every product-runtime operator
+   write failed ("native.capture needs the call's exact prompt and sampled reply ids", found by the live smoke on
+   8e634a0f) and silently kept the cut. Operator calls and the compaction turn now carry `exact_ids`, which a native
+   transport sends as `x_natlang_rl_capture` (contracts.ts, chat-completion.ts, agent.ts).
+4. Leaf judges (separate strand, 7ecfac2d8): a decision readout sees its values whole up to half the context, and under
+   `nl` a value past that gets its compact-params state.

@@ -146,12 +146,20 @@ def actor_request_retries() -> int:
 
 
 def infra_lost(row: dict[str, Any]) -> bool:
-    """Whether a rollout row was lost to infrastructure (``infrastructure_error``, or a held sample's ``infra_lost``
-    label): it says nothing about the policy, so pass rates leave it out. Any other unscored row (a wall-clock stop, an
+    """Whether a rollout row was lost to infrastructure (``infrastructure_error``, a held sample's ``infra_lost``
+    label, or an unscored row with 0 model calls): it says nothing about the policy, so pass rates leave it out. Any other unscored row (a wall-clock stop, an
     unresolved run) counts as a failure in a pass rate, though it never trains (aei1 held re-judgement, 2026-11-24)."""
     if row.get("infra_lost"):
         return True
-    return row.get("outcome") == "infrastructure_error"
+    if row.get("outcome") == "infrastructure_error":
+        return True
+    # An unscored row whose policy was never called measured nothing about it: rows written before the scorer
+    # classified a collector's transport failure as infrastructure_error read 'unresolved' (aei1 r1's DGX collection:
+    # 686 of 1,142 student rows, 0 model calls; the r0009 frontier counted 853 such rows as failures on 257 tasks).
+    # NATLANG_ZERO_CALL_UNSCORED_LOST=0 counts them as failures again.
+    calls = (row.get("execution_efficiency") or {}).get("model_calls")
+    return (row.get("reward") is None and calls == 0 and "memetic_success" not in row
+            and os.environ.get("NATLANG_ZERO_CALL_UNSCORED_LOST", "1") != "0")
 
 
 def pass_rate_counts(rows) -> tuple[int, int]:

@@ -50,6 +50,21 @@ def test_group_outcomes_leave_infrastructure_losses_out(tmp_path):
     assert ei.group_outcomes([directory]) == {'t': [1, 2]}
 
 
+def test_group_outcomes_leave_unscored_rows_without_a_model_call_out(tmp_path, monkeypatch):
+    directory = tmp_path / 'groups' / 'g000000'
+    directory.mkdir(parents=True)
+    calls = lambda n: {'execution_efficiency': {'model_calls': n}}
+    rows = [{'task_id': 't', 'reward': 1.0, 'outcome': 'task_success', **calls(3)},
+            {'task_id': 't', 'reward': None, 'outcome': 'unresolved', **calls(0)},    # legacy label: the actor was down
+            {'task_id': 't', 'reward': None, 'outcome': 'unresolved', **calls(5)},    # the policy ran out of wall clock
+            {'task_id': 't', 'reward': 0.0, 'outcome': 'semantic_mismatch', **calls(0)},   # scored: the policy's
+            {'task_id': 'u', 'reward': None, 'outcome': 'unresolved', **calls(0)}]
+    (directory / 'rewards.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    assert ei.group_outcomes([directory]) == {'t': [1, 3]}
+    monkeypatch.setenv('NATLANG_ZERO_CALL_UNSCORED_LOST', '0')
+    assert ei.group_outcomes([directory]) == {'t': [1, 4], 'u': [0, 1]}
+
+
 @pytest.mark.parametrize('s,n,expected', [(4, 4, 'solved'), (3, 4, 'solved'), (1, 4, 'sometimes'), (0, 4, 'never'),
                                           (1, 1, 'unmeasured'), (0, 0, 'unmeasured')])
 def test_tier_by_pass_rate(s, n, expected):
