@@ -12775,3 +12775,69 @@ grades no lower than wave 1's final ones (semantic depth 3-4) with `wrong_expect
 four, at well under wave 1's builder-plus-reviewer inference per admitted program. Failure: a sampled wrong-expected
 rate above one in three, or a recurring finding the brief already covers; then the funnel findings change the brief
 again before wave 3.
+
+**2026-11-25 10:00, EI retention: the driver and the sweep delete what no consumer reads (`ei_round_tier.drop_plan`).**
+`/` fell 9-13 GiB/h while aei1 ran, and the HDD (136 GB free) fell behind it: `ei_round_tier` only *moved* old rounds
+and collections to the HDD, and kept the last two lineage rounds and the protected policies whole.
+- **Measured per round** (r0009/r0010; a round every ~2-2.5 h), about 30 GB on the NVMe:
+  - round directory, 14 GB: `policy/checkpoint.pt` 3.22, `policy/sglang-hf` 3.71, `policy/gguf` 1.72,
+    `filled/chains.pkl` 1.25-1.32, `mix/chains.pkl` 0.93-1.08, `sft/learner-state` 1.44 (optimizer 0.96 + a factors
+    copy 0.48), `sft/factors` 0.48, `neuralese-graph-own/chains.pkl` 0.21-0.26;
+  - DGX collection of the policy: `actor/sglang-hf` 3.71, native-state blocks left at the stop 2-3 (v0008 3.01, v0001
+    2.04), episodes ~6.5 (v0008); remote collectors' pulled episodes on top (v0001: remote0 9.2, Pop 12; their trim
+    alone would free 6.7 and 3.5);
+  - teacher campaign 3-4.6 GB (teacher-r0010 4.6: byte-identical `jobs/*.result.json` 0.94, raw partials and evidence
+    1.45, traces 0.30; campaigns from pins before 69193e82b were never compacted);
+  - held measurement ~0.9 GB per measured policy.
+- **Rules (default; `ei_round_tier --no-drop`, `SWEEP_EI_DROP=0`, `async-drive --no-retention` opt out).** Deletions
+  leave `<name>.removed.json` (what, HDD target, bytes, why) and, through an earlier move's link, remove the HDD target
+  too. Every item passes the sweep's reference checks first (process cwd/exe/fds/maps/cmdline/environ, active units).
+  - Collections of every policy but the lineage head lose `actor/sglang-hf` (`serve_native_checkpoint` re-exports it
+    when the policy is served again, `export_loaded`) and `actor/blocks`. An episode imports only states its own calls
+    stored, and `episode_files.partial_continuable` never continues past a Neuralese write. The SFT build trains
+    imports as pass-through. The live actor's `--store-dir` guards both.
+  - Rounds that trained (`trained_rounds`, `discarded.json`, or older than the active round; never the active round or
+    one prepared ahead) lose:
+    - `sft/learner-state*`: read only before publication, by `--resume`, `recap_for_dgx`, `sft_handback` and
+      `rebuild_round`, which refuses once SFT started;
+    - `*.pkl` of a mix with `trained-units.json`, or of a `mix.pre-rebuild-*`: `--prefer-unseen` reads rows.jsonl.zst
+      and trained-units.json, and `sft_sources.trained_units` falls back to chains.pkl only without the json;
+    - `filled/chains.pkl` and `neuralese-graph-own/chains.pkl`: inputs of that round's build only; the fill store
+      `/home/werg/data/filled-reasoning-20261120` stays.
+  - Trained rounds whose policy is not the lineage head lose `policy/sglang-hf` and `policy/gguf`. `rebind_remote` and
+    `ensure_remote_policy` read only the head's. Pop `serve-checkpoint`, the held series and lfm-latest
+    (`natlang setup --native`) build from the checkpoint.
+  - A trained round whose policy left the lineage and is protected by nothing (`protected_policies`) loses
+    `policy/checkpoint.pt`. `sft/factors` and `published.json` (base sha + factors) stay, so a merge rebuilds it.
+  - Teacher campaigns: `episode_files.compact_sample` over quiet samples (unchanged for 1 h, none open);
+    `.episodes-compacted` marks a finished campaign. Only open files count as readers here: the live campaign names
+    the earlier ones in `--covered-by`.
+  - Stay: lineage checkpoints (the sweep tiers them as before), every `sft/factors`, the head's exports and
+    collection, episodes, rows.jsonl.zst / trained-units.json / build.json, held measurements.
+- **Where it runs.**
+  - The driver (`AsyncRoundDriver.retain`, a background thread, one pass at a time) runs it at its start, after each
+    publication and after it stops an older collection.
+  - The sweep runs the same plan every 30 minutes, ahead of its moves.
+  - By hand: `ei_round_tier.py --retain DRIVER [--apply]`.
+  - Tests: `tests/test_ei_round_tier.py` (drop plan, protection, links, references, compaction, opt-out) and
+    `test_async_driver_retention_pass_and_opt_out`.
+- **Bug fixed on the way:** `protected_policies` never protected the last applied verdict. `applied_verdicts` holds
+  sha strings, and `_shas` reads only dicts. aei1's r0005 (3eb3f435, the verdict that rolled back to r1) was therefore
+  unprotected: its checkpoint went to the HDD at 06:19, and this pass deleted it. It is rebuildable as r0004 (on Drive,
+  `checkpoint.pt.ondrive.json`) merged with r0005's factors (HDD). r0006 and r0007 (off the lineage) can be rebuilt the
+  same way from their factors.
+- **Applied:** the 09:43 sweep ran this code from the working tree before the commit, so the deletions above happened
+  before a path list was written. The tier log `~/.local/state/natlang/ei-round-tier.jsonl` (09:43-09:46) lists every
+  path, and each has a `.removed.json`.
+  - NVMe: 31 -> 55 GiB free. Freed: v0001 and v0008 actor exports and blocks (12.5); learner states r0006/7/9/10
+    (5.8); filled, mix and own-graph pickles r0001-r0010 (~14); r0009 exports (5.5); off-lineage checkpoints
+    r0005-r0007 on the HDD (9.7).
+  - The teacher compaction then ran by hand (`--retain --apply`, ledger unit `eiret-apply-1`; its path list is in
+    the session scratchpad).
+- **Expected steady state.** Per round, the NVMe keeps checkpoint and factors (3.7 GB, tiered once two rounds old),
+  the head's exports and actor (~11 GB, freed at the next publication), episodes (~6.5 GB DGX plus remote, tiered
+  with their collection), the compacted teacher campaign (~2 GB) and a held measurement (~0.9 GB).
+  - Not addressed: teacher campaigns and held measurements stay on the NVMe for good, since every build reads the
+    teacher pools (recalled to NVMe 2026-11-23), about +3 GB per round.
+  - Not addressed: episodes of collections tiered to the HDD (~6-10 GB per policy after compaction) grow the HDD,
+    and the Drive tier drains it.

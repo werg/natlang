@@ -3353,6 +3353,7 @@ class AsyncRoundDriver:
                 if self.c.present(u):
                     self.c.stop_unit(u)
                     self.note(collection_stopped=u)
+                    self.retain(f'collection {u} stopped')
         if self.c.present(unit):           # running, or preempted and requeued (the ledger relaunches it)
             if not self.collector_on_old_dir(unit, policy):
                 return unit
@@ -3843,6 +3844,34 @@ class AsyncRoundDriver:
                 self.ensure_teacher()
             except Exception as error:
                 self.note(teacher_check_failed=repr(error)[:300])
+
+    RETAIN_LOCK = threading.Lock()
+
+    def retain(self, why):
+        """Retention in the background (``ei_round_tier.retain``: trained rounds' learner states, chains pickles and
+        superseded exports, closed collections' actor exports and blocks, off-lineage checkpoints; teacher episode
+        compaction), one pass at a time; a pass already running covers this call. aei1 2026-11-25: ~30 GB per round
+        reached the NVMe (9-13 GiB/h) with only the sweep's HDD moves behind it. ``--no-retention`` opts out."""
+        if getattr(self.a, 'no_retention', False) or not self.RETAIN_LOCK.acquire(blocking=False):
+            return None
+
+        def work():
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location('ei_round_tier', REPO / 'scripts' / 'ei_round_tier.py')
+                tier = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(tier)
+                summary = tier.retain(self.root)
+                self.note(retention=why, freed_gb=round((summary['deleted_bytes'] + summary.get('compacted_bytes', 0))
+                                                        / 2**30, 2), actions=summary['actions'],
+                          skipped=summary['skipped'], errors=summary['errors'])
+            except Exception as error:
+                self.note(retention_failed=repr(error)[:300], why=why)
+            finally:
+                self.RETAIN_LOCK.release()
+        thread = threading.Thread(target=work, daemon=True)
+        thread.start()
+        return thread
 
     def lineage_policies(self):
         """The policies whose collections a round reads: the current and the previous published policy."""
@@ -4935,6 +4964,7 @@ class AsyncRoundDriver:
         self.record_reader_sources()
         self.c.pin_stage()
         self.drop_off_lineage()         # a lineage an earlier driver changed: nothing measures its dropped policies
+        self.retain('driver start')
         threading.Thread(target=self.held_loop, daemon=True).start()
         self.held_wake.set()
         if self.pop_target() is not None:
@@ -5006,6 +5036,7 @@ class AsyncRoundDriver:
             except Exception as error:      # the remote actor keeps serving the old policy; its collection drops it
                 self.note(rebind_failed=repr(error)[:300])
             self.note(round=rid, published=new['sha256'], version=new['version'])
+            self.retain(f'{rid} published')
             completed += 1
         return 0
 
@@ -5398,6 +5429,9 @@ def main():
     ad.add_argument('--no-dgx-recap', action='store_true',
                     help='a round sized for a session that starts on the DGX trains its whole mix there (default: '
                          'recapped to --round-target-tokens first, sft_sources recap)')
+    ad.add_argument('--no-retention', action='store_true',
+                    help='no retention pass (scripts/ei_round_tier.py retain: what no consumer reads once a round '
+                         'published or a collection closed is deleted) at each publication and collection change')
     ad.add_argument('--no-prefer-inflight', action='store_true',
                     help='a round prepared while another trains does not prefer unseen over that round\'s mix')
     ad.add_argument('--unfilled-live-teacher', choices=('auto', 'drop', 'train'), default=None,

@@ -77,8 +77,9 @@ done < <(candidates)
 # previous one move to the HDD (verified, symlinked back); regenerable exports go (scripts/ei_round_tier.py).
 # SWEEP_EI=0 opts out; bounded like every step.
 if [ "${SWEEP_EI:-1}" != 0 ]; then
+  # SWEEP_EI_DROP=0: moves only (no retention deletions, ei_round_tier --no-drop)
   timeout -k 30 "${SWEEP_EI_TIMEOUT:-1200}" /usr/bin/python3 "$(dirname "$0")/ei_round_tier.py" --apply \
-    --max-minutes "${SWEEP_EI_MINUTES:-18}" > /dev/null 2>&1
+    --max-minutes "${SWEEP_EI_MINUTES:-18}" $([ "${SWEEP_EI_DROP:-1}" = 0 ] && echo --no-drop) > /dev/null 2>&1
   [ $? = 124 ] && echo "$(date -Is) ei_round_tier timed out after ${SWEEP_EI_TIMEOUT:-1200} s" >> "$LOG"
 fi
 
