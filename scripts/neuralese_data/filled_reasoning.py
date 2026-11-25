@@ -694,18 +694,24 @@ def prefer(episodes, rates):
     return sorted(episodes, key=rank)
 
 
-def untrained(episodes, builds, funnel=None):
-    """``episodes`` less those an earlier build (``--skip-trained`` BUILD dirs: the lineage's trained mixes) trained,
-    raw or as a fill (``sft_sources.Exposures``: a fill unit and the teacher episode it stands in for share one exposure,
-    and with ``--max-prior-exposures 1`` an episode that trained once never trains again). A fill of such an episode is
-    left out of every later mix, so drawing it spends actor time for nothing: aei1 2026-11-25, 32,515 of the build's
-    43,321 teacher successes had trained, and the standing fills worked through those seed WORKs while the new
-    campaign episodes were not listed at all."""
+def untrained(episodes, builds, funnel=None, fill_after_raw=True):
+    """``episodes`` less those whose fill can no longer train (``--skip-trained`` BUILD dirs: the lineage's trained
+    mixes; ``sft_sources.Exposures``). With ``fill_after_raw`` (default; ``--fill-after-raw skip`` opts out) an episode
+    that trained raw is still filled: its fill trains the filled reasoning with the actions at zero weight
+    (``sft_sources.reasoning_after_raw``), so only an earlier fill of it leaves it out. Without it every episode an
+    earlier build trained, raw or filled, is left out (one exposure per episode). aei1 2026-11-25: the standing fills
+    worked through seed WORKs whose episodes had all trained raw while the campaign episodes were not listed."""
     if not builds:
         return list(episodes)
     from sft_sources import trained_exposures
-    exposure = trained_exposures(builds)
-    kept = [e for e in episodes if not exposure(('teacher', e['task_id'], e['key']))]
+    exposure = trained_exposures(builds, fill_after_raw)
+    if fill_after_raw:
+        kept = [e for e in episodes if not exposure(('filled', e['task_id'], 'filled:' + e['key']))]
+        for e in kept:      # filled after every never-trained episode (``ordered``): a raw-trained one adds less
+            if exposure.raw_trained(e['task_id'], e['key']):
+                e['raw_trained'] = True
+    else:
+        kept = [e for e in episodes if not exposure(('teacher', e['task_id'], e['key']))]
     if funnel is not None:
         funnel['teacher']['trained_before_skipped'] += len(episodes) - len(kept)
     return kept
@@ -713,8 +719,8 @@ def untrained(episodes, builds, funnel=None):
 
 def ordered(episodes, prefer_works, rates, seed, shape_cap=None):
     """The generation order: shuffled (``seed``), tasks the student fails first (``prefer``, with ``rates``), and
-    episodes of the ``prefer_works`` WORKs before every other (stable: each group keeps that order). Within each of the
-    two groups every task's first episode comes before any task's second (``diversity.round_robin_by``) and no program
+    episodes of the ``prefer_works`` WORKs before every other, episodes that trained raw (``raw_trained``) last
+    (stable: each group keeps that order). Within each of the three groups every task's first episode comes before any task's second (``diversity.round_robin_by``) and no program
     shape (an episode's ``shape``, ``teacher_episodes``) takes more than ``shape_cap`` of any prefix
     (``diversity.cap_shapes``; default ``diversity.SHAPE_CAP``, 0: neither): the fill's actor time spreads over distinct
     programs instead of one template's items or one task's several teacher episodes."""
@@ -726,7 +732,9 @@ def ordered(episodes, prefer_works, rates, seed, shape_cap=None):
         episodes = prefer(episodes, rates)
     first = set(prefer_works)
     out = []
-    for group in ([e for e in episodes if e['work'] in first], [e for e in episodes if e['work'] not in first]):
+    fresh = [e for e in episodes if not e.get('raw_trained')]
+    for group in ([e for e in fresh if e['work'] in first], [e for e in fresh if e['work'] not in first],
+                  [e for e in episodes if e.get('raw_trained')]):
         if shape_cap > 0:
             group = cap_shapes(round_robin_by(group, lambda e: e['task_id']),
                                lambda e: e.get('shape') or e['task_id'], shape_cap)
@@ -886,7 +894,7 @@ def generate(args):
     episodes = teacher_episodes(works, held, funnel, drifted=args.admit_drifted == 'on',
                                 skip_mismatched_live=args.live_mismatch == 'skip')
     listed = {e['key'] for e in episodes}
-    episodes = untrained(episodes, args.skip_trained, funnel)
+    episodes = untrained(episodes, args.skip_trained, funnel, args.fill_after_raw == 'reasoning')
     done = done_keys(out)
     rates = load_rates(args.prefer_rates) if args.prefer_rates else None
     todo = ordered([e for e in episodes if e['key'] not in done], prefer_works, rates, args.seed,
@@ -976,7 +984,7 @@ def generate(args):
                 found = untrained(teacher_episodes(prefer_works, held, collections.defaultdict(collections.Counter),
                                                    drifted=args.admit_drifted == 'on',
                                                    skip_mismatched_live=args.live_mismatch == 'skip'),
-                                  args.skip_trained)
+                                  args.skip_trained, fill_after_raw=args.fill_after_raw == 'reasoning')
                 record_fills(out, works, held,
                              **registry_options(registry_repo, ref=selected_ref, writer=True))
                 registry_ref = selected_ref
@@ -1603,6 +1611,9 @@ def build_parser():
     g.add_argument('--skip-trained', action='append', default=[], metavar='BUILD',
                    help='an earlier mix build (OUT of sft_sources build: rows.jsonl.zst, trained-units.json) whose '
                         'trained episodes are not filled: their fills would never train (sft_sources.Exposures)')
+    g.add_argument('--fill-after-raw', choices=('reasoning', 'skip'), default='reasoning',
+                   help='--skip-trained: an episode that trained raw is still filled (reasoning, default: its fill trains '
+                        'the filled reasoning only, sft_sources --fill-after-raw) or left out (skip)')
     g.add_argument('--rescan-minutes', type=float, default=0.,
                    help='list the --prefer-work WORKs again this often and queue their new episodes first; the '
                         'generation then keeps running until stopped (a standing fill beside an ingester)')

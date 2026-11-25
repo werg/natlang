@@ -13675,3 +13675,70 @@ The Python engines store a reply captured in its own context as `producer_kind` 
   `NatlangContextError: The invocation that owns this callback has finished`, raised from `runtime-capabilities.ts` →
   `executeProgram` → `callable.js invokeExport` (the invocation-lifetime check). This change does not touch that path.
   Reported for the runtime strand.
+
+- **Update 15:35: operator states are spliced, as in collection.** Since 3d8037571 and 5269b1a5a, a compaction capture
+  (an operator reply, a `compact_history` note) has `producer_kind` `capture`, and every engine splices it rather than
+  reading it in context (the use ablation: the spliced state beats the inline reply by up to 0.6 nats/token). Plain
+  `Neuralese<T>` value writes stay `span` and are read inline.
+  - The in-context transport now records captures as `capture`. A request shows a capture as a
+    `{type: "native_state", id}` content part and a span as its text.
+  - The render (`reference_episodes.mjs`) marks the producing turn with `captures: [{id, select?}]`. Pool, extract
+    and `semantic_turn` keep that field.
+  - `sft_sources replay` now replays authored episodes that carry states (it used to skip every episode with native
+    state) and marks their verdict `graph_only`. The text build skips them.
+  - `neuralese-graph` lowers them (`authored_graph` → `authored_trajectories.graph_calls`):
+    - Each call is rendered by the engine's own rendering (`TemplateRenderer`, `target_items`).
+    - Each state is a pass-through import placed between `consume_open` and `consume_close`.
+    - Its producer document is the one `Engine.capture_plan` writes: the operator call's prompt, its reply up to the
+      content (the empty thought, and the whitespace after it), `produce_open`, then the content. The learner computes
+      the state in the consumer's forward, so no engine is needed.
+    - Teacher think blocks stay zero-weight.
+    - Opt-out: `--no-authored`. `neuralese-text` leaves authored episodes out (`native_not_authored`).
+  - **Fixed on the way.** `reworded_key` and `signature_key` cut an opening to its first line. A view site's first
+    line is `instructions:`, so every operator call matched every other, and one call's summary could be served to
+    another (seen in the end-to-end replay). A view site's opening is now kept whole (`signature_line`).
+  - **End to end.** Scratch program, ledger unit `authnz-tests-5`. `check` ok. The render gives two `view` turns with
+    captures. The replay was exact (5/5, `graph_only`). Graph rows: 5 calls, 2 consumer imports. A decoded consumer
+    reads `log: string = <|neuralese_consume|><summary><|/neuralese_consume|>  // view of the value`. The document ends
+    `<|im_start|>assistant\n<think></think><|neuralese_produce|><summary>`.
+  - **Still left out.** An authored decision readout in a graph episode trains as plain token CE, without the
+    decision objective that `build` gives text rows.
+  - Tests: `test_graph_calls_lower_an_operator_capture_as_a_pass_through_import` and
+    `test_operator_calls_are_not_reworded_matches_of_each_other` (`test_authored_trajectories.py`); the updated
+    `ts-host/test/authored-in-context-neuralese.test.mjs`.
+
+## 2026-11-25 18:00 aei1 supply, coordinator decisions: fills of raw-trained episodes train their reasoning only; a Colab fill keeper; retention protects rounds still to train (ei-supply agent)
+
+Coordinator decisions on the 16:30 entry: (1) allow fills of episodes that already trained raw, with the actions at
+zero weight so no target token trains twice; (2) keep the family cap at 0.05; (3) the Colab fill gets an owner that
+relaunches it; (4) fix the retention bug that deleted r0011's chains; (5) update the `test_native_prefill_chunks` stub
+once the engine change is on main.
+
+1. **Reasoning after raw** (`sft_sources build --fill-after-raw reasoning`, default; `skip` opts out). A fill unit
+   counts only earlier *fills* of its episode (`Exposures.fill_after_raw`), not the episode's raw training. When the
+   episode trained raw (`Exposures.raw_trained`), `reasoning_after_raw` zeroes every target token after the row's
+   first `</think>`. Those are the actions the raw episode trained; the filled reasoning through `</think>` was
+   zero-weight context in the raw episode and now trains. A row without `</think>` is all action (weight 0). A
+   decision readout (an option choice the raw episode trained) is dropped. So one exposure per target token holds
+   exactly. The raw episode never trains again after its fill. The fills (`filled_reasoning --skip-trained`) now skip
+   only episodes whose fill trained, and they fill raw-trained episodes after every never-trained one
+   (`raw_trained`, last group of `ordered`). This unlocks the ~30k raw-trained teacher episodes at ~1.0-1.3K new
+   reasoning tokens each. Their teacher episodes passed the core caps when they trained raw, so the fills enter as the
+   `filled` aux part (shape share and per-task tokens apply).
+2. Family cap unchanged (0.05).
+3. **Colab fill keeper** (`AsyncRoundDriver.colab_fill_check`, every 5 min in the remote-collection loop;
+   `--no-colab-fill` opts out). Every Colab session actor that serves the lineage head gets a unit
+   `<name>-colab-fill<suffix>`: `fill_command(colab=True)`, polite, campaigns first, `--skip-trained` with the lineage's
+   builds, `--expect-policy` the head, 8 GB. It is relaunched whenever it is gone: it died, or it exited because the
+   actor moved to a newer policy. It never starts on a session that a round's SFT holds. Log:
+   `ROOT/colab-fill/<unit>.log`. The hand-launched `colab-fill-campaigns-20261125` should stop when the driver starts
+   on this pin, because the keeper replaces it.
+4. **Retention** (`ei_round_tier.round_pending`, used by `drop_plan` and the tier moves `_tier_plan`, the callers of
+   both `retain` and `plan`). A round that is not discarded and not trained (not in `trained_rounds`, no
+   `policy/published.json`, no factors manifest) is never touched when it is prepared (`stages/prepared.done`) or
+   prepared from the lineage head (round.json `base_policy_sha`/`trained_from`), whatever `active_round` says. Test:
+   `test_a_round_still_to_train_keeps_its_mix_whatever_active_round_says`.
+5. Already on main: 348d7574d updated the stub with the engine change.
+
+Also: `test_async_driver_retention_pass_and_opt_out` failed when run after another driver test whose background
+retention pass still held the class-wide lock. The test now waits for the lock.

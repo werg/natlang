@@ -1231,6 +1231,10 @@ OWN_PARTS = ('rl-own', 'own-neuralese-graph')
 DEFER_UNFILLED_HOURS = 12.0
 # the lineage's fixed held-like validation set (sft_sources FixedVal), under the driver's root
 FIXED_VAL_DIR = 'val-fixed'
+# the standing Colab fill (``colab_fill_check``): ledger GB of its DGX client (the hand-launched backlog fill peaked at
+# 3.6 GB with 192 workers and was OOM-killed) and the Colab actor's running cap its polite draws fill up to
+COLAB_FILL_GB = 8
+COLAB_FILL_RUNNING = 128
 
 
 def mix_supply(report):
@@ -2097,7 +2101,7 @@ class Cycle:
                     repo=self.fill_repo())
         self.note(stage='fill', started=f'{self.a.name}-fill', actor=actor['url'])
 
-    def fill_command(self, actor, window=False, pop=False, skip_trained=()):
+    def fill_command(self, actor, window=False, pop=False, skip_trained=(), colab=False):
         """filled_reasoning.py generate: the seed WORKs then the grpo-sd-teacher role's (first WORK wins a key),
         teacher episodes of the tasks the student fails first (the select stage's rates: failed, then unmeasured, then
         by rate; the frontier mix trains teacher trajectories there). On the collect actor a fixed share: the actor runs
@@ -2122,7 +2126,10 @@ class Cycle:
                     *data_registry.role_paths('grpo-sd-teacher',
                       **({'repo': owner, **({'ref': ref} if ref is not None else {})} if owner is not None else {}))]))
         rates = self.dir / 'tasks.rates.json'
-        if pop:
+        if colab:           # a Colab actor beside its collector: spare engine slots only
+            share = ['--polite', '--max-running', COLAB_FILL_RUNNING, '--min-inflight', 16, '--max-inflight', 96,
+                     '--workers', 96]
+        elif pop:
             n = self.a.pop_fill_running
             share = ['--max-running', n, '--max-inflight', n, '--min-inflight', n, '--workers', 3 * n // 2]
         elif window:
@@ -3638,6 +3645,61 @@ class AsyncRoundDriver:
         while True:
             time.sleep(REMOTE_COLLECT_CHECK_SECONDS)
             self.remote_collect_check()
+            self.colab_fill_check()
+
+    def fill_export(self):
+        """An export directory of this lineage for the fill's tokenizer and serving manifest (every policy shares the
+        tokenizer): the newest collection's actor export that still exists, else None."""
+        found = []
+        for path in (self.root / 'collect').glob('*/actor.json') if (self.root / 'collect').exists() else ():
+            try:
+                export = json.loads(path.read_text()).get('export')
+            except (OSError, ValueError):
+                continue
+            if export and (Path(export) / 'tokenizer.json').exists():
+                found.append((path.stat().st_mtime, export))
+        return max(found)[1] if found else None
+
+    def colab_fill_unit(self, target):
+        return f'{self.a.name}-colab-fill{target["suffix"]}'
+
+    def colab_fill_check(self):
+        """The standing Colab fill: every Colab actor serving the lineage head has a ``filled_reasoning generate``
+        unit beside its collector (``fill_command(colab=True)``: polite, the campaigns first, the lineage's trained
+        builds skipped), relaunched by this check (every REMOTE_COLLECT_CHECK_SECONDS) whenever it is gone: it died,
+        or it exited because the actor moved to a newer policy (each step attests the served policy). Never on a
+        session a round's SFT holds. 2026-11-25: the hand-launched backlog fill was OOM-killed at 10:45 and nothing
+        relaunched it. ``--no-colab-fill`` opts out."""
+        if getattr(self.a, 'no_colab_fill', False) or not self.a.fill:
+            return []
+        started = []
+        try:
+            import pop_rl_actor
+            from urllib.parse import urlparse
+            policy, busy = self.controller.current, self.colab_sft_busy_hosts()
+            for target in self.remote_targets():
+                if target['pop'] or not target['host'] or target['host'] in busy:
+                    continue
+                unit = self.colab_fill_unit(target)
+                if self.c.present(unit):
+                    continue
+                endpoint = self.target_endpoint(target)
+                export = self.fill_export()
+                if export is None or not endpoint_alive(endpoint, policy['sha256']):
+                    continue
+                sglang = pop_rl_actor.remote_endpoint(target['host'], urlparse(target['front']).port + 1000)
+                actor = {'url': endpoint, 'sglang': sglang, 'export': export, 'checkpoint_sha256': policy['sha256']}
+                self.c.work_tokenizer()
+                log_dir = self.root / 'colab-fill'
+                log_dir.mkdir(parents=True, exist_ok=True)
+                self.c.ledger(unit, COLAB_FILL_GB, 'medium',
+                              self.c.fill_command(actor, colab=True, skip_trained=self.trained_builds()),
+                              log_dir / f'{unit}.log', detach=True, repo=self.c.fill_repo())
+                self.note(colab_fill_started=unit, host=target['host'], policy=policy['sha256'], sglang=sglang)
+                started.append(unit)
+        except Exception as error:
+            self.note(colab_fill_failed=repr(error)[:300])
+        return started
 
     def remote_collect_check(self):
         try:
@@ -5615,6 +5677,9 @@ def main():
     ad.add_argument('--own-solved-anchor', type=int, default=0,
                     help='sft_sources build --anchor-per-task: own episodes kept of a task the policy solves '
                          '(>= 0.75; default 0: none; 1: the light anchor before 2026-11-25)')
+    ad.add_argument('--no-colab-fill', action='store_true',
+                    help='no standing filled-reasoning unit on the Colab actors (colab_fill_check keeps one per serving '
+                         'session, relaunched whenever it is gone)')
     ad.add_argument('--no-fixed-val', action='store_true',
                     help='no fixed held-like validation set (ROOT/val-fixed, sft_sources --fixed-val) in the builds '
                          'and the learner')
