@@ -39,6 +39,20 @@ export function pluggableMode(setting: unknown, fallback: PluggableMode = 'nl'):
     '("natlang" and "natural-language" are accepted for "nl" but deprecated).');
 }
 
+/**
+ * The natural-language side of a part whose caller supplies it (a `.nl` function, an agent call). `nl` and `shadow`
+ * run it, so under those modes a missing one is an error, never the crisp rule running under the natural-language name
+ * (which would make `shadow` agree with itself). Under `crisp` a missing one is a stub that is never called.
+ */
+export function suppliedNl<F extends (...args: never[]) => unknown>(nl: F | undefined, setting: PluggableSetting,
+  fallback: PluggableMode, name: string): F {
+  if (nl) return nl;
+  if (pluggableMode(setting, fallback) !== 'crisp')
+    throw new TypeError(`${name}: mode ${JSON.stringify(setting ?? fallback)} runs the natural-language implementation; pass it as \`nl\`.`);
+  const missing = (): never => { throw new TypeError(`${name}: no natural-language implementation was given`); };
+  return missing as unknown as F;
+}
+
 const clip = (text: string): string => text.length > 400 ? `${text.slice(0, 400)} … (${text.length} chars)` : text;
 
 /** Record a trace event on the current call, or on the task when no call trace is open; nothing outside a task. */

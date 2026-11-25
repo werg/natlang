@@ -15,8 +15,8 @@ import {
 } from '../dist/tune/decision-compile.js';
 import { verifyCrispCandidate, wrapCrispFastPath } from '../dist/tune/crisp-promote.js';
 import {
-  ScopedExperienceStore,
   createWhichScopesPolicy,
+  createWorthRememberingPolicy,
   formatStageADemonstrations,
   worthRememberingCrisp,
 } from '../dist/memory/experience-kb.js';
@@ -165,53 +165,22 @@ test('Crisp fast-path verification enforces 0 FP on dev & confirmation and falls
   assert.equal(wrapped.metrics.neuralFallbacks, 1);
 });
 
-test('ScopedExperienceStore enforces held exclusion, pre-top-k excludeTasks, and Stage-A formatting', async () => {
+test('experience-KB policies are pluggable parts; Stage-A formatting of retrieved hits', async () => {
   const scopes = await createWhichScopesPolicy()({ taskGroup: 'sql', repoSha: 'abc', siteId: 'q.nl' });
   assert.deepEqual(scopes, ['natlang:global', 'group:sql', 'repo:abc', 'fn:q.nl']);
   assert.equal(worthRememberingCrisp({ taskId: 'h1', verifiedSuccess: true, wasRepairWin: false, heldExcluded: true, textLength: 50 }), false);
   assert.equal(worthRememberingCrisp({ taskId: 't1', verifiedSuccess: true, wasRepairWin: false, heldExcluded: false, textLength: 50 }), true);
 
-  const store = new ScopedExperienceStore(['held-task-7']);
-  assert.throws(() =>
-    store.add({
-      recordId: 'r-held',
-      scope: 'natlang:global',
-      key: [1, 0, 0],
-      text: 'leaked',
-      taskIds: ['held-task-7'],
-      strength: 1,
-      kind: 'success',
-    }),
-  );
+  // nl and shadow need the natural-language policy; the crisp rule never stands in for it
+  assert.throws(() => createWhichScopesPolicy({ mode: 'nl' }), /kb:whichScopes.*pass it as `nl`/);
+  assert.throws(() => createWorthRememberingPolicy({ mode: 'shadow' }), /kb:worthRemembering/);
+  const nlScopes = createWhichScopesPolicy({ mode: 'nl', nl: () => ['natlang:global'] });
+  assert.deepEqual(await nlScopes({ taskGroup: 'sql' }), ['natlang:global']);
 
-  store.add({
-    recordId: 'r-self',
-    scope: 'group:sql',
-    key: [1, 0, 0],
-    text: 'exact self task',
-    taskIds: ['task-A'],
-    strength: 1,
-    kind: 'success',
-  });
-  store.add({
-    recordId: 'r-peer',
-    scope: 'group:sql',
-    key: [0.9, 0.43, 0],
-    text: 'Always use COALESCE on nullable window sums.',
-    taskIds: ['task-B'],
-    strength: 1,
-    kind: 'repair',
-  });
-
-  const { items, evidenceGate } = store.retrieve({
-    queryKey: [1, 0, 0],
-    scopes: ['natlang:global', 'group:sql'],
-    excludeTasks: ['task-A'],
-    topK: 2,
-  });
-  assert.equal(items.length, 1);
-  assert.equal(items[0].record.recordId, 'r-peer');
-  assert.ok(evidenceGate > 0.5);
-  const formatted = formatStageADemonstrations(items);
-  assert.match(formatted, /COALESCE/);
+  const formatted = formatStageADemonstrations([
+    { recordId: 'r-peer', scope: 'group:sql', kind: 'repair', text: 'Always use COALESCE on nullable window sums.',
+      taskIds: ['task-B'], similarity: 0.9, weight: 0.71 },
+  ]);
+  assert.match(formatted, /\[group:sql \| repair \| w=0\.71\] Always use COALESCE/);
+  assert.equal(formatStageADemonstrations([]), '');
 });

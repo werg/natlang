@@ -6,7 +6,7 @@
  */
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { pluggable, type PluggableSetting } from './pluggable.js';
+import { pluggable, suppliedNl, type PluggableSetting } from './pluggable.js';
 
 export type JitTier = '0' | '0.5' | '1' | '1.5' | '2' | 'crisp';
 
@@ -117,7 +117,7 @@ export interface ChooseTierPolicyOptions {
 export function createChooseTierPolicy(options: ChooseTierPolicyOptions = {}): (stats: SiteStats) => Promise<JitTier> {
   const thresholds = options.thresholds ?? {};
   const crisp = (stats: SiteStats): JitTier => chooseTierCrisp(stats, thresholds);
-  const nl = options.nl ?? crisp;
+  const nl = suppliedNl(options.nl, options.mode, 'crisp', 'jit:chooseTier');
   return pluggable({ crisp, nl }, options.mode, { default: 'crisp', name: 'jit:chooseTier' });
 }
 
