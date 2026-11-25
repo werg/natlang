@@ -24,8 +24,10 @@ The claim registry lets many inventors work at once (ROOT: data_nvme:natlang-nov
                                                          idea (ROOT/accepted.jsonl) and every idea claimed for building
   program_atlas.py claim IDEA.json --by AGENT [--root ROOT] [--threshold 0.25]
       register an idea card before building it. Under ROOT/claims/.lock: the slug must be free, and no accepted or
-      claimed idea card, nor any atlas line, may be a near duplicate (TF-IDF cosine >= threshold; distinct pilot ideas
-      score 0.06-0.10 against each other and the atlas, a card against its own ideas' text 0.85-0.90). Prints
+      claimed idea card, nor any atlas line, may be a near duplicate (TF-IDF cosine >= threshold, default 0.35: with the
+      full atlas's word weights, distinct pilot ideas score 0.16-0.21 card against card, the 75-card bank's nearest
+      pairs median 0.14, max 0.25; a card cut to its pitch, two judgments and inputs scores 0.70-0.72 against its own
+      full card). Prints
       {ok, slug, conflicts, nearest}; exit 1 when refused. Appends to ROOT/claims/claims.jsonl (append-only).
   program_atlas.py claims [--root ROOT]                  the latest state of every claim
   program_atlas.py release SLUG --status abandoned|accepted|failed [--root ROOT] [--submission DIR] [--reason TEXT]
@@ -224,7 +226,8 @@ import time  # noqa: E402
 from natlang_neuralese.common.paths import resolve as data_path  # noqa: E402
 
 ROOT = Path(os.environ.get('NATLANG_INVENTOR_ROOT') or data_path('data_nvme', 'natlang-novel-programs'))
-THRESHOLD = 0.25
+THRESHOLD = 0.35   # refuse at or above
+WATCH = 0.22       # bank-check lists pairs at or above for a look
 BASE_MAX_AGE = 3600   # seconds before the repository + pool part of the atlas is rebuilt
 
 
@@ -340,8 +343,10 @@ def bank_check(root: Path, bank: Path, threshold: float = THRESHOLD) -> dict:
                        'nearest': [{'id': e['id'], 'similarity': e['similarity']} for e in nearest[:3]]})
         earlier.append({'id': f'bank:{slug_}', 'kind': 'bank', 'name': slug_, 'line': clip(f'{slug_}: {card.get("pitch", "")}'),
                         'text': idea_text(card)})
+    watch = sorted(({'slug': r['slug'], **r['nearest'][0]} for r in report if r['ok'] and r['nearest']
+                    and r['nearest'][0]['similarity'] >= WATCH), key=lambda item: -item['similarity'])
     return {'bank': str(bank), 'cards': len(cards), 'ok': sum(r['ok'] for r in report), 'threshold': threshold,
-            'refused': [r for r in report if not r['ok']], 'cards_checked': report}
+            'refused': [r for r in report if not r['ok']], 'watch': watch, 'cards_checked': report}
 
 
 def take(root: Path, bank: Path, by: str, threshold: float = THRESHOLD) -> dict:
