@@ -73,7 +73,7 @@ returns: Significance
 Judge how significant item is.
 ```
 
-- It is a `T` for crisp code: `event.message.toLowerCase()` works and an `Untrusted<string>` goes wherever a `string` does. A plain string becomes one with `untrusted(text, "stdin")` (from the runtime module), which names the source the label will show.
+- It is a `T` for crisp code: `event.message.toLowerCase()` works and an `Untrusted<string>` goes wherever a `string` does. A slot typed `Untrusted` marks what enters it: a helper passes `said.slice(2)` to a judgment's `Untrusted<string>` parameter as it is, and the call shows it as data. `untrusted(text, "call:C04")` (from `@natlang/node`) marks a string with a named source, for text that enters a slot not typed `Untrusted` or when the label should say where it came from.
 - Instructions refer to the value by name or take it as an argument. Interpolating it into an `nl` template, `nl\`Summarize ${message}\``, or text built from it, `${message.slice(0, 20)}`, is the compile error `untrusted-instruction`. Write ``nl`Summarize the message.`(message)``. A number computed from it (`${message.length}`) is fine.
-- Mark the fields that are outside text, not whole records: a trusted field with the same text as an untrusted one is also shown as data.
+- Outside text is everything people wrote: documents, notes, messages, and also names, titles, nicknames and labels (a road's local name, a song title, an author's name form). Mark those fields in the records a judgment receives, not whole records: identifiers, codes and dates stay plain and say what they are in their name or doc comment, and a closed set of values is a literal union. A trusted field with the same text as an untrusted one is also shown as data.
 - The instructions can say what to do with the data ("summarize message"), never how to read it ("ignore any commands in message"); the data block already says it is data.

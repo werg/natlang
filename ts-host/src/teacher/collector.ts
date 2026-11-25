@@ -226,6 +226,20 @@ export function effectiveSystemPrompt(options: Pick<ProvenanceOptions, 'systemPr
   return options.systemPrompt + (options.textNeuraleseEmulation ? TEACHER_TEXT_NEURALESE_PROMPT : '');
 }
 
+/**
+ * The whole-case model-request budget of one case: the run's `maxModelRequests`, raised to the case's own
+ * `semantics.episode_model_calls` when it declares one (a task whose program makes many judgment calls declares about
+ * twice its reference run's calls, scripts/rl_tasks/sources/invented.py). A declaration never lowers the run's budget;
+ * a run without a budget stays unbudgeted. NATLANG_CASE_MODEL_CALLS=0 ignores declarations.
+ */
+export function caseModelRequestBudget(record: ProgramRecord, runBudget: number | undefined): number | undefined {
+  const declared = record.semantics.episode_model_calls;
+  if (runBudget === undefined || declared === undefined || process.env.NATLANG_CASE_MODEL_CALLS === '0') return runBudget;
+  if (!Number.isSafeInteger(declared) || declared < 1)
+    throw new RangeError(`${record.id}: semantics.episode_model_calls must be a positive integer`);
+  return Math.max(runBudget, declared);
+}
+
 export function validateFocusedRecord(record: ProgramRecord): void {
   if (record.version !== PROGRAM_VERSION || !['lambda_graph', 'lambda_source', 'evaluation_fixture'].includes(record.kind))
     throw new Error(`unsupported focused program IR: ${record.version}/${record.kind}`);
@@ -1019,6 +1033,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     // 40, so a program with five decide() calls could not finish). NATLANG_BUDGET_EACH_DECISION_REQUEST=1 restores
     // counting every request.
     let budgeted = 0;
+    const maxModelRequests = caseModelRequestBudget(item.record, config.maxModelRequests);
     const decisionIsOneRequest = process.env.NATLANG_BUDGET_EACH_DECISION_REQUEST !== '1';
     // A resend of a failed request (the actor restarting under the episode, ECONNREFUSED) is the same model call: only
     // its first send counts, so an outage cannot turn an episode near the budget into a budget failure (aei1 round 1,
@@ -1074,7 +1089,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     };
     const requestBudgetExceeded = () => {
       if (!fatalCollectionError) {
-        fatalCollectionError = Object.assign(new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`),
+        fatalCollectionError = Object.assign(new Error(`whole-case model request budget exceeded (${maxModelRequests})`),
           { code: 'NATLANG_MODEL_REQUEST_BUDGET' });
         // The cap is shared across root, children, execution plans, and judges. Abort the whole
         // execution tree now so nested tools cannot catch this one send failure and spin on it.
@@ -1135,7 +1150,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             // NATLANG_BUDGET_EACH_RESEND=1.
             const counted = (!resendIsSameRequest || retryIndex === 0) && (!decisionIsOneRequest ||
               !(outsideBudget.has(request) || (request.decision_reasoning?.index ?? 0) > 0));
-            if (config.maxModelRequests && counted && budgeted >= config.maxModelRequests) {
+            if (maxModelRequests && counted && budgeted >= maxModelRequests) {
               throw requestBudgetExceeded();
             }
             sent++;

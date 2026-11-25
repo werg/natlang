@@ -242,20 +242,20 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
         (diag.code === 2305 || diag.code === 2614 || diag.code === 2724 || diag.code === 2307) && diag.start !== undefined &&
         checked.some(([start, end]) => diag.start! >= start && diag.start! < end)) : [];
       if (importErrors.length) {
-        const formatted = importErrors.map(diag => {
+        throw NatlangSourceError.of(record.source, importErrors.map(diag => {
           const pos = file.getLineAndCharacterOfPosition(diag.start!);
-          return `${pos.line + 1}:${pos.character + 1} TS${diag.code}: ${ts.flattenDiagnosticMessageText(diag.messageText, '\n')}`;
-        }).join('\n');
-        throw new NatlangSourceError(record.source, formatted);
+          return { line: pos.line + 1, column: pos.character + 1, code: `TS${diag.code}`,
+            message: `TS${diag.code}: ${ts.flattenDiagnosticMessageText(diag.messageText, '\n')}` };
+        }));
       }
     }
     const analysis = analyzeInlineLambdas(program, [file], { displayPath: () => record.source,
       sourceRevision: record.revision, authored: true });
     // Iteration sources are classified by type, so a loop the run would refuse is refused when the project is checked.
     const iteration = checkConstrainedSource(file, { checker: program.getTypeChecker(), displayPath: () => record.source });
-    if (iteration.length) throw new NatlangSourceError(record.source, iteration.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'));
+    if (iteration.length) throw NatlangSourceError.of(record.source, iteration);
     const errors = analysis.diagnostics.filter(item => item.severity === 'error');
-    if (errors.length) throw new NatlangSourceError(record.source, errors.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'));
+    if (errors.length) throw NatlangSourceError.of(record.source, errors);
     readouts = new Set(analysis.readouts.filter(item => !item.kind).map(item => `${item.start}:${item.end}`));
     conditionalReadouts = new Set(analysis.readouts.filter(item => item.conditional).map(item => `${item.start}:${item.end}`));
     joins = new Set(analysis.readouts.filter(item => item.kind === 'join').map(item => `${item.start}:${item.end}`));

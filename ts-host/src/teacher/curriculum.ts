@@ -434,8 +434,13 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
       calls = [['eval', { code: record.semantics.failure_seed!.code }]];
     } else if (name === rootName) {
       const call = record.curriculum.reference.root[step++];
+      // A root that is a decision readout gets a tool-free request: its scripted return_result value answers as the
+      // decision's JSON text, as a child's value answer does (stage tasks of invented programs, decision gates).
+      const value: ReturnType<typeof scriptedSuccess> | undefined = call?.[0] === 'return_result' && (call[1] as { status?: string }).status === 'success' ?
+        scriptedSuccess(request, (call[1] as { value?: unknown }).value) : undefined;
+      if (value && value.calls.length === 0) return value as { text: string; calls: [] };
       calls = [call ? [call[0], call[1]] :
-        ['return_result', { status: 'failed', reason: 'The reference solution ended without finishing the call.' }]];
+        ['return_result', { status: 'failed', reason: referenceEnded(context) }]];
     } else {
       const opening = openingText(context);
       const children = record.curriculum.reference.children ?? [];
@@ -462,10 +467,28 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
         if ('text' in reply) return reply;
         calls = reply.calls;
       } else calls = [scripted ? [scripted[0], scripted[1]] : answer?.call ? [answer.call[0], answer.call[1]] :
-        ['return_result', { status: 'failed', reason: `The reference has no answer for the child call ${name}.` }]];
+        ['return_result', { status: 'failed', reason: unansweredChild(context, name) }]];
     }
     return { calls, reasoning: reasoningFor?.(context, calls) ?? actionNote(calls) };
   };
+}
+
+const oneLine = (value: string, limit: number) => {
+  const flat = value.replace(/\s+/g, ' ').trim();
+  return flat.length > limit ? `${flat.slice(0, limit - 3)}...` : flat;
+};
+/** Why a root's reference stopped: its script has no further action; the last tool result says what went wrong. */
+function referenceEnded(context: Message[]): string {
+  const last = context.at(-1);
+  const observed = last?.role === 'tool' ? oneLine(text(last.content), 600) : '';
+  return observed ? `The reference solution ended without finishing the call; its last action returned: ${observed}` :
+    'The reference solution ended without finishing the call.';
+}
+/** A child call no `children` entry matches, named with the start of its arguments so the entry to add is clear. */
+function unansweredChild(context: Message[], name: string): string {
+  const shown = oneLine(context.slice(2, openingLength(context)).map(message => text(message.content)).join(' '), 300);
+  return `The reference has no answer for the child call ${name}${shown ? ` (its arguments: ${shown})` : ''}; ` +
+    'add a children entry whose match fragments all appear in this call\'s opening.';
 }
 
 /** One line on what a scripted action does, from the action alone. */

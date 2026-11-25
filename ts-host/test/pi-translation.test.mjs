@@ -36,6 +36,14 @@ test('a Pi turn reports the whole prompt: uncached input plus cache reads and wr
   assert.equal(piAssistantToTurn(upstream, 'p').cached_tokens, undefined);
 });
 
+test('a redacted thinking block is no reasoning: its placeholder text stays out of the turn', () => {
+  const redacted = { ...upstream, content: [{ type: 'thinking', thinking: '[Reasoning redacted]', redacted: true,
+    thinkingSignature: 'opaque' }, ...content] };
+  assert.equal(piAssistantToTurn(redacted, 'p').reasoning, 'consider');
+  const only = { ...upstream, content: [{ type: 'thinking', thinking: '[Reasoning redacted]', redacted: true }, content[1]] };
+  assert.equal(piAssistantToTurn(only, 'p').reasoning, undefined);
+});
+
 test('truncated and failed Pi replies', () => {
   assert.equal(piAssistantToTurn({ ...upstream, stopReason: 'length' }, 'p').truncated, true);
   assert.throws(() => piAssistantToTurn({ ...upstream, stopReason: 'error', errorMessage: 'quota' }, 'p'), /quota/);

@@ -186,7 +186,8 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 raise ValueError('text writer actor binding differs from its archived state')
             segments=source.get('segments')
             if not isinstance(segments,list) or any(s.get('kind')!='tokens' for s in segments):
-                raise ValueError('text writer requires exact standalone token source')
+                # a producing call that itself imported a spliced state needs that import replayed as well
+                raise ValueError('text writer requires an exact token source (its producing context imports no state)')
             tokens=[]; flags=[]
             for segment in segments:
                 ids=_tokens(segment.get('token_ids')); producing=segment.get('producing')
@@ -194,11 +195,15 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     raise ValueError('text writer source needs exact token roles')
                 tokens.extend(ids); flags.extend(producing)
             lo,hi=source.get('payload_start'),source.get('payload_stop')
-            if (type(lo) is not int or type(hi) is not int or lo!=1 or hi!=len(tokens)-1 or hi<=lo
-                    or tokens[0]!=roles.produce_open or tokens[-1]!=roles.produce_close
-                    or flags != [False]+[True]*(hi-lo)+[False]
+            # The document is the producing call's context (empty for a legacy context-free write), produce_open,
+            # the payload and produce_close (engine.native_write_text, DECISIONS 2026-11-25).
+            markers=set(roles.ids)
+            if (type(lo) is not int or type(hi) is not int or lo<1 or hi!=len(tokens)-1 or hi<=lo
+                    or tokens[lo-1]!=roles.produce_open or tokens[-1]!=roles.produce_close
+                    or flags != [False]*lo+[True]*(hi-lo)+[False]
+                    or markers.intersection(tokens[:lo-1])
                     or block.token_ids.tolist()!=tokens[lo:hi]):
-                raise ValueError('text writer source changed its exact standalone producer span')
+                raise ValueError('text writer source changed its exact producer span')
             import hashlib
             if hashlib.sha256(block.text.encode('utf-8')).hexdigest()!=write.get('text_body_sha256'):
                 raise ValueError('text writer state text differs from actual returned text hash')

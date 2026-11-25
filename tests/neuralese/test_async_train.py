@@ -1574,9 +1574,14 @@ def test_dry_run_shows_the_remote_collection_and_the_dgx_sft_sizing(tmp_path, mo
     monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: True)
     plan = d.plan()
     (remote,) = plan['remote_collect']
-    assert remote['endpoint'] == 'http://127.0.0.1:18731' and remote['serves_policy'] and remote['budget_gb'] == 12
+    import remote_collect
+    # the collector runs on the VM beside its actor (remote_collect.py run): VM-local front, a small DGX claim
+    assert remote['endpoint'] == 'http://127.0.0.1:18731' and remote['serves_policy'] and remote['on_host']
+    assert remote['budget_gb'] == remote_collect.REMOTE_SYNC_GB
     argv = remote['collect']
-    assert argv[argv.index('--actor') + 1] == 'http://127.0.0.1:18731=64' and argv[argv.index('--slots') + 1] == '64'
+    assert argv[1].endswith('remote_collect.py') and argv[2:6] == ['run', '--host', 'colab-g4', '--work']
+    assert argv[argv.index('--') + 2].endswith('expert_iteration.py') and argv[argv.index('--') + 3] == 'collect'
+    assert argv[argv.index('--actor') + 1] == 'http://127.0.0.1:8570=64' and argv[argv.index('--slots') + 1] == '64'
     assert argv[argv.index('--work') + 1].endswith('-remote0')
     assert argv[argv.index('--checkpoint-sha256') + 1] == d.controller.current['sha256']
     assert plan['sft_dgx'] == {'activation_gb': 56, 'budget_gb': 80}
@@ -1838,7 +1843,7 @@ def test_rebind_targets_carry_their_own_slots_and_pop_is_a_standing_actor_with_i
     assert [a[0] for a in d.remote_actors(include_pop=False)] == ['colab-g4']
     _u, work, argv, budget = d.remote_collect_argv(cur, t[1], 'http://100.1.2.3:18531')
     assert work.name.endswith('-pop') and argv[argv.index('--slots') + 1] == '24'
-    assert argv[argv.index('--actor') + 1] == 'http://100.1.2.3:18531=24' and budget == 8
+    assert argv[argv.index('--actor') + 1] == 'http://100.1.2.3:18531=24' and budget == max(8, round(24 * ei.REMOTE_COLLECTOR_SLOT_GB) + 4)
     assert argv[argv.index('--tasks') + 1] == str(d.collect_dir(cur) / 'tasks.json')
     # the Colab collector only: Pop's is pop_step's
     started = []
@@ -2812,3 +2817,59 @@ def test_a_collection_tiered_to_the_hdd_resumes_on_the_nvme_and_readers_see_both
     work.symlink_to(hdd / 'n1')
     assert d.collect_dir(cur).name == f'{base}-n2'
     assert ei.nvme_work_dir(tmp_path / 'plain') == tmp_path / 'plain'
+
+
+def test_a_collection_queued_at_its_full_claim_is_requeued_at_the_prep_share(tmp_path, monkeypatch):
+    """2026-11-25 00:39: a restarted driver queued its DGX collection at the full 70 GB before the round's prep share
+    existed; short 4.7 GB behind unpreemptible remote collectors, it never fit and the frontier waited out
+    PREP_YIELD_WAIT behind it (GPU idle). A queued collection above the share budget is requeued at it; one at or
+    below it, or one running, is left alone."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    cur = d.controller.current
+    unit = d.collection_unit(cur)
+    queued = {unit: 70.0}
+    monkeypatch.setattr(ei, 'ledger_queued', lambda u: u in queued)
+    monkeypatch.setattr(ei, 'ledger_waiting_gb', lambda u: queued.get(u))
+    monkeypatch.setattr(d.c, 'active', lambda u: False)
+    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (40, 70))
+    stopped, relaunched = [], []
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), queued.pop(u, None)))
+    monkeypatch.setattr(d, 'ensure_collection', lambda p: (relaunched.append(p['sha256']), queued.__setitem__(unit, 40)))
+    assert d.collection_pending() is True
+    assert stopped == [unit] and relaunched == [cur['sha256']] and queued[unit] == 40
+    assert d.collection_pending() is True and len(stopped) == 1          # at the share: not requeued again
+    monkeypatch.setattr(d.c, 'active', lambda u: True)                   # running: nothing to do
+    queued[unit] = 70
+    assert d.collection_pending() is False and len(stopped) == 1
+    # wait_for_room ends once the requeued collection runs and the step fits
+    monkeypatch.setattr(d.c, 'active', lambda u: False)
+    monkeypatch.setattr(d.c, 'present', lambda u: False)
+    monkeypatch.setattr(ei, 'ledger_admissible', lambda gb: True)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: queued.clear())     # the collection is admitted meanwhile
+    assert d.c.wait_for_room('aei-r0001-frontier', 4) is True
+
+
+def test_a_collection_launched_at_the_prep_share_asks_the_ledger_for_a_shrunk_admission(tmp_path, monkeypatch):
+    """The ledger raised a shrunk collection's admission to its family's full-size peak (2026-11-25 00:50, 78 GB for a
+    51 GB share): every launch below collection_budget()'s full size passes --shrunk; a full-size one does not."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    runs = []
+    monkeypatch.setattr(ei.subprocess, 'run', lambda argv, **kw: runs.append(argv) or SimpleNamespace(returncode=0))
+    monkeypatch.setattr(d.c, 'present', lambda u: False)
+    d.c.ledger('aei-collect-v0001', 51, 'medium', ['x'], tmp_path / 'log', detach=True, shrunk=True)
+    d.c.ledger('aei-collect-v0002', 70, 'medium', ['x'], tmp_path / 'log', detach=True)
+    launches = [a for a in runs if 'run' in a and '--unit' in a]
+    assert '--shrunk' in launches[0] and '--shrunk' not in launches[1]
+    assert launches[0].index('--shrunk') < launches[0].index('--')
+    calls = []
+    monkeypatch.setattr(d.c, 'ledger', lambda unit, budget, *a, **kw: calls.append((unit, budget, kw.get('shrunk'))))
+    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (51, 70))
+    monkeypatch.setattr(d.a, 'fill', None, raising=False)
+    cur = d.controller.current
+    (d.collect_dir(cur)).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    d.ensure_collection(cur)
+    assert calls[-1] == (d.collection_unit(cur), 51, True)
+    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (70, 70))
+    d.ensure_collection(d.controller.current)
+    assert calls[-1][2] is False

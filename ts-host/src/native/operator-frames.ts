@@ -22,7 +22,45 @@ export type CapturedCall = { messages: unknown[]; tools: unknown[]; prompt?: num
   text?: string; reasoning?: string;
   /** Capture the tokens of this text inside the reply (a `compact_history` note in its tool call) instead of the
    * reply's content. */
-  select?: string };
+  select?: string;
+  /** Write this text as the span after the whole reply (a Neuralese text write in its producing call,
+   * `NeuralesePort.write`'s `context`), instead of capturing the reply's own tokens. */
+  write?: string };
+
+/**
+ * The producing context of one model call (`NativeWriteContext`): the request's messages and tools and, when the
+ * server reported its RL capture, the exact prompt (token ids, or segments with the states it imported) and the
+ * sampled reply ids. Shared by the operator capture (agent.ts `capturedRef`) and Neuralese text writes.
+ */
+export function callContext(request: { messages: unknown[]; tools?: unknown[] },
+    response: { raw_response?: Record<string, unknown> }): import('./neuralese-store.js').NativeWriteContext {
+  const sampled = response.raw_response?.x_natlang_rl_capture as { prompt?: { kind?: string; token_ids?: number[]; id?: string }[];
+    generated_inputs?: { token_id?: number }[] } | undefined;
+  const tokens = (segment: { kind?: string; token_ids?: number[] }) => segment.kind === 'tokens' && Array.isArray(segment.token_ids);
+  const base = { messages: request.messages, tools: request.tools ?? [] };
+  const exact = !!sampled?.prompt?.length && !!sampled.generated_inputs?.length &&
+    sampled.prompt.every(segment => tokens(segment) || (segment.kind === 'native_state' && typeof segment.id === 'string')) &&
+    sampled.generated_inputs.every(input => Number.isSafeInteger(input?.token_id));
+  if (!exact) return base;
+  // A prompt that imported state (an operator's soft prompt state) keeps those imports in place.
+  const plain = sampled!.prompt!.every(tokens);
+  return { ...base, ...(plain ? { prompt: sampled!.prompt!.flatMap(segment => segment.token_ids!) } :
+    { promptSegments: sampled!.prompt!.map(segment => tokens(segment) ? { kind: 'tokens' as const, token_ids: segment.token_ids! } :
+      { kind: 'native_state' as const, id: segment.id! }) }),
+    reply: sampled!.generated_inputs!.map(input => input.token_id!) };
+}
+
+/** The latest producing call of each call id (bounded): a Neuralese text write of that call's value (its typed result, a
+ * literal it wrote, an argument it passed to a child call) is written at the end of it. */
+const PRODUCING_CALLS = new Map<string, import('./neuralese-store.js').NativeWriteContext>();
+export function noteProducingCall(callId: string, context: import('./neuralese-store.js').NativeWriteContext): void {
+  PRODUCING_CALLS.delete(callId);
+  PRODUCING_CALLS.set(callId, context);
+  while (PRODUCING_CALLS.size > 4096) PRODUCING_CALLS.delete(PRODUCING_CALLS.keys().next().value!);
+}
+export function producingCall(callId: string | null | undefined): import('./neuralese-store.js').NativeWriteContext | undefined {
+  return callId ? PRODUCING_CALLS.get(callId) : undefined;
+}
 export type NativeCapture = (call: CapturedCall, options?: { type?: string }) =>
   Promise<import('./neuralese-store.js').NeuraleseBlockMeta>;
 

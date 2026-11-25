@@ -64,7 +64,20 @@ paths to skip reasoning). `decide(fn, ...args)` (from `@natlang/node`, and the s
 probabilities). A record type of up to 32 values is scored in one pass; a larger one field by field, and its
 `confidence` is the probability of the record chosen. Act on the confidence in code (or wrap `fn` in `escalate` from
 `@natlang/node/std`). A field typed `string` or marked optional makes the result open: split the open part into its own
-function, or keep the tool loop.
+function, or keep the tool loop. Literal unions may mix strings and numbers (`-2 | -1 | 1 | 2 | 'reset'`), and each
+value names one meaning: when the same thing could be called two ways on some input (a section that occurs once is its
+first and its last), give it its own value (`'only'`) or say in the type's doc comment which one it is.
+
+**Judgments map words to referents; code finds the item.** A judgment reads what the words say and returns it as a
+finite description; TypeScript resolves the description against the data. "The second right after the church" is
+`{ side: 'right', ordinal: 2, after: 'church' }` from the judgment, and the map walk finds the road. A choice among items
+known only at run time goes the same way: code numbers or describes the candidates and the judgment returns the
+description, or `decide` runs one boolean judgment per candidate and code takes the most probable:
+
+```ts
+const scored = await Promise.all(candidates.map(async road => ({ road, p: (await decide(isMeant, sentence, road)).probabilities.find(o => o.value === true)?.probability ?? 0 })));
+const meant = scored.reduce((best, next) => next.p > best.p ? next : best);
+```
 
 <!-- from: examples/refunds/desk.ts -->
 ```ts

@@ -1,0 +1,50 @@
+{
+  "id": "natlang-rl-invented-20261125-020600",
+  "owner": "dgx",
+  "path": "data_nvme:natlang-novel-programs/pool/20261125-020600",
+  "include": [
+    "cases.jsonl",
+    "repetition.json"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.program/2 cases of 4 invented programs (train split): 8 whole-program tasks and 263 stage tasks (scripts/rl_tasks/sources/invented.py)",
+  "rows": 271,
+  "license": "invented (project-authored by frontier models)",
+  "protected": false,
+  "note": "program inventor campaign (plans/NOVEL_PROGRAMS_20261124.md); ideas: anatomical-character-tree-scorer, assurance-case-defeater-grounder, randomization-law-reconstructor, suppressed-count-reconstruction-auditor",
+  "producer": {
+    "script": "data_registry.py",
+    "argv": [
+      "record",
+      "--id",
+      "natlang-rl-invented-20261125-020600",
+      "--path",
+      "/home/werg/data/natlang-novel-programs/pool/20261125-020600",
+      "--kind",
+      "rl-tasks",
+      "--include",
+      "cases.jsonl",
+      "--include",
+      "repetition.json",
+      "--license",
+      "invented (project-authored by frontier models)",
+      "--rows",
+      "271",
+      "--format",
+      "natlang.program/2 cases of 4 invented programs (train split): 8 whole-program tasks and 263 stage tasks (scripts/rl_tasks/sources/invented.py)",
+      "--note",
+      "program inventor campaign (plans/NOVEL_PROGRAMS_20261124.md); ideas: anatomical-character-tree-scorer, assurance-case-defeater-grounder, randomization-law-reconstructor, suppressed-count-reconstruction-auditor"
+    ],
+    "git_commit": "e4425d852b24e9d5b8ff96bb8d707960f16832b5",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "72e106d185f4161194cf0d520b7a99b66ed39bbd7e0b9a82e84e8320fcb5ad37",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "grpo-pool": {
+      "order": 23,
+      "file": "cases.jsonl"
+    }
+  }
+}

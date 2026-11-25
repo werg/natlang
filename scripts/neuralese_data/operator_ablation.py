@@ -5,7 +5,7 @@ For every consumer chain of `operator_rows.py` (a test split), the consumer's ta
 
 * ``actual``: the state computed in-graph from its own producer document (the in-context capture, the pass-through
   `lfm3_fast_train.passthrough_plan`, no gradient);
-* ``standalone``: the same reply content written from position 0 (`[produce_open] + span`, today's text write):
+* ``standalone``: the same reply content written from position 0 (`[produce_open] + span`, the context-free text write engines made before 2026-11-25):
   whether the in-context capture carries more than its tokens;
 * ``shuffled``: the state of another case of the same source (a derangement), its span spliced in at the import;
 * ``text-cut``: the runtime's text cut of the value instead of any state (`*.test-textcut.pkl`).

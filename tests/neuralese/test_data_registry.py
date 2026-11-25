@@ -202,29 +202,6 @@ def test_promote_role_appends_after_current_members(roots, monkeypatch, capsys):
     assert entry['path'] == 'data_hdd:new' and entry['license'] == 'L' and entry['kind'] == 'rl-tasks'
 
 
-def test_build_supply_records_the_source(roots, monkeypatch):
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('build_supply', REPO / 'scripts/rl_tasks/build_supply.py')
-    bs = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(bs)
-    authoring = roots / 'data_hdd' / 'natlang-rl-authoring'
-    rows = [{'id': f't{i}', 'family': 'f', 'split': 'train'} for i in range(3)]
-    pool(authoring / 'admitted' / 'cases.jsonl', [])
-    (authoring / 'admitted' / 'cases.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
-    (authoring / 'admitted' / 'admissions.jsonl').write_text(json.dumps({'batch': 'w300/b1', 'admitted_case_ids': ['t0', 't1']}) + '\n')
-    dr.record_dataset('natlang-rl-authoring-admitted', authoring / 'admitted', kind='rl-tasks', format='f', closed=False)
-    existing = pool(roots / 'data_hdd' / 'old-pool' / 'cases.jsonl', ['t1'])
-    dr.record_dataset('old-pool', existing.parent, kind='rl-tasks', format='f')
-    monkeypatch.setattr(bs.grpo, 'default_pools', lambda: [str(existing)])
-    out = roots / 'data_hdd' / 'natlang-rl-task-supply-x'
-    bs.main([str(out), '--min-worker', '300', '--authoring', str(authoring)])
-    assert [json.loads(l)['id'] for l in open(out / 'cases.jsonl')] == ['t0']
-    reg = dr.load(repo=roots / 'repo', fresh=True)
-    ds = reg.datasets['natlang-rl-task-supply-x']
-    assert ds['kind'] == 'rl-tasks' and ds['rows'] == 1 and ds['license'].startswith('project-authored')
-    assert {i.get('id') for i in ds['inputs']} >= {'natlang-rl-authoring-admitted', 'old-pool'}
-
-
 def test_single_file_datasets_share_a_directory(roots):
     d = roots / 'data_nvme' / 'ops'
     pool(d / 'probe-v1.json', ['a'])

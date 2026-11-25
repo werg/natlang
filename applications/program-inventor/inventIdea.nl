@@ -31,12 +31,16 @@ none of them:
    arithmetic, state transitions, graph walks); each judgment of meaning is one narrow typed function. judgments
    lists at least three judgments, each asking a different question, each with the wrong reading a careless or
    keyword-driven reader would give. The program's answer must change when any one judgment is answered wrong.
-4. Give the computation real depth: at least five functions, a call chain at least three deep, at least one judgment
-   that reads the result of another judgment or of an exact stage built from judgments, and at least two rules or
-   stages whose order or precedence decides the outcome. constructs names at least three of the listed constructs the
-   design genuinely needs.
-5. One input instance holds at least eight items or about 1,200 words of realistic text, and has exactly one correct
-   output that an exact checker can decide (a record, a list of records, a set, a final state). whyKeywordsFail
+4. Give the computation real depth: at least five functions, a call chain at least three deep, a judgment that reads
+   a passage of several sentences and weighs it, a judgment that reads the results of two earlier judgments or state
+   carried across items, at least two rules or stages whose order or precedence decides the outcome, and an exact
+   algorithm at the core (a graph walk, a fixed point, a search, an enumeration). Each judgment maps words to meanings
+   and referents; the code computes positions, ordinals and counts from them. constructs names at least three of the
+   listed constructs the design genuinely needs.
+5. One input instance is one real working session of that user: 1,000 to 2,000 words of text people wrote, in 15 to 30
+   items a judgment reads, with the evidence for each reading spread through the text the way it is in real work. It
+   has exactly one correct output that an exact checker can decide (a record, a list of records, a set, a final
+   state). inputs states the size of one instance in items and words; the build is held to it. whyKeywordsFail
    explains why no rule over surface cues reaches it.
 6. nearest names the atlas entries closest to your idea, each by the name its line starts with, and difference says for
    each how yours differs in the four respects above. If the honest difference is only subject matter, go back to

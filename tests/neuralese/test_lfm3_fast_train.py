@@ -879,6 +879,34 @@ def test_rollout_lowering_resolves_imports_to_their_write_sources():
     assert episode_turns({'turns': [turn(prompt)]}, stats) == [] and stats['skip_native_state_prompt'] == 1
 
 
+def test_sft_lowering_writes_a_legacy_context_free_result_in_its_producing_turn():
+    """A typed result written before 2026-11-25 (`[produce_open] + text` from position 0) is rewritten for SFT to the
+    span at the end of the call's last sampled turn (its prompt, its reply up to its end of turn), as the engines write
+    it now; without `in_context` (GRPO) the recorded document stays."""
+    import collections
+    from lower_rollout_turns import write_sources
+    write = {'kind': 'block_write', 'block': 'nzs1_r', 'call_id': 'c', 'source_kind': 'typed-text-result',
+             'source_capture': {'segments': [{'kind': 'tokens', 'token_ids': [63], 'producing': [False]},
+                                             {'kind': 'tokens', 'token_ids': [41, 42], 'producing': [True, True]},
+                                             {'kind': 'tokens', 'token_ids': [62], 'producing': [False]}],
+                                'payload_start': 1, 'payload_stop': 3}}
+    samples = [{'token_id': t, 'logp': -0.1, 'input_role': 'ordinary', **({'terminal': True} if t == 2 else {})}
+               for t in (8, 9, 2)]
+    turn = lambda invocation, prompt: {'invocation_id': invocation, 'sampling': {
+        'prompt': [{'kind': 'tokens', 'token_ids': prompt}], 'samples': samples,
+        'generated_inputs': [{'sample_index': i, 'token_id': s['token_id']} for i, s in enumerate(samples)]}}
+    row = {'turns': [turn('c', [1, 5]), turn('other', [1, 6]), turn('c', [1, 7, 50])], 'execution_graph': [write]}
+    stats = collections.Counter()
+    source = write_sources(row, stats, in_context=(50, 51))['nzs1_r']
+    # the call's last turn: prompt [1, 7, <think>], reply [8, 9] (end of turn dropped), the thought closed, then the span
+    assert source['ids'].tolist() == [1, 7, 50, 8, 9, 51, 63, 41, 42] and (source['start'], source['stop']) == (7, 9)
+    assert stats['source_in_context'] == 1
+    assert write_sources(row)['nzs1_r']['ids'].tolist() == [63, 41, 42]
+    unrelated = {**write, 'call_id': 'missing'}
+    assert write_sources({**row, 'execution_graph': [unrelated]}, stats, in_context=(50, 51))['nzs1_r']['start'] == 1
+    assert stats['source_context_free'] == 1
+
+
 def test_a_source_whose_producer_imported_a_stored_state_keeps_it_as_fixed_context():
     """An operator call under its soft prompt state: its capture records the imported state; the producer document
     holds placeholder rows there, and the pass-through reads the stored state at those rows of the document."""

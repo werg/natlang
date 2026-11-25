@@ -307,13 +307,23 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
                                 {'text': 'placeholder body', 'type': 'Neuralese<string>'})
         assert placeholder['id'].startswith('nzs1_')
         assert placeholder['native_state']['type'] == 'Neuralese<string>'
+        # written at the end of its producer call (engine.text_producer_messages): the call's rendered prompt, then
+        # produce_open, the text as the producing span, produce_close
         source_segments = placeholder['source_capture']['segments']
-        assert [segment['token_ids'] for segment in source_segments] == [
-            [roles.produce_open], source_segments[1]['token_ids'], [roles.produce_close]]
-        assert source_segments[0]['producing'] == [False] and source_segments[-1]['producing'] == [False]
-        assert source_segments[1]['producing'] == [True] * len(source_segments[1]['token_ids'])
-        assert placeholder['source_capture']['payload_start'] == 1
-        assert placeholder['source_capture']['payload_stop'] == len(source_segments[1]['token_ids']) + 1
+        prefix = [token for segment in source_segments[:-2] for token in segment['token_ids']]
+        span = source_segments[-2]['token_ids']
+        assert source_segments[-1]['token_ids'] == [roles.produce_close] and source_segments[-1]['producing'] == [False]
+        assert source_segments[-2]['producing'] == [True] * len(span)
+        assert len(prefix) > 1 and prefix[-1] == roles.produce_open
+        assert not any(flag for segment in source_segments[:-2] for flag in segment['producing'])
+        assert placeholder['source_capture']['payload_start'] == len(prefix)
+        assert placeholder['source_capture']['payload_stop'] == len(prefix) + len(span)
+        # with the producing call given (its exact prompt and reply), the text follows the reply
+        produced = post_path('/v1/neuralese/native-states/write-text',
+                             {'text': 'placeholder body', 'prompt_token_ids': [4, 5], 'reply_token_ids': [6, 7]})
+        ids = [token for segment in produced['source_capture']['segments'] for token in segment['token_ids']]
+        assert ids[:5] == [4, 5, 6, 7, roles.produce_open] and produced['source_capture']['payload_start'] == 5
+        assert ids[5:produced['source_capture']['payload_stop']] == span
         assert placeholder['source_text_sha256']
         literal = post_path('/v1/neuralese/native-states/write-text',
             {'text': 'keep <|neuralese_produce|> literal'})

@@ -106,3 +106,25 @@ def test_template_paths_and_step_writes_are_declared_even_when_the_reference_wri
     item['semantics']['files']['apply_fix.nl'] = root
     fields = migrate.migrate(item)[0]['curriculum']['external']['typed_output_contract']['writes']
     assert {'replies/*.md', 'done/*.md'} <= set(fields)
+
+
+def test_migrate_output_contracts_read_step_and_path_boundaries():
+    semantics = {
+        'folder_files': {'ledger.csv': 'id\n1\n', 'rules.md': 'rule\n'},
+        'expected_files': {'ledger.csv': 'id\n1\n2\n', 'rules.md': 'rule\n', 'summary.md': 'ok\n'},
+    }
+    body = (
+        '1. Read ledger.csv and inspect every open refund. Append one line for each approved refund.\n'
+        '2. Read rules.md and write summary.md.\n'
+    )
+    fields, _ = migrate.output_fields(semantics, body, '')
+    assert 'ledger.csv' in fields and 'summary.md' in fields and 'rules.md' not in fields
+
+    general, per_field, returned = migrate.attribute(
+        'Write a/b.md with details. Write b.md. Put replies in out/item.md.',
+        {'a/b.md': ['a/b.md'], 'b.md': ['b.md'], 'out/*.md': []},
+        True,
+    )
+    assert per_field['a/b.md'] == ['Write a/b.md with details.']
+    assert per_field['b.md'] == ['Write b.md.']
+    assert per_field['out/*.md'] == ['Put replies in out/item.md.']

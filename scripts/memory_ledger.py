@@ -960,7 +960,13 @@ def run(args):
             if unit in live:
                 raise SystemExit(f'{unit} already holds a claim')
             learned = learned_budget(state, unit, budget)
-            if learned > budget:
+            if learned > budget and getattr(args, 'shrunk', False):
+                # launched at a reduced share of its full size (a collection during round preparation): admitted at
+                # the requested budget, its MemoryMax the full size it may grow to once `resize restore` raises the
+                # claim (2026-11-25 00:50: v0001 requeued at its 51 GB share was raised to the full run's 78 GB peak
+                # and waited 29 GB short beside the round's data step, GPU idle)
+                shrunk_max_gb = max(args.host_max_gb or 0, learned / GIB)
+            elif learned > budget:
                 print(json.dumps({'budget_raised_to_measured_peak_gb': round(learned / GIB, 1),
                                   'requested_gb': args.budget_gb, 'family': family(unit)}), file=sys.stderr)
                 budget = learned
@@ -979,7 +985,8 @@ def run(args):
                 live, free, head, order[0][1], dict(waiting[unit], resumable=resumable_job), cuda_free)
             cuda_fits = cuda_fits_entry(waiting[unit], cuda_free)
             if may_start(order, unit, bool(backfill), fits(free, budget, reserve) and cuda_fits):
-                spec = {'unit': unit, 'budget': budget, 'host_max_gb': args.host_max_gb, 'cls': args.cls,
+                host_max_gb = shrunk_max_gb if getattr(args, 'shrunk', False) and learned > budget else args.host_max_gb
+                spec = {'unit': unit, 'budget': budget, 'host_max_gb': host_max_gb, 'cls': args.cls,
                         'cuda_budget': cuda_budget,
                         'oom_policy': args.oom_policy, 'workdir': os.path.abspath(args.workdir), 'env': args.env,
                         'stop_seconds': args.stop_seconds, 'command': args.command, 'priority': priority,
@@ -1639,6 +1646,9 @@ def main():
                    help='wait for admission in its own user unit (<unit>-waiter) instead of this process, so the queue '
                         'entry survives the end of the calling shell or agent session; needs --wait. Output goes to the '
                         'journal of that unit')
+    r.add_argument('--shrunk', action='store_true',
+                   help='the job starts at a reduced share of its full size and restores its claim later (resize '
+                        'restore): admit it at --budget-gb, not the family\'s learned peak (which stays its MemoryMax)')
     r.add_argument('--hold-budget', '--fixed-claim', action='store_true',
                    help='always count the whole unspent budget, even after the job settles (working set grows later)')
     r.add_argument('--stop-seconds', type=float, default=None,

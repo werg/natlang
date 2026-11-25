@@ -202,7 +202,7 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                 events=json.loads((tmp_path / 'archive/native-recorded-graph.json').read_text())
                 compiled=compile_recorded_graph(recorded,events,identity=identity,
                     roles=engine.role_tokens,fetch_block=fetch)
-                assert len(compiled.replay.plan.invocations)==6
+                assert len([node for node in compiled.replay.plan.invocations if ':alternative:' not in node.name])==6  # split-tokenization alternatives are their own nodes (716a9d0fc)
                 assert len(compiled.decision_actions)==2
                 assert not compiled.replay.external_blocks, 'both decisions consume the actual captured producer'
                 only_decisions=[turn for turn in recorded if turn['native']['kind']=='decision']
@@ -215,8 +215,8 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                 external=compile_recorded_graph(only_decisions,decision_events,identity=identity,
                     roles=engine.role_tokens,fetch_block=fetch)
                 assert len(external.replay.external_blocks)==1
-                assert len(external.replay.plan.invocations)==4
-                assert len(next(iter(external.replay.external_invocations.values())))==4
+                assert len([node for node in external.replay.plan.invocations if ':alternative:' not in node.name])==4
+                assert len([item for item in next(iter(external.replay.external_invocations.values())) if ':alternative:' not in item['invocation']])==4
                 assert all(item['invocation'] in {node.name for node in external.replay.plan.invocations}
                     for items in external.replay.external_invocations.values() for item in items)
                 assert all(binding['external_read_bindings'] for binding in external.origin_bindings.values())
@@ -234,7 +234,14 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                             'options':turn['decision']['options']})
                         actions=compiled.decision_actions[turn['native']['id']]
                         flat=[float(token_action_logps(model,result['h_final'][0],option).sum()) for option in actions]
-                        torch.testing.assert_close(torch.tensor(flat),torch.tensor(cached['log_probs']),rtol=2e-5,atol=3e-5)
+                        # an option scores as the logsumexp over its canonical sequence and its split-tokenization
+                        # alternatives, which follow the canonical options (716a9d0fc)
+                        groups=compiled.decision_alternatives.get(turn['native']['id']) or []
+                        count=len(flat)-sum(len(alts) for alts in groups)
+                        rest=iter(flat[count:])
+                        scored=[float(torch.logsumexp(torch.tensor([flat[index],*(next(rest) for _ in (groups[index] if index<len(groups) else ()))]),0))
+                                for index in range(count)]
+                        torch.testing.assert_close(torch.tensor(scored),torch.tensor(cached['log_probs']),rtol=1e-4,atol=5e-4)  # logsumexp in FP32 here vs the engine's
                 import copy
                 forged=copy.deepcopy(recorded)
                 forged[-1]['native']['graph']['read_bindings']={}

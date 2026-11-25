@@ -3,6 +3,13 @@
 
   simulate_selection.py --cases POOL/cases.jsonl [--rounds 400] [--rows 16] [--group 8] [--compare-without-quota] -o report.json
   simulate_selection.py --grpo [--cases POOL ...] [--groups 2000] [--explore-order family] -o report.json
+  simulate_selection.py --ei [--rates-json COLLECT/tasks.rates.json] [--shape-cap 0.01] -o report.json
+
+``--ei``: expert iteration's collection order (``expert_iteration.selection_order``, the order a collection walks one
+group per task) over the EI pool (``expert_iteration.pool_args``: grpo-pool minus the held closure) with the measured
+rates of an earlier selection, once without the program-shape cap and once with ``--shape-cap``; it reports per prefix
+(500, 2000, 8000 groups: a collection reaches a few hundred to a few thousand) the distinct and effective program shapes
+(``measure_repetition.program_shape``), the largest shapes' shares, families and sources. Real rates, no outcome model.
 
 ``--grpo``: the GRPO collector's own selection (``grpo.Collector._pick``: ``--explore`` of groups from the unmeasured-task
 walk ``grpo.ExploreWalk``, the rest cycling tasks in the pass band, each task's latest group replacing its rate) over the
@@ -143,20 +150,81 @@ def simulate(cases, *, rounds, rows, group, config, seed=1103, outcomes='level')
             'max_visits_one_row': max(picked.values())}
 
 
-def simulate_grpo(tasks, *, groups, group, wrapper_share, held_weight, explore, band=(0.1, 0.9), seed=1103):
+def shape_spread(rows, shapes, prefixes=(500, 2000, 8000)):
+    """Program-shape spread of the first ``n`` rows of an order, for each prefix."""
+    import math
+    out = {}
+    for n in prefixes:
+        head = rows[:n]
+        if not head:
+            continue
+        counts = collections.Counter(shapes[r['id']] for r in head)
+        total = len(head)
+        top = counts.most_common(5)
+        out[str(n)] = {'rows': total, 'shapes': len(counts),
+                       'effective_shapes': round(math.exp(-sum(c / total * math.log(c / total) for c in counts.values())), 1),
+                       'top_shape_share': round(top[0][1] / total, 4), 'top5_shape_share': round(sum(c for _, c in top) / total, 4),
+                       'families': len({r.get('family') for r in head}),
+                       'sources': dict(collections.Counter(str(r.get('source')) for r in head).most_common(8))}
+    return out
+
+
+def ei_report(args):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'neuralese_data'))
+    import expert_iteration as ei
+    import grpo
+    from types import SimpleNamespace
+    pool = SimpleNamespace(pool=args.cases, held_manifest=None, exclude_family_regex=None, seed=args.seed)
+    rows, excluded = grpo.load_tasks(ei.pool_args(pool), None)
+    rates = {}
+    for path in args.rates_json or []:
+        rates.update({k: (v['successes'], v['scored']) for k, v in json.loads(Path(path).read_text()).items()
+                      if v.get('scored')})
+    shapes = grpo.task_shapes(rows)
+    report = {'schema': 'natlang.ei-selection-simulation/1', 'eligible': len(rows), 'held_excluded': excluded,
+              'rated': len(rates), 'rates_json': args.rates_json, 'pool_shapes': len(set(shapes.values())),
+              'pool': shape_spread(rows, shapes, (len(rows),))[str(len(rows))], 'pool_by_source': {}}
+    by_source = collections.defaultdict(list)
+    for row in rows:
+        by_source[str(row.get('source'))].append(row)
+    for source, members in sorted(by_source.items(), key=lambda item: -len(item[1])):
+        counts = collections.Counter(shapes[r['id']] for r in members)
+        report['pool_by_source'][source] = {'rows': len(members), 'families': len({r.get('family') for r in members}),
+                                            'shapes': len(counts), 'top_shape_share': round(counts.most_common(1)[0][1] / len(members), 4)}
+    for name, cap in (('without_cap', 0.), *((f'cap_{c:g}', c) for c in args.shape_caps or [args.shape_cap])):
+        order, tiers = ei.selection_order(rows, rates, random.Random(args.seed), shape_cap=cap,
+                                          shape_of=lambda r: shapes[r['id']])
+        report[name] = {'shape_cap': cap, 'tiers': tiers, 'prefixes': shape_spread(order, shapes)}
+    Path(args.output).write_text(json.dumps(report, indent=1) + '\n')
+    print(json.dumps(report, indent=1))
+    return 0
+
+
+def pool_metadata(row):
+    """A pool row's level and family for the outcome model. ``curriculum.metadata`` refuses rows whose
+    ``curriculum.rl.qualification`` is not ``qualified``; grpo's collector does not read it, so the GRPO pool has such
+    rows and the simulation of its selection must take them (``grpo_report`` counts them)."""
+    rl = (row.get('curriculum') or {}).get('rl') or {}
+    level = rl.get('level', 3)
+    return {'level': level if isinstance(level, int) and level >= 0 else 3,
+            'family': rl.get('family') or row.get('family') or 'unspecified'}
+
+
+def simulate_grpo(tasks, *, groups, group, wrapper_share, held_weight, explore, band=(0.1, 0.9), seed=1103,
+                  shape_cap=0.):
     """``grpo.Collector._pick`` on a bare collector (no actor): synthetic outcomes, the real selection code."""
     import threading
     from types import SimpleNamespace
     import grpo
-    from natlang_neuralese.rl.curriculum import metadata
     c = grpo.Collector.__new__(grpo.Collector)
     c.args = SimpleNamespace(pass_rates=None, pass_band=band, pass_min_scored=2, explore=explore)
     c.tasks, c.by_id, c.lock = tasks, {row['id']: row for row in tasks}, threading.Lock()
     c.learnable_ids, c.learnable_order, c.measured, c.rates_read = [], [], set(), 0.
     c.base_rates, c.own, c.rates_changed, c.prior_stale = {}, {}, True, True
     c.rng, c.cursor = random.Random(seed), 0
-    c.walk = grpo.ExploreWalk(tasks, wrapper_share, held_weight)
+    c.walk = grpo.ExploreWalk(tasks, wrapper_share, held_weight, shape_cap)
     features = c.walk.features or grpo.task_features(tasks)
+    shapes, explored_shapes = grpo.task_shapes(tasks), collections.Counter()
     model, rng = OutcomeModel('latent', random.Random(seed + 1)), random.Random(seed + 2)
     shares = {'explored': collections.Counter(), 'all': collections.Counter()}
     spread = 0
@@ -164,8 +232,9 @@ def simulate_grpo(tasks, *, groups, group, wrapper_share, held_weight, explore, 
         taken = c.walk.counts['taken']
         row = c._pick()
         explored = c.walk.counts['taken'] > taken
+        explored_shapes[shapes[row['id']]] += explored
         held, wrapper = features[row['id']]
-        meta = metadata(row)
+        meta = pool_metadata(row)
         p = model.probability(row['id'], meta['level'], meta['family'])
         wins = sum(rng.random() < p for _ in range(group))
         spread += 0 < wins < group
@@ -183,6 +252,9 @@ def simulate_grpo(tasks, *, groups, group, wrapper_share, held_weight, explore, 
                                                    for name, v in sorted(counter.items()) if name != 'groups'}}
            for kind, counter in shares.items()}
     out['groups_with_spread'] = round(spread / groups, 4)
+    explored = sum(explored_shapes.values())
+    out['explored_shapes'] = {'shapes': sum(1 for v in explored_shapes.values() if v),
+                              'top_shape_share': round(max(explored_shapes.values(), default=0) / max(1, explored), 4)}
     out['learnable_tasks_at_end'] = len(c.learnable_ids)
     return out
 
@@ -198,11 +270,14 @@ def grpo_report(args):
     pool = grpo.ExploreWalk(tasks, args.wrapper_share, args.held_weight)
     report = {'schema': 'natlang.grpo-selection-simulation/1', 'pools': args.cases or grpo.default_pools(), 'eligible': len(tasks),
               'held_excluded': excluded, 'explore_order': args.explore_order, 'explore': args.explore, 'groups': args.groups,
-              'pool': pool.pool_report(), 'outcomes': 'latent (OutcomeModel)'}
-    for name, share, weight in (('before', 1., 1.), ('after', args.wrapper_share, args.held_weight)):
-        report[name] = {'wrapper_share': share, 'held_weight': weight,
+              'pool': pool.pool_report(), 'outcomes': 'latent (OutcomeModel)',
+              'rows_not_qualified': collections.Counter(
+                  str(((r.get('curriculum') or {}).get('rl') or {}).get('qualification')) for r in tasks
+                  if ((r.get('curriculum') or {}).get('rl') or {}).get('qualification') not in (None, 'qualified'))}
+    for name, share, weight, cap in (('before', 1., 1., 0.), ('after', args.wrapper_share, args.held_weight, args.shape_cap)):
+        report[name] = {'wrapper_share': share, 'held_weight': weight, 'shape_cap': cap,
                         **simulate_grpo(tasks, groups=args.groups, group=args.group, wrapper_share=share,
-                                        held_weight=weight, explore=args.explore)}
+                                        held_weight=weight, explore=args.explore, shape_cap=cap)}
     Path(args.output).write_text(json.dumps(report, indent=1) + '\n')
     print(json.dumps(report, indent=1))
     return 0
@@ -212,6 +287,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cases', action='append', help='pool cases.jsonl (repeatable with --grpo)')
     parser.add_argument('--grpo', action='store_true', help="simulate grpo.py's collector selection instead")
+    parser.add_argument('--ei', action='store_true', help="expert iteration's collection order instead (real rates)")
+    parser.add_argument('--rates-json', action='append', help="--ei: an earlier selection's tasks.rates.json")
+    parser.add_argument('--shape-caps', type=float, nargs='+', help='--ei: several capped arms')
+    parser.add_argument('--shape-cap', type=float, default=0.01, help='--ei/--grpo: the program-shape cap of the capped arm')
     parser.add_argument('--groups', type=int, default=2000, help='--grpo: groups to select')
     parser.add_argument('--explore', type=float, default=0.4)
     parser.add_argument('--explore-order', choices=('row', 'family'), default='family')
@@ -232,6 +311,8 @@ def main(argv=None):
                         help='synthetic outcome model: per-level pass rate, or per-task latent rates with family learning')
     parser.add_argument('-o', '--output', required=True)
     args = parser.parse_args(argv)
+    if args.ei:
+        return ei_report(args)
     if args.grpo:
         return grpo_report(args)
     if not args.cases or len(args.cases) != 1:

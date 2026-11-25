@@ -11846,3 +11846,411 @@ state tests pass, including real rsync and remote-helper execution, warm-cache
 reuse, corruption repair, mismatched receipts, continued export and both opt-outs.
 This enters the next official collector pin at a graceful resume; current paid
 Luna work is not interrupted.
+
+## 2026-11-24 20:45 No invented task worlds: procedural task generation removed (owner)
+
+Owner, verbatim: "I want to rip out task worlds from our generation process. That's not helpful. No procedural
+generation."
+
+**Removed (git history is the archive).** The subagent task-authoring pipeline, whose authors invented worlds ("mode
+B", or dataset-inspired worlds in "mode A") and wrote 10-40 seeded rows per family, often from per-batch `gen_*.py`
+generators: the kits `RL_TASK_AUTHORING_KIT.md` and `_V2.md`; `scripts/rl_tasks/` `authoring_rotation.py`,
+`authored_novelty.py`, `authored_checks.py`, `qualify_authored.py`, `blind_solve.py`, `admit_authored.py`,
+`authored_child_notes.py`, `authored_family_report.py`, `register_authored_held.py`, `build_supply.py`, `sfp_batch.py`,
+`verifier_controls.mjs` and the converter `sources/authored.py`; the natlang app `applications/task-author` (it drafted
+a task world per seed) and its tier0 test. The reasoning-gym generators (`sources/puzzles.py` `reasoning_gym`,
+`rg_multi_solution`; SOURCES `reasoning-gym`, `rg-multi-solution`). `collection_health.py` keeps its own copy of the
+semantic-FP construct set it imported from the converter. The surviving tests of shared code (the migration helper,
+verify.mjs's final-return finder) moved to `test_migrate_output_contracts.py` and `test_rl_task_verifier_cache.py`.
+AGENTS.md "Task supply" no longer directs authoring. On `/mnt/external/natlang-rl-authoring` the round briefs,
+`nb24/` (runner scripts, the w460-w480 batch: qualified, never admitted), the rotation state, `novelty-index/` and the
+kit examples moved to `retired-20261124-no-task-worlds/`; `admitted/`, `batches/` and the `round*/` folders stay, as
+registry entries cite them. No timer, cron or unit authors tasks; the user stopped `nb24-qrunner2-{1,2,3}` at 19:55.
+
+**Kept.** Dataset sources that take items one by one with exact checkers (`sources/*` other than the removed
+generators), the pool tools (`measure_repetition`, `simulate_selection`, `assemble_selection_pool`), verify.mjs and the
+trusted verifiers that score admitted rows, `migrate_output_contracts.py` (typed contracts for admitted rows), every
+admitted row in `grpo-pool`, and all held data.
+
+**Not removed: the owner decides.** Two kinds of generation are still in the code, and rows from all of them still train:
+- The inline curriculum generator (`ts-host/scripts/inline-curriculum`, `natlang.inline_curriculum_generator/1`):
+  seeded scripted worlds (`inline-curriculum:s72:workbench_applicants`, `claims_desk`, `edit_stream`, ...). The SFT
+  builders and the October teacher seed work are entangled with it, and nothing new is generated from it today.
+- Template programs that our scripts wrap around real items (composed, bgkit readers, decisions, codebase-py and
+  natlang questions, codebase-ops and natlang-codebase planted faults, git history, design-brief gates). Every gold
+  comes from the item, but programs come from a fixed set of templates. `neuralese_variants.py` also rewrites the
+  return types of existing tasks; aei1 collection uses it.
+
+**How much of today's data is procedural.** Classes: A = authored worlds; B = procedural or scripted generators
+(reasoning-gym, inline curriculum); C = template programs over real items; D = one dataset item with one wrapper
+program.
+- **grpo-pool** (22 sources, 37,523 unique train rows):
+
+  | Class | Rows | Share | Detail |
+  |---|---:|---:|---|
+  | A | 4,984 | 13.3% | 214 families; Haiku 4,466, Opus (hfb/sfp) 518 |
+  | B | 3,415 | 9.1% | reasoning-gym 1,961 (5.2%); inline curriculum 1,454 (3.9%) |
+  | C | 23,990 | 63.9% | bgkit 7,263; composed 6,493; codebase-py 2,822; natlang-codebase 2,683; decisions 2,524; codebase-natlang 988; git-history 736; codebase-ops 301; design-brief-gates 180 |
+  | D | 5,134 | 13.7% | |
+
+  GRPO selection drops the `ext_codebase-*` families; EI collection draws from the role.
+- **aei1 round mixes** (weighted target tokens of every chain in `r000N/mix/chains.pkl`):
+
+  | Round | A | B | C | D |
+  |---|---:|---:|---:|---:|
+  | r0001 | 23.4% | 26.1% | 38.1% | 8.8% |
+  | r0007 | 30.6% | 28.6% | 28.1% | 9.5% |
+
+  Most of B's 28.6% in r0007 is seeded inline-curriculum worlds in the filled October teacher episodes (15.5%). The
+  rest: inline-curriculum pool tasks 7.5% and reasoning-gym 5.6%.
+  - A grows each round because the policy's own successes (rl-own: 16.9 of the 35.7 points) and teacher episodes
+    concentrate on authored tasks.
+  - The remainder (about 1%) is unmapped ids and live goals.
+  - Script: `/tmp/claude-1000/-home-werg-natlang/4c9bd489-afe4-4847-b74c-378caa27432c/scratchpad/noproc/mixshare.py`.
+
+Whether to stop training on A and B rows (a pool-errata or role change, plus a mix filter) is put to the owner. aei1
+keeps running as it is.
+
+## 2026-11-25 02:00 Teacher trajectories in the round mix: nothing drops them for their reasoning; real teacher reasoning trains at weight 0.1
+
+**Owner.** 2026-11-24: teacher reasoning may be in the data as context, never a target; filling every trace is not
+required; "want real teacher reasoning traces". 2026-11-25: "And are we using trajectories that have teacher reasoning
+traces? In a pinch, I think they would teach the model something." Then: "I originally just meant to just make sure
+that we use those trajectories with the teacher traces and don't keep them out of training or downweight them in the
+mix. But I could see maybe using teacher reasoning traces as targets, but very, very sparing and downweighted. And I
+don't know whether it's worth the compute then to do that."
+
+**Are teacher trajectories kept out or downweighted? No stage selects on reasoning.** Round 7's build
+(`ops/ei/aei1/r0007/mix/build.json`, pin b63c35c54707), teacher funnel:
+- Verified successes: 39,354. Replay-failed (4,375) and inexact (1,174) episodes are out. Held siblings (38) and
+  near-duplicates (415) are out.
+- Frontier: 437 out because the policy's own success on the task trains instead, 70 because the task is solved.
+- Caps applied to every source alike: per-task cap by base rate, family share (6,136 out), wrapper share (1,095).
+- 9,309 train as their filled-reasoning unit (`filled_instead`: teacher actions after the student's filled reasoning,
+  outside the teacher forward budget). 4,574 are over the teacher forward budget (306M tokens).
+- 11,591 raw teacher episodes are admitted. 1,750 are at treatment `context`, and 9,841 are at `filled` with no fill;
+  both render the teacher's think block as zero-weight context, so none is dropped. `drop_unfilled_live` keeps
+  unfilled live episodes (51 kept, 0 dropped).
+- The round cap is forward-bound at fraction 0.3876. It keeps that fraction of every part's weighted target tokens
+  (unseen episodes first): raw teacher 3,471 of 11,591 episodes (2.34M of 6.04M), filled 5,018 of 13,245 (8.11M of
+  20.9M), own 834 of 2,515.
+- Teacher trajectories are 55.3% of round 7's loss: raw 12.4% plus filled 42.9%. No teacher-specific weight exists:
+  a row's weight is 0 on its think block, its lead-in text and backend detours, and 1 on its actions.
+
+From round 9 on, `--max-prior-exposures 1` (owner 2026-11-24, no repetition) removes every episode an earlier build
+trained. In round 7, 86% of the kept raw teacher episodes (2,986) and 96% of the filled ones (4,794) had trained
+before. So the teacher share now depends on new teacher episodes. This is the no-repetition rule, not a reasoning
+filter.
+
+**Fix found on the way.** Exposure counted a fill unit (round `filled:<teacher key>`) and its raw episode as two units.
+A teacher episode that trained raw could train again as its fill, and the reverse. `Exposures` now gives a stand-in unit
+and the episode it replaces one exposure (`stand_in`). Test:
+`test_a_stand_in_unit_and_the_episode_it_replaces_share_one_exposure`.
+
+**What the think blocks are (measured).** All teacher episodes in `/home/werg/data/ei-sources`:
+`/home/werg/data/teacher-reasoning-treatment-20261125/audit.json`.
+
+| Model (main sources) | Replies with a think block | Policy tokens p50 (p10-p90) | Kind |
+|---|---:|---:|---|
+| claude-haiku-5-5 (pool-v1/v2-rich/gap-v1) | 88-92% | 58-90 (29-156) | Anthropic summarized thinking (Pi `display: summarized`; Claude returns no raw chain of thought) |
+| gpt-6-luna, gpt-6.1-sol (pools, aei1 teacher rounds) | 0.04-5.7% | 6-7 | Codex summary headers ("**Inspecting donor note**"); the reasoning is encrypted |
+| openai-codex:gpt-6-luna (live campaign) | 0% | - | none recorded |
+| gemini-3.5/3.7, gemini-3.1-pro, gemini-4-argon | 0% | - | hidden |
+| nvidia/Qwen3.6-35B-A3B (October) | 64-100% | 25-54 (11-261) | raw (vLLM `reasoning_content`) |
+| nvidia/nemotron-3-ultra(-free) (NIM/OpenRouter) | 99.7-100% | 41-87 (7-384) | raw |
+| nvidia/nemotron-3.5-super-vl | 100% | 178 (24-1011) | raw |
+| glm-4.7-flash | 100% | 61 (11-1226) | raw (70 replies) |
+
+The student's own reasoning is about 1,539 characters at p50 (2026-11-20 audit). Every teacher block is shorter.
+
+**Decision.** Real reasoning trains, sparingly. `sft_sources` treatment `train` now means `train@W`, with
+`--teacher-think-weight` defaulting to 0.1. The think block through `</think>` carries weight W, the lead-in text before
+the first tool call stays 0, and the action stays 1 (`think_context` -> `WeightedLead`, `rendered_row`). `train@W` sets
+W per table entry, `--teacher-think-weight 1` restores full weight, and 0 is context.
+
+The new registry table, role `teacher-think-treatment` (`teacher-reasoning-treatment-20261125`, superseding
+`teacher-reasoning-audit-20261120`):
+- `train`: Nemotron 3 Ultra (and `:free`), Nemotron 3.5 Super, Qwen3.6-35B, GLM-4.7-flash.
+- `filled`: Claude Haiku, Luna, Sol and the Gemini models. A summary or a hidden or empty block stays zero-weight
+  context.
+
+A filled unit still replaces its episode whatever the treatment, so one episode never trains twice. Builds report
+`think_weighted_tokens` and `think_weighted_mass` per producer.
+
+**Compute.** Nothing new runs: these tokens are already in every forward and backward pass as context, and only their
+loss weight changes. Round 7 kept 157,626 think tokens of real-reasoning teachers in unfilled episodes: Qwen 68,587,
+Nemotron Ultra 68,113, Nemotron Super 20,926. At W = 0.1 that adds about 15.8k weighted target tokens to an 18.9M round
+(0.08%). Haiku's summaries (686k tokens in the kept episodes) stay context. sft-v3-run1's full-weight teacher reasoning
+cut the student's reasoning to a fifth (DECISIONS 2026-11-18). At 0.08% of the loss the next held eval shows whether
+the reasoning-length telemetry moves.
+
+**Generation paths.** Neither Claude nor Codex returns raw reasoning. Pi requests Claude's summarized thinking and
+Codex's `reasoning.summary: auto`, and natlang records both. One leak is fixed: Pi turns a `redacted_thinking` block into the text
+"[Reasoning redacted]", which `piAssistantContent` recorded as reasoning. It now leaves it out, and
+`live_teacher_sources` accepts captures in both forms (`ts-host/test/pi-translation.test.mjs`).
+
+**Not checked.** Whether the filled reasoning should give way to real teacher reasoning for the raw models; it does
+not today. Whether richer Codex summaries (`reasoningSummary: detailed`) would carry more; they would still be summaries.
+Round 9's funnel: its build was still replaying when this entry was written.
+
+## 2026-11-25 03:00 Program inventor to production: pilot admitted, held-inv slice, stage tasks, per-task episode budgets, campaign pipeline (program-inventor strand)
+
+Owner decisions of 2026-11-25 on plans/NOVEL_PROGRAMS_20261124.md §14, then the change of plan: generation runs as a
+coordinator-launched campaign of Claude subagents (Sonnet first, Opus where needed) from a central idea bank of ~200
+cards; this strand does not run the 30-50 idea round and builds what the campaign needs.
+
+**Episode budget (decision 5).** Inventory of the mechanism: the whole-case model-request budget is enforced in one place,
+ts-host `teacher/collector.ts` (`nativeJobRunner`); grpo.py, expert_iteration collect, teacher_gen, held_eval measure,
+memetic_workspace and sft_sources replays all hand it a run budget (`max_model_requests`). A case now declares
+`semantics.episode_model_calls`; `caseModelRequestBudget` raises the run budget to it for that case and never lowers it
+(opt-out `NATLANG_CASE_MODEL_CALLS=0`; test). Held measurement goes through the same collector, so held-inv tasks get
+their declared budgets. `invented.py qualify` replays each reference call by call (`scripts/rl_tasks/reference_trace.mjs`)
+and declares twice the reference run's model calls: pilot whole-program tasks declare 42-102 (reference runs 21-51
+calls). No other engine executes episodes (the serving engines serve calls, not episodes).
+
+**Stage tasks (decision 4).** Every distinct leaf judgment call of a reference run (no callable folder of its own, no
+function among its arguments) becomes a task: the same program files with that judgment as the root, the call's own
+arguments as inputs, the reference's answer as the exact expected value; same split and world as the program. Two
+defects found and fixed on the way: the reference driver answered a decision-readout root with return_result, so every
+decision-root stage task failed replay with decision-generation-invalid (now the scripted value answers as the
+decision's JSON text, as for children; test); and decision readouts return through no return_result action, so their
+values are read from the call's invocation_output host capture. All 324 stage tasks of the four train programs replay
+to accepted answers.
+
+**Admission (decision 1).** Admitted through the new per-submission pipeline (`invented.py admit`: qualify + review
+gate on S4/C3/D3/N1 for the submission's digest + split + ledger): anatomical-character-tree-scorer,
+assurance-case-defeater-grounder, randomization-law-reconstructor, suppressed-count-reconstruction-auditor (train) and
+nonvisual-interaction-parity-auditor (dev). Published as one batch: `natlang-rl-invented-20261125-020600` in grpo-pool
+(271 rows: 8 whole-program tasks, 263 stage tasks; repetition against the 37,868-row pool: 0 shared instruction texts,
+programs or structures; 21 distinct instruction texts, top-10 share 0.79) and the held slice (below). Fixes first: the
+suppressed-count display string is `Untrusted` now; the causal-adjustment notes are reworded as explicit influence in
+both instances. Not admitted: **causal-adjustment-auditor**: its final review (gpt-6-luna) keeps a real S4 finding
+(`isConditionedBySelection` receives `candidate.causes` it does not need, and C3's pass rests on them; fixing it needs a
+redesign of that judgment). suppressed-count: the final Luna review answered S4 and D3 false with findings that
+contradict the files (the cited fields are `Untrusted<string>` in types.ts lines 14/46/60/70/139; the D3 finding objects
+to exact work in TypeScript); I checked and overrode them, recorded in its review.json. Live runs (F5) for the pilot
+programs not run cleanly in the pilot were not run in this strand (below).
+
+**Held slice (decision 2).** `ops/held-inv/<stamp>/` beside held-v3, pinned with `held_eval pin --all-rows` (also
+excluding held-v3), registry role `held-eval-invented`, so `held_eval.training_exclusion_ids` keeps every row of its
+ideas (whole programs and stage tasks: 63 of 63 for the parity auditor) out of training. `held_eval verify` against
+every row of grpo-pool and grpo-memetic-tasks (38,391 ids, 61,917 groups): no overlap. First manifest
+`held-inv-20261125-020600`: 2 whole-program tasks of one idea. Each publish pins a new cumulative manifest that
+supersedes the previous. held-v3 untouched.
+
+**Campaign pipeline.** `program_atlas.py bank-check BANK` (each card against the atlas, accepted/claimed ideas and the
+bank's earlier cards; TF-IDF cosine >= 0.25 refuses: distinct pilot ideas score 0.06-0.10, a card against its own
+text 0.85-0.90), `take BANK --by AGENT` (one builder per card under a lock; near duplicates of taken cards recorded
+`duplicate` and skipped), `release SLUG --status failed`; `invented.py admit SUBMISSION` and `publish` (batched pool
+dataset + cumulative held manifest); `applications/program-inventor/REVIEW_BRIEF.md` for reviewer agents.
+
+**Not checked.** F5 live runs of anatomical, suppressed-count, parity a and assurance a (Codex window shared with the
+teacher campaign; Anthropic API has no credits; `scripts/claude_code_endpoint.py` serves Claude Code's models as an
+OpenAI-compatible teacher endpoint for them). Reviewer reliability (one review per program; Luna's final findings
+contradicted the files twice). Stage-task learnability and whether 263 stage tasks crowd 8 whole-program tasks in
+selection. The held slice's baseline measurement (2 tasks: not yet a useful measure).
+
+## 2026-11-25 02:50 Program-shape cap in collection selection: no program shape takes more than 1% of any prefix of a collection order
+
+**Measured** (pool of `aei1/collect/v0001-8e634a0f46ce/tasks.json`, 34,837 tasks, 520 row families, 50 sources). A
+program shape (`measure_repetition.program_shape`) is the task's callable folder with item data abstracted: every file
+(root stem abstracted from the paths), its frontmatter types with literal unions collapsed, its text with digits,
+quoted spans, mid-sentence capitalized words, code identifiers, paths and hex ids abstracted; plus services and mode.
+`semantics.inputs` is item data and not part of it. The pool has **5,945 distinct shapes, 1,148 effective**
+(exp-entropy); the top shape is 2.0% of the pool, the top 10 11.7%. Per source (rows -> shapes): bgkit 7,195 -> 126,
+composed 6,358 -> 145, codebase-py 2,596 -> 352 (45 effective, top 6.6%), decisions 2,451 -> 1,080, natlang-codebase
+1,763 -> 694 (one repair template 702 rows, 40% of the source), codebase-natlang 885 -> 258, git-history 736 -> 322,
+reasoning-gym 1,671 -> 3 shapes over 57 families, math 737 -> 3, babi 617 -> 4, every tool/QA dataset wrapper 1-6
+shapes; authored (haiku 4,153 -> 2,130; opus 518 -> 347) and inline-curriculum (1,239 -> 251) are mostly distinct. The
+largest shapes: the natlang-codebase type-typo repair (702), three reasoning-gym wrappers spanning 57 families each
+(586, 549, 536), babi (324, 264), math/gsm8k (291, 276, 265), apigen/tau retail (275, 271). Family round-robin makes the
+cross-family wrappers worse: the 2,000-task prefix of v0001/v0007's order had its top shape at 3.3% (expected 2.0% by
+pool share) and 1,313-1,338 shapes, 837-843 effective; the 1,584 collected aei1 groups whose tasks are in this pool
+cover 425 shapes (307 effective), the top two (reasoning-gym arc-1d and rectangle-count wrappers) 50 groups each.
+
+**Change.** `grpo.cap_shapes` reorders a collection order so that no shape takes more than `SHAPE_CAP` (0.01) of any
+prefix beyond its first 4 rows; a capped row waits and enters as soon as the prefix has grown; nothing is dropped
+(only capped shapes left: least-placed first). It applies after the tiers and the family round-robin, so it overrides
+tier order for an over-cap shape (a band task of a 1%-full shape waits behind unmeasured tasks of other shapes).
+`expert_iteration.py select --shape-cap` (default `grpo.SHAPE_CAP`; 0 opts out; `tasks.report.json` records `shapes`
+and `prefix_shapes`) covers both cycle `select_stage` and async-drive `select_command`. GRPO's unmeasured-task walk
+gets the same cap (`grpo.py train --explore-shape-cap`, default `SHAPE_CAP`; `ExploreWalk(shape_cap=)`;
+`explore-constructs.json` records it). Driver opt-out: `--select-args "--shape-cap 0"`.
+
+**Checked** with `simulate_selection.py --ei` (new: the real `selection_order` over the EI pool, v0007's measured rates,
+seed 20261120; 35,841 eligible, 6,040 shapes): uncapped -> 1% cap, prefix 500: 419 -> 425 shapes, top 1.2% -> 1.0%;
+prefix 2,000: 1,340 -> 1,419 shapes, effective 876 -> 1,131, top 3.45% -> 1.0%, top 5 11.5% -> 4.8%; prefix 8,000:
+effective 1,156 -> 1,872, top 4.55% -> 1.0%. 2% and 0.5% arms: effective 987 / 1,238 at 2,000; at 0.5% the 4-row floor
+binds at 500 and 2,000-prefix families fall 521 -> 479 (many-family wrappers deferred), so 1% is the default.
+`simulate_selection.py --grpo --groups 2000` (GRPO walk, latent outcomes): explored groups 779 -> 773, their top shape
+3.47% -> 0.52%, distinct shapes 593 -> 645, groups with reward spread 73.6% -> 75.9%. That run also found 42 grpo-pool
+rows with `curriculum.rl.qualification: source-only-live-pending`, which `curriculum.metadata` refuses for production
+selection but neither collector reads (open: they are still selected).
+
+**Fixed (same day, coordinator).** `curriculum.selection_refusal(row)` is the one predicate: `curriculum.metadata`
+raises on it and `grpo.load_tasks` leaves such rows out of the pool, which covers expert-iteration select and collect
+(`pool_args`), the GRPO walk, teacher_gen's pool and `neuralese_variants`. `pool.json` records
+`excluded_unqualified_ids`. Opt-out: `--include-unqualified` on `grpo.py train` and `expert_iteration.py select` /
+`collect` (collect passes it to its pool load). async-drive has no collect-args passthrough, so a driver-level opt-out
+would need `--select-args "--include-unqualified"` and a collect flag it does not have yet.
+
+**Not checked / left out.** Shapes are declared program text, not episode behaviour; item words that are lowercase
+prose (an item's topic inside a template sentence) still split a template into several shapes, and two genuinely
+different programs that differ only in abstracted identifiers merge. Held-set effect: not measured (enters at the next
+driver pin; aei1's driver runs pin 21d7c5a050c6 and was not restarted). Teacher campaign order (`teacher_gen` over the
+frontier's rare tasks), filled-reasoning ordering and the SFT mix build are not capped: they consume the collection's
+own outcomes, and training-side exposure is a separate decision. Authored/procedural rows stay in the pool (owner).
+
+## 2026-11-25 Neuralese states are written in their producing context; the context-free text write is gone (neuralese-write strand)
+
+Owner, 2026-11-25: "The whole idea with Neuralese is to write it out in such a way that it attends to the text that
+precedes it, but then that preceding text, of course, doesn't propagate to wherever the Neuralese embeddings get used.
+… the compression function is you take some sort of text and have it return a model-generated summary, and the span
+of the summary is where the Neuralese handover happens." About the text write: "That context-free write, if I
+understand it correctly, sounds like a massive bug."
+
+**Inventory: where a state is created from text, and whether its producing context was there.**
+
+| Component | Before | Now |
+|---|---|---|
+| Python native engine `native_write_text` (`serve/engine.py`) | context-free: `[produce_open] + text` from position 0 | the span after its producing call (`write_context`, `capture_plan(text=)`) |
+| SGLang actor `_sglang_write_text` | context-free | the same plan, one fork capture request |
+| Managed llama-server | no text writer (typed `Neuralese<T>` from text failed) | `grammarWritePort`: `grammarCapture` in write mode |
+| In-page wllama | no text writer, no capture | unchanged: gap row in ENGINE_PARITY with its blocker |
+| `native.capture` / grammar capture (operators, compact_history) | in context (the reply in its own call) | unchanged |
+| `native.init-body` (soft states, guidance primed in the call) | in context (its real position in the call) | unchanged; its placeholder is now an in-context write |
+| Produce spans sampled in generation (template write readout) | in context | unchanged |
+| ts-host typed result / typed JSON result / result field (`runtime.ts writeNeuraleseText`) | `port.write(text)`, no context | the call's latest turn (`noteProducingCall`, `callContext`: exact prompt and reply ids from the RL capture, else messages and tools) |
+| ts-host literals `<|neuralese|>…` (`decodeNeuralese` → `writeLiterals`) | no context | the turn that wrote them |
+| ts-host typed argument (`materializeSoftStringArguments`) | no context | the caller's latest turn; none for an outside input |
+| writeGuidance / writeHint (`training-guidance.ts`) | no context | the writer call's turn |
+| Guidance with `guidancePriming: 'text'`, library values (`combinators.ts`), text-init placeholders, memetic guidance (`memetic_workspace.py`), `tune/soft.py`, `tune/learned/growth.py` | context-free | no producing call: the engine's producer call (`text_producer_messages`: the text as the user's message, the span as the answer) |
+| Learner pass-through (`lower_rollout_turns.write_sources`, `exp0_sft`, `grpo`, `lfm3_fast.passthrough_plan`) | computed whatever document was recorded | unchanged code path: new rollouts record the in-context document; SFT (`sft_sources neuralese-graph`) rewrites legacy context-free typed-result writes to the span after their producing turn (`write_sources(in_context=…)`, opt-out `--recorded-write-documents`); GRPO keeps the recorded document (exact replay) |
+| Whole-graph replay (`rl/native_replay.py`) | refused any writer document but the standalone one | accepts a token document with context; still refuses a producing prompt that imported a spliced state |
+| `subagent_neuralese.py` (D01, D02) | `[produce_open] + report` | the report at the end of the subagent's own call (below) |
+| `operator_ablation.py` `standalone` arm | context-free on purpose (an ablation) | unchanged |
+| Read side: `in-context-text` bypass (`engine.reads_in_context`, fork `native_state_registry::resolve`) | text writes and spans read as tokens | unchanged default (see the probe); legacy `text` kind keeps its own opt-out |
+
+**Decision: what produces a plain text value with no producing call.** A call that receives the value and writes it
+back as its answer: the text as the user's message, then the span after the generation prompt (an empty thought
+closed). The span attends to the value and to a real call frame (BOS, turn markers). The engine owns this frame, so
+every caller of `write-text` without a context (memetic guidance, library values, placeholders) gets it from one
+place. A sampled model-generated summary was not chosen: a `Neuralese<string>` value must hold its text exactly, and
+the learned compaction operators (`view`, `compact_history`) are the summary path and already capture in context.
+
+**Fix.** `native.text-write` takes the producing call (`prompt_token_ids` | `prompt_segments`, `reply_token_ids`, or
+`messages`/`tools`; `/v1/neuralese/info` lists `native.text-write.context`); the state is
+`prompt + reply up to its end of turn (+ </think> if open) + produce_open + text`, header `producer_kind: "span"`.
+The consumer still receives only the span's rows.
+A producing context that no longer fits the model's context with the text falls back to the producer call above
+(`Engine.write_in_context`). An empty text writes an empty state, as before.
+
+**Read side: the in-context-text bypass stays the default.** Probe (`neuralese_readback_probe.py`, the aei1 r0001
+policy `8e634a0f`, native engine BF16 on the DGX, `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0 NATLANG_NEURALESE_TEXT_IN_CONTEXT=0`
+so every state is spliced, 24 synthetic texts, greedy, the runtime's `natlang.read` prompt, exact `return_result`):
+
+| Arm | Read back | Receipt |
+|---|---|---|
+| state: write-text with no producing call (the engine's producer call) | 0/24 | exact-native-state 24 |
+| context: write-text after a producer call's messages | 0/24 | exact-native-state 24 |
+| captured: the text captured in place in a producer reply (`select`) | 0/24 | exact-native-state 24 |
+| inline: the text in the reader's own prompt | 19/24 | none |
+| shuffled: another text's state | 0/24 | exact-native-state 24 |
+
+Every spliced reply was the same text-independent opening ("We need to understand the task. The user says: …"):
+the policy ignores a spliced state, wherever it was written. Writing in context is the precondition for a readable
+handover, not sufficient for an untrained reader; the rebuilt subagent data (below) trains spliced reads of
+in-context states through the learner pass-through. Until the probe passes spliced on a trained policy, engines keep
+reading text writes and spans as their tokens (`NATLANG_NEURALESE_SPAN_IN_CONTEXT`, default on), so serving
+behaviour does not change. Flipping the default is an OPEN_ITEMS row.
+
+**Also fixed on the way** (test failures seen in this work): `test_native_typed_harness` counted split-tokenization
+alternative nodes (716a9d0fc) as invocations and compared raw option scores with the logsumexp readout; the recorded
+objective's prompt check refused a decision capture whose prompt holds the options' shared prefix
+(`native_learning._shared_into_prompt`). Its error now names the first differing item.
+
+## 2026-11-25 03:10 Program tuning: ext_decisions_verdict's merged arm 0/128 was a fit on empty-reply rows (fixed everywhere; five fits invalid)
+
+**Observation.** `progtune-l4-seq-3`, 02:42: ext_decisions_verdict merged vs base on dev64 (l4 series, de2b36add)
+0.0 vs 0.7266 (0/128 vs 93/128). Every merged episode ended `model_incomplete: terminated_without_result (repeated
+immediate EOS after one recovery turn)`: 0-1 completion tokens per call ("up", then EOS), 47 s for 128 episodes.
+
+**Cause.** The fit's `rows.jsonl` held 16 turns (of 1,280) whose reply had neither text nor a tool call (teacher turns
+of pool-progtune-decisions t000069/t000089 and pool-v2-rich t004625/t006207/t017043 that the runtime answered with a
+recovery turn). `program_tune.episode_turns` admitted them (no tool call, so no rejected or unverified event), and
+`tune.rows.turn_graph` lowered each to one weighted token, `<|im_end|>` (a teacher reply's think block is context).
+`tune.objective.program_loss` averages per row, so each such row weighed as much as a whole reply: the fit's row losses
+show them at 7.3-11.4 nats (steps 2, 13, 21, 30, 46). Evidence that the weights, not serving, ended the replies: HF
+forward on the DGX (independent of SGLang and the Colab export): P(`<|im_end|>`) at the first generated position 0.75-0.84
+on verdict and route prompts with the merged verdict checkpoint, e^-19..-22 with the base, e^-11 with the route merged
+checkpoint (route's rows: 0 empty replies, merged arm 0.8438 vs 0.8828). The prompts were identical (5,081 prompt tokens
+on both arms' first call), the actor attested 95df57f2 with the same export format and config as route's arm, and the
+episodes were scored as model failures (no infra losses, no timeouts). The release's factors were finite and of the
+usual size (per-family LoRA delta norms within 1.3x of route's).
+
+**Fix (default, opt-out `NATLANG_TUNE_EMPTY_REPLIES=train` / `--empty-replies train`).** One predicate
+(`tune.rows.empty_reply`, `empty_reply_message`): a reply with no visible text and no tool call (a decision turn never
+is) is no positive target. Where the mechanism lives:
+- `program_tune.episode_turns` (tune-turn producer): disposition `empty-reply`, counted in `rows.json`
+  `empty_reply_turns`.
+- `tune.rows.lower_rows` (every tune-turn consumer: program fits, the bank's `program_rows`, ts-host `tune
+  collect`/`pool`/`distill` rows, memetic and operator soft-state rows): drops them, so rows files written before the fix
+  are safe too.
+- `sft_sources build` (expert-iteration mixes: r0007 1,283 and r0008 1,382 such teacher rows of ~125k) and `sft_sources
+  neuralese-graph` (own calls): dropped, counted as `empty_reply_calls`.
+- Left out: GRPO (`lower_rollout_turns.episode_turns`, `grpo.py`): on-policy, an empty sampled reply trains with its
+  group advantage (negative in a failed episode), which is the signal RL wants, not a positive target.
+
+**Results invalidated and rerun.** Rows of five programs held empty replies: verdict 16/1,280, bgkit_pubmed_reading
+45/5,301, bgkit_searchqa_reading 336/12,568, composed_multihop_deep 173/11,718, composed_neuralese_iterate 247/7,146
+(route, tally, tree, apigen retail: 0). Their rows were repaired in place (the old file, fits and arms under
+`DIR/fit/invalid-empty-reply-20261125-025649/` with `INVALID.json`): verdict's release and merged arm (the 0/128),
+searchqa's A100 release (not yet measured), and the in-progress pubmed (step 40) and neuralese_iterate (step 11) fits,
+which I stopped with their lanes `progtune-l4-fits3-a/b` (they were producing invalid releases). No other measured arm
+was affected (route merged -3.9 pts and its adapter arms trained on 0 empty rows). The fits restart from scratch on the
+repaired rows at the same tenant commit 206b5ebd6 (`progtune-l4-fits4-a/b`: verdict, pubmed, neuralese_iterate,
+multihop, searchqa); `progtune-l4-seq-readd` relaunches the measurement lane as `progtune-l4-seq-4` with verdict back in
+its list once its new release is home and l4-seq-3 is idle. The bank stage (after l4-seq) lowers rows with the pinned
+pin-51cf1173c code, which predates the `lower_rows` guard, but it reads the repaired rows files.
+
+## 2026-11-25 03:30 Collectors run beside their remote actors (remote_collect.py); every --colab-hosts session collects
+
+**Observation (02:20).** DGX host memory bound everything: the DGX collection held 58 GB (192 slots), and the DGX-side
+collector of the Colab A100 actor (`aei1-collect-v0001-remote0`, 64 slots) held 12-15 GB (main Python process 6.1 GB
+RSS: pool rows, custody, scoring; 8 node episode servers ~0.6-0.8 GB each; run_bonsai_queue children ~1 GB). It and
+Pop's collector were OOM-killed at 00:52; Pop's collector then waited 60 min in the ledger 11.6 GB short with Pop's GPU
+idle, and eight agent jobs queued behind it. The A100 VM had 156 GB host RAM free, 12 CPUs (the collector used 1.5
+cores).
+
+**Change (default; `--collect-on-dgx` opts out).** A Colab target's collector runs on its VM: the DGX unit is
+`remote_collect.py run --host H --work W -- <the same collect command, --actor at the VM-local front>` with a 3 GB claim
+(`REMOTE_SYNC_GB`). It mirrors the pin at its DGX path (a worktree at the pin commit of a VM checkout at the pin's
+canonical checkout path /home/werg/natlang, objects shared with the session clone, verified clean, plus the pin's
+ignored build outputs; the session venv), mirrors the data the collector reads at the same absolute paths with their
+symlinks (registry roles grpo-pool/memetic/held-eval*, held cases and predecessors, errata, variants, task order,
+custody sources resolved with the pin's code, task asset roots, the registry journal, every existing path pool/memetic/
+variant rows name: ~1.6 GB, 680 files and asset trees, first sync ~2 min), launches the collector detached under a
+host-RAM admission claim (6 + 0.2/slot GiB), and pulls the work dir back every 60 s over the ControlMaster (rsync -z,
+zstd): content first, each group's rollouts/rewards/score/versions staged and moved into place only after the content is
+pulled again, so build, health, teacher and frontier read the DGX copy as before. A fresh VM gets the small files of the
+DGX copy (rewards, journals, queues) so the collector resumes. SIGTERM stops the VM collector and pulls once more; an
+audit hook records paths the VM collector fails to open, which are mirrored before a relaunch (at most 3).
+Every `--colab-hosts` session not in `--rebind-actor` is a collection target too (`-remote-<alias>` units, front 8570,
+slots capped at its actor's running cap); one with no actor answering there is served the lineage head
+(`serve-checkpoint`, collection weight dtype; at most every 20 min; `--no-colab-collect-serve` opts out); the round's
+SFT session is left out; publication rebinds them like the A100. Pop keeps its collector on the DGX: its 14 GB hold the
+actor (11 GB claim) and the collector's main process alone peaks at ~6 GB.
+Also fixed: g4b's DGX forward offset was 11161, so its front 8570 mapped to 19731 = g4a's SGLang forward
+(forward_port keeps a listening port): offsets are now 2000 apart (g4b 12161).
+
+**Live.** aei1-collect-v0001-remote0 moved to the VM at 03:21 after six failed attempts from 02:41 (driver not restarted; same unit name, so the
+driver's stop at the next policy stops it). Mistake while migrating: the first relaunches used ledger priority high and
+preempted the DGX collection twice (02:40:52, 02:48:26; ~10 min lost); it was requeued by hand at 44 GB --shrunk. Twice the old driver relaunched its DGX-side remote0 between my attempts (its standing check); I stopped it. A stopped VM collector first left 59 episode workers and node servers running (they start their own sessions): the VM wrapper is now their subreaper and stops every descendant.
+**Restart needs:** the driver on a pin containing this commit, `--colab-hosts colab-g4,colab-g4b` for g4b (its current
+actor is program tuning's measure tenant at 8571, not an aei1 actor; serving aei1's policy there evicts preemptible
+program-tuning tenants through admission).
+
+**Not checked.** Pass-rate parity of VM-collected groups against DGX-collected ones on the same tasks (the next health
+report shows it); node-side episode reads of files outside the scanned set (no audit there); the L4's capacity for an
+actor alone plus a 64-slot collector; behaviour when a session is replaced mid-collection beyond the code path (push of
+small files) — not exercised; memetic family seconds seed only from the collection's own groups on the VM.

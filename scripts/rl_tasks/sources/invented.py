@@ -9,8 +9,37 @@ program per new idea, with two or three literal input instances, exact checkers 
   invented.py package SUBMISSION OUT      one `natlang.program/2` case per instance (the collector's case format)
   invented.py qualify SUBMISSION [--runtime TS_HOST]
       check + `natlang check --json` (F1) + package + scripts/rl_tasks/verify.mjs (reference replay F3, wrong answers
-      F4, keyword baselines S3) + scripts/rl_tasks/ablate.mjs (judgment ablations S2); writes
-      SUBMISSION/qualification/{cases.jsonl,report.json}. Run through the memory ledger on the DGX.
+      F4, keyword baselines S3) + scripts/rl_tasks/ablate.mjs (judgment ablations S2) + scripts/rl_tasks/
+      reference_trace.mjs (the reference run call by call: each case declares `semantics.episode_model_calls`, twice
+      its reference run's model calls, and its stage tasks are cut); writes SUBMISSION/qualification/{cases.jsonl,
+      stages.jsonl,trace.json,report.json}. Run through the memory ledger on the DGX.
+  invented.py stages SUBMISSION [--runtime TS_HOST]
+      only the stage tasks of an already qualified submission (qualification/stages.jsonl), verified by replay.
+
+The per-submission pipeline of a generation campaign (ROOT: data_nvme:natlang-novel-programs, or
+NATLANG_INVENTOR_ROOT):
+
+  invented.py digest SUBMISSION        the digest of program/ + submission.json a review names (REVIEW_BRIEF.md)
+  invented.py admit SUBMISSION [--review FILE] [--idea FILE] [--root ROOT] [--publish] [--skip-qualify]
+      qualify (above: crisp requirements, natlang check, replay, ablations, keyword baselines, reference trace,
+      episode budgets, stage cut); the review (default SUBMISSION/review.json, `natlang.invented-review/1`) must name
+      this digest and meet every judged requirement (S4, S5, C3, D3, D5, N1); then the idea's split (70/15/15 by world):
+      train ideas stage their cases and stage tasks for the pool, dev and confirmation ideas their cases for the held
+      slice (ROOT/admitted/<slug>/). The idea enters ROOT/accepted.jsonl (the atlas every later builder reads) and its
+      claim is closed as accepted. --publish publishes at once.
+  invented.py publish [--root ROOT] [--dry-run]
+      every admitted, unpublished idea, as one batch: train cases + stage tasks -> ROOT/pool/<stamp>/cases.jsonl,
+      repetition measured against the pool (measure_repetition.py), registry dataset natlang-rl-invented-<stamp>
+      promoted to grpo-pool; dev + confirmation programs of every admitted idea so far -> the held slice
+      ops/held-inv/<stamp>/ (held_eval pin --all-rows, also excluding held-v3; held_eval verify against every pool row
+      training selects from), registry dataset held-inv-<stamp> with role held-eval-invented, so
+      held_eval.training_exclusion_ids keeps it out of training. held-v3 stays untouched.
+
+Stage tasks (owner 2026-11-25: "also cut programs into per-stage tasks with checked intermediate outputs, so a small
+model gets dense signal"): every judgment call of an instance's reference run is an intermediate output the reference
+checks, so each distinct leaf `.nl` call (one without a callable folder of its own and with no function among its
+arguments) becomes a task of its own: the same program files with that judgment as the root, the call's own arguments
+as inputs and the reference's answer as the exact expected value. They share the program's split and world.
 
 It never invents gold, wrong answers or references: everything it judges with comes from the submission. Each idea is
 its own family (`inv_<slug>`) and world (`invented:<slug>`): all instances of a program share one split.
@@ -18,12 +47,15 @@ its own family (`inv_<slug>`) and world (`invented:<slug>`): all instances of a 
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(os.environ.get('NATLANG_REPO_ROOT') or Path(__file__).resolve().parents[3])
@@ -34,7 +66,9 @@ SCHEMA = 'natlang.invented-program/1'
 GENERATOR = 'natlang.invented-programs/1'
 ORACLES = frozenset({'exact', 'normalized', 'verifier'})
 VERIFIER_ROOT = 'training/semantic_fp_tasks/verifiers/'
-SUBMISSION_ENTRIES = frozenset({'program', 'submission.json', 'NOTES.md', 'qualification'})
+# The bar (requirements.json; coordinator 2026-11-25 after the calibration review): size floors, code depth, notes.
+MIN_WORDS, MIN_TEXT_ITEMS, MIN_TS_LINES, MIN_HARDEST = 800, 15, 100, 3
+SUBMISSION_ENTRIES = frozenset({'program', 'submission.json', 'NOTES.md', 'qualification', 'idea.json', 'review.json'})
 PROGRAM_EXTRA = frozenset({'natlang.json', 'package.json', 'tsconfig.json', 'examples.json', '.natlang', 'node_modules'})
 STD = ('semanticMap', 'semanticFilter', 'semanticPartition', 'semanticReduce', 'semanticMatch', 'semanticRank',
        'semanticMerge', 'semanticRepair', 'fixedPoint', 'proposeAndVerify', 'branchAndSelect', 'escalate',
@@ -99,6 +133,142 @@ def longest_list(value) -> int:
     return 0
 
 
+def text_items(value) -> int:
+    """The most elements of one list in value that each hold text (at least three words): items a judgment can read."""
+    if isinstance(value, list):
+        return max([sum(1 for v in value if words(v) >= 3), *(text_items(v) for v in value)])
+    if isinstance(value, dict):
+        return max([0, *(text_items(v) for v in value.values())])
+    return 0
+
+
+def declared_words(card: dict) -> int | None:
+    """The instance size in words the idea card declares (`inputs`: "... about 1,300 words"), its lower bound."""
+    match = re.search(r'(\d[\d,]*)(?:\s*(?:-|\u2013|to)\s*\d[\d,]*)?\s+words', str(card.get('inputs') or ''))
+    return int(match.group(1).replace(',', '')) if match else None
+
+
+# S6: a plain `string` a judgment reads is text people wrote unless it is an identifier (its name or doc says so).
+ID_NAME = re.compile(r'^(id|ids|key|keys|slug|code|codes|ref|refs|uuid|url|urls|path|paths|email|date|time|timestamp|'
+                     r'language|lang|locale|currency|unit|units|iso)$|(Id|Ids|Key|Keys|Code|Codes|Ref|Refs|Url|Path|Date|'
+                     r'Time|At|Iso)$')
+ID_DOC = re.compile(r'\b(identifier|ids?|ISO|code|date|timestamp|URL|path|digits|computed)\b')
+TYPE_ALIAS = re.compile(r'(?:/\*\*((?:(?!\*/)[\s\S])*)\*/\s*)?export\s+type\s+(\w+)\s*=\s*')
+
+
+def top_level(text: str, end: str) -> int:
+    """Index of the first `end` character outside brackets and strings in text (len(text) when there is none)."""
+    depth, quote, skip = 0, '', -1
+    for i, ch in enumerate(text):
+        if i < skip:
+            continue
+        if not quote and text.startswith('/*', i):  # a doc comment's apostrophes are not quotes
+            skip = text.find('*/', i) + 2 or len(text)
+            continue
+        if quote:
+            quote = '' if ch == quote and text[i - 1] != '\\' else quote
+        elif ch in '"\'`':
+            quote = ch
+        elif ch in '{([<':
+            depth += 1
+        elif ch in '})]>' and not (ch == '>' and text[i - 1] == '='):
+            depth -= 1
+        elif depth == 0 and ch in end:
+            return i
+    return len(text)
+
+
+def type_aliases(files: dict[str, str]) -> dict[str, str]:
+    aliases = {}
+    for path, text in files.items():
+        if path.split('/')[-1] != 'types.ts':
+            continue
+        text = re.sub(r'//[^\n]*', '', text)
+        for match in TYPE_ALIAS.finditer(text):
+            rest = text[match.end():]
+            aliases[match.group(2)] = rest[:top_level(rest, ';')].strip()
+    return aliases
+
+
+def record_fields(text: str) -> list[tuple[str, str, str]]:
+    """(name, type, doc) of each member of an object type literal `{ ... }`."""
+    body = text.strip()[1:-1]
+    fields, doc = [], ''
+    while body.strip():
+        body = body.lstrip()
+        if body.startswith('/**'):
+            close = body.find('*/')
+            doc, body = body[3:close], body[close + 2:]
+            continue
+        cut = top_level(body, ';,\n')
+        member, body = body[:cut], body[cut + 1:]
+        found = re.match(r'\s*(?:readonly\s+)?["\']?(\w+)["\']?\??\s*:\s*([\s\S]+)$', member)
+        if found:
+            fields.append((found.group(1), found.group(2).strip(), doc))
+            doc = ''
+    return fields
+
+
+def plain_strings(type_text: str, aliases: dict, at: str, seen: set) -> list[str]:
+    """Paths under type_text that are a bare `string` (alone, in an array, or with null), following type aliases."""
+    text = type_text.strip()
+    if re.fullmatch(r'\(?\s*string\s*\)?(\[\])*(\s*\|\s*(null|undefined))*', text):
+        return [at]
+    if re.match(r'^(Untrusted|Is|Neuralese)\s*<', text):
+        return []
+    out = []
+    if text.startswith('{') and text.endswith('}'):
+        for name, field_type, doc in record_fields(text):
+            if not (ID_NAME.search(name) or ID_DOC.search(doc)):
+                out += plain_strings(field_type, aliases, f'{at}.{name}', seen)
+        return out
+    for name in re.findall(r'\b[A-Z]\w*\b', text):
+        if name in aliases and name not in seen:
+            out += plain_strings(aliases[name], aliases, f'{at} ({name})', seen | {name})
+    return out
+
+
+def nl_args(head: str) -> dict[str, str]:
+    """The `args:` of a .nl frontmatter, name to type text, in inline or block form."""
+    lines = head.splitlines()
+    for index, line in enumerate(lines):
+        found = re.match(r'^args:\s*(.*)$', line)
+        if not found:
+            continue
+        if found.group(1).strip().startswith('{'):
+            return {n: t for n, t, _ in record_fields(found.group(1).strip())}
+        args = {}
+        for item in lines[index + 1:]:
+            entry = re.match(r'^\s+(\w+)\??\s*:\s*(.+)$', item)
+            if not entry:
+                break
+            args[entry.group(1)] = entry.group(2).strip().strip('"\'')
+        return args
+    return {}
+
+
+def untrusted_problems(files: dict[str, str]) -> list[str]:
+    aliases, problems = type_aliases(files), []
+    for path, text in sorted(files.items()):
+        if not path.endswith('.nl'):
+            continue
+        for name, type_text in nl_args(frontmatter(text)[0]).items():
+            if ID_NAME.search(name):
+                continue
+            for where in dict.fromkeys(plain_strings(type_text, aliases, name, set())):
+                problems.append(f'S6: program/{path}: {where} is a plain string this judgment reads; type it Untrusted<string> '
+                                'when people wrote it (names, titles, nicknames, labels, notes), a literal union when its values '
+                                'are a closed set, or, for an identifier, name it so (id, ...Id, code, date) or say so in its doc '
+                                'comment')
+    return problems
+
+
+def hardest_items(notes: str) -> int:
+    """List entries under the NOTES.md heading `Hardest items`."""
+    section = re.search(r'^#+\s*Hardest items[^\n]*\n([\s\S]*?)(?=^#|\Z)', notes, re.M | re.I)
+    return len(re.findall(r'^\s*(?:[-*]|\d+\.)\s+\S', section.group(1), re.M)) if section else 0
+
+
 def metrics(data: dict, files: dict[str, str]) -> dict:
     root = data['root']
     stem = root[:-3]
@@ -130,8 +300,8 @@ def metrics(data: dict, files: dict[str, str]) -> dict:
     return {'nl_functions': len(nl_files), 'judgment_files': len(judgment_files), 'inline_nl': len(inline),
             'ts_helpers': len(ts_files), 'ts_exported_functions': exported, 'ts_logic_lines': ts_lines,
             'functions': len(nl_files) + exported, 'call_depth': depth, 'constructs': constructs,
-            'instances': [{'name': i.get('name'), 'words': words(i.get('inputs')), 'longest_list': longest_list(i.get('inputs'))}
-                          for i in instances]}
+            'instances': [{'name': i.get('name'), 'words': words(i.get('inputs')), 'longest_list': longest_list(i.get('inputs')),
+                           'text_items': text_items(i.get('inputs'))} for i in instances]}
 
 
 def static_problems(submission: Path, data: dict, files: dict[str, str], m: dict) -> list[str]:
@@ -149,8 +319,16 @@ def static_problems(submission: Path, data: dict, files: dict[str, str], m: dict
     for entry in submission.iterdir():
         if entry.name not in SUBMISSION_ENTRIES and not entry.name.startswith('.'):
             problems.append(f'N2: {entry.name} is not part of a submission (program/, submission.json, NOTES.md); '
-                            'instances are literal data, not generated')
+                            'instances are literal data, not generated: move logs and notes beside SUBMISSION')
     instances = data.get('instances') or []
+    card_path = submission / 'idea.json'
+    try:
+        declared = declared_words(json.loads(card_path.read_text())) if card_path.is_file() else None
+    except ValueError:
+        declared = None
+        problems.append('C2: idea.json does not parse')
+    if not card_path.is_file():
+        problems.append('C2: SUBMISSION/idea.json is missing; keep the idea card you built there (its instance size binds)')
     if not 2 <= len(instances) <= 3:
         problems.append('F2: two or three instances')
     canonical = lambda value: json.dumps(value, sort_keys=True)  # noqa: E731
@@ -187,17 +365,27 @@ def static_problems(submission: Path, data: dict, files: dict[str, str], m: dict
             problems.append(f'S3: {label}: keyword_baseline is a root eval script ending in return')
         elif INLINE_NL.search(baseline) or re.search(r'\bdecide\s*\(', baseline):
             problems.append(f'S3: {label}: the keyword baseline makes a natural-language call')
-        if m['instances'][index]['longest_list'] < 8 and m['instances'][index]['words'] < 1200:
-            problems.append(f'C2: {label}: {m["instances"][index]["longest_list"]} items, {m["instances"][index]["words"]} '
-                            'words; at least eight items or 1,200 words')
+        size = m['instances'][index]
+        if size['text_items'] < MIN_TEXT_ITEMS and size['words'] < MIN_WORDS:
+            problems.append(f'C2: {label}: {size["text_items"]} items with text, {size["words"]} words; at least '
+                            f'{MIN_TEXT_ITEMS} items whose text a judgment reads, or {MIN_WORDS} words of outside text')
+        if declared and size['words'] < 0.9 * declared:
+            problems.append(f'C2: {label}: {size["words"]} words, but the idea card declares {declared}; the card\'s size '
+                            'is binding: write the instance at the size the card names')
     if len(judgments) < 3 or m['judgment_files'] + m['inline_nl'] < 3:
         problems.append('S1: at least three distinct judgments (judgment .nl files or inline nl calls), listed in judgments')
     if m['functions'] < 5:
         problems.append(f'C1: {m["functions"]} functions; at least five (.nl files and exported TypeScript functions)')
     if m['call_depth'] < 3:
         problems.append(f'C1: call depth {m["call_depth"]}; at least three (root, helper, judgment)')
-    if m['ts_logic_lines'] < 40:
-        problems.append(f'D1: {m["ts_logic_lines"]} lines of TypeScript logic in the callable folder; at least 40')
+    if m['ts_logic_lines'] < MIN_TS_LINES:
+        problems.append(f'D1: {m["ts_logic_lines"]} lines of TypeScript logic in the callable folder; at least {MIN_TS_LINES}')
+    problems += untrusted_problems(files)
+    notes = submission / 'NOTES.md'
+    listed = hardest_items(notes.read_text()) if notes.is_file() else 0
+    if listed < MIN_HARDEST:
+        problems.append(f'C4: NOTES.md lists {listed} hardest items; give a section "## Hardest items" with at least '
+                        f'{MIN_HARDEST} entries, each the item and why a careful reader could get it wrong')
     found = [c for c in m['constructs'] if c != 'inline-nl']
     if len(found) < 3:
         problems.append(f'D2: semantic-FP constructs found: {", ".join(found) or "none"}; at least three')
@@ -278,6 +466,86 @@ def package(data: dict, files: dict[str, str]) -> list[dict]:
     return cases
 
 
+REFERENCE_CALL_FACTOR = 2   # owner 2026-11-25: an episode's model-call budget is about twice the reference run's calls
+
+
+def with_reference_calls(cases: list[dict], trace: dict) -> list[dict]:
+    """Each case declares its episode budget: REFERENCE_CALL_FACTOR x its reference run's model calls (the collector
+    raises the run's budget to it, never lowers it: ts-host teacher/collector.ts caseModelRequestBudget)."""
+    calls = {row['id']: row.get('calls') for row in trace.get('results', [])}
+    for case in cases:
+        if calls.get(case['id']):
+            case['semantics']['episode_model_calls'] = REFERENCE_CALL_FACTOR * int(calls[case['id']])
+    return cases
+
+
+def stage_cases(cases: list[dict], trace: dict) -> list[dict]:
+    """The stage tasks of packaged cases: one per distinct leaf judgment call of each reference run (module docstring)."""
+    by_id = {row['id']: row for row in trace.get('results', [])}
+    out = []
+    for case in cases:
+        files = case['semantics']['files']
+        seen = set()
+        for child in (by_id.get(case['id']) or {}).get('children') or []:
+            path = child.get('path') or ''
+            if (path not in files or not path.endswith('.nl') or child.get('functional') or not child.get('returned')
+                    or child.get('status') != 'success' or not isinstance(child.get('args'), dict)
+                    or any(p.startswith(path[:-3] + '/') for p in files)):
+                continue
+            key = json.dumps([path, child['args']], sort_keys=True)
+            if key in seen:
+                continue
+            seen.add(key)
+            judgment = Path(path).stem
+            stage = json.loads(json.dumps(case))
+            stage['id'] = f'{case["id"]}:stage:{slug(judgment, 32)}:{text_digest(key)[:8]}'
+            stage['source_ids'] = [f'{sid}:stage:{judgment}:{text_digest(key)[:8]}' for sid in case['source_ids']]
+            stage['semantics'] = {'root': path, 'files': files, 'inputs': child['args'], 'expected': child['value'],
+                                  'oracle': 'exact'}
+            curriculum = stage['curriculum']
+            curriculum['shape'] = f'{curriculum["shape"]}:{judgment}'
+            curriculum['variant'] = 'stage'
+            curriculum['reference'] = {'root': [['return_result', {'status': 'success', 'value': child['value']}]]}
+            curriculum['rl'] = {**curriculum['rl'], 'level': 1,
+                                'basis': 'invented-stage-reference-answer-of-a-qualified-program'}
+            external = curriculum['external']
+            external['shape'] = curriculum['shape']
+            external['stage'] = {'of': case['id'], 'judgment': judgment, 'path': path}
+            body = frontmatter(files[path])[1]
+            external['instruction_sha256'] = text_digest(body)[:16]
+            external['instruction_id'] = text_digest(body)[:12]
+            external['checks'] = {'wrong_answers': [], 'alias_answers': [], 'keyword_baseline_code': [], 'ablations': []}
+            stage['generation'] = {**stage['generation'],
+                                   'method': 'a judgment call of a qualified invented program\'s reference run, as its own '
+                                             'task: the call\'s arguments and the reference\'s answer; no sampled trajectory'}
+            out.append(stage)
+    return out
+
+
+def run_node(script: str, runtime: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([node(), str(REPO / 'scripts/rl_tasks' / script), str(runtime), *args],
+                          capture_output=True, text=True, timeout=3600)
+
+
+def qualify_stages(out: Path, runtime: Path, cases: list[dict], trace: dict) -> dict:
+    """Cut and replay the stage tasks; only those whose reference replays to an accepted answer are kept."""
+    stages = stage_cases(cases, trace)
+    (out / 'stages-input.jsonl').write_text(''.join(json.dumps(c, ensure_ascii=False) + '\n' for c in stages))
+    if not stages:
+        (out / 'stages.jsonl').write_text('')
+        return {'cut': 0, 'kept': 0}
+    verified = out / 'stages-verified'
+    run = run_node('verify.mjs', runtime, str(out / 'stages-input.jsonl'), str(verified), '4')
+    try:
+        kept_ids = {row['id'] for row in map(json.loads, (verified / 'cases.jsonl').read_text().splitlines()) if row}
+    except OSError:
+        return {'cut': len(stages), 'kept': 0, 'error': (run.stderr or run.stdout)[-600:]}
+    kept = [c for c in stages if c['id'] in kept_ids]
+    (out / 'stages.jsonl').write_text(''.join(json.dumps(c, ensure_ascii=False) + '\n' for c in kept))
+    per = collections.Counter(c['curriculum']['external']['stage']['judgment'] for c in kept)
+    return {'cut': len(stages), 'kept': len(kept), 'by_judgment': dict(per)}
+
+
 def node() -> str:
     for candidate in sorted(Path.home().glob('.local/share/natlang-dev/node-v24*/bin/node'), reverse=True):
         return str(candidate)
@@ -323,6 +591,7 @@ def qualify(submission: Path, runtime: Path) -> dict:
             verification = {'error': (run.stderr or run.stdout)[-1500:]}
             problems.append('verify.mjs did not finish: ' + verification['error'][-300:])
         report['verification'] = {key: verification.get(key) for key in ('summary', 'failures', 'error')}
+        broken = {row.get('id') for row in verification.get('results', []) if not row.get('reference_ok')}
         for row in verification.get('results', []):
             name = row.get('id', '?')
             if not row.get('reference_ok'):
@@ -332,7 +601,7 @@ def qualify(submission: Path, runtime: Path) -> dict:
                     problems.append(f'F4: {name}: wrong answer not rejected: {json.dumps(wrong)[:300]}')
             for baseline in row.get('keyword_baseline', []):
                 if baseline.get('accepted') is not False:
-                    problems.append(f'S3: {name}: keyword baseline not rejected: {json.dumps(baseline)[:300]}')
+                    problems.append(f'S3: {name}: keyword baseline not rejected: {json.dumps(baseline)[:900]}')
         run = subprocess.run([node(), str(REPO / 'scripts/rl_tasks/ablate.mjs'), str(runtime), str(out / 'cases.jsonl'),
                               str(out / 'ablations.json')], capture_output=True, text=True, timeout=3600)
         try:
@@ -342,13 +611,212 @@ def qualify(submission: Path, runtime: Path) -> dict:
             problems.append('ablate.mjs did not finish: ' + ablations['error'][-300:])
         report['ablations'] = ablations
         for row in ablations.get('results', []):
-            if row.get('rejected') is not True:
+            if row.get('rejected') is not True and row.get('id') in broken:
+                # An ablation replays the reference with one judgment changed: while the reference fails, it shows nothing.
+                problems.append(f'S2: {row["id"]}: ablating {row["judgment"]} not judged: the reference replay of '
+                                f'{row["id"]} fails (F3 above); fix that first')
+            elif row.get('rejected') is not True:
                 problems.append(f'S2: {row["id"]}: ablating {row["judgment"]} did not change the answer to a rejected one'
                                 f' ({row.get("error") or json.dumps(row.get("value"))[:200]})')
+        run = run_node('reference_trace.mjs', runtime, str(out / 'cases.jsonl'), str(out / 'trace.json'))
+        try:
+            trace = json.loads((out / 'trace.json').read_text())
+        except (OSError, ValueError):
+            trace = {'error': (run.stderr or run.stdout)[-1500:]}
+            problems.append('reference_trace.mjs did not finish: ' + trace['error'][-300:])
+        report['reference_calls'] = {row['id']: row.get('calls') for row in trace.get('results', [])}
+        cases = with_reference_calls(cases, trace)
+        (out / 'cases.jsonl').write_text(''.join(json.dumps(c, ensure_ascii=False) + '\n' for c in cases))
+        if not problems:
+            report['stages'] = qualify_stages(out, runtime, cases, trace)
     report['problems'] = problems
     report['ok'] = not problems
     (out / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=1) + '\n')
     return report
+
+
+# ---- campaign pipeline: admit one submission, publish batches --------------------------------------------------------
+sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+from natlang_neuralese.common.paths import resolve as data_path  # noqa: E402
+
+INVENTOR_ROOT = Path(os.environ.get('NATLANG_INVENTOR_ROOT') or data_path('data_nvme', 'natlang-novel-programs'))
+HELD_ROOT = data_path('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-inv')
+HELD_V3 = data_path('data_nvme', 'lfm3-rl-dgx-20261029', 'ops', 'held-v3')
+REVIEW_SCHEMA = 'natlang.invented-review/1'
+JUDGED = ('S4', 'S5', 'C3', 'D3', 'D5', 'N1')
+PYTHON = REPO / '.venv-neuralese/bin/python'
+
+
+def digest(submission: Path) -> str:
+    """sha256 over program/ files (as load() reads them) and submission.json: what a review is a review of."""
+    data, files = load(submission)
+    return hashlib.sha256(json.dumps({'files': files, 'submission': data}, sort_keys=True).encode()).hexdigest()
+
+
+def review_problems(review: dict, submission: Path) -> list[str]:
+    if review.get('schema') != REVIEW_SCHEMA:
+        return [f'review: schema must be {REVIEW_SCHEMA}']
+    problems = []
+    if review.get('digest') != digest(submission):
+        problems.append('review: it names another version of the submission (digest); review the current one')
+    if not review.get('reviewer'):
+        problems.append('review: reviewer (model id) is missing')
+    for rid in JUDGED:
+        verdict = (review.get('requirements') or {}).get(rid) or {}
+        if verdict.get('met') is not True:
+            problems.append(f'{rid}: judged unmet: {"; ".join(map(str, verdict.get("findings") or ["no verdict"]))[:400]}')
+    return problems
+
+
+def rows_of(path: Path) -> list[dict]:
+    from natlang_neuralese.common import jsonio
+    return jsonio.read_jsonl(path) if path.exists() else []
+
+
+def save_rows(path: Path, rows: list[dict]) -> None:
+    from natlang_neuralese.common.jsonio import write_bytes_durable
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_bytes_durable(path, ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows).encode())
+
+
+def admit(submission: Path, *, review_path: Path | None, idea_path: Path | None, root: Path, runtime: Path,
+          skip_qualify: bool = False) -> dict:
+    out = submission / 'qualification'
+    report = json.loads((out / 'report.json').read_text()) if skip_qualify else qualify(submission, runtime)
+    if not report.get('ok'):
+        return {'admitted': False, 'stage': 'qualify', 'problems': report.get('problems', [])}
+    review_path = review_path or submission / 'review.json'
+    if not review_path.exists():
+        return {'admitted': False, 'stage': 'review', 'problems': [f'no review at {review_path} (REVIEW_BRIEF.md)']}
+    problems = review_problems(json.loads(review_path.read_text()), submission)
+    if problems:
+        return {'admitted': False, 'stage': 'review', 'problems': problems}
+    data, _ = load(submission)
+    sys.path.insert(0, str(REPO / 'scripts' / 'rl_tasks'))
+    import program_atlas
+    states = program_atlas.claim_states(root)
+    if idea_path is None and (submission / 'idea.json').exists():
+        idea_path = submission / 'idea.json'
+    idea = json.loads(idea_path.read_text()) if idea_path else (states.get(data['slug']) or {}).get('idea')
+    if not idea:
+        return {'admitted': False, 'stage': 'idea', 'problems': ['no idea card: pass --idea, write idea.json or claim it']}
+    idea = idea.get('idea', idea)
+    cases = rows_of(out / 'cases.jsonl')
+    stages = rows_of(out / 'stages.jsonl')
+    split = split_of(data)
+    home = root / 'admitted' / data['slug']
+    save_rows(home / 'cases.jsonl', cases)
+    save_rows(home / 'stages.jsonl', stages)
+    shutil.copy2(review_path, home / 'review.json')
+    admission = {'slug': data['slug'], 'split': split, 'submission': str(submission), 'digest': digest(submission),
+                 'cases': len(cases), 'stages': len(stages), 'reference_calls': report.get('reference_calls'),
+                 'at': time.time(), 'published': None}
+    (home / 'admission.json').write_text(json.dumps(admission, indent=1) + '\n')
+    ledger = root / 'accepted.jsonl'
+    listed = {row['idea']['slug'] for row in rows_of(ledger)}
+    if data['slug'] not in listed:
+        with open(ledger, 'a') as handle:
+            handle.write(json.dumps({'idea': idea, 'submission': str(submission), 'split': split, 'at': time.time()},
+                                    ensure_ascii=False) + '\n')
+    if data['slug'] in states:
+        program_atlas.release(root, data['slug'], 'accepted', str(submission))
+    return {'admitted': True, **admission}
+
+
+def pool_avoid(directory: Path) -> tuple[Path, Path]:
+    """Ids and split/source groups of every row training selects from (registry roles grpo-pool, grpo-memetic-tasks):
+    what a held slice must not share."""
+    from natlang_neuralese.common.data_registry import role_paths
+    ids, groups = set(), set()
+    for path in [*role_paths('grpo-pool'), *role_paths('grpo-memetic-tasks')]:
+        for line in open(path, encoding='utf-8'):
+            row = json.loads(line)
+            ids.add(row.get('id'))
+            groups.add((row.get('curriculum') or {}).get('split_group') or '')
+            groups.update(row.get('source_groups') or [])
+    ids.discard(None)
+    groups.discard('')
+    (directory / 'avoid-ids.json').write_text(json.dumps(sorted(ids)))
+    (directory / 'avoid-groups.json').write_text(json.dumps(sorted(groups)))
+    return directory / 'avoid-ids.json', directory / 'avoid-groups.json'
+
+
+def registry(*args: str) -> None:
+    subprocess.run([str(PYTHON), str(REPO / 'scripts/data_registry.py'), *args], check=True, cwd=REPO)
+
+
+def publish(root: Path, *, dry_run: bool = False, no_check: bool = False) -> dict:
+    stamp = time.strftime('%Y%m%d-%H%M%S')
+    admitted = [(json.loads((d / 'admission.json').read_text()), d) for d in sorted((root / 'admitted').glob('*'))
+                if (d / 'admission.json').exists()]
+    fresh = [(a, d) for a, d in admitted if not a.get('published')]
+    train = [(a, d) for a, d in fresh if a['split'] == 'train']
+    held = [(a, d) for a, d in admitted if a['split'] != 'train']
+    summary = {'stamp': stamp, 'fresh': [a['slug'] for a, _ in fresh], 'train_ideas': len(train),
+               'held_ideas': len(held), 'new_held_ideas': sum(1 for a, _ in fresh if a['split'] != 'train')}
+    if dry_run or not fresh:
+        return summary
+    env = {**os.environ, 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'}
+    if train:
+        pool = root / 'pool' / stamp
+        rows = [r for _, d in train for r in rows_of(d / 'cases.jsonl') + rows_of(d / 'stages.jsonl')]
+        save_rows(pool / 'cases.jsonl', rows)
+        from natlang_neuralese.common.data_registry import role_paths
+        against = [a for p in role_paths('grpo-pool') for a in ('--against', p)]
+        subprocess.run([str(PYTHON), str(REPO / 'scripts/rl_tasks/measure_repetition.py'), '--cases',
+                        str(pool / 'cases.jsonl'), *against, '--label', f'invented-{stamp}', '-o',
+                        str(pool / 'repetition.json')], check=True, env=env, cwd=REPO)
+        dataset = f'natlang-rl-invented-{stamp}'
+        registry('record', '--id', dataset, '--path', str(pool), '--kind', 'rl-tasks', '--include', 'cases.jsonl',
+                 '--include', 'repetition.json', '--license', 'invented (project-authored by frontier models)',
+                 '--rows', str(len(rows)),
+                 '--format', f'natlang.program/2 cases of {len(train)} invented programs (train split): '
+                             f'{sum(a["cases"] for a, _ in train)} whole-program tasks and '
+                             f'{sum(a["stages"] for a, _ in train)} stage tasks (scripts/rl_tasks/sources/invented.py)',
+                 '--note', 'program inventor campaign (plans/NOVEL_PROGRAMS_20261124.md); ideas: '
+                           + ', '.join(a['slug'] for a, _ in train))
+        registry('promote', dataset, '--role', 'grpo-pool', *(['--no-check'] if no_check else []))
+        summary['pool'] = {'dataset': dataset, 'rows': len(rows), 'path': str(pool)}
+    if held:
+        directory = HELD_ROOT / stamp
+        (directory / 'source').mkdir(parents=True, exist_ok=True)
+        save_rows(directory / 'source' / 'cases.jsonl', [r for _, d in held for r in rows_of(d / 'cases.jsonl')])
+        avoid_ids, avoid_groups = pool_avoid(directory / 'source')
+        held_eval = [str(PYTHON), '-m', 'natlang_neuralese.rl.held_eval']
+        subprocess.run([*held_eval, 'pin', '--cases', str(directory / 'source' / 'cases.jsonl'), '--dir', str(directory),
+                        '--all-rows', '--seed', f'held-inv-{stamp}', '--avoid-ids', str(avoid_ids),
+                        '--avoid-groups', str(avoid_groups), '--also-exclude', str(HELD_V3 / 'manifest.json')],
+                       check=True, env=env, cwd=REPO)
+        shutil.copy2(HELD_V3 / 'engine.json', directory / 'engine.json')
+        verify = subprocess.run([*held_eval, 'verify', '--manifest', str(directory / 'manifest.json'),
+                                 '--avoid-ids', str(avoid_ids), '--avoid-groups', str(avoid_groups)],
+                                capture_output=True, text=True, env=env, cwd=REPO)
+        (directory / 'verify.json').write_text(verify.stdout)
+        if verify.returncode:
+            raise SystemExit(f'held_eval verify found held-inv tasks training sees: {verify.stdout[-1500:]}')
+        previous = sorted(p.name for p in HELD_ROOT.glob('*') if p.is_dir() and p.name < stamp and
+                          (p / 'manifest.json').exists())
+        dataset = f'held-inv-{stamp}'
+        tasks = len(json.loads((directory / 'manifest.json').read_text())['tasks'])
+        registry('record', '--id', dataset, '--path', str(directory), '--kind', 'held', '--protected',
+                 *[a for f in ('manifest.json', 'cases.jsonl', 'engine.json', 'exclusion-ids.json', 'verify.json',
+                               'source/cases.jsonl', 'source/avoid-ids.json', 'source/avoid-groups.json')
+                   for a in ('--include', f)],
+                 '--license', 'invented (project-authored by frontier models)', '--rows', str(tasks),
+                 *(['--supersedes', f'held-inv-{previous[-1]}'] if previous else []),
+                 '--format', f'held_eval pinned set: {tasks} whole-program tasks of the {len(held)} invented ideas '
+                             'whose world drew dev or confirmation (the new-programs slice; held-v3 untouched)',
+                 '--note', 'evaluation-only-never-training: role held-eval-invented; training excludes every '
+                           'held-eval* role (held_eval.training_exclusion_ids); ideas: ' + ', '.join(a['slug'] for a, _ in held))
+        registry('promote', dataset, '--role', 'held-eval-invented', '--role-file', 'manifest.json',
+                 *(['--no-check'] if no_check else []))
+        summary['held'] = {'dataset': dataset, 'tasks': tasks, 'path': str(directory)}
+    for admission, d in fresh:
+        admission['published'] = stamp
+        (d / 'admission.json').write_text(json.dumps(admission, indent=1) + '\n')
+    with open(root / 'publications.jsonl', 'a') as handle:
+        handle.write(json.dumps(summary) + '\n')
+    return summary
 
 
 def main(argv=None) -> int:
@@ -362,8 +830,57 @@ def main(argv=None) -> int:
     q = sub.add_parser('qualify')
     q.add_argument('submission', type=Path)
     q.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
+    dg = sub.add_parser('digest')
+    dg.add_argument('submission', type=Path)
+    ad = sub.add_parser('admit')
+    ad.add_argument('submission', type=Path)
+    ad.add_argument('--review', type=Path)
+    ad.add_argument('--idea', type=Path)
+    ad.add_argument('--root', type=Path, default=INVENTOR_ROOT)
+    ad.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
+    ad.add_argument('--publish', action='store_true')
+    ad.add_argument('--skip-qualify', action='store_true', help='use the existing qualification/report.json')
+    pb = sub.add_parser('publish')
+    pb.add_argument('--root', type=Path, default=INVENTOR_ROOT)
+    pb.add_argument('--dry-run', action='store_true')
+    pb.add_argument('--no-check', action='store_true',
+                    help="promote without the registry's check-main --quick (when another strand's uncommitted change "
+                         'turns it red; the promotion commits only registry files)')
+    st = sub.add_parser('stages')
+    st.add_argument('submission', type=Path)
+    st.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
     args = parser.parse_args(argv)
+    if args.command == 'publish':
+        print(json.dumps(publish(args.root, dry_run=args.dry_run, no_check=args.no_check), indent=1))
+        return 0
     submission = args.submission.resolve()
+    if args.command == 'digest':
+        print(digest(submission))
+        return 0
+    if args.command == 'admit':
+        result = admit(submission, review_path=args.review, idea_path=args.idea, root=args.root,
+                       runtime=args.runtime.resolve(), skip_qualify=args.skip_qualify)
+        if result['admitted'] and args.publish:
+            result['publication'] = publish(args.root)
+        print(json.dumps(result, ensure_ascii=False, indent=1))
+        return 0 if result['admitted'] else 1
+    if args.command == 'stages':
+        out = submission / 'qualification'
+        report = json.loads((out / 'report.json').read_text())
+        if not report.get('ok'):
+            raise SystemExit('stages: the submission is not qualified')
+        cases = [json.loads(line) for line in (out / 'cases.jsonl').read_text().splitlines() if line.strip()]
+        run = run_node('reference_trace.mjs', args.runtime.resolve(), str(out / 'cases.jsonl'), str(out / 'trace.json'))
+        if run.returncode:
+            raise SystemExit('reference_trace.mjs failed: ' + (run.stderr or run.stdout)[-600:])
+        trace = json.loads((out / 'trace.json').read_text())
+        cases = with_reference_calls(cases, trace)
+        (out / 'cases.jsonl').write_text(''.join(json.dumps(c, ensure_ascii=False) + '\n' for c in cases))
+        report['reference_calls'] = {row['id']: row.get('calls') for row in trace.get('results', [])}
+        report['stages'] = qualify_stages(out, args.runtime.resolve(), cases, trace)
+        (out / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=1) + '\n')
+        print(json.dumps({'reference_calls': report['reference_calls'], 'stages': report['stages']}, indent=1))
+        return 0
     if args.command == 'check':
         data, files = load(submission)
         m = metrics(data, files)

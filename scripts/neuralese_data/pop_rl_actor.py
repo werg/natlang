@@ -201,8 +201,11 @@ def host_address(host):
 COLAB_FORWARD_OFFSET = 10161
 # Two sessions (aei1's A100 'colab-g4', program tuning's L4 'colab-g4b', 2026-11-24) must not share DGX ports:
 # forward_port keeps a port already listening, so a second host's VM port P would be served by the first host's
-# forward. Each alias has its own offset; NATLANG_COLAB_FORWARD_OFFSETS='alias=offset,...' adds or overrides.
-COLAB_FORWARD_OFFSETS = {'colab-g4': COLAB_FORWARD_OFFSET, 'colab-g4b': COLAB_FORWARD_OFFSET + 1000}
+# forward. Each alias has its own offset; NATLANG_COLAB_FORWARD_OFFSETS='alias=offset,...' adds or overrides. Offsets
+# lie COLAB_FORWARD_SPACING apart, more than the VM ports span (8570-9571): at 1000 apart (until 2026-11-25) g4b's
+# front 8570 mapped to 19731, g4a's SGLang forward, so a g4b collection actor would have been reached at g4a's engine.
+COLAB_FORWARD_SPACING = 2000
+COLAB_FORWARD_OFFSETS = {'colab-g4': COLAB_FORWARD_OFFSET, 'colab-g4b': COLAB_FORWARD_OFFSET + COLAB_FORWARD_SPACING}
 
 
 def colab_forward_offset(host):
@@ -215,7 +218,7 @@ def colab_forward_offset(host):
         table[alias.strip()] = int(value)
     if host in table:
         return table[host]
-    return COLAB_FORWARD_OFFSET + 1000 * (2 + zlib.crc32(str(host).encode()) % 20)
+    return COLAB_FORWARD_OFFSET + COLAB_FORWARD_SPACING * (2 + zlib.crc32(str(host).encode()) % 12)
 
 
 def _listening(port):

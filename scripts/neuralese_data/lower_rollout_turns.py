@@ -52,15 +52,52 @@ class NativeStates:
         return read_native_state_file(self.path(block_id), block_id).load()
 
 
-def write_sources(row, stats=None):
+TYPED_RESULT_WRITES = ('typed-text-result', 'typed-json-result', 'typed-text-result-field')
+
+
+def producing_context(row, event, think):
+    """The token ids a legacy context-free typed-result write (``[produce_open] + text`` from position 0, written before
+    2026-11-25) stands after when it is written in its producing call, as ``engine.native_write_text`` writes it now
+    (DECISIONS 2026-11-25): the last sampled turn of the call that returned the value (``event['call_id']``), its exact
+    prompt and its sampled reply up to its end of turn, an unfinished thought closed (``think``: (<think> id, </think>
+    id)). None when that turn is not lowerable as tokens (an imported state in its prompt, no samples)."""
+    turns = [turn for turn in row.get('turns') or () if turn.get('invocation_id') == event.get('call_id')
+             and 'samples' in (turn.get('sampling') or {})]
+    if not turns:
+        return None
+    sampling = turns[-1]['sampling']
+    if any(segment.get('kind') != 'tokens' for segment in sampling.get('prompt') or ()):
+        return None
+    prompt = [int(t) for segment in sampling['prompt'] for t in segment['token_ids']]
+    inputs = sampling.get('generated_inputs') or [{'token_id': item['token_id'], 'sample_index': index}
+                                                  for index, item in enumerate(sampling['samples'])]
+    terminal = {index for index, item in enumerate(sampling['samples']) if item.get('terminal')}
+    reply = []
+    for item in inputs:     # the reply as fed, forced inputs included, up to its end of turn
+        if item.get('sample_index') in terminal:
+            break
+        reply.append(int(item['token_id']))
+    think_open, think_close = think
+    if ((prompt and prompt[-1] == think_open) or think_open in reply) and think_close not in reply:
+        reply.append(think_close)
+    return prompt + reply
+
+
+def write_sources(row, stats=None, in_context=None):
     """{block id: producer document} of an episode's Neuralese writes, from its ``execution_graph`` ``block_write`` events:
-    ``source_capture`` is the exact input of the actor's capture (a text write: ``[produce_open] + text ids`` from
-    position 0; ``sglang_actor._sglang_write_text``, ``engine._native_write_text_impl``), the state the rows
-    [payload_start, payload_stop). A document is {'ids': int32[: payload_stop], 'start', 'stop'}. A producer whose
-    context itself imported a stored state (an operator call under its soft prompt state, ``engine.capture_prompt``)
-    records it as a ``native_state`` segment of ``token_count`` rows: the document holds placeholder ids there and
-    ``imports`` [(position, state id)], read as fixed stored context (``lfm3_fast_train.passthrough_plan``). A
-    ``native_state`` segment without its row count is not a source (counted)."""
+    ``source_capture`` is the exact input of the actor's capture (since 2026-11-25 the producing call's context, then
+    ``produce_open`` and the text ids, ``engine.native_write_text``; before, a text write had no context, ``[produce_open]
+    + text ids`` from position 0), the state the rows [payload_start, payload_stop). A document is {'ids': int32[:
+    payload_stop], 'start', 'stop'}. A producer whose context itself imported a stored state (an operator call under its
+    soft prompt state, ``engine.capture_prompt``) records it as a ``native_state`` segment of ``token_count`` rows: the
+    document holds placeholder ids there and ``imports`` [(position, state id)], read as fixed stored context
+    (``lfm3_fast_train.passthrough_plan``). A ``native_state`` segment without its row count is not a source (counted).
+
+    ``in_context`` ((<think> id, </think> id); SFT builders): a legacy context-free typed-result write is rewritten to
+    the span written at the end of its producing turn (``producing_context``), the document today's engines write, so
+    the reader learns from states written in context (counted ``source_in_context``; ``source_context_free`` where
+    the producing turn is not lowerable). A learner replaying the actor's exact computation (GRPO) keeps the recorded
+    document."""
     sources = {}
     for event in row.get('execution_graph') or ():
         capture = event.get('source_capture') if event.get('kind') == 'block_write' else None
@@ -85,6 +122,12 @@ def write_sources(row, stats=None):
             if stats is not None:
                 stats['source_bad_span'] += 1
             continue
+        if (in_context is not None and start == 1 and not imports and event.get('source_kind') in TYPED_RESULT_WRITES):
+            context = producing_context(row, event, in_context)
+            if stats is not None:
+                stats['source_in_context' if context is not None else 'source_context_free'] += 1
+            if context is not None:
+                ids, start, stop = context + ids[:stop], len(context) + 1, len(context) + stop
         sources[event['block']] = {'ids': np.array(ids[:stop], dtype=np.int32), 'start': start, 'stop': stop,
                                    **({'imports': imports} if imports else {})}
         if imports and stats is not None:
@@ -133,11 +176,12 @@ def prompt_imports(segments, states, stats, sources=None):
     return np.array(ids, dtype=np.int32), imports, used
 
 
-def episode_turns(row, stats, states=None):
+def episode_turns(row, stats, states=None, in_context=None):
     """(rows of one episode's usable calls). A row: dict(invocation, index, prompt int32[], sample int32[], logp f32[],
-    imports [(start, block_id)]). ``states``: a ``NativeStates`` reader; without it calls importing native state are skipped."""
+    imports [(start, block_id)]). ``states``: a ``NativeStates`` reader; without it calls importing native state are skipped.
+    ``in_context``: ``write_sources``' rewrite of legacy context-free writes (SFT)."""
     rows = []
-    sources = write_sources(row, stats)
+    sources = write_sources(row, stats, in_context)
     for index, turn in enumerate(row['turns']):
         sampling = turn.get('sampling') or {}
         if 'samples' not in sampling:

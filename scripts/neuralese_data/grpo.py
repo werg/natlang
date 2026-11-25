@@ -15,7 +15,8 @@ One process runs the whole loop; nothing else (no controller, custody or transit
   model call is (exact actor prompt ids, sampled ids) (``lower_rollout_turns.episode_turns``; calls of one invocation chain
   into one sequence as in ``exp0_sft.chains_of``). A consumer call's imported Neuralese state is a differentiable
   pass-through: computed in the consumer's own forward from the producer document the episode recorded (the text write's
-  ``[produce_open] + text ids``, ``lfm3_fast_train.passthrough_plan``), so the consumer's loss reaches the weights that
+  producing call, ``produce_open`` and the text ids; before 2026-11-25 ``[produce_open] + text ids`` alone;
+  ``lfm3_fast_train.passthrough_plan``), so the consumer's loss reaches the weights that
   computed the state (``--no-neuralese-passthrough``: the same state detached; a block without a recorded document is the
   actor's stored state, ``lfm3_fast_train.import_tensors``). The producer's own sampled tokens train as its own calls. Loss on sampled tokens only:
   ``-min(rho, C) * A * logp + beta * k2(ref || policy)``, ``rho = exp(logp_learner - logp_actor)`` (truncated importance
@@ -481,7 +482,8 @@ class Collector:
         # actor whose publication failed keeps its last version and its slots idle once it lags past --max-staleness
         self.actor_versions = {}
         self.by_id = {row['id']: row for row in tasks}
-        self.walk = ExploreWalk(tasks, getattr(args, 'explore_wrapper_share', 1.), getattr(args, 'explore_held_weight', 1.))
+        self.walk = ExploreWalk(tasks, getattr(args, 'explore_wrapper_share', 1.), getattr(args, 'explore_held_weight', 1.),
+                                getattr(args, 'explore_shape_cap', 0.))
         if work is not None:
             (Path(work) / 'explore-constructs.json').write_text(json.dumps(self.walk.pool_report(), indent=1) + '\n')
         self.learnable_ids, self.learnable_order, self.measured, self.rates_read = [], [], set(), 0.
@@ -3959,18 +3961,23 @@ class ExploreWalk:
     (``sft_sources.HELD_CONSTRUCTS`` except ``multi_function``, which the pool has as often as the held set: 69% vs 75%)
     is always taken when the walk reaches it; any other row is taken with probability 1 / ``held_weight``, and a dataset
     wrapper only while wrappers stay at most ``wrapper_share`` of the rows taken. A row passed over stays unmeasured and
-    comes round again. ``held_weight`` 1 and ``wrapper_share`` 1: the plain walk."""
+    comes round again. ``held_weight`` 1 and ``wrapper_share`` 1: the plain walk. ``shape_cap`` > 0: the walk's order is
+    first reordered so that no program shape takes more than that share of any prefix (``cap_shapes``)."""
 
     COMMON = frozenset({'multi_function'})
 
-    def __init__(self, tasks, wrapper_share=1., held_weight=1.):
-        self.tasks, self.wrapper_share, self.held_weight = tasks, wrapper_share, held_weight
+    def __init__(self, tasks, wrapper_share=1., held_weight=1., shape_cap=0.):
+        if 0 < shape_cap < 1 and tasks:
+            shapes = task_shapes(tasks)
+            tasks = cap_shapes(tasks, lambda row: shapes[row['id']], shape_cap)
+        self.tasks, self.wrapper_share, self.held_weight, self.shape_cap = tasks, wrapper_share, held_weight, shape_cap
         self.weighted = wrapper_share < 1 or held_weight != 1
         self.features = task_features(tasks) if self.weighted and tasks else {}
         self.counts = collections.Counter()      # rows taken: all, wrappers, declaring a held construct
 
     def pool_report(self):
-        report = {'wrapper_share': self.wrapper_share, 'held_weight': self.held_weight, 'rows': len(self.tasks)}
+        report = {'wrapper_share': self.wrapper_share, 'held_weight': self.held_weight, 'shape_cap': self.shape_cap,
+                  'rows': len(self.tasks)}
         if self.features:
             constructs = collections.Counter(k for held, _ in self.features.values() for k in held)
             report.update(wrappers=sum(w for _, w in self.features.values()),
@@ -4022,6 +4029,60 @@ def family_round_robin(rows, rng):
     return out
 
 
+SHAPE_CAP = 0.01        # the share of any prefix of a collection order one program shape may take (0: no cap)
+SHAPE_CAP_FLOOR = 4     # rows of each shape always admitted before the share applies (a short prefix stays mixed)
+
+
+def task_shapes(rows):
+    """id -> program shape (``measure_repetition.program_shape``, the one implementation)."""
+    sys.path.insert(0, str(REPO / 'scripts/rl_tasks'))
+    from measure_repetition import program_shape
+    return {row['id']: program_shape(row) for row in rows}
+
+
+def cap_shapes(rows, shape_of, share=SHAPE_CAP, floor=SHAPE_CAP_FLOOR):
+    """``rows`` (an order) reordered so that no program shape (``shape_of(row)``) takes more than ``share`` of any
+    prefix, beyond its first ``floor`` rows: a row whose shape is at its cap waits, in order, and enters as soon as the
+    prefix has grown enough. Every row is kept: once only capped shapes are left they follow least-placed first
+    (round-robin over the shapes). Spreads collection effort over distinct programs instead of items of one template
+    (DECISIONS 2026-11-25 "program-shape cap")."""
+    if share <= 0 or share >= 1:
+        return list(rows)
+    counts, waiting, out = collections.Counter(), {}, []
+
+    def allowed(key):
+        return counts[key] + 1 <= max(floor, share * (len(out) + 1))   # placed, the shape stays within its share
+
+    def place(key):
+        out.append(waiting[key].popleft())
+        counts[key] += 1
+        if not waiting[key]:
+            del waiting[key]
+
+    def drain():
+        progressed = True
+        while progressed and waiting:
+            progressed = False
+            for key in list(waiting):
+                if allowed(key):
+                    place(key)
+                    progressed = True
+
+    for row in rows:
+        key = shape_of(row)
+        if key not in waiting and allowed(key):
+            out.append(row)
+            counts[key] += 1
+            drain()
+        else:
+            waiting.setdefault(key, collections.deque()).append(row)
+    while waiting:
+        drain()
+        if waiting:
+            place(min(waiting, key=lambda k: counts[k]))
+    return out
+
+
 def load_tasks(args, work=None):
     """The shuffled train tasks of the pools (first occurrence of an id wins) minus the held set: its tasks, every row of
     a held ``split_group`` (``held_eval.exclusion_ids``) and every row sharing a ``source_groups`` entry with those.
@@ -4049,8 +4110,13 @@ def load_tasks(args, work=None):
     errata_paths = errata_files(args)
     for path in errata_paths:
         errata |= {row['id'] for row in read_jsonl(path)}
+    # rows the curriculum refuses for production selection (curriculum.selection_refusal: awaiting live qualification);
+    # --include-unqualified opts out
+    from natlang_neuralese.rl.curriculum import selection_refusal
+    unqualified = set() if getattr(args, 'include_unqualified', False) else {
+        r['id'] for r in rows if selection_refusal(r)}
     eligible = [r for r in rows if r['id'] not in excluded and r['id'] not in errata and r.get('split', 'train') == 'train'
-                and not (broken and broken.search(str(r.get('family') or '')))]
+                and r['id'] not in unqualified and not (broken and broken.search(str(r.get('family') or '')))]
     random.Random(args.seed).shuffle(eligible)
     if getattr(args, 'explore_order', 'row') == 'family':
         eligible = family_round_robin(eligible, random.Random(args.seed))
@@ -4065,6 +4131,7 @@ def load_tasks(args, work=None):
                   'excluded_family_regex': args.exclude_family_regex,
                   'excluded_errata': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in errata_paths],
                   'excluded_errata_ids': len(errata & {r['id'] for r in rows}),
+                  'excluded_unqualified_ids': len(unqualified),
                   'selection': {'pass_rates': args.pass_rates, 'band': args.pass_band, 'min_scored': args.pass_min_scored,
                                 'explore': args.explore, 'explore_order': getattr(args, 'explore_order', 'row'),
                                 'own_outcomes': 'latest scored group per task replaces its rate'},
@@ -5772,6 +5839,13 @@ def build_parser():
     t.add_argument('--explore-wrapper-share', type=float, default=0.15,
                    help='explored groups that are one-function dataset wrappers, at most this share (ExploreWalk; held-v3 '
                         'has 9%% wrappers, a family-ordered walk over the pool ~36%%); 1: no cap')
+    t.add_argument('--include-unqualified', action='store_true',
+                   help='select pool rows the curriculum refuses (curriculum.selection_refusal: qualification other than '
+                        'qualified, e.g. source-only-live-pending); default: left out of the pool load')
+    t.add_argument('--explore-shape-cap', type=float, default=SHAPE_CAP,
+                   help='the unmeasured-task walk is ordered so that no program shape (measure_repetition.program_shape: '
+                        'the program with item data abstracted) takes more than this share of any prefix (cap_shapes; '
+                        'DECISIONS 2026-11-25 "program-shape cap"); 0: no cap')
     t.add_argument('--explore-held-weight', type=float, default=3.,
                    help='an unmeasured task declaring a construct the held set tests (sft_sources.HELD_CONSTRUCTS: '
                         'Neuralese results/arguments, decide, folder reducers, iterateOn, readouts, call depth >= 3, '

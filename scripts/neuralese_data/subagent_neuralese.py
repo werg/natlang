@@ -9,10 +9,16 @@ student (``serve.targets.target_items``). Only the handoff changes: each subagen
 message becomes a Neuralese value written from the report's text and read by the lead.
 
 * ``--read-mode splice`` (default): the learner's producer/consumer pass-through. The lead's prompt carries
-  ``consume_open``, the report's written token ids as placeholder rows, ``consume_close``, and an import at those rows;
-  the producer document is the text write ``[produce_open] + tokens`` (``lower_rollout_turns.write_sources``,
-  ``sglang_actor._sglang_write_text``), whose state the learner computes in the same forward, so the lead's loss trains
-  the producer computation and the marker rows (plans/neuralese/NEURALESE_PASSTHROUGH_20261117.md).
+  ``consume_open``, the report's written token ids as placeholder rows, ``consume_close``, and an import at those rows.
+  The producer document is the report written at the end of the subagent's own conversation (``producer_document``,
+  DECISIONS 2026-11-25): the subagent's final call rendered as it saw it, the reasoning of its final reply, then
+  ``produce_open`` and the report as the span, as ``engine.native_write_text`` writes a value in its producing call.
+  The learner computes the state in the same forward, so the lead's loss trains the producer computation and the marker
+  rows, and the lead receives only the span's rows, never the subagent's context
+  (plans/neuralese/NEURALESE_PASSTHROUGH_20261117.md). A subagent whose conversation the source did not keep writes
+  its report at the end of its opening (a recorded sibling's system prompt and tools, its own brief); a conversation
+  over ``--max-producer-tokens`` is compacted as the runtime compacts a long call (``agent.ts`` ``collapseHistory``:
+  the opening and the latest exchange), then to its opening.
 * ``--read-mode inline``: the report's written token ids inline with no markers, the engines' read of a text write
   since 2026-11-23 (``engine.reads_in_context``).
 
@@ -327,7 +333,7 @@ def state_id(text):
 class Lowering:
     """The serving engine's rendering (``TemplateRenderer``) plus the Neuralese reads of written reports."""
 
-    def __init__(self, tokenizer, read_mode):
+    def __init__(self, tokenizer, read_mode, max_producer_tokens=8192, max_lead_producer_tokens=49152):
         from sft_sources import TemplateRenderer
         from natlang_neuralese.model.shared_state import CONSUME_CLOSE, CONSUME_OPEN, PRODUCE_OPEN
         self.renderer = TemplateRenderer(tokenizer)
@@ -335,6 +341,56 @@ class Lowering:
         self.consume_open, self.consume_close, self.produce_open = (
             int(tok.convert_tokens_to_ids(t)) for t in (CONSUME_OPEN, CONSUME_CLOSE, PRODUCE_OPEN))
         self.read_mode = read_mode
+        self.max_producer_tokens = max_producer_tokens
+        self.max_lead_producer_tokens = max_lead_producer_tokens
+
+    def producer_document(self, report_ids, sub=None, frame=None, max_tokens=8192, stats=None):
+        """The producer document of a report (``lower_rollout_turns.write_sources`` form): the report written at the end
+        of the subagent's own call, its state the span. ``sub``: the recorded subagent conversation (its final reply is
+        the report's producing turn: the final call's prompt, the reply's reasoning through ``</think>``, then
+        ``produce_open`` and the report, as ``engine.capture_plan`` writes a text in its producing call with the reply's
+        content replaced by the report delivered). Over ``max_tokens`` the conversation is compacted as the runtime
+        compacts a long call (``collapseHistory``: the opening and the latest exchange), then to its opening alone.
+        ``frame``: (messages, tools) of the opening of a subagent the source did not keep (a recorded sibling's system
+        prompt and tools with this subagent's brief)."""
+        import numpy as np
+        think_open = int(self.renderer.tokenizer.convert_tokens_to_ids('<think>'))
+        think_close = int(self.renderer.tokenizer.convert_tokens_to_ids('</think>'))
+
+        def document(messages, tools, final):
+            from natlang_neuralese.serve.targets import target_items
+            before, rest = target_items(self.renderer, list(messages), tools,
+                                        final if final is not None else {'role': 'assistant', 'content': ''})
+            if any(kind != 'tok' for kind, _ in before + rest):
+                raise ValueError('a Neuralese read inside a producer context')
+            prompt = [int(v) for _, v in before]
+            reply = [int(v) for _, v in rest] if final is not None else []
+            lead = reply[:reply.index(think_close) + 1] if think_close in reply else []
+            if prompt and prompt[-1] == think_open and think_close not in lead:
+                lead.append(think_close)
+            ids = prompt + lead + [self.produce_open]
+            return {'ids': np.array(ids + list(report_ids), np.int32), 'start': len(ids), 'stop': len(ids) + len(report_ids)}
+
+        if sub is not None:
+            messages, tools = sub['messages'], sub['tools']
+            final = messages[-1] if messages and messages[-1]['role'] == 'assistant' else None
+            history = messages[:-1] if final is not None else messages
+            opening = 2 if len(history) > 1 and history[0]['role'] == 'system' else 1
+            latest = max((i for i, m in enumerate(history) if m['role'] == 'assistant'), default=None)
+            tries = [('full', history, final)]
+            if latest is not None and latest > opening:
+                tries.append(('compacted', history[:opening] + history[latest:], final))
+            tries.append(('opening', history[:opening], final))
+            for kind, part, reply in tries:
+                doc = document(part, tools, reply)
+                if len(doc['ids']) <= max_tokens or kind == 'opening':
+                    if stats is not None:
+                        stats[f'producer_{kind}'] += 1
+                    return doc
+        messages, tools = frame if frame is not None else ([{'role': 'user', 'content': ''}], None)
+        if stats is not None:
+            stats['producer_frame' if frame is not None else 'producer_brief_only'] += 1
+        return document(messages, tools, None)
 
     def written(self, text):
         """The token ids a text write of ``text`` holds (``_sglang_write_text``: escaped template tokens)."""
@@ -354,8 +410,8 @@ class Lowering:
                 prompt.append(int(value))
                 continue
             block = value['id'] if isinstance(value, dict) else value
-            read(prompt, imports, sources, block, self.written(bodies[block]), self.read_mode,
-                 (self.consume_open, self.consume_close, self.produce_open))
+            read(prompt, imports, sources, block, bodies[block]['ids'], self.read_mode,
+                 (self.consume_open, self.consume_close), bodies[block]['document'])
         if any(kind != 'tok' for kind, _ in rest):
             raise ValueError('a Neuralese read inside a target')
         sample = [int(i) for _, i in rest]
@@ -363,36 +419,95 @@ class Lowering:
         return np.array(prompt, np.int32), np.array(sample, np.int32), imports, sources, lead
 
 
-def read(prompt, imports, sources, block, ids, mode, markers):
+def read(prompt, imports, sources, block, ids, mode, markers, document):
     """Append one Neuralese read of the written ``ids`` to ``prompt``. ``splice``: consume_open, the ids as placeholder
-    rows with an import of ``block`` at them, consume_close (``sglang_actor._sglang_import``), and the producer document
-    ``[produce_open] + ids`` with span [1, n+1) (``lower_rollout_turns.write_sources``). ``inline``: the ids alone
-    (``engine.reads_in_context``)."""
-    import numpy as np
-    consume_open, consume_close, produce_open = markers
+    rows with an import of ``block`` at them, consume_close (``sglang_actor._sglang_import``), and the producer
+    ``document`` (``Lowering.producer_document``: the report written at the end of its subagent's call, the span
+    ``ids``; ``lower_rollout_turns.write_sources`` form). ``inline``: the ids alone (``engine.reads_in_context``)."""
+    consume_open, consume_close = markers
     if mode == 'inline':
         prompt += ids
         return
+    if list(document['ids'][document['start']:document['stop']]) != list(ids):
+        raise ValueError('a producer document does not hold the read span')
     prompt.append(consume_open)
     imports.append((len(prompt), block))
     prompt += ids
     prompt.append(consume_close)
-    sources[block] = {'ids': np.array([produce_open] + list(ids), np.int32), 'start': 1, 'stop': len(ids) + 1}
+    sources[block] = document
 
 
-def handoff_messages(lead):
-    """The lead's messages with each report of a handoff as a native_state part; {state id: report}."""
+def first_user(messages):
+    return next((m['content'] for m in messages if m['role'] == 'user' and isinstance(m.get('content'), str)), '')
+
+
+def producers(bundle):
+    """Per handoff of the lead (in order): the recorded subagent that wrote its report (its brief opens the subagent's
+    first user message; each subagent answers one handoff), else None."""
+    used, out = set(), []
+    for _, _, _, brief in bundle['lead']['handoffs']:
+        brief = (brief or '').strip()
+        match = next((k for k, sub in enumerate(bundle['subagents'])
+                      if k not in used and brief and brief in first_user(sub['messages'])), None)
+        if match is not None:
+            used.add(match)
+        out.append(match)
+    return out
+
+
+def opening_frame(bundle, brief):
+    """(messages, tools) of the opening of a subagent the source did not keep: a recorded sibling's system prompt and
+    tools and its first user message with this subagent's brief in place of the sibling's; None without a sibling whose
+    brief stands in its message."""
+    matched = producers(bundle)
+    for (_, _, _, sibling_brief), k in zip(bundle['lead']['handoffs'], matched):
+        if k is None or not (sibling_brief or '').strip():
+            continue
+        sub = bundle['subagents'][k]
+        user = first_user(sub['messages'])
+        if user.count(sibling_brief.strip()) != 1:
+            continue
+        system = [m for m in sub['messages'][:1] if m['role'] == 'system']
+        return system + [{'role': 'user', 'content': user.replace(sibling_brief.strip(), (brief or '').strip())}], sub['tools']
+    return None
+
+
+def handoff_messages(lowering, bundle, stats=None, max_producer_tokens=8192, max_lead_producer_tokens=49152):
+    """The lead's messages with each report of a handoff as a native_state part; {state id: {'text', 'ids',
+    'document'}}: the report's written ids and its producer document (``Lowering.producer_document``). A state's id
+    names its report and its producing context, so one report written by two subagents is two states. The lead's
+    documents together stay within ``max_lead_producer_tokens`` where compaction allows (its last chain's forward holds
+    them all): once they reach it, a recorded conversation is compacted to fit what is left."""
+    lead = bundle['lead']
     messages = [dict(m) for m in lead['messages']]
     bodies = {}
     by_message = collections.defaultdict(list)
-    for index, lo, hi, _ in lead['handoffs']:
-        by_message[index].append((lo, hi))
-    for index, spans in by_message.items():
+    matched = producers(bundle) if lowering is not None else [None] * len(lead['handoffs'])
+    for (index, lo, hi, brief), k in zip(lead['handoffs'], matched):
+        by_message[index].append((lo, hi, brief, k))
+    spent = 0
+    for index, spans in sorted(by_message.items()):
         text, parts, cursor = messages[index]['content'], [], 0
-        for lo, hi in sorted(spans):
+        for lo, hi, brief, k in sorted(spans):
             report = text[lo:hi]
-            block = state_id(report)
-            bodies[block] = report
+            if lowering is None:
+                block, body = state_id(report), report
+            else:
+                ids = lowering.written(report)
+                if k is not None:
+                    budget = min(max_producer_tokens, max(0, max_lead_producer_tokens - spent))
+                    document = lowering.producer_document(ids, sub=bundle['subagents'][k], max_tokens=budget, stats=stats)
+                else:
+                    frame = opening_frame(bundle, brief)
+                    if frame is None:
+                        frame = ([{'role': 'user', 'content': (brief or '').strip()}], None)
+                        if stats is not None:
+                            stats['producer_no_sibling_frame'] += 1
+                    document = lowering.producer_document(ids, frame=frame, stats=stats)
+                spent += len(document['ids'])
+                block = state_id(report + '\x00' + hashlib.sha256(document['ids'].tobytes()).hexdigest())
+                body = {'text': report, 'ids': ids, 'document': document}
+            bodies[block] = body
             parts += [{'type': 'text', 'text': text[cursor:lo]}, {'type': 'native_state', 'id': block}]
             cursor = hi
         parts.append({'type': 'text', 'text': text[cursor:]})
@@ -423,7 +538,8 @@ def conversation_rows(lowering, invocation, messages, tools, bodies, stats):
 def lower_bundle(lowering, bundle, stats):
     """The bundle's episode {'task_id', 'round', 'rows'} or None: the lead's calls (consumers) and every recorded
     subagent's calls (the producers of their reports, trained on their own replies)."""
-    messages, bodies = handoff_messages(bundle['lead'])
+    messages, bodies = handoff_messages(lowering, bundle, stats, getattr(lowering, 'max_producer_tokens', 8192),
+                                        getattr(lowering, 'max_lead_producer_tokens', 49152))
     rows = conversation_rows(lowering, 'lead', messages, bundle['lead']['tools'], bodies, stats)
     if rows is None:
         return None
@@ -493,9 +609,9 @@ def held_content_hit(question, held):
 _LOWERING = None
 
 
-def _init(tokenizer, read_mode):
+def _init(tokenizer, read_mode, max_producer_tokens=8192, max_lead_producer_tokens=49152):
     global _LOWERING
-    _LOWERING = Lowering(tokenizer, read_mode)
+    _LOWERING = Lowering(tokenizer, read_mode, max_producer_tokens, max_lead_producer_tokens)
 
 
 def _work(bundle):
@@ -583,7 +699,8 @@ def build(args):
     chains, cases, calls = [], {}, []
     rows_out = ZstdWriter(out / 'rows.jsonl.zst')
     with concurrent.futures.ProcessPoolExecutor(args.workers, initializer=_init,
-                                                initargs=(args.tokenizer, args.read_mode)) as pool:
+                                                initargs=(args.tokenizer, args.read_mode, args.max_producer_tokens,
+                                                          args.max_lead_producer_tokens)) as pool:
         work = admitted()
         pending = {}
         for bundle in work:   # bounded in flight: bundles stream from the source
@@ -604,6 +721,10 @@ def build(args):
         'inputs': {'source': str(args.input), 'source_sha256': sha256_file(args.input),
                    'held_manifest': args.held_manifest, 'tokenizer': str(args.tokenizer)},
         'policy': {'read_mode': args.read_mode, 'min_width_f1': args.min_width_f1, 'shard': [args.shard, args.shards],
+                   'producer': 'each report written at the end of its subagent\'s call (DECISIONS 2026-11-25): the '
+                               'recorded conversation, compacted over max_producer_tokens, else a sibling\'s opening '
+                               'with its brief', 'max_producer_tokens': args.max_producer_tokens,
+                   'max_lead_producer_tokens': args.max_lead_producer_tokens,
                    'max_per_question': args.max_per_question, 'seed': args.seed,
                    'targets': 'every recorded assistant reply of the lead and of each recorded subagent; teacher '
                               'reasoning and lead-in text zero weight (think_context); prompts, tool outputs and the '
@@ -758,6 +879,12 @@ def main():
     b.add_argument('--tokenizer', required=True)
     b.add_argument('--out', required=True)
     b.add_argument('--read-mode', choices=READ_MODES, default='splice')
+    b.add_argument('--max-producer-tokens', type=int, default=8192,
+                   help='a subagent conversation longer than this as a producer document is compacted (the runtime\'s '
+                        'collapseHistory: opening and latest exchange), then cut to its opening')
+    b.add_argument('--max-lead-producer-tokens', type=int, default=49152,
+                   help='the producer documents one lead reads together (its last chain\'s forward holds them all): '
+                        'past this, recorded conversations are compacted to fit what is left')
     b.add_argument('--min-width-f1', type=float, default=0.9,
                    help='WideSeek width items: the least source item F1 admitted (depth items need 1.0)')
     b.add_argument('--max-per-question', type=int, default=1, help='bundles admitted per distinct question')

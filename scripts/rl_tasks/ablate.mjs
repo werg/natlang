@@ -24,7 +24,7 @@ for (const record of rows) {
       row.accepted = run.outcome.accepted === true;
       row.value = run.outcome.value;
       row.rejected = run.outcome.status === 'done' && run.outcome.accepted === false;
-      if (run.outcome.status !== 'done') row.error = JSON.stringify(run.outcome.detail ?? run.outcome.status).slice(0, 300);
+      if (run.outcome.status !== 'done') row.error = JSON.stringify(run.outcome.detail ?? run.outcome.status).slice(0, 700);
     } catch (e) { row.rejected = false; row.error = String(e).slice(0, 300); }
     results.push(row);
   }

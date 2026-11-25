@@ -52,9 +52,18 @@ JUMP_ABS = 0.05             # ... and >= baseline + this
 INFRA_RATE = 0.05           # unscored/crashed/abandoned share of started episodes
 
 
+# semantic-FP construct tags that admitted tasks carry (`curriculum.external.constructs`; plans/semantic-fp/05 §3)
+SEMANTIC_FP_CONSTRUCTS = frozenset({'inline_nl', 'nl_with_context', 'library_discovery', 'nl_convergence', 'higher_order',
+                                    'context_lens', 'folder_transaction', 'untrusted_contract', 'refinement_contract',
+                                    'ensures_contract', 'structural_recursion',
+                                    'semantic_merge', 'semantic_repair', 'fixed_point', 'propose_and_verify',
+                                    'branch_and_select', 'semantic_map', 'semantic_filter', 'semantic_partition',
+                                    'semantic_reduce', 'semantic_match', 'semantic_rank', 'escalate', 'with_context',
+                                    'compile_rule'})
+
+
 def semantic_fp_constructs():
-    """The semantic-FP construct tags (the authored-task source's definition)."""
-    from scripts.rl_tasks.sources.authored import SEMANTIC_FP_CONSTRUCTS
+    """The semantic-FP construct tags."""
     return SEMANTIC_FP_CONSTRUCTS
 
 

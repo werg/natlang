@@ -93,19 +93,30 @@ def non_student_context(tokenizer, target_message, target_ids, *, think="context
     if think == "train" and (target_message.get("reasoning_content") or "").strip():
         return 0
     ids = list(target_ids)
-
-    def first(*tokens):   # the first position of any of these vocabulary tokens (templates name them differently)
-        found = [ids.index(i) for i in (tokenizer.convert_tokens_to_ids(t) for t in tokens)
-                 if isinstance(i, int) and i in ids and tokenizer.decode([i]) in tokens]
-        return min(found) if found else None
-    end = 0
-    close = first("</think>")
-    if close is not None:
-        end = close + 1
-        while end < len(ids) and not tokenizer.decode([ids[end]]).strip():
-            end += 1
+    end = think_end(tokenizer, ids)
     if lead_in == "context" and target_message.get("tool_calls") and (target_message.get("content") or "").strip():
-        start = first("<tool_call>", "<|tool_call_start|>")
+        start = _first(tokenizer, ids, "<tool_call>", "<|tool_call_start|>")
         if start is not None:
             end = max(end, start)
+    return end
+
+
+def _first(tokenizer, ids, *tokens):
+    """The first position in ``ids`` of any of these vocabulary tokens (templates name them differently), or None."""
+    found = [ids.index(i) for i in (tokenizer.convert_tokens_to_ids(t) for t in tokens)
+             if isinstance(i, int) and i in ids and tokenizer.decode([i]) in tokens]
+    return min(found) if found else None
+
+
+def think_end(tokenizer, target_ids):
+    """The end of a rendered reply's think block: the position after ``</think>`` and the whitespace after it (0 when
+    the reply has none). ``non_student_context`` masks up to here; a weighted teacher think block
+    (``sft_sources.think_context`` ``train@W``) carries weight W up to here."""
+    ids = list(target_ids)
+    close = _first(tokenizer, ids, "</think>")
+    if close is None:
+        return 0
+    end = close + 1
+    while end < len(ids) and not tokenizer.decode([ids[end]]).strip():
+        end += 1
     return end

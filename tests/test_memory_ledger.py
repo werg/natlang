@@ -1752,3 +1752,32 @@ def test_a_yielding_collection_lowers_its_claim_so_a_waiting_stage_fits_beside_i
     with ledger.ledger() as state:
         assert state['claims']['aei1-collect-v0006.service']['budget'] == 90 * GIB
     assert ledger.resize(type('Args', (), {'unit': 'gone', 'mode': 'yield'})()) == 1
+
+
+def test_a_shrunk_launch_is_admitted_at_its_requested_budget_with_its_full_memorymax(monkeypatch, tmp_path):
+    """2026-11-25 00:50: a collection requeued at its 51 GB prep share was raised to its family's learned peak (the
+    full 192-slot run's 78 GB) and waited 29 GB short beside the round's data step. ``--shrunk`` admits it at the
+    requested budget (resize restore raises the claim later); its MemoryMax stays the learned peak it may grow to."""
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'mem_total', lambda: 128 * GIB)
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 0)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 60 * GIB)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False: 0)
+    launched = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec) or 0)
+    with ledger.ledger() as state:
+        state['family_peaks'] = {'aei1-collect-v0001': 71 * GIB}
+
+    def args(unit, shrunk):
+        return type('A', (), {'cuda_budget_gb': None, 'budget_gb': 40, 'reserve_gb': 8, 'unit': unit,
+                              'priority': 'medium', 'cls': 'experiment', 'wait': 0, 'resumable': True,
+                              'host_max_gb': None, 'oom_policy': 'stop', 'workdir': '.', 'env': [], 'stop_seconds': None,
+                              'command': ['x'], 'hold_budget': False, 'container': [], 'shrunk': shrunk})()
+    ledger.run(args('aei1-collect-v0001', True))
+    spec = launched[-1]
+    assert spec['budget'] == 40 * GIB and spec['host_max_gb'] == pytest.approx(71 * 1.1, abs=0.01)
+    with pytest.raises(SystemExit):                 # without it: raised to 78 GB, which 60 GB available cannot admit
+        ledger.run(args('aei1-collect-v0001-1234', False))   # same family
+    assert len(launched) == 1

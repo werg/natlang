@@ -39,13 +39,13 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { pluggable, pluggableMode, type PluggableSetting } from '../runtime/pluggable.js';
 import { modelFacing, promptRevision } from '../runtime/model-facing.js';
-import { argumentInstructions, compactionPageChars, framedState, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
+import { argumentInstructions, callContext, compactionPageChars, framedState, noteProducingCall, producingCall, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
 import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { literalText, writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsGuidance, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
-import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
+import type { NativeStateArtifact, NeuralesePort, NeuraleseStore } from './neuralese-store.js';
 import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerOccurrences, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
@@ -719,18 +719,8 @@ export class NativeToolAgent {
       capture: NonNullable<NeuraleseRuntimeOptions['capture']>, request: ModelTurnRequest, response: ModelTurn,
       select?: string): Promise<NeuraleseRef> {
     const callId = session.runtime.currentCallId ?? session.runtime.options.runId;
-    const sampled = response.raw_response?.x_natlang_rl_capture as { prompt?: { kind?: string; token_ids?: number[]; id?: string }[];
-      generated_inputs?: { token_id?: number }[] } | undefined;
-    const tokens = (segment: { kind?: string; token_ids?: number[] }) => segment.kind === 'tokens' && Array.isArray(segment.token_ids);
-    const exact = !!sampled?.prompt?.length && !!sampled.generated_inputs?.length &&
-      sampled.prompt.every(segment => tokens(segment) || (segment.kind === 'native_state' && typeof segment.id === 'string'));
     // A prompt that imported state (the operator's soft prompt state) is captured with those imports in place.
-    const plain = exact && sampled!.prompt!.every(tokens);
-    const meta = await capture({ messages: request.messages, tools: request.tools,
-      ...(exact ? { ...(plain ? { prompt: sampled!.prompt!.flatMap(segment => segment.token_ids!) } :
-        { promptSegments: sampled!.prompt!.map(segment => tokens(segment) ? { kind: 'tokens' as const, token_ids: segment.token_ids! } :
-          { kind: 'native_state' as const, id: segment.id! }) }),
-        reply: sampled!.generated_inputs!.map(input => input.token_id!) } : {}),
+    const meta = await capture({ ...callContext(request, response),
       text: response.text ?? '', ...(response.reasoning ? { reasoning: response.reasoning } : {}),
       ...(select !== undefined ? { select } : {}) }, { type: 'Neuralese<string>' });
     const node = graphNode(session.runtime.trace, 'block_write', { call_id: callId, block: meta.id, length: meta.length,
@@ -1001,7 +991,11 @@ export class NativeToolAgent {
     const returnType = session.lam.type.kind === 'lambda' ? formatType(session.lam.type.returns) : undefined;
     const producer = { call_id: session.runtime.currentCallId ?? null, turn,
       ...(returnType ? { result_type: returnType } : {}) };
-    const port = this.options.neuralese?.port;
+    const basePort = this.options.neuralese?.port;
+    // Literals the reply wrote are written at the end of this turn (its producing call).
+    const context = producingCall(session.runtime.currentCallId ?? session.runtime.options.runId);
+    const port: NeuralesePort | undefined = basePort && { dialect: basePort.dialect, ...(basePort.forcedText ? { forcedText: true as const } : {}),
+      write: (text, options = {}) => basePort.write(text, { ...options, ...(context && !options.context ? { context } : {}) }) };
     const expectedReturn = session.lam.type.kind === 'lambda' ? session.env.resolve(session.lam.type.returns) : undefined;
     const nativeStateText = async (id: string): Promise<string | undefined> => {
       const artifact = await this.options.neuralese?.store.getNativeState?.(id);
@@ -2579,6 +2573,9 @@ export class NativeToolAgent {
           throw error;
         }
       }
+      // The call's latest turn is the producing context of any Neuralese text it writes (its literals, its typed result,
+      // the arguments it passes to child calls): the state is the span written at the end of it.
+      if (sentRequest) noteProducingCall(session.runtime.currentCallId ?? session.runtime.options.runId, callContext(sentRequest, response));
       response = await this.decodeNeuralese(response, session, turns, turnNode, availableTools === allTools || lastTurn);
       const recordedNativeTurn=response.raw_response?.x_natlang_native_recorded_turn;
       if(turnNode&&typeof recordedNativeTurn==='string')activeRecorder()?.linkNativeTurn?.(recordedNativeTurn,turnNode);

@@ -197,6 +197,47 @@ def semantic_fp_shape(semantics):
     return {key: value for key, value in shape.items() if value}
 
 
+# Item data a template program spells into its prose: names and places (a capitalized word inside a sentence), code
+# identifiers (snake_case, camelCase, dotted or slashed paths, repo/owner names) and long hex ids. Sentence-initial
+# words, digits and quoted spans are handled by `normalize` or kept: they are the template's own words.
+ITEM_TOKEN = re.compile(r'(?<![.!?:;] )(?<!^)\b[A-Z][\w-]*|'                      # a capitalized word mid-sentence
+                        r'\b\w*[a-z][A-Z]\w*\b|'                                 # camelCase
+                        r'[\w@~-]*(?:[./\\:]\w[\w@~-]*)+|'                       # paths, dotted names, URLs, repo/owner
+                        r'\b\w+_\w+\b|\b[0-9a-f]{7,}\b')                          # snake_case, hex ids
+
+
+LITERAL_UNION = re.compile(r'L(?:\|L)+')
+
+
+def program_text_shape(text):
+    """Program text with literal item data abstracted (``normalize`` plus ITEM_TOKEN -> I): what a template keeps
+    when it wraps another item."""
+    return SPACE.sub(' ', ITEM_TOKEN.sub('I', normalize(text))).strip()
+
+
+def program_shape(row):
+    """A task's program shape: its callable folder with literal item data abstracted. Every file (the root's own stem
+    abstracted from the paths), its frontmatter types (``type_shape``) and its text (``program_text_shape``), the
+    services it binds and its curriculum mode; a sha256 prefix. ``semantics.inputs`` is item data and not part of it.
+    Thousands of tasks of one template (one wrapper over many items) share a shape, which their family count does not
+    show (DECISIONS 2026-11-25 "program-shape cap"). A row without semantics is its own shape."""
+    import hashlib
+    semantics = row.get('semantics') or {}
+    files = semantics.get('files') or {}
+    if not files:
+        return 'id:' + str(row.get('id'))
+    stem = str(semantics.get('root') or '').removesuffix('.nl').removesuffix('.ts')
+    parts = []
+    for path, text in sorted(files.items()):
+        header, body = split_file(text) if path.endswith('.nl') else ('', text)
+        name = 'ROOT' + path[len(stem):] if stem and path.startswith(stem) else path
+        # a union of literals (a label set) is item data: its size too
+        parts.append([program_text_shape(name), LITERAL_UNION.sub('L|L', type_shape(header)), program_text_shape(body)])
+    key = json.dumps({'files': parts, 'services': sorted(semantics.get('services') or {}),
+                      'mode': curriculum_of(row).get('mode')}, sort_keys=True)
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
 def program_features(row):
     semantics = row['semantics']
     files = {path: text for path, text in semantics['files'].items() if path.endswith('.nl')}
@@ -284,6 +325,7 @@ CONSTRUCTS = ('multi_function', 'call_depth_ge_3', 'neuralese_result', 'typed_ne
 def report(paths, label=None):
     rows = 0
     instructions, programs, structures = collections.Counter(), collections.Counter(), collections.Counter()
+    shapes = collections.Counter()
     family_instructions = collections.defaultdict(set)
     family_rows = collections.Counter()
     family_programs = collections.defaultdict(set)
@@ -302,6 +344,7 @@ def report(paths, label=None):
                 instructions[features['instruction']] += 1
                 programs[features['program']] += 1
                 structures[features['structure']] += 1
+                shapes[program_shape(row)] += 1
                 family_instructions[features['family']].add(features['instruction'])
                 family_rows[features['family']] += 1
                 generators[features['generator']] += 1
@@ -324,6 +367,8 @@ def report(paths, label=None):
         'distinct_programs': len(programs), 'effective_programs': round(effective(programs), 1),
         'distinct_structures': len(structures), 'effective_structures': round(effective(structures), 1),
         'top_structure_share': round(structures.most_common(1)[0][1] / rows, 4) if rows else None,
+        'distinct_shapes': len(shapes), 'effective_shapes': round(effective(shapes), 1),
+        'top10_shape_share': round(sum(n for _, n in shapes.most_common(10)) / rows, 4) if rows else None,
         'constructs': {key: {'rows': value, 'share': round(value / rows, 4) if rows else None}
                        for key, value in sorted(constructs.items())},
         'generators': {key: {'rows': value, 'share': round(value / rows, 4)} for key, value in generators.most_common()},

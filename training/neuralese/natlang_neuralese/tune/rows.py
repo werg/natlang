@@ -265,6 +265,35 @@ def reasoning_generation(turn):
     return isinstance(marker, dict) and 'action' not in marker and turn.get('decision') is None
 
 
+def empty_reply(turn):
+    """Whether a tune turn's reply is no action: neither visible text nor a tool call (a decision turn's choice lives in
+    its ``decision``, so it never is). Its only target would be the end-of-turn token right after the prompt (the
+    think block of a reply the student did not sample is context), at the full weight of a row: the runtime answers
+    such a reply with a recovery turn and ends the call after two (``terminated_without_result``). 2026-11-25:
+    ext_decisions_verdict's fit trained 16 of them (row losses 7-11 nats) and its merged weights ended every reply at
+    once (P(<|im_end|>) 0.75-0.84 at the first position on any prompt, 0 of 128 dev episodes)."""
+    if turn.get('schema') != TURN_SCHEMA or turn.get('decision') is not None:
+        return False
+    reply = turn.get('reply') or {}
+    return not reply.get('calls') and not (reply.get('text') or '').strip()
+
+
+def empty_reply_message(message):
+    """``empty_reply`` for a recorded assistant message (chat format: ``content``, ``tool_calls``), as the turn
+    producers (``program_tune.episode_turns``) and ``sft_sources`` builds see it."""
+    message = message or {}
+    content = message.get('content')
+    if isinstance(content, list):
+        content = ''.join(part.get('text', '') for part in content if isinstance(part, dict))
+    return not message.get('tool_calls') and not (content or '').strip()
+
+
+def train_empty_replies():
+    """``NATLANG_TUNE_EMPTY_REPLIES=train`` opts back into training empty replies (``empty_reply``) as targets."""
+    import os
+    return os.environ.get('NATLANG_TUNE_EMPTY_REPLIES', 'drop') == 'train'
+
+
 def decision_reasoning_text(turn):
     """The reasoning a decision turn's options were scored after (None: an instant readout): the decision's
     ``reasoning``, else its reply's or target's reasoning content when the turn is a reasoned sample."""
@@ -284,8 +313,11 @@ def decision_reasoning_text(turn):
 def lower_rows(engine, rows, *, prompt_weight=0., soft=None, prefix_share=0., prefix_tokens=PREFIX_TOKENS):
     """Turn rows lowered to graph rows (other rows pass through). ``prefix_share`` > 0: prefix-robust training of the
     soft states (``prefix_for``); the fit's recipe sets it (``Recipe.soft_prefix_share``). A reasoned readout's
-    reasoning generations are left out (``reasoning_generation``)."""
-    rows = [row for row in rows if not (row.get('schema') == TURN_SCHEMA and reasoning_generation(row))]
+    reasoning generations are left out (``reasoning_generation``), and so are empty replies (``empty_reply``, opt-out
+    ``NATLANG_TUNE_EMPTY_REPLIES=train``)."""
+    keep_empty = train_empty_replies()
+    rows = [row for row in rows if not (row.get('schema') == TURN_SCHEMA and reasoning_generation(row))
+            and (keep_empty or not empty_reply(row))]
     lowered = [turn_graph(engine, row, prompt_weight=prompt_weight, soft=soft) if row.get('schema') == TURN_SCHEMA else row
                for row in rows]
     if not prefix_share or not soft:

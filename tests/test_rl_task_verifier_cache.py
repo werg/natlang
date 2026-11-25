@@ -55,3 +55,33 @@ def test_verifier_reuses_only_same_input_and_executable_runtime(tmp_path):
     run()
     assert len(trace.read_text().splitlines()) == 3
     assert len(list(out.glob('partial.jsonl.previous-*'))) == 2
+
+
+def _node():
+    for candidate in sorted(Path.home().glob('.local/share/natlang-dev/node-v24*/bin/node'), reverse=True):
+        return str(candidate)
+    return 'node'
+
+
+def test_verify_mjs_multiline_return_and_eval_guard():
+    import subprocess
+    verify_src = (Path(__file__).resolve().parents[1] / 'scripts' / 'rl_tasks' / 'verify.mjs').read_text()
+    assert "last?.[0] !== 'eval'" in verify_src
+    # Test findFinalTopLevelReturn logic directly by extracting it from verify.mjs
+    start = verify_src.index('function findFinalTopLevelReturn')
+    end = verify_src.index('// The terminal answering action')
+    fn_code = verify_src[start:end]
+    script = (
+        fn_code + '\n'
+        'const code = "await moveFile();\\nfunction helper() { return 1; }\\nreturn {\\n  a: 1,\\n  b: 2,\\n};\\n";\n'
+        'const idx = findFinalTopLevelReturn(code);\n'
+        'const replaced = code.slice(0, idx) + "return 42;";\n'
+        'console.log(JSON.stringify({ idx, replaced }));\n'
+    )
+    proc = subprocess.run([_node(), '--input-type=module', '-e', script],
+                          capture_output=True, text=True, check=True)
+    out = json.loads(proc.stdout)
+    assert out['idx'] > 0
+    assert 'await moveFile();' in out['replaced']
+    assert 'function helper() { return 1; }' in out['replaced']
+    assert out['replaced'].endswith('return 42;')

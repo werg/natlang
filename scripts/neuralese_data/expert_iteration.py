@@ -100,7 +100,15 @@ COLLECTOR_SLOT_GB = 0.3
 # A collector beside a remote actor holds no engine: aei1-collect-v0004/v0005-remote0 (64 slots) peaked at 6.5-7.0 GB, and
 # 0.3/slot (23 GB) kept the 74 GB DGX collection out of the ledger for 30+ min (2026-11-24 13:51). NATLANG_REMOTE_COLLECTOR_SLOT_GB
 # opts back to the shared rate.
-REMOTE_COLLECTOR_SLOT_GB = float(os.environ.get('NATLANG_REMOTE_COLLECTOR_SLOT_GB', '0.12'))
+REMOTE_COLLECTOR_SLOT_GB = float(os.environ.get('NATLANG_REMOTE_COLLECTOR_SLOT_GB', '0.2'))
+# Collectors beside their remote actors (DECISIONS 2026-11-25 "collectors run beside their remote actors"): a Colab
+# actor's collector (episode servers, pool rows, scoring: ~6 GB + 0.1-0.2 GB per slot) runs on the VM
+# (``remote_collect.py run``: the pin and the data mirrored at their DGX paths, scored groups pulled back over the
+# ControlMaster); its DGX unit claims remote_collect.REMOTE_SYNC_GB. Pop stays on the DGX: its 14 GB hold the actor
+# (pop_rl_actor.SGLANG_MEMORY_GB 11) and the collector's main process alone peaks at ~6 GB. --collect-on-dgx opts out.
+# Every Colab session of --colab-hosts is a collection target at this front port (VM-local), besides --rebind-actor's.
+COLAB_COLLECT_FRONT_PORT = 8570
+COLAB_SERVE_RETRY_SECONDS = 1200
 # The standing DGX collection (DECISIONS 2026-11-24 "the DGX collection yields to round preparation"). Concurrency:
 # v0006's engine ran at its cap (160 running = 128 slots + 32 fill, 5-10 queued, KV 0.61, mamba 0.49, 1.75-1.94k tok/s,
 # ~200-270 own episodes/h); decode is bandwidth-bound and the KV pool has room, so 192 slots (224 running with the fill).
@@ -217,10 +225,11 @@ def tier(successes, scored, solved=0.75, min_scored=2):
     return 'solved' if p >= solved else 'sometimes' if successes else 'never'
 
 
-def selection_order(rows, rates, rng, include_solved=False):
+def selection_order(rows, rates, rng, include_solved=False, shape_cap=0., shape_of=None):
     """Pool rows ordered for collection: tier 0 measured in (0, 1), 1 measured 0, 2 unmeasured, 3 measured 1 (left out
-    unless ``include_solved``); each tier family round-robin (``grpo.family_round_robin``)."""
-    from grpo import family_round_robin
+    unless ``include_solved``); each tier family round-robin (``grpo.family_round_robin``). ``shape_cap`` > 0: no
+    program shape (``shape_of(row)``) takes more than that share of any prefix of the order (``grpo.cap_shapes``)."""
+    from grpo import cap_shapes, family_round_robin
     tiers = collections.defaultdict(list)
     for row in rows:
         s, n = rates.get(row['id'], (0, 0))
@@ -233,16 +242,30 @@ def selection_order(rows, rates, rng, include_solved=False):
         members = list(tiers[t])
         rng.shuffle(members)
         out += family_round_robin(members, rng)
+    if shape_cap > 0:
+        out = cap_shapes(out, shape_of, shape_cap)
     return out, {['band', 'failed', 'unmeasured', 'solved'][t]: len(v) for t, v in sorted(tiers.items())}
 
 
 # ---- select ----------------------------------------------------------------------------------------------------------
+def shape_prefix_report(shapes, prefixes=(500, 2000, 8000)):
+    """Distinct program shapes and the largest shape's share in each prefix of a collection order (a collection
+    reaches a few hundred to a few thousand groups)."""
+    out = {}
+    for n in prefixes:
+        head = collections.Counter(shapes[:n])
+        if head:
+            out[str(n)] = {'shapes': len(head), 'top_share': round(head.most_common(1)[0][1] / min(n, len(shapes)), 4)}
+    return out
+
+
 def pool_args(args):
     import grpo
     from types import SimpleNamespace
     return SimpleNamespace(pool=args.pool or grpo.default_pools(), held_manifest=args.held_manifest or grpo.default_held(),
                            exclude_manifest=[], task_ids=None, exclude_family_regex=args.exclude_family_regex,
-                           exclude_ids=[], no_default_errata=False, seed=args.seed, pass_rates=None, pass_band=(0.1, 0.9),
+                           exclude_ids=[], no_default_errata=False, seed=args.seed,
+                           include_unqualified=getattr(args, 'include_unqualified', False), pass_rates=None, pass_band=(0.1, 0.9),
                            pass_min_scored=1, explore=None, max_model_requests=None, case_seconds=None)
 
 
@@ -265,12 +288,17 @@ def select(args):
         for task_id, v in json.loads(Path(path).read_text())['tasks'].items():
             if v.get('scored'):
                 rates[task_id] = (v['successes'], v['scored'])
-    ordered, counts = selection_order(rows, rates, random.Random(args.seed), args.include_solved)
+    shapes = grpo.task_shapes(rows)
+    cap = grpo.SHAPE_CAP if getattr(args, 'shape_cap', None) is None else args.shape_cap
+    ordered, counts = selection_order(rows, rates, random.Random(args.seed), args.include_solved,
+                                      shape_cap=cap, shape_of=lambda r: shapes[r['id']])
     if args.limit:
         ordered = ordered[:args.limit]
     out.write_text(json.dumps([r['id'] for r in ordered]) + '\n')
     report = {'eligible': len(rows), 'held_excluded': excluded, 'rated': len(rates), 'group_dirs': len(dirs),
-              'tiers': counts, 'selected': len(ordered), 'families': len({r.get('family') for r in ordered})}
+              'tiers': counts, 'selected': len(ordered), 'families': len({r.get('family') for r in ordered}),
+              'shape_cap': cap, 'shapes': len({shapes[r['id']] for r in ordered}),
+              'prefix_shapes': shape_prefix_report([shapes[r['id']] for r in ordered])}
     out.with_suffix('.report.json').write_text(json.dumps(report, indent=1) + '\n')
     # the rates the order came from (filled_reasoning generate --prefer-rates: teacher episodes of failed tasks first)
     out.with_suffix('.rates.json').write_text(json.dumps({k: {'successes': s, 'scored': n} for k, (s, n) in rates.items()},
@@ -349,6 +377,14 @@ def ledger_admissible(budget_gb):
 def held_budget_gb(slots=HELD_SLOTS):
     """Ledger GB of one DGX held measurement unit: the held actor and its collector slots."""
     return round(HELD_ACTOR_GB + slots * COLLECTOR_SLOT_GB)
+
+
+def ledger_waiting_gb(unit):
+    """The budget (GB) ``unit`` waits in the ledger's queue with, else None (running, or not queued)."""
+    from scripts.memory_ledger import GIB, read_snapshot
+    name = unit if unit.endswith('.service') else unit + '.service'
+    entry = (read_snapshot().get('waiting') or {}).get(name)
+    return entry['budget'] / GIB if entry and entry.get('budget') is not None else None
 
 
 def ledger_queued(unit):
@@ -583,6 +619,7 @@ def collect(args):
     g.top_p = check_top_p(g.top_p)
     g.pool = args.pool or grpo.default_pools()
     g.held_manifest = args.held_manifest or grpo.default_held()
+    g.include_unqualified = getattr(args, 'include_unqualified', False)   # as select (pool_args)
     g.memetic_tasks = getattr(args, 'memetic_tasks', None) or (grpo.default_memetic_tasks() if memetic_share > 0 else None)
     g.memetic_max_groups = int(getattr(args, 'memetic_max_groups', MEMETIC_MAX_GROUPS))
     g.memetic_layout = getattr(args, 'memetic_layout', 'staged')
@@ -1285,11 +1322,14 @@ class Cycle:
             self.note(stage='prep yield', unit=unit, budget_gb=budget, room=True, waited=round(time.time() - started))
         return True
 
-    def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None, room=False):
+    def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None, room=False,
+               shrunk=False):
         """``command`` (argv) as ledger unit ``unit``; waits for it unless ``detach``; a running unit is joined.
         ``repo``: the checkout on NATLANG_REPO/PYTHONPATH (default the pin). A unit the ledger holds requeued (preempted,
         awaiting its relaunch) is joined too, never launched a second time. ``room``: first ``wait_for_room`` (a
-        preparation stage beside a yielding collection)."""
+        preparation stage beside a yielding collection). ``shrunk``: it starts at a reduced share of its full size and
+        restores its claim later (a collection launched during round preparation): admitted at ``budget``, not raised
+        to its family's learned peak (``memory_ledger run --shrunk``)."""
         if room:
             self.wait_for_room(unit, budget)
         if not self.present(unit):
@@ -1300,7 +1340,8 @@ class Cycle:
             env = ['/usr/bin/env', *[f'{k}={values[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH', 'HF_HUB_OFFLINE',
                                                                     'OMP_NUM_THREADS', 'MKL_NUM_THREADS')]]
             subprocess.run([*LEDGER, 'run', '--unit', unit, '--budget-gb', str(budget), '--priority', priority,
-                            '--wait', '36000', '--detach', '--workdir', str(workdir or self.pin), '--',
+                            '--wait', '36000', '--detach', *(['--shrunk'] if shrunk else []),
+                            '--workdir', str(workdir or self.pin), '--',
                             *env, '/bin/sh', '-c', f'exec {shell}'], check=True)
         if not detach:
             self.wait(unit)
@@ -1595,7 +1636,7 @@ class Cycle:
                 budget, full = self.collection_budget(self.a.slots)
                 self.ledger(unit, budget, COLLECTION_PRIORITY,
                             self.collect_command(unit, start, sha, self.a.slots, full_gb=full),
-                            self.dir / 'collect.log', detach=True)
+                            self.dir / 'collect.log', detach=True, shrunk=budget < full)
                 if self.a.fill:         # filled reasoning draws on the DGX actor (a remote one exposes no SGLang port)
                     self.fill_alongside(unit, sha)
             time.sleep(20)
@@ -2219,7 +2260,7 @@ class Cycle:
             budget, full = self.collection_budget(self.a.slots)
             self.ledger(unit, budget, COLLECTION_PRIORITY,
                         self.collect_command(unit, reference, sha, self.a.slots, full_gb=full),
-                        self.dir / 'collect.log', detach=True)
+                        self.dir / 'collect.log', detach=True, shrunk=budget < full)
             record['collecting'] = unit
         if stop_next and self.done('next'):
             nxt = json.loads((self.dir / 'stages' / 'next.done').read_text())
@@ -3178,12 +3219,35 @@ class AsyncRoundDriver:
 
     def collection_pending(self):
         """Whether the standing DGX collection of the newest policy waits in the ledger (launched or requeued, not
-        running): the round's preparation steps let it in first (``Cycle.wait_for_room``)."""
+        running): the round's preparation steps let it in first (``Cycle.wait_for_room``). One queued at more than
+        the budget it would launch with now (``collection_budget``: the prep share while a round prepares) is
+        requeued at that budget first (``requeue_collection_at_share``)."""
         try:
-            unit = self.collection_unit(self.controller.current)
+            cur = self.controller.current
+            unit = self.collection_unit(cur)
+            if not ledger_queued(unit) or self.c.active(unit):
+                return False
+            self.requeue_collection_at_share(cur, unit)
             return ledger_queued(unit) and not self.c.active(unit)
         except Exception:
             return False
+
+    def requeue_collection_at_share(self, policy, unit):
+        """A DGX collection waiting in the ledger at more than ``collection_budget`` asks now is cancelled and queued
+        again at that budget (its collector restores the full claim after the preparation, as at any launch).
+        2026-11-25 00:39: a restarted driver queued v0001 at its full 70 GB before the round's prep share existed;
+        it could not fit (short 4.7 GB behind unpreemptible remote collectors) and the frontier waited out
+        PREP_YIELD_WAIT behind it with the GPU idle. Returns whether it requeued."""
+        queued = ledger_waiting_gb(unit)
+        if queued is None:
+            return False
+        budget, _ = self.c.collection_budget(self.a.slots)
+        if queued <= budget + 0.5:
+            return False
+        self.c.stop_unit(unit)
+        self.note(collection_requeued=unit, from_gb=round(queued, 1), to_gb=budget, why='the prep share')
+        self.ensure_collection(policy)
+        return True
 
     def ensure_collection(self, policy):
         """The standing DGX collection serves exactly ``policy`` (the newest published): an earlier policy's collection
@@ -3217,7 +3281,7 @@ class AsyncRoundDriver:
             budget, full = self.c.collection_budget(self.a.slots)
             argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots, full_gb=full)
         argv[argv.index('--tasks') + 1] = str(tasks)
-        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
+        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True, shrunk=budget < full)
         self.note(collection_started=unit, policy=policy['sha256'], work=str(work))
         if self.a.fill:
             threading.Thread(target=self._fill_beside, args=(unit, work, policy), daemon=True).start()
@@ -3241,14 +3305,31 @@ class AsyncRoundDriver:
         """The ``--rebind-actor HOST@FRONT_URL[=SLOTS]`` targets: {index, host, front, slots, pop, suffix}. A target on
         Pop's host (``pop_rl_actor.POP``) is a standing Pop actor (``pop_step``: served, not rebound in place, and
         yielding to held measurements); its collector unit ends in ``POP_COLLECT_SUFFIX`` (every Pop serve stops it),
-        the others in ``-remote{index}``."""
+        the others in ``-remote{index}``. Every other Colab session of ``--colab-hosts`` is a target too ('session':
+        its front at COLAB_COLLECT_FRONT_PORT, served the policy by ``ensure_colab_actor``, unit suffix
+        ``-remote-<alias>``, slots at most its actor's running cap). 'on_host': its collector runs on the remote host
+        (``remote_collect.py``; every Colab target unless ``--collect-on-dgx``), else on the DGX."""
         import pop_rl_actor
-        out = []
+        out, hosts = [], set()
         for i, target in enumerate(self.a.rebind_actor):
             host, front, slots = parse_remote_target(target, self.a.remote_slots)
             pop = bool(host) and host == pop_rl_actor.POP
-            out.append({'index': i, 'host': host, 'front': front, 'slots': slots, 'pop': pop,
+            out.append({'index': i, 'host': host, 'front': front, 'slots': slots, 'pop': pop, 'session': False,
                         'suffix': pop_rl_actor.POP_COLLECT_SUFFIX if pop else f'-remote{i}'})
+            hosts.add(host)
+        for host in getattr(self, 'colab_hosts', None) or ():
+            if not host or host in hosts or host == pop_rl_actor.POP:
+                continue
+            hosts.add(host)
+            slots = self.a.remote_slots
+            record = pop_rl_actor.read_json(pop_rl_actor.colab_state_path(host)) or {}
+            cap = (record.get('sglang') or {}).get('max_running')
+            if isinstance(cap, int) and cap > 0:
+                slots = min(slots, cap)
+            out.append({'index': None, 'host': host, 'front': f'http://127.0.0.1:{COLAB_COLLECT_FRONT_PORT}',
+                        'slots': slots, 'pop': False, 'session': True, 'suffix': f'-remote-{host}'})
+        for t in out:
+            t['on_host'] = bool(t['host']) and not t['pop'] and not getattr(self.a, 'collect_on_dgx', False)
         return out
 
     def remote_units(self, unit):
@@ -3263,9 +3344,18 @@ class AsyncRoundDriver:
 
     def remote_actors(self, include_pop=True):
         """[(host, VM-local front URL, DGX-side endpoint)] of the hosted targets (Colab actors beside the learner reach
-        the DGX through the host's forwarded ports; Pop over Tailscale)."""
-        return [(t['host'], t['front'], self.target_endpoint(t)) for t in self.remote_targets()
-                if t['host'] and (include_pop or not t['pop'])]
+        the DGX through the host's forwarded ports; Pop over Tailscale). A session target whose port cannot be forwarded
+        (no tunnel up) is left out."""
+        out = []
+        for t in self.remote_targets():
+            if not t['host'] or (t['pop'] and not include_pop):
+                continue
+            try:
+                out.append((t['host'], t['front'], self.target_endpoint(t)))
+            except Exception:
+                if not t.get('session'):
+                    raise
+        return out
 
     def ensure_remote_collection(self, policy, rebind=True):
         """A DGX-side collector per remote actor that serves ``policy`` (``collect --actor``): restarted with the
@@ -3276,7 +3366,58 @@ class AsyncRoundDriver:
                 self.ensure_remote_policy(policy)
             for target in self.remote_targets():
                 if target['host'] and not target['pop']:     # Pop's collector: pop_step (it yields to held measurements)
-                    self.start_remote_collector(policy, target)
+                    try:
+                        if target.get('session'):
+                            self.ensure_colab_actor(policy, target)
+                        self.start_remote_collector(policy, target)
+                    except Exception as error:      # one session down never keeps the others from collecting
+                        if not target.get('session'):
+                            raise
+                        self.note(remote_collection_failed=repr(error)[:300], host=target['host'])
+
+    def ensure_colab_actor(self, policy, target):
+        """A ``--colab-hosts`` session (not the round's SFT session) serves ``policy`` for collection: when its front
+        answers with another policy, ``ensure_remote_policy`` rebinds it; when nothing answers there, the policy is
+        served (``pop_rl_actor serve-checkpoint --host-profile colab``, the collection weight dtype; in the background,
+        at most every COLAB_SERVE_RETRY_SECONDS). ``--no-colab-collect-serve`` opts out."""
+        host = target['host']
+        if getattr(self.a, 'no_colab_collect_serve', False) or host in self.colab_sft_hosts:
+            return
+        endpoint = self.target_endpoint(target)
+        if endpoint_alive(endpoint, policy['sha256']):
+            return
+        try:
+            with urllib.request.urlopen(endpoint + '/v1/neuralese/info', timeout=10):
+                return                       # an actor of another policy answers: the rebind's
+        except (OSError, ValueError):
+            pass
+        tried = self.__dict__.setdefault('_colab_serve_tried', {})
+        key = (host, policy['sha256'])
+        if time.time() - tried.get(key, 0) < COLAB_SERVE_RETRY_SECONDS or getattr(self, '_colab_serving', {}).get(host):
+            return
+        tried[key] = time.time()
+        self.__dict__.setdefault('_colab_serving', {})[host] = True
+        import pop_rl_actor
+        weight_dtype = getattr(self.a, 'collect_weight_dtype', COLLECT_WEIGHT_DTYPE)
+        argv = [PY, str(self.c.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py'), 'serve-checkpoint',
+                '--host-profile', 'colab', '--host', host, '--checkpoint', str(policy['checkpoint']),
+                '--policy-id', policy['sha256'], '--commit', self.a.commit, '--kv-cache-dtype',
+                pop_rl_actor.POP_KV_CACHE_DTYPE, '--weight-dtype', weight_dtype]
+
+        def serve():
+            started = time.time()
+            try:
+                with (self.root / f'colab-serve-{host}.log').open('a') as handle:
+                    rc = subprocess.run(argv, env=self.c.env, stdout=handle, stderr=subprocess.STDOUT,
+                                        timeout=7200).returncode
+                self.note(colab_collect_served=host, policy=policy['sha256'], rc=rc,
+                          seconds=round(time.time() - started))
+            except Exception as error:
+                self.note(colab_collect_serve_failed=host, error=repr(error)[:300])
+            finally:
+                self._colab_serving[host] = False
+        threading.Thread(target=serve, daemon=True).start()
+        self.note(colab_collect_serving=host, policy=policy['sha256'])
 
     def remote_collect_loop(self):
         """The standing check that every reachable remote actor serving the newest policy has its collector, whatever
@@ -3296,14 +3437,21 @@ class AsyncRoundDriver:
             self.note(remote_collection_failed=repr(error)[:300])
 
     def remote_collect_argv(self, policy, target, endpoint):
-        """(unit, work dir, argv, ledger GB) of ``target``'s DGX-side collector of ``policy``."""
+        """(unit, work dir, argv, ledger GB) of ``target``'s collector of ``policy``: on the remote host
+        (``target['on_host']``: ``remote_collect.py run`` around the collect command, which reaches the actor at its
+        VM-local front; the DGX unit only mirrors and pulls) or on the DGX (through ``endpoint``)."""
         unit = self.collection_unit(policy) + target['suffix']
         work = self.collect_dir(policy, target['suffix'])
+        on_host = target.get('on_host', False)
         with self.COLLECT_LOCK:
             self.c.collect_dir = work
             argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], target['slots'],
-                                          endpoints=[f'{endpoint}={target["slots"]}'])
+                                          endpoints=[f'{target["front"] if on_host else endpoint}={target["slots"]}'])
         argv[argv.index('--tasks') + 1] = str(self.collect_dir(policy) / 'tasks.json')
+        if on_host:
+            from remote_collect import REMOTE_SYNC_GB
+            return unit, work, self.c.py('remote_collect.py', 'run', '--host', target['host'], '--work', work, '--',
+                                         *argv), REMOTE_SYNC_GB
         return unit, work, argv, max(8, round(target['slots'] * REMOTE_COLLECTOR_SLOT_GB) + 4)
 
     def start_remote_collector(self, policy, target):
@@ -4344,9 +4492,12 @@ class AsyncRoundDriver:
         sha, errors = published['checkpoint_sha256'], []
         endpoints = {(host, front): endpoint for host, front, endpoint in self.remote_actors(include_pop=False)}
         for t in self.remote_targets():
-            host, front, target = t['host'], t['front'], self.a.rebind_actor[t['index']]
+            host, front = t['host'], t['front']
+            target = self.a.rebind_actor[t['index']] if t['index'] is not None else f'{host}@{front}'
             if t['pop'] or endpoint_alive(endpoints.get((host, front), front), sha):
                 continue                    # Pop: pop_step serves the new policy
+            if t.get('session') and (host, front) not in endpoints:
+                continue                    # a session whose tunnel is down: served again by ensure_colab_actor
             try:
                 pop_rl_actor.rebind_actor(front_url=front, policy_id=sha, version=version, factors_dir=factors,
                                           host=host or None, host_profile='colab',
@@ -4594,6 +4745,8 @@ class AsyncRoundDriver:
                                               label=f'{self.a.name} {round_dir.name}', close_previous=True,
                                               earlier_cached_only=True)
             health['policy'] = policies[-1]['sha256']
+            # the round mix's diversity and its regression flags against the previous build (sft_sources build)
+            collection_health.add_mix_diversity(health, round_dir / 'mix' / 'build.json')
             collection_health.write(health, out)
             self.note(round=round_dir.name, health=collection_health.summary_line(health), health_flags=len(health['flags']),
                       health_sfp=health['sfp_flagged'])
@@ -4778,10 +4931,14 @@ class AsyncRoundDriver:
         for t in self.remote_targets():
             if not t['host']:
                 continue
-            endpoint = self.target_endpoint(t)
+            try:
+                endpoint = self.target_endpoint(t)
+            except Exception as error:      # a session with no tunnel up
+                endpoint = f'unreachable: {error!r}'[:200]
             unit, _work, argv, budget = self.remote_collect_argv(cur, t, endpoint)
             remote.append({'unit': unit, 'host': t['host'], 'front': t['front'], 'endpoint': endpoint,
-                           'slots': t['slots'], 'pop': t['pop'], 'serves_policy': endpoint_alive(endpoint, cur['sha256']),
+                           'slots': t['slots'], 'pop': t['pop'], 'on_host': t['on_host'], 'session': t['session'],
+                           'serves_policy': endpoint.startswith('http') and endpoint_alive(endpoint, cur['sha256']),
                            'budget_gb': budget, 'collect': list(map(str, argv))})
         plan = {'phase': self.controller.phase, 'policy': cur, 'pin': str(self.c.pin),
                 'reader_sources': self.reader_sources(),
@@ -4846,6 +5003,8 @@ def main():
         p.add_argument('--held-manifest', help='default: grpo.default_held() (held-v3)')
         p.add_argument('--exclude-family-regex', default='(?!)', help="families left out (default: none, as grpo-v5)")
         p.add_argument('--seed', type=int, default=20261120)
+        p.add_argument('--include-unqualified', action='store_true',
+                       help='select pool rows the curriculum refuses (curriculum.selection_refusal); default: left out')
 
     def memetic_flags(p):
         p.add_argument('--memetic-share', type=float, default=MEMETIC_SHARE,
@@ -4872,6 +5031,9 @@ def main():
     s.add_argument('--frontier', action='append', default=[], help='earlier frontier files (newest last)')
     s.add_argument('--include-solved', action='store_true')
     s.add_argument('--limit', type=int, default=0)
+    s.add_argument('--shape-cap', type=float, default=None,
+                   help='the share of any prefix of the order one program shape (measure_repetition.program_shape: '
+                        'the program with item data abstracted) may take (default grpo.SHAPE_CAP); 0: no cap (opt-out)')
     c = sub.add_parser('collect')
     pool_flags(c)
     c.add_argument('--work', required=True)
@@ -5092,6 +5254,12 @@ def main():
                          'collector slots. On Pop\'s host (POP_HOST@http://POP_IP:18531=32) a standing Pop actor: served '
                          'with each new policy and yielding to Pop held measurements')
     ad.add_argument('--remote-slots', type=int, default=64, help='collector slots per remote actor (default)')
+    ad.add_argument('--collect-on-dgx', action='store_true',
+                    help="run remote actors' collectors on the DGX (opt-out of remote_collect.py: by default a Colab "
+                         "actor's collector runs on its VM and the DGX unit only mirrors the data and pulls the groups)")
+    ad.add_argument('--no-colab-collect-serve', action='store_true',
+                    help='never serve the policy on a --colab-hosts session for collection (default: a session with '
+                         'no actor answering at its collection front gets the lineage head served)')
     ad.add_argument('--pop-max-running', type=int, default=32,
                     help='SGLang running cap of the Pop collection actor (pop_rl_actor.POP_COLLECT_RUNNING)')
     ad.add_argument('--round-target-tokens', type=int, default=ROUND_TARGET_TOKENS,

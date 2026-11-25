@@ -230,12 +230,18 @@ def episode_turns(task_id, key, turns):
     # a reasoned readout's samples train only when their answer is the one the program used
     # (data.decision_graph.reasoned_decision_plan, as sft_sources build)
     from natlang_neuralese.data.decision_graph import reasoned_decision_plan
+    from natlang_neuralese.tune.rows import empty_reply_message, train_empty_replies
     reasoned = reasoned_decision_plan(turns)
     for index, turn in enumerate(turns):
         if reasoned[index] is not None and not reasoned[index]['train']:
             dispositions.append('reasoned-sample-not-used')
             continue
         target = turn['target']
+        if empty_reply_message(target) and not train_empty_replies():
+            # no action (no text, no tool call): its only target would be an immediate end of turn
+            # (tune.rows.empty_reply; NATLANG_TUNE_EMPTY_REPLIES=train opts out)
+            dispositions.append('empty-reply')
+            continue
         later = [t['messages'] for t in turns[index + 1:]]
         events = []
         for call in target.get('tool_calls') or ():
@@ -343,6 +349,7 @@ def rows(args):
             stats['turns'] += len(dispositions)
             stats['rejected_turns'] += dispositions.count('rejected')
             stats['unverified_turns'] += dispositions.count('unverified')
+            stats['empty_reply_turns'] = stats.get('empty_reply_turns', 0) + dispositions.count('empty-reply')
             stats['reasoned_samples_not_used'] = (stats.get('reasoned_samples_not_used', 0)
                                                   + dispositions.count('reasoned-sample-not-used'))
             stats['rows'] += len(made)

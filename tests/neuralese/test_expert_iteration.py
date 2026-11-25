@@ -70,6 +70,20 @@ def test_selection_order_puts_band_then_failures_then_unmeasured_and_drops_solve
     assert [r['id'][0] for r in with_solved][-4:] == ['s'] * 4
 
 
+def test_selection_order_caps_a_program_shape_across_tiers_and_families():
+    rows = [{'id': f'w{i}', 'family': f'wf{i}', 'shape': 'wrapper'} for i in range(60)]
+    rows += [{'id': f'o{i}', 'family': f'of{i % 3}', 'shape': f'o{i}'} for i in range(60)]
+    rates = {f'w{i}': (1, 4) for i in range(10)}               # band rows of the big shape come first without the cap
+    plain, _ = ei.selection_order(rows, rates, random.Random(0))
+    assert sum(r['shape'] == 'wrapper' for r in plain[:40]) >= 30   # 60 one-template families out-turn 3 families
+    capped, counts = ei.selection_order(rows, rates, random.Random(0), shape_cap=0.1, shape_of=lambda r: r['shape'])
+    assert sorted(r['id'] for r in capped) == sorted(r['id'] for r in plain)
+    assert sum(r['shape'] == 'wrapper' for r in capped[:40]) <= 4
+    assert counts == {'band': 10, 'unmeasured': 110}
+    report = ei.shape_prefix_report([r['shape'] for r in capped], prefixes=(40,))
+    assert report == {'40': {'shapes': 37, 'top_share': 0.1}}
+
+
 def test_frontier_drop_keeps_the_cheapest_verified_source_per_task():
     tiers = {'solved': 'solved', 'some': 'sometimes', 'never': 'never'}
     own = {'some'}
@@ -95,6 +109,24 @@ def test_think_treatment_takes_the_most_specific_entry_and_filled_renders_as_con
     assert sft_sources.ThinkTreatment.load('none', 'train').of({'source': 'teacher', 'teacher': 'haiku'}) == 'train'
     with pytest.raises(ValueError):
         sft_sources.ThinkTreatment({'models': {'m': 'sometimes'}})
+
+
+def test_think_treatment_train_renders_at_the_teacher_think_weight():
+    spec = {'default': 'context', 'models': {'raw': 'train', 'set': 'train@0.3', 'summary': 'filled'}}
+    t = sft_sources.ThinkTreatment(spec)
+    assert t.train_weight == sft_sources.TEACHER_THINK_WEIGHT == 0.1
+    assert t.render({'source': 'teacher', 'teacher': 'raw'}) == 'train@0.1'
+    assert t.render({'source': 'teacher', 'teacher': 'set'}) == 'train@0.3'
+    assert t.render({'source': 'teacher', 'teacher': 'summary'}) == 'context'
+    assert t.render({'source': 'teacher', 'teacher': 'other'}) == 'context'
+    assert sft_sources.ThinkTreatment(spec, train_weight=1).render({'source': 'teacher', 'teacher': 'raw'}) == 'train'
+    assert sft_sources.ThinkTreatment(spec, train_weight=0).render({'source': 'teacher', 'teacher': 'raw'}) == 'train@0'
+    assert t.report()['train_weight'] == 0.1
+    for bad in ({'models': {'m': 'filled@0.1'}}, {'models': {'m': 'train@3'}}):
+        with pytest.raises(ValueError):
+            sft_sources.ThinkTreatment(bad)
+    with pytest.raises(ValueError):
+        sft_sources.ThinkTreatment(spec, train_weight=2)
 
 
 def test_load_frontier_refuses_other_files(tmp_path):
@@ -952,3 +984,16 @@ def test_the_standing_teacher_queue_takes_every_task_with_every_collections_rate
     assert f'--student-rates {rates}' in script and f'--frontier-rates {frontier}' in script
     command = ei.teacher_command(tmp_path, work, [], [], 7)
     assert command[command.index('--limit') + 1] == '7' and '--frontier-rates' not in command
+
+
+def test_a_stand_in_unit_and_the_episode_it_replaces_share_one_exposure():
+    raw, fill = 'teacher:pool:t000001:0', 'filled:teacher:pool:t000001:0'
+    # build 1 trained the episode raw; build 2 trained another episode's fill
+    exposure = sft_sources.Exposures([({raw}, {'task-a'}, {('task-a', raw)}),
+                                      (set(), {'task-b'}, {('task-b', 'filled:teacher:pool:t000002:0')})])
+    assert exposure(('teacher', 'task-a', raw)) == 1
+    assert exposure(('filled', 'task-a', fill)) == 1             # its fill does not train it again
+    assert exposure(('teacher', 'task-b', 'teacher:pool:t000002:0')) == 1   # nor raw after its fill trained
+    assert exposure(('filled', 'task-b', 'filled:teacher:pool:t000002:0')) == 1
+    assert exposure(('teacher', 'task-c', 'teacher:pool:t000003:0')) == 0
+    assert exposure(('operators', 'task-a', '0:abc')) == 0       # a round whose rest is no episode key

@@ -3,6 +3,19 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-25 — a Neuralese text write is written at the end of its producing call
+
+- **What changed.** `native.text-write` no longer encodes a value's text from position 0 with nothing before it. The
+  state is the span written after the call that produced the value (its prompt, its reply, `produce_open`, the text);
+  a value with no producing call is written as the answer of the engine's own producer call (the text as the user's
+  message). The runtime passes the producing call for typed results, literals, typed arguments and writeGuidance.
+  The managed llama-server now writes typed `Neuralese<T>` results through the grammar capture (it had no text
+  writer, so such results failed there). DECISIONS 2026-11-25.
+- **What the model sees.** By default nothing changes in a reader's prompt: the state is a produce span, read as its
+  tokens inline (`in-context-text`) as before. With `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0` a reader gets the spliced
+  span, now computed in its producing context. The text-written states' content ids change (their header says
+  `producer_kind: "span"`).
+
 ### 2026-11-23 — replies never sample a Neuralese consume marker
 
 - **What changed.** Every draw on every engine bans `<|neuralese_consume|>` and `<|/neuralese_consume|>`. The engine

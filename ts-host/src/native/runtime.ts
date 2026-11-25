@@ -29,6 +29,7 @@ import { desugarNlCalls } from '../compiler/nl-call.js';
 import { dialectBinding, isNeuraleseRef, isNoNeuraleseWriterFault, isTeacherTextNeuraleseId, neuraleseRef, neuraleseSentinel, nativeLiteralArguments, NeuraleseNoWriterError, NeuraleseUnsupportedError, sourceWithLiteralCalls,
   type NeuraleseRuntimeOptions } from './neuralese.js';
 import { bindTraceScope, blockInput, FILE_CONTEXT, graphNode, invocationNodeId, producerScopeForTrace, valueInputs } from './graph.js';
+import { producingCall } from './operator-frames.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
 import { SAME_QUESTION_REFUSAL } from '../runtime/kernel.js';
 import { isNatlangCallable } from '../runtime/callable.js';
@@ -1120,7 +1121,7 @@ export class NativeRuntime {
       const callerInput = { node: parentCallId ? invocationNodeId(parentCallId) : 'external', port: `argument:${parameter.name}` };
       normalized[index] = await this.writeNeuraleseText(input, wanted, {
         sourceKind: 'typed-text-argument', source: 'call-argument', markerContext: 'typed-argument',
-        argumentName: parameter.name, inputs: [callerInput],
+        argumentName: parameter.name, inputs: [callerInput], producerCallId: parentCallId ?? null,
         typeAliases: Object.fromEntries(Object.entries(aliases).map(([name, alias]) => [name, formatType(alias)])),
       });
     }
@@ -1136,6 +1137,8 @@ export class NativeRuntime {
     typeAliases?: Record<string, string>;
     resultPath?: (string | number)[];
     argumentName?: string;
+    /** The call whose latest turn produced the text (default: the current call; null: none, an outside input). */
+    producerCallId?: string | null;
   }): Promise<Value> {
     const port = this.neuralese?.port;
     const type = formatType(wanted), bodySha = hexDigest(text);
@@ -1153,7 +1156,10 @@ export class NativeRuntime {
       ...(this.neuralese?.teacherText && metadata.typeAliases ? { type_aliases: metadata.typeAliases } : {}),
       ...(metadata.resultPath ? { result_path: metadata.resultPath } : {}),
       ...(metadata.argumentName ? { argument_name: metadata.argumentName } : {}) };
-    const block = await port.write(text, { type, producer });
+    // Written at the end of its producing call (the latest turn of the call that returned or passed the text); a value
+    // with no producing call gets the writer's own producer call (DECISIONS 2026-11-25).
+    const context = producingCall(metadata.producerCallId === undefined ? callId : metadata.producerCallId);
+    const block = await port.write(text, { type, producer, ...(context ? { context } : {}) });
     const teacherText = isTeacherTextNeuraleseId(block.id) && block.producer?.kind === 'teacher-text-emulation';
     if (isTeacherTextNeuraleseId(block.id) && (!teacherText || !this.neuralese?.teacherText?.get(block.id)))
       throw new NeuraleseUnsupportedError('teacher-text artifact has no exact case-local body store');

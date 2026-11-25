@@ -197,9 +197,10 @@ DECISIONS.md entries are authoritative.
   held gain per machine hour and measure it like anything else. Measure repetition and diversity in what is actually
   trained: in 2026-11 scripted templates carried ~78% of SFT loss and RL tasks were 98% one wrapper generator
   (`plans/neuralese/RECIPE_REVIEW_20261103/`); step counts on such a mixture are not capability.
-- **Task supply.** Subagents author task programs with exact oracles, qualified by reference, negative and alias
-  replay, continuously and across rotating domains, seeded from existing agentic and reasoning datasets (never held
-  inputs) and invented ones. Measure repetition against the pool before admitting a batch
+- **Task supply.** Tasks come from existing agentic and reasoning datasets (never held inputs) with exact oracles,
+  qualified by reference, negative and alias replay. No invented task worlds and no procedural generation (owner
+  2026-11-24: "I want to rip out task worlds from our generation process. That's not helpful. No procedural
+  generation."). Measure repetition against the pool before admitting a batch
   (`scripts/rl_tasks/measure_repetition.py`, `simulate_selection.py`); never pad scarce behaviours by repetition.
 - **Breadth from more natlang domains** (chat and writing included) rather than anchor KL or broad mixing; forgetting
   general ability outside natlang is acceptable.
@@ -324,6 +325,9 @@ DECISIONS.md entries are authoritative.
   disposable `NATLANG_HASH_CACHE` and `OMP_NUM_THREADS=1 MKL_NUM_THREADS=1` (`check-main.sh` sets both).
 - **Processes.** Any agent may stop, kill, restart, relaunch or remove any process, unit, ledger job or container
   without asking; record why. Stop them by systemd unit name or explicit PID, never by pattern.
+- **Never search the whole filesystem** (`find /`, `bfs /`, `du /mnt/external`): on the 3.4 TB HDD one crawl runs
+  for hours and saturates the disk the collections and driver use (2026-11-24: three such scans stalled aei1). Search
+  known paths, the registry or `git grep`.
 - Do not add or remove hardlinks to source, manifest or index files while live readers stream them (ctime changes
   invalidate strict reader checks).
 

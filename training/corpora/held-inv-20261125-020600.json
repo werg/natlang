@@ -1,0 +1,69 @@
+{
+  "id": "held-inv-20261125-020600",
+  "owner": "dgx",
+  "path": "data_nvme:lfm3-rl-dgx-20261029/ops/held-inv/20261125-020600",
+  "include": [
+    "manifest.json",
+    "cases.jsonl",
+    "engine.json",
+    "exclusion-ids.json",
+    "verify.json",
+    "source/cases.jsonl",
+    "source/avoid-ids.json",
+    "source/avoid-groups.json"
+  ],
+  "kind": "held",
+  "format": "held_eval pinned set: 2 whole-program tasks of the 1 invented ideas whose world drew dev or confirmation (the new-programs slice; held-v3 untouched)",
+  "rows": 2,
+  "license": "invented (project-authored by frontier models)",
+  "protected": true,
+  "note": "evaluation-only-never-training: role held-eval-invented; training excludes every held-eval* role (held_eval.training_exclusion_ids); ideas: nonvisual-interaction-parity-auditor",
+  "producer": {
+    "script": "data_registry.py",
+    "argv": [
+      "record",
+      "--id",
+      "held-inv-20261125-020600",
+      "--path",
+      "/home/werg/data/lfm3-rl-dgx-20261029/ops/held-inv/20261125-020600",
+      "--kind",
+      "held",
+      "--protected",
+      "--include",
+      "manifest.json",
+      "--include",
+      "cases.jsonl",
+      "--include",
+      "engine.json",
+      "--include",
+      "exclusion-ids.json",
+      "--include",
+      "verify.json",
+      "--include",
+      "source/cases.jsonl",
+      "--include",
+      "source/avoid-ids.json",
+      "--include",
+      "source/avoid-groups.json",
+      "--license",
+      "invented (project-authored by frontier models)",
+      "--rows",
+      "2",
+      "--format",
+      "held_eval pinned set: 2 whole-program tasks of the 1 invented ideas whose world drew dev or confirmation (the new-programs slice; held-v3 untouched)",
+      "--note",
+      "evaluation-only-never-training: role held-eval-invented; training excludes every held-eval* role (held_eval.training_exclusion_ids); ideas: nonvisual-interaction-parity-auditor"
+    ],
+    "git_commit": "96bb1d8fdff6ed3afa70763dbe50b4cf2eab0b2c",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "fce1dd85f0971f5534ec1233928d2190e520c18207b5f8354f639360b4310320",
+  "training_admission": "evaluation-only",
+  "roles": {
+    "held-eval-invented": {
+      "order": 0,
+      "file": "manifest.json"
+    }
+  }
+}

@@ -27,7 +27,7 @@ export type Ruling = {
 JUDGE = '''---
 readout: decision
 args:
-  note: "string"
+  note: "Untrusted<string>"
 returns: "boolean"
 ---
 Decide whether note withdraws an earlier note.
@@ -36,12 +36,12 @@ HELPER = '\n'.join(['import withdraws from "./withdraws.nl";', 'import supersede
                     'import sameItem from "./same_item.nl";', 'import { semanticFilter } from "@natlang/node/std";',
                     'export async function rule(notes: string[]): Promise<{ standing: string[] }> {',
                     '  const kept = await semanticFilter(notes, withdraws);'] +
-                   [f'  const step{i} = kept.length + {i};' for i in range(40)] +
+                   [f'  const step{i} = kept.length + {i};' for i in range(100)] +
                    ['  return { standing: kept.map(n => n.slice(0, 4)) };', '}', 'export function order(a: string[]): string[] { return [...a].sort(); }'])
 
 
 def instance(name):
-    return {'name': name, 'level': 3, 'inputs': {'notes': [f'n{i} text' for i in range(9)]}, 'oracle': 'exact',
+    return {'name': name, 'level': 3, 'inputs': {'notes': [f'n{i} withdraws nothing yet' for i in range(16)]}, 'oracle': 'exact',
             'expected': {'standing': ['n1']},
             'reference': {'root': [['eval', {'code': 'const r = await rule(notes); return r;', 'finish': True}]],
                           'children': [{'match': ['withdraws an earlier'], 'value': False}]},
@@ -65,6 +65,9 @@ def write(tmp, extra=None):
             'judgments': [{'name': n, 'file': f'rule_notes/{n}.nl', 'trap': 't'} for n in ('withdraws', 'supersedes', 'same_item')],
             'instances': [instance('a'), instance('b')], **(extra or {})}
     (sub / 'submission.json').write_text(json.dumps(data))
+    (sub / 'idea.json').write_text(json.dumps({'slug': 'withdrawal-ruling', 'inputs': 'sixteen notes of a dozen words'}))
+    (sub / 'NOTES.md').write_text('withdraws: the trap.\n\n## Hardest items\n\n- n1: reads as a withdrawal.\n'
+                                  '- n2: replaces rather than withdraws.\n- n3: names the item only by a nickname.\n')
     return sub
 
 
@@ -96,6 +99,37 @@ def test_generator_script_and_missing_controls_fail(tmp_path):
         assert code in text, (code, problems)
 
 
+def test_the_bar_size_card_size_notes_code_depth_and_untrusted_fields(tmp_path):
+    sub = write(tmp_path)
+    data = json.loads((sub / 'submission.json').read_text())
+    data['instances'][0]['inputs'] = {'notes': ['short note here'] * 10}
+    (sub / 'submission.json').write_text(json.dumps(data))
+    (sub / 'idea.json').write_text(json.dumps({'slug': 'withdrawal-ruling', 'inputs': 'notes, about 1,300 words in all'}))
+    (sub / 'NOTES.md').write_text('withdraws: the trap.\n')
+    types = TYPES + '''/** A note as filed. */
+export type Note = {
+  /** The note's id. */
+  id: string;
+  /** Who wrote it (the clerk's nickname). */
+  by: string;
+  sourceKey: string;
+  text: Untrusted<string>;
+};
+'''
+    (sub / 'program' / 'types.ts').write_text(types)
+    (sub / 'program' / 'rule_notes' / 'same_item.nl').write_text(
+        JUDGE.replace('note: "Untrusted<string>"', 'note: Note\n  label: string\n  noteId: string'))
+    helper = sub / 'program' / 'rule_notes' / 'rule.ts'
+    helper.write_text(helper.read_text().replace('\n'.join(f'  const step{i} = kept.length + {i};' for i in range(50, 100)) + '\n', ''))
+    problems, _ = check(sub)
+    text = '\n'.join(problems)
+    assert 'C2: instance a: 10 items with text' in text, problems
+    assert "C2: instance b: 64 words, but the idea card declares 1300" in text, problems
+    assert 'C4: NOTES.md lists 0 hardest items' in text and 'D1: ' in text, problems
+    flagged = [p.split(' is a plain string')[0] for p in problems if p.startswith('S6')]
+    assert flagged == ['S6: program/rule_notes/same_item.nl: note (Note).by', 'S6: program/rule_notes/same_item.nl: label'], problems
+
+
 def test_package_one_case_per_instance_sharing_a_world(tmp_path):
     data, files = invented.load(write(tmp_path))
     cases = invented.package(data, files)
@@ -115,3 +149,115 @@ def test_near_ranks_the_overlapping_entry_first():
                {'id': 'c', 'line': 'grade transcripts against degree requirements'}]
     idea = {'slug': 'pilot-booking-tides', 'pitch': 'reconcile harbour pilot bookings with the tide table'}
     assert program_atlas.near(entries, idea, 2)[0]['id'] == 'a'
+
+
+def trace_for(cases):
+    """A reference trace as scripts/rl_tasks/reference_trace.mjs writes it: two leaf judgment calls per case (one twice),
+    one call with a function argument and one call of a judgment that has a callable folder of its own."""
+    results = []
+    for case in cases:
+        children = [{'path': 'rule_notes/withdraws.nl', 'args': {'note': 'n1 text'}, 'value': False, 'status': 'success',
+                     'returned': True, 'functional': False},
+                    {'path': 'rule_notes/withdraws.nl', 'args': {'note': 'n1 text'}, 'value': False, 'status': 'success',
+                     'returned': True, 'functional': False},
+                    {'path': 'rule_notes/supersedes.nl', 'args': {'note': 'n2 text'}, 'value': True, 'status': 'success',
+                     'returned': True, 'functional': False},
+                    {'path': 'rule_notes/same_item.nl', 'args': {'note': {'$lambda': {}}}, 'value': True,
+                     'status': 'success', 'returned': True, 'functional': True}]
+        results.append({'id': case['id'], 'calls': 7, 'children': children})
+    return {'results': results}
+
+
+def test_cases_declare_twice_their_reference_calls(tmp_path):
+    data, files = invented.load(write(tmp_path))
+    cases = invented.with_reference_calls(invented.package(data, files), trace_for(invented.package(data, files)))
+    assert [c['semantics']['episode_model_calls'] for c in cases] == [14, 14]
+
+
+def test_stage_tasks_one_per_distinct_leaf_judgment_call(tmp_path):
+    data, files = invented.load(write(tmp_path))
+    cases = invented.package(data, files)
+    stages = invented.stage_cases(cases, trace_for(cases))
+    # per case: withdraws once (the repeated call is one task), supersedes once; the functional call is left out
+    assert len(stages) == 4
+    first = stages[0]
+    assert first['semantics']['root'] == 'rule_notes/withdraws.nl'
+    assert first['semantics']['inputs'] == {'note': 'n1 text'} and first['semantics']['expected'] is False
+    assert first['curriculum']['reference']['root'] == [['return_result', {'status': 'success', 'value': False}]]
+    assert first['split'] == cases[0]['split'] and first['curriculum']['split_group'] == 'invented:withdrawal-ruling'
+    assert first['curriculum']['external']['stage']['of'] == cases[0]['id']
+    assert len({s['id'] for s in stages}) == 4
+    # a judgment with a callable folder of its own is no leaf: no stage task
+    files['rule_notes/supersedes/inner.nl'] = JUDGE
+    cases = invented.package(data, files)
+    assert {s['semantics']['root'] for s in invented.stage_cases(cases, trace_for(cases))} == {'rule_notes/withdraws.nl'}
+
+
+def card(slug, pitch, judgments):
+    return {'slug': slug, 'pitch': pitch, 'judgments': [{'name': j, 'question': j} for j in judgments],
+            'shape': 'notes to rulings', 'inputs': 'notes', 'output': 'record'}
+
+
+def test_bank_cards_go_one_per_builder_and_near_duplicates_are_skipped(tmp_path, monkeypatch):
+    monkeypatch.setattr(program_atlas, 'base_entries', lambda root: [
+        {'id': 'application:sem-merge', 'kind': 'application', 'name': 'sem-merge', 'line': 'merge wiki edits by intent'}])
+    bank = tmp_path / 'bank' / 'ideas'
+    bank.mkdir(parents=True)
+    tide = card('tide-pilot-bookings', 'Reconcile harbour pilot bookings against the tide table windows.',
+                ['withinWindow', 'samePilot', 'cancels'])
+    (bank / '01.json').write_text(json.dumps(tide))
+    (bank / '02.json').write_text(json.dumps({**tide, 'slug': 'tide-pilot-bookings-2'}))
+    (bank / '03.json').write_text(json.dumps(card('stitch-count-errata', 'Verify knitting pattern stitch counts after '
+                                                  'errata across sizes.', ['appliesToSize', 'errataOverrides', 'repeatSpan'])))
+    root = tmp_path / 'root'
+    check = program_atlas.bank_check(root, bank)
+    assert [r['slug'] for r in check['refused']] == ['tide-pilot-bookings-2']
+    first = program_atlas.take(root, bank, 'builder-a')
+    assert first['ok'] and first['slug'] == 'tide-pilot-bookings'
+    second = program_atlas.take(root, bank, 'builder-b')
+    assert second['ok'] and second['slug'] == 'stitch-count-errata', second
+    states = program_atlas.claim_states(root)
+    assert states['tide-pilot-bookings-2']['status'] == 'duplicate'
+    assert program_atlas.take(root, bank, 'builder-c') == {'ok': False, 'reason': 'no free card left in the bank'}
+    program_atlas.release(root, 'stitch-count-errata', 'failed', reason='build failed')
+    assert program_atlas.claim_states(root)['stitch-count-errata']['status'] == 'failed'
+    # a claimed idea is in the atlas an inventor reads, marked as being built
+    assert any(e['id'] == 'invented:tide-pilot-bookings' and 'being built' in e['line']
+               for e in program_atlas.campaign_entries(root))
+
+
+def test_admit_needs_a_review_of_this_version_then_stages_by_split(tmp_path, monkeypatch):
+    sub = write(tmp_path)
+    data, files = invented.load(sub)
+    out = sub / 'qualification'
+    out.mkdir()
+    cases = invented.package(data, files)
+    invented.save_rows(out / 'cases.jsonl', cases)
+    invented.save_rows(out / 'stages.jsonl', invented.stage_cases(cases, trace_for(cases)))
+    (out / 'report.json').write_text(json.dumps({'ok': True, 'problems': []}))
+    (sub / 'idea.json').write_text(json.dumps(card('withdrawal-ruling', 'Rule on notes.', ['withdraws', 'supersedes', 'same_item'])))
+    root = tmp_path / 'root'
+    kwargs = dict(review_path=None, idea_path=None, root=root, runtime=tmp_path, skip_qualify=True)
+    assert invented.admit(sub, **kwargs)['stage'] == 'review'
+    review = {'schema': invented.REVIEW_SCHEMA, 'reviewer': 'claude-opus-5-5', 'digest': invented.digest(sub),
+              'requirements': {r: {'met': True, 'findings': []} for r in invented.JUDGED}}
+    review['requirements']['S4'] = {'met': False, 'findings': ['note text reaches withdraws as plain string']}
+    (sub / 'review.json').write_text(json.dumps(review))
+    result = invented.admit(sub, **kwargs)
+    assert not result['admitted'] and 'S4' in result['problems'][0]
+    review['requirements']['S4'] = {'met': True, 'findings': []}
+    review['digest'] = 'stale'
+    (sub / 'review.json').write_text(json.dumps(review))
+    assert 'digest' in invented.admit(sub, **kwargs)['problems'][0]
+    review['digest'] = invented.digest(sub)
+    (sub / 'review.json').write_text(json.dumps(review))
+    assert invented.static_problems(sub, data, files, invented.metrics(data, files)) == []   # review/idea are allowed
+    result = invented.admit(sub, **kwargs)
+    assert result['admitted'] and result['split'] == invented.split_of(data)
+    assert result['cases'] == 2 and result['stages'] == 4
+    assert (root / 'admitted' / 'withdrawal-ruling' / 'stages.jsonl').exists()
+    ledger = invented.rows_of(root / 'accepted.jsonl')
+    assert [row['idea']['slug'] for row in ledger] == ['withdrawal-ruling']
+    invented.admit(sub, **kwargs)
+    assert len(invented.rows_of(root / 'accepted.jsonl')) == 1, 'admitting again does not repeat the ledger line'
+    assert invented.publish(root, dry_run=True)['fresh'] == ['withdrawal-ruling']
