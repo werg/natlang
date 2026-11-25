@@ -46,6 +46,8 @@ Closed 2026-11-23 by the language-gaps agent (DECISIONS "Semantic-FP language ga
   package is an error and an unknown member of a loaded type file is TS2305/2614/2724 at load. Still untyped on purpose: a
   type file outside the loaded root (a sub-function loaded on its own whose `types.ts` lives in the program root), since
   the loader never reads past its root.
+- **`Untrusted<string>` in a saved eval helper's annotation fails `invalid-binding`** (authored-program calibration
+  builder cal2, 2026-11-25; worked around with `typeof` of another const). Not yet reproduced. Owner: unassigned.
 - **Runtime function synthesis is NL literals (owner 2026-11-25: "It's just built in our ability to make these nl
   literals").** Works under replay today: a literal built in eval from derived values, and a `.nl` function with a
   function result whose call finishes with `return nl`...``. Not checked yet: a synthesized function stored as data

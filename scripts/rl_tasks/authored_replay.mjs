@@ -14,8 +14,10 @@ const { replayReference } = await import(runtime + '/dist/teacher/curriculum.js'
 const { TOOLS_PROMPT } = await import(runtime + '/dist/native/prompt.js');
 const rows = fs.readFileSync(input, 'utf8').split('\n').filter(Boolean).map(JSON.parse);
 
+// A function argument is recorded as a live-value preview (`[function nl@eval:1 #46; live value, ...]`), or as a lambda
 const holdsFunction = value => value && typeof value === 'object' &&
-  (Object.hasOwn(value, '$lambda') || Object.hasOwn(value, '$function') || Object.values(value).some(holdsFunction));
+  (Object.hasOwn(value, '$lambda') || Object.hasOwn(value, '$function') ||
+   /^\[function /.test(String(value.$diagnostic_preview ?? '')) || Object.values(value).some(holdsFunction));
 const clip = (value, limit) => { const s = typeof value === 'string' ? value : JSON.stringify(value) ?? ''; return s.length > limit ? s.slice(0, limit) : s; };
 
 function node(trace) {
@@ -51,7 +53,7 @@ for (const record of rows) {
   try {
     const answers = [];
     const { run, trajectory } = await replayReference(record, TOOLS_PROMPT, () => '',
-      { onChild: ({ name, entry, shown }) => answers.push({ name, entry, shown: shown.slice(0, 600) }) });
+      { onChild: ({ name, entry, shown }) => answers.push({ name, entry, shown: shown.slice(0, 2000) }) });
     row.status = run.outcome.status;
     row.accepted = run.outcome.accepted === true;
     row.value = run.outcome.value ?? null;

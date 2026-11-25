@@ -463,8 +463,10 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
         else if (exactInputs.length === 0) answer = children.find(child =>
           (Array.isArray(child.match) ? child.match : [child.match]).every(fragment => shows(opening, fragment)));
       }
-      const turn = childTurns.get(opening) ?? 0;
-      childTurns.set(opening, turn + 1);
+      // Turns count per call: two calls with the same opening (the same judgment asked twice) each start at turn 0.
+      const callKey = request.invocation_id ? `call:${request.invocation_id}` : opening;
+      const turn = childTurns.get(callKey) ?? 0;
+      childTurns.set(callKey, turn + 1);
       if (turn === 0) onChild?.({ name, entry: answer ? children.indexOf(answer) : -1, opening, shown: argumentText(context) });
       // A decision readout's request offers no tools, so a failed return_result there would read as a malformed
       // choice; the missing entry is the error.
