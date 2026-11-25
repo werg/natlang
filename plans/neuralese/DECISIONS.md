@@ -13675,3 +13675,34 @@ The Python engines store a reply captured in its own context as `producer_kind` 
   `NatlangContextError: The invocation that owns this callback has finished`, raised from `runtime-capabilities.ts` →
   `executeProgram` → `callable.js invokeExport` (the invocation-lifetime check). This change does not touch that path.
   Reported for the runtime strand.
+
+- **Update 15:35: operator states are spliced, as in collection.** Since 3d8037571 and 5269b1a5a, a compaction capture
+  (an operator reply, a `compact_history` note) has `producer_kind` `capture`, and every engine splices it rather than
+  reading it in context (the use ablation: the spliced state beats the inline reply by up to 0.6 nats/token). Plain
+  `Neuralese<T>` value writes stay `span` and are read inline.
+  - The in-context transport now records captures as `capture`. A request shows a capture as a
+    `{type: "native_state", id}` content part and a span as its text.
+  - The render (`reference_episodes.mjs`) marks the producing turn with `captures: [{id, select?}]`. Pool, extract
+    and `semantic_turn` keep that field.
+  - `sft_sources replay` now replays authored episodes that carry states (it used to skip every episode with native
+    state) and marks their verdict `graph_only`. The text build skips them.
+  - `neuralese-graph` lowers them (`authored_graph` → `authored_trajectories.graph_calls`):
+    - Each call is rendered by the engine's own rendering (`TemplateRenderer`, `target_items`).
+    - Each state is a pass-through import placed between `consume_open` and `consume_close`.
+    - Its producer document is the one `Engine.capture_plan` writes: the operator call's prompt, its reply up to the
+      content (the empty thought, and the whitespace after it), `produce_open`, then the content. The learner computes
+      the state in the consumer's forward, so no engine is needed.
+    - Teacher think blocks stay zero-weight.
+    - Opt-out: `--no-authored`. `neuralese-text` leaves authored episodes out (`native_not_authored`).
+  - **Fixed on the way.** `reworded_key` and `signature_key` cut an opening to its first line. A view site's first
+    line is `instructions:`, so every operator call matched every other, and one call's summary could be served to
+    another (seen in the end-to-end replay). A view site's opening is now kept whole (`signature_line`).
+  - **End to end.** Scratch program, ledger unit `authnz-tests-5`. `check` ok. The render gives two `view` turns with
+    captures. The replay was exact (5/5, `graph_only`). Graph rows: 5 calls, 2 consumer imports. A decoded consumer
+    reads `log: string = <|neuralese_consume|><summary><|/neuralese_consume|>  // view of the value`. The document ends
+    `<|im_start|>assistant\n<think></think><|neuralese_produce|><summary>`.
+  - **Still left out.** An authored decision readout in a graph episode trains as plain token CE, without the
+    decision objective that `build` gives text rows.
+  - Tests: `test_graph_calls_lower_an_operator_capture_as_a_pass_through_import` and
+    `test_operator_calls_are_not_reworded_matches_of_each_other` (`test_authored_trajectories.py`); the updated
+    `ts-host/test/authored-in-context-neuralese.test.mjs`.

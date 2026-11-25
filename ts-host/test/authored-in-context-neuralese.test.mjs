@@ -1,7 +1,7 @@
-// Authored trajectories read Neuralese as the serving engines do by default (model/in-context-neuralese.ts): learned
-// compaction's operator call is a call of `view` answered by its entry's summary, and its consumer reads the summary in
-// place; a Neuralese<string> result is its producing call's text, read in place by its consumer. No sentinel reaches a
-// request, and the runtime's own operator and typed-write paths run.
+// Authored trajectories read Neuralese as the serving engines do (model/in-context-neuralese.ts): learned compaction's
+// operator call is a call of `view` answered by its entry's summary, captured in its own context and spliced where its
+// consumer reads it (a native_state part); a Neuralese<string> result is its producing call's text, read in place by its
+// consumer. No sentinel reaches a request, and the runtime's own operator and typed-write paths run.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { replayReference, OPERATOR_CALL } from '../dist/teacher/curriculum.js';
@@ -27,8 +27,9 @@ const record = { version: 'natlang.program/2', id: 'authored-neuralese', kind: '
 
 test('learned compaction and Neuralese values replay in their serving form', async () => {
   const turns = [];
+  const neuralese = createInContextNeuralese({ compaction: 'nl' });
   const { run } = await replayReference(record, TOOLS_PROMPT, () => '', {
-    neuralese: createInContextNeuralese({ compaction: 'nl' }),
+    neuralese,
     onTurn: (request, response) => turns.push({ request, response }) });
   assert.equal(run.outcome.accepted, true, JSON.stringify(run.outcome.detail ?? run.outcome.status).slice(0, 800));
   assert.equal(run.outcome.value, BRIEFING);
@@ -40,10 +41,20 @@ test('learned compaction and Neuralese values replay in their serving form', asy
     assert.equal(response.text, SUMMARY);
   }
   const shown = name => turns.find(({ request }) => String(request.messages[1]?.content ?? '').startsWith(`You are inside this call: ${name}(`));
-  const gist = JSON.stringify(shown('gistLog').request.messages);
-  assert.ok(gist.includes(`log: string = ${SUMMARY}  // view of the value; log holds all of it`),
-    'the consumer\'s listing reads the operator reply in the value\'s place');
-  assert.ok(JSON.stringify(shown('writeBriefing').request.messages).includes(GIST), 'a Neuralese<string> argument reads as its text');
+  // the operator's summary is a capture, which engines splice: the consumer's listing holds it as a native_state part
+  // where the value stands, and the transport names the operator call that produced it
+  const listing = shown('gistLog').request.messages.find(m => Array.isArray(m.content));
+  assert.ok(listing, 'the consumer reads the captured state as a content part');
+  const part = listing.content.find(p => p.type === 'native_state');
+  assert.deepEqual(Object.keys(part).sort(), ['id', 'type']);
+  assert.ok(listing.content[0].text.endsWith('log: string = ') && listing.content.at(-1).text.startsWith('  // view of the value'));
+  assert.ok(!JSON.stringify(shown('gistLog').request.messages).includes(SUMMARY));
+  const capture = neuralese.captures().find(c => c.id === part.id);
+  assert.equal(capture.text, SUMMARY);
+  assert.match(capture.invocation_id, /#operator-\d+$/);
+  assert.equal(capture.turn, 0);
+  assert.ok(JSON.stringify(shown('writeBriefing').request.messages).includes(`gist: Neuralese<string> = ${GIST}`),
+    'a Neuralese<string> argument (a span) reads as its text in place');
 });
 
 test('without a Neuralese transport the replay keeps the crisp cut and cannot write a Neuralese<string> result', async () => {

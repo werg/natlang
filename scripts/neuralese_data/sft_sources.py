@@ -116,7 +116,7 @@ def exact_tokens(turn):
 
 def semantic_turn(turn, keep_exact):
     out = {k: turn.get(k) for k in ('messages', 'tools', 'target', 'invocation_id')}
-    for key in ('function', 'definition_id', 'parent_invocation', 'invocation_role', 'decision_reasoning'):
+    for key in ('function', 'definition_id', 'parent_invocation', 'invocation_role', 'decision_reasoning', 'captures'):
         if key in turn:
             out[key] = turn[key]
     out['completion_tokens'] = (turn.get('usage') or {}).get('completion_tokens')
@@ -1016,6 +1016,17 @@ def visible_key(messages):
     return json.dumps(out, ensure_ascii=False)
 
 
+VIEW_SITE_OPENING = 'instructions:\n'
+
+
+def signature_line(content):
+    """The opening message's signature line, which ``reworded_key`` and ``signature_key`` keep: a call's first line
+    (``You are inside this call: f(...)``). A learned operator's view site (``instructions:``, then its instructions and
+    the value: ts-host native/operator-frames.ts viewSiteMessages) has no signature line, so all of it is kept; cut to
+    ``instructions:`` every operator call would match every other."""
+    return content if content.startswith(VIEW_SITE_OPENING) else content.split('\n', 1)[0]
+
+
 def reworded_key(messages):
     """``visible_key`` with the invocation's opening message cut to its first line (the call's signature): the runtime
     rewords the rest (call notes, protocol sentences; e.g. 1cb19e291 made return_result the only way to answer), and a
@@ -1024,7 +1035,7 @@ def reworded_key(messages):
     out, opening = [], True
     for role, content, calls in json.loads(visible_key(messages)):
         if opening and role == 'user':
-            content, opening = content.split('\n', 1)[0], False
+            content, opening = signature_line(content), False
         out.append((role, content, calls))
     return json.dumps(out, ensure_ascii=False)
 
@@ -1042,7 +1053,7 @@ def signature_key(messages):
     for m in messages:
         if m.get('role') != 'system':
             content = m.get('content')
-            return json.dumps([m.get('role'), content.split('\n', 1)[0] if isinstance(content, str) else content],
+            return json.dumps([m.get('role'), signature_line(content) if isinstance(content, str) else content],
                               ensure_ascii=False)
     return ''
 
@@ -1246,6 +1257,66 @@ def authored_episode(episode):
     return (episode.get('teacher') or {}).get('provider') == 'authored'
 
 
+def authored_graph(args, work, episodes, held, rows_out, sft_episodes, tasks, per_task, funnel, stats):
+    """``neuralese_graph``'s authored episodes: teacher episodes of authored trajectories whose consumers read spliced
+    states (an operator's summary). Their replay re-ran them under this runtime (``replay_episode``, in-context
+    transport) and its verdict admits them (exact, or a drifted success); each call is rendered by the serving engine's
+    rendering and every state is a pass-through import of its producing call's document
+    (``authored_trajectories.graph_calls``)."""
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
+    from exp0_sft import source_tokens, chains_of
+    import authored_trajectories
+    replays = {}
+    path = work / 'replay.jsonl'
+    for line in path.open() if path.exists() else ():
+        if line.strip():
+            record = json.loads(line)
+            replays[record.get('key')] = record
+    renderer = TemplateRenderer(args.tokenizer or work / 'tokenizer')
+    excluded = training_exclusion_ids([e['task'] for e in episodes], args.held_manifest)
+    funnel['authored_native_state_episodes'] = len(episodes)
+    for e in episodes:
+        task = e['task']
+        groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
+        if e['task_id'] in excluded or held_hit(e['task_id'], task.get('source_ids') or (), groups, held):
+            funnel['authored_held_excluded'] += 1
+            continue
+        record = replays.get(e['key'])
+        if record is None or record.get('outcome') != SUCCESS or not (record.get('exact') or drifted_success(record, e['turns'])):
+            funnel['authored_not_replayed' if record is None else 'authored_replay_failed'] += 1
+            continue
+        if per_task[e['task_id']] >= args.max_per_task:
+            funnel['over_task_cap'] += 1
+            continue
+        counters = collections.Counter()
+        calls = authored_trajectories.graph_calls(e['turns'], renderer, counters)
+        stats.update(counters)
+        if calls is None:
+            funnel['authored_not_lowerable'] += 1
+            continue
+        episode = {'task_id': e['task_id'], 'round': f"authored-neuralese-graph:{e['key']}", 'rows': calls}
+        chains = chains_of([episode])
+        per_task[e['task_id']] += 1
+        funnel['authored_admitted'] += 1
+        tasks[e['task_id']] = task
+        stats['authored:episodes'] += 1
+        stats['authored:calls'] += len(calls)
+        stats['authored:consumer_calls'] += sum(1 for c in calls if c['imports'])
+        stats['authored:producer_document_tokens'] += sum(source_tokens(c) for c in chains)
+        for call in calls:
+            rows_out.write({'episode': e['key'], 'source': 'authored-neuralese-graph', 'run': e.get('run'),
+                            'task_id': e['task_id'], 'family': e.get('family') or task.get('family'),
+                            'generator': 'authored', 'call': call['index'], 'invocation': call['invocation'],
+                            'imports': [list(i) for i in call['imports']], 'prompt_tokens': len(call['prompt']),
+                            'target_tokens': len(call['sample'])})
+        sft_episodes.append(episode)
+
+
+def native_not_authored(episode):
+    """``neuralese_text``'s episodes: own episodes with imported state (authored ones train whole, ``authored_graph``)."""
+    return has_native_state(episode) and not authored_episode(episode)
+
+
 def has_native_state(episode):
     return any(isinstance(m.get('content'), list) and any(isinstance(part, dict) and part.get('type') == 'native_state'
                                                            for part in m['content'])
@@ -1268,7 +1339,9 @@ def replay_episode(args, server, episode, env):
     done = directory / 'replay.json'
     if done.exists():
         return json.loads(done.read_text())
-    if has_native_state(episode):   # its imported states came from the actor's store: no text endpoint can replay them
+    # its imported states came from the actor's store: no text endpoint can replay them. An authored episode's states
+    # are its operator calls' replies (authored_trajectories.py graph_calls): its replay re-runs them in place.
+    if has_native_state(episode) and not authored_episode(episode):
         return {'key': episode['key'], 'name': name, 'source': episode['source'], 'task_id': episode['task_id'],
                 'outcome': 'skipped_native_state', 'exact': False, 'recorded_turns': len(episode['turns'])}
     if directory.exists():
@@ -1342,6 +1415,8 @@ def replay_episode(args, server, episode, env):
     # (a reasoned readout's recorded samples are one call: ReplayEpisode.calls)
     matched = {k: v for k, v in kinds.items() if k not in ('scoring-declined', 'group-repeat')}
     record['replay_calls'] = replay.calls
+    if has_native_state(episode):   # an authored episode with spliced states: whole-graph rows only (neuralese-graph)
+        record['graph_only'] = True
     record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and set(matched) <= {'exact', 'reworded'}
                        and sum(matched.values()) == replay.calls and turns == replay.calls)
     for path in directory.iterdir():   # keep the verdict, the replayed record and the logs; drop the job scratch
@@ -1747,7 +1822,7 @@ def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTE
         if record is None:
             f['not_replayed'] += 1
             continue
-        if record['outcome'] == 'skipped_native_state':
+        if record['outcome'] == 'skipped_native_state' or record.get('graph_only'):
             f['native_state'] += 1
             continue
         if record['outcome'] != SUCCESS:
@@ -4006,7 +4081,7 @@ def neuralese_text(args):
     funnel = collections.Counter()
     workers = getattr(args, 'workers', None) or 1
     surfaces = replay_surfaces(work, workers)    # the current runtime's surfaces: every call of every exact replay
-    episodes = list(all_episodes(work, workers, keep=has_native_state))
+    episodes = list(all_episodes(work, workers, keep=native_not_authored))
     funnel['native_state_episodes'] = len(episodes)
     excluded = training_exclusion_ids([e['task'] for e in episodes], args.held_manifest)
     kept = []
@@ -4187,7 +4262,11 @@ def neuralese_graph(args):
     excluded_runs = [re.compile(pattern) for pattern in getattr(args, 'exclude_run', None) or ()]
     window = [] if getattr(args, 'no_window_surfaces', False) else list(getattr(args, 'current_surface_run', None) or ())
     episodes, window_surfaces = [], set()
+    authored = []   # authored teacher episodes with spliced states (authored_trajectories.py graph_calls)
     for e in all_episodes(work, workers, keep=NativeOrRun(window)):
+        if authored_episode(e) and has_native_state(e):
+            authored.append(e)
+            continue
         if e.get('source') not in OWN_SOURCES:
             continue
         if window and current_surface_run(args, e):
@@ -4288,6 +4367,8 @@ def neuralese_graph(args):
                             'invocation': call['invocation'], 'imports': [list(i) for i in call['imports']],
                             'prompt_tokens': len(call['prompt']), 'target_tokens': len(call['sample'])})
         sft_episodes.append(episode)
+    if authored and not getattr(args, 'no_authored', False):
+        authored_graph(args, work, authored, held, rows_out, sft_episodes, tasks, per_task, funnel, stats)
     rows_out.close()
     chains = chains_of(sft_episodes)
     rng.shuffle(chains)
@@ -4547,6 +4628,8 @@ def main():
     g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
                    help='own runs left out (as build --exclude-run), matched against the episode run label')
     g.add_argument('--seed', type=int, default=20261117)
+    g.add_argument('--no-authored', action='store_true',
+                   help='leave out authored episodes whose consumers read spliced states (authored_graph)')
     g.add_argument('--empty-replies', choices=('drop', 'train'), default='drop',
                    help='own calls whose reply has neither text nor a tool call: drop (default) or train (opt-out)')
     g.add_argument('--tokenizer', default=None,
