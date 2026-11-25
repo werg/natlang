@@ -30,18 +30,19 @@ def test_canonical_json_unchanged_without_surrogates_and_encodable_with_them():
     value = {'b': 'é\U0001f642', 'a': [1, 2]}
     assert jsonio.canonical_json_str(value) == json.dumps(value, ensure_ascii=False, sort_keys=True,
                                                          separators=(',', ':'))
-    assert json.loads(jsonio.canonical_json_bytes(ROW)) == {'error': "expected '\ufffd' to deeply equal '\U0001f642'",
-                                                             '\ufffdkey': 1}
+    assert json.loads(jsonio.canonical_json_bytes(ROW)) == ROW
+    assert jsonio.canonical_json_bytes({'x': '\ud83d'}) != jsonio.canonical_json_bytes({'x': '\ufffd'})
+    assert jsonio.canonical_json_bytes({'x': '\ud83d\ude42'}) == jsonio.canonical_json_bytes({'x': '\U0001f642'})
 
 
 def test_jsonl_text_writers(tmp_path):
     with jsonio.write_jsonl_text(tmp_path / 'a.jsonl') as stream:
         stream.write(json.dumps(ROW, ensure_ascii=False) + '\n')
-    assert '\ufffd' in (tmp_path / 'a.jsonl').read_text()
+    assert json.loads((tmp_path / 'a.jsonl').read_text()) == ROW
     with jsonio.write_jsonl_text(tmp_path / 'a.jsonl.zst') as stream:
         stream.write(json.dumps(ROW, ensure_ascii=False) + '\n')
-    assert '\ufffd' in zstandard.ZstdDecompressor().decompress((tmp_path / 'a.jsonl.zst').read_bytes(),
-                                                               max_output_size=1 << 20).decode()
+    assert json.loads(zstandard.ZstdDecompressor().decompress((tmp_path / 'a.jsonl.zst').read_bytes(),
+                                                               max_output_size=1 << 20).decode()) == ROW
     assert jsonio.write_canonical_jsonl(tmp_path / 'c.jsonl', [ROW]) == 1
 
 
@@ -51,20 +52,20 @@ def test_zstd_writer_exports_lone_surrogates(tmp_path):
     writer.write(ROW)
     writer.close()
     rows = [json.loads(line) for line in sft_sources.zstd_lines(tmp_path / 'x.jsonl.zst')]
-    assert rows[0]['error'] == "expected '\ufffd' to deeply equal '\U0001f642'"
+    assert rows[0] == ROW
 
 
 def test_recorded_turns_and_port_records(tmp_path):
     import common
     import recorded_turns
     recorded_turns.write(tmp_path, 'episode', [{'messages': [{'role': 'tool', 'content': ROW['error']}]}])
-    assert '\ufffd' in zstandard.ZstdDecompressor().decompress(recorded_turns.path(tmp_path, 'episode').read_bytes(),
-                                                               max_output_size=1 << 20).decode()
+    assert recorded_turns.read(tmp_path, 'episode')[0]['messages'][0]['content'] == ROW['error']
     sink = common.Sink(tmp_path, 'demo')
     sink.accept({'split': 'train', 'text': ROW['error']})
     sink.reject('store', 0, 'bad: ' + ROW['error'])
     sink.close()
-    assert '\ufffd' in (tmp_path / 'demo.port-records.jsonl').read_text()
+    assert json.loads((tmp_path / 'demo.port-records.jsonl').read_text())['text'] == ROW['error']
+    assert json.loads((tmp_path / 'demo.rejects.jsonl').read_text())['reason'] == 'bad: ' + ROW['error']
 
 
 def test_opt_out_keeps_the_strict_failure(tmp_path, monkeypatch):
@@ -83,4 +84,4 @@ def test_teacher_receipt_canonical_bytes_match_previous_encoding():
     value = {'z': 'é', 'a': ['\U0001f642']}
     assert _canonical(value) == json.dumps(value, ensure_ascii=False, sort_keys=True,
                                            separators=(',', ':')).encode()
-    assert b'\xef\xbf\xbd' in _canonical({'t': '\ud83d'})
+    assert json.loads(_canonical({'t': '\ud83d'})) == {'t': '\ud83d'}

@@ -12733,6 +12733,10 @@ other source kinds in grpo-pool (bgkit, decisions, codebase, authored, searchswa
 this pass (only composed and v2-origin dataset rows); AGENTS.md's `collect_exposure.py` flow (exposure of past training
 and collection) was not rerun for these sources: the rows are new to the pool, so they have no exposure yet.
 
+### 2026-11-25: preserve JavaScript code units at JSON data boundaries
+
+The standing DGX86 campaign ingestion repeatedly failed UTF-8 encoding on the legitimate wrapping-graphemes capture; process liveness had concealed stalled ingestion since08:23. Main73b already added text replacement, but JSON must preserve recorded string values and keys: U+FFFD replacement also conflated canonical identities. JSON serializers now join valid surrogate pairs and escape lone UTF-16 units. Plain text encoding retains existing JavaScript-compatible U+FFFD behavior; `NATLANG_KEEP_LONE_SURROGATES=1` retains strict opt-out. Shared boundary inventory: `JSON_SURROGATE_BOUNDARIES_20261125.md`. Actual focused JSON/writer/hashing tests20PASS under0.6GiB ledger; original data is unchanged. Deploy the official current reader to archive/export/ingest/fill at their safe boundaries; actor/learner state remains intact. This is an archive-reader repair, independent of live runtime Core207.
+
 ## 2026-11-25 10:10 Invented programs: quality at the top of the funnel; reviews only on a drawn sample (program-inventor agent)
 
 **Owner (2026-11-25):** "our qualification and admittance process is too heavy ... we need to create masses of data. So
