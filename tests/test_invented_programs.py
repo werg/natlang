@@ -27,7 +27,7 @@ export type Ruling = {
 JUDGE = '''---
 readout: decision
 args:
-  note: "string"
+  note: "Untrusted<string>"
 returns: "boolean"
 ---
 Decide whether note withdraws an earlier note.
@@ -36,12 +36,12 @@ HELPER = '\n'.join(['import withdraws from "./withdraws.nl";', 'import supersede
                     'import sameItem from "./same_item.nl";', 'import { semanticFilter } from "@natlang/node/std";',
                     'export async function rule(notes: string[]): Promise<{ standing: string[] }> {',
                     '  const kept = await semanticFilter(notes, withdraws);'] +
-                   [f'  const step{i} = kept.length + {i};' for i in range(40)] +
+                   [f'  const step{i} = kept.length + {i};' for i in range(100)] +
                    ['  return { standing: kept.map(n => n.slice(0, 4)) };', '}', 'export function order(a: string[]): string[] { return [...a].sort(); }'])
 
 
 def instance(name):
-    return {'name': name, 'level': 3, 'inputs': {'notes': [f'n{i} text' for i in range(9)]}, 'oracle': 'exact',
+    return {'name': name, 'level': 3, 'inputs': {'notes': [f'n{i} withdraws nothing yet' for i in range(16)]}, 'oracle': 'exact',
             'expected': {'standing': ['n1']},
             'reference': {'root': [['eval', {'code': 'const r = await rule(notes); return r;', 'finish': True}]],
                           'children': [{'match': ['withdraws an earlier'], 'value': False}]},
@@ -65,6 +65,9 @@ def write(tmp, extra=None):
             'judgments': [{'name': n, 'file': f'rule_notes/{n}.nl', 'trap': 't'} for n in ('withdraws', 'supersedes', 'same_item')],
             'instances': [instance('a'), instance('b')], **(extra or {})}
     (sub / 'submission.json').write_text(json.dumps(data))
+    (sub / 'idea.json').write_text(json.dumps({'slug': 'withdrawal-ruling', 'inputs': 'sixteen notes of a dozen words'}))
+    (sub / 'NOTES.md').write_text('withdraws: the trap.\n\n## Hardest items\n\n- n1: reads as a withdrawal.\n'
+                                  '- n2: replaces rather than withdraws.\n- n3: names the item only by a nickname.\n')
     return sub
 
 
@@ -94,6 +97,37 @@ def test_generator_script_and_missing_controls_fail(tmp_path):
     text = '\n'.join(problems)
     for code in ('N2: gen.py', 'F2: two or three', 'F4: instance a', 'S2: instance a', 'S3: instance b'):
         assert code in text, (code, problems)
+
+
+def test_the_bar_size_card_size_notes_code_depth_and_untrusted_fields(tmp_path):
+    sub = write(tmp_path)
+    data = json.loads((sub / 'submission.json').read_text())
+    data['instances'][0]['inputs'] = {'notes': ['short note here'] * 10}
+    (sub / 'submission.json').write_text(json.dumps(data))
+    (sub / 'idea.json').write_text(json.dumps({'slug': 'withdrawal-ruling', 'inputs': 'notes, about 1,300 words in all'}))
+    (sub / 'NOTES.md').write_text('withdraws: the trap.\n')
+    types = TYPES + '''/** A note as filed. */
+export type Note = {
+  /** The note's id. */
+  id: string;
+  /** Who wrote it (the clerk's nickname). */
+  by: string;
+  sourceKey: string;
+  text: Untrusted<string>;
+};
+'''
+    (sub / 'program' / 'types.ts').write_text(types)
+    (sub / 'program' / 'rule_notes' / 'same_item.nl').write_text(
+        JUDGE.replace('note: "Untrusted<string>"', 'note: Note\n  label: string\n  noteId: string'))
+    helper = sub / 'program' / 'rule_notes' / 'rule.ts'
+    helper.write_text(helper.read_text().replace('\n'.join(f'  const step{i} = kept.length + {i};' for i in range(50, 100)) + '\n', ''))
+    problems, _ = check(sub)
+    text = '\n'.join(problems)
+    assert 'C2: instance a: 10 items with text' in text, problems
+    assert "C2: instance b: 64 words, but the idea card declares 1300" in text, problems
+    assert 'C4: NOTES.md lists 0 hardest items' in text and 'D1: ' in text, problems
+    flagged = [p.split(' is a plain string')[0] for p in problems if p.startswith('S6')]
+    assert flagged == ['S6: program/rule_notes/same_item.nl: note (Note).by', 'S6: program/rule_notes/same_item.nl: label'], problems
 
 
 def test_package_one_case_per_instance_sharing_a_world(tmp_path):

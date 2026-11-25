@@ -100,9 +100,17 @@ export type NamespaceRecord = { kind: 'namespace'; name: string; source: string;
 export type ItemRecord = NatlangRecord | ModuleRecord | NamespaceRecord;
 
 /** A source file that is not a valid natlang item: `reason` says why, at `line` (1-based) when it is known. */
+/** One positioned problem of a source file, kept with its own code (a refused loop is `forbidden-loop` at the loop). */
+export type SourceDiagnostic = { line: number; column: number; code: string; message: string };
 export class NatlangSourceError extends Error {
-  constructor(readonly path: string, readonly reason: string, readonly line?: number, readonly hint?: string) {
+  constructor(readonly path: string, readonly reason: string, readonly line?: number, readonly hint?: string,
+      readonly diagnostics?: readonly SourceDiagnostic[], readonly code?: string) {
     super(`${path}${line === undefined ? '' : `:${line}`}: ${reason}${hint ? ` (${hint})` : ''}`); this.name = 'NatlangSourceError';
+  }
+  /** A source error made of positioned diagnostics: the message lists each as `line:column message`. */
+  static of(path: string, items: readonly SourceDiagnostic[]): NatlangSourceError {
+    return new NatlangSourceError(path, items.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'),
+      undefined, undefined, items);
   }
 }
 /** A frontmatter error at `line` (1-based, counted from the first frontmatter line). */
@@ -274,7 +282,16 @@ export function readNatlangFrontmatter(source: string): Record<string, unknown> 
   let meta: unknown;
   // A YAML error's line is of the YAML lines alone; it is reported at its line in the frontmatter.
   try { meta = YAML.parse(yaml.join('\n')) ?? {}; }
-  catch (error) { const line = lineOf(error); throw line ? atLine((error as Error).message.split('\n')[0]!.replace(/ at line \d+, column \d+:?$/, ''), yamlLines[line - 1] ?? line) : error; }
+  catch (error) {
+    const line = lineOf(error);
+    if (!line) throw error;
+    const at = yamlLines[line - 1] ?? line, plain = /^([A-Za-z_][\w-]*):[ \t]+([^"'\s|>[{].*)$/.exec(lines[at - 1] ?? '');
+    // A plain value holding `: ` (or ` #`) is YAML syntax; the fix is to quote the value.
+    const quoted = plain && /:\s|\s#/.test(plain[2]!) ?
+      `the ${plain[1]} value contains ${/:\s/.test(plain[2]!) ? '": "' : '" #"'}, which YAML reads as syntax; put the whole value in double quotes (${plain[1]}: "${plain[2]!.trim().replace(/"/g, '\\"').slice(0, 40)}${plain[2]!.trim().length > 40 ? '...' : ''}")` : undefined;
+    throw Object.assign(atLine(quoted ?? `frontmatter is YAML: ${(error as Error).message.split('\n')[0]!.replace(/ at line \d+, column \d+:?$/, '')}; quote a value that holds YAML punctuation`, at),
+      { code: 'frontmatter-yaml' });
+  }
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw atLine('frontmatter must be a mapping', 1);
   return { ...meta, ...typed };
 }
@@ -306,7 +323,11 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   let meta: Record<string, unknown>;
   // Frontmatter lines are counted from the line after the opening ---.
   try { meta = readNatlangFrontmatter(match[1]!); }
-  catch (error) { const line = lineOf(error); throw new NatlangSourceError(path, (error as Error).message, line === undefined ? undefined : line + 1); }
+  catch (error) {
+    const line = lineOf(error), code = (error as { code?: unknown }).code;
+    throw new NatlangSourceError(path, (error as Error).message, line === undefined ? undefined : line + 1, undefined, undefined,
+      typeof code === 'string' ? code : undefined);
+  }
   for (const key of Object.keys(meta)) if (!NL_KEYS.has(key)) {
     const near = closestName(key, NL_KEYS);
     throw new NatlangSourceError(path, `unknown frontmatter field ${JSON.stringify(key)}; allowed: ${[...NL_KEYS].join(', ')}`,
@@ -1091,9 +1112,12 @@ export function parseModule(path: string, text: string, inherited: Record<string
   const allowUntyped = options.allowUntypedExports === true;
   const file = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true, path.endsWith('.js') ? ts.ScriptKind.JS : ts.ScriptKind.TS);
   const errors = (file as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [];
-  if (errors.length) throw new NatlangSourceError(path, errors.map(item => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; '));
+  if (errors.length) throw NatlangSourceError.of(path, errors.map(item => {
+    const at = file.getLineAndCharacterOfPosition(item.start ?? 0);
+    return { line: at.line + 1, column: at.character + 1, code: `TS${item.code}`, message: ts.flattenDiagnosticMessageText(item.messageText, '\n') };
+  }));
   const policy = options.compiled ? [] : checkConstrainedSource(file);
-  if (policy.length) throw new NatlangSourceError(path, policy.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'));
+  if (policy.length) throw NatlangSourceError.of(path, policy);
   const exports: Record<string, ExportRecord> = {};
   const imports: string[] = [];
   const typeImports: string[] = [];

@@ -35,6 +35,9 @@ for the codes it answers. Each code was checked with `grep` against those source
 | `idiom-review-cue-word-rule` | Model-backed idiom review (`natlang check --idiom`): a `.nl` body encodes a brittle keyword/cue-word lookup table that belongs in TypeScript or a crisp `pluggable` fast-path | plan time (`natlang check --idiom`; warning, or error at confidence >= 0.8 with `--idiom-strict`) | `cli/commands.ts`, `applications/idiom-reviewer` |
 | `idiom-review-untyped-external-input` | Model-backed idiom review (`natlang check --idiom`): external or user-supplied text is typed as plain `string` instead of `Untrusted<string>` | plan time (`natlang check --idiom`; warning, or error at confidence >= 0.8 with `--idiom-strict`) | `cli/commands.ts`, `applications/idiom-reviewer` |
 | `type-recursive-function` | A type alias may not mention itself in a function parameter or result position ([SPEC](SPEC.md#iteration-and-termination)) | plan time | `compiler/neuralese.ts`, `native/types.ts` |
+| `forbidden-loop` | A `while`/`do` loop, a generator, an iterator protocol, or a counted `for` that is not one counter compared with one bound read once ([SPEC](SPEC.md#iteration-and-termination)); reported at the loop, and for a counter inside arithmetic (`i + k <= n`) the message gives the counted form (`i <= n - k`) | plan time (callable-folder TypeScript), eval time | `compiler/policy.ts` |
+| `frontmatter-yaml` | A `.nl` frontmatter that is not valid YAML; a plain value holding `: ` or ` #` (a `description:` with a colon) is told to quote the whole value | plan time, load time | `runtime/loader.ts` |
+| `callable-scope` | Any other load error of a callable folder or `.nl` source (an unknown type name, a bad frontmatter field, an unresolved import), at the file and line it names | plan time, load time | `runtime/loader.ts`, `compiler/project.ts` |
 | `undeclared-field` | Eval reads a field the declared type lacks ([SPEC](SPEC.md#types)) | eval time (checked before the eval runs) | `compiler/eval-check.ts` |
 | `invalid-binding` | An eval binding that would shadow or read itself before it exists (`const plan = plan(...)`) | eval time (before the eval runs) | `scope-compiler.ts` |
 | `protected` | `edit_code` of an item that judges the call: a `protect:` entry, an item an `ensures:` check names, `types.ts`, or a change to a `protect:` list or to the `ensures:`, `writes:`, `measure:` or `recursive:` lines ([SPEC](SPEC.md#postconditions)). The message names the item and says to fix the code that produces the value it rejects | eval time (edit_code) | `native/runtime.ts` |
@@ -157,5 +160,5 @@ and `IterationLimitError` (call time) carry `lastState` and the trajectory; `NzF
    ([NEURALESE_REWRITES.md](NEURALESE_REWRITES.md)).
 4. Codes in the source that the docs do not name: `nl-not-called`, `nl-not-tag`, `nl-shadowed`, `nl-explicit-captures`,
    `nl-type-arguments`, `nl-parameter-collision`, `nl-unknown-name`, `nl-spread`, `nl-const-capture-write`, `reserved-property`, `duplicate-site`, `context-conflict`, `forbidden-control`,
-   `forbidden-loop`, `forbidden-prototype-mutation`, `recursion`. They are outside this index until a document names
+   `forbidden-prototype-mutation`, `recursion`. They are outside this index until a document names
    them.

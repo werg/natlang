@@ -191,6 +191,38 @@ export function finiteCounterComparison(condition: ts.Expression | undefined, co
     { comparison: unwrapped(root.right) as ts.BinaryExpression, guard: root.left };
 }
 
+/** `i + k <= n` (or `k + i`, `i - k`) rewritten as `i <= n - k`, the counted form, when the condition is one such comparison
+ * (optionally the left side of `&&`); undefined otherwise. */
+function counterOffsetRewrite(condition: ts.Expression, counter: string): string | undefined {
+  let root = condition;
+  while (ts.isParenthesizedExpression(root)) root = root.expression;
+  let rest = '';
+  if (ts.isBinaryExpression(root) && root.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+    rest = ` && ${root.right.getText()}`;
+    root = root.left;
+    while (ts.isParenthesizedExpression(root)) root = root.expression;
+  }
+  if (!ts.isBinaryExpression(root) || !COMPARATORS.has(root.operatorToken.kind)) return;
+  const isCounter = (node: ts.Expression) => ts.isIdentifier(node) && node.text === counter;
+  const mentions = (node: ts.Node): boolean => isCounter(node as ts.Expression) || !!ts.forEachChild(node, child => mentions(child) || undefined);
+  const split = (side: ts.Expression): { sign: '+' | '-'; offset: string } | undefined => {
+    while (ts.isParenthesizedExpression(side)) side = side.expression;
+    if (!ts.isBinaryExpression(side)) return;
+    const op = side.operatorToken.kind;
+    if (op === ts.SyntaxKind.PlusToken && isCounter(side.left) && !mentions(side.right)) return { sign: '+', offset: side.right.getText() };
+    if (op === ts.SyntaxKind.PlusToken && isCounter(side.right) && !mentions(side.left)) return { sign: '+', offset: side.left.getText() };
+    if (op === ts.SyntaxKind.MinusToken && isCounter(side.left) && !mentions(side.right)) return { sign: '-', offset: side.right.getText() };
+    return;
+  };
+  const left = split(root.left), right = left ? undefined : split(root.right);
+  const found = left ?? right, other = left ? root.right : root.left;
+  if (!found || mentions(other)) return;
+  const wrap = (text: string) => /^[\w$.]+$/.test(text) ? text : `(${text})`;
+  const bound = `${wrap(other.getText())} ${found.sign === '+' ? '-' : '+'} ${wrap(found.offset)}`;
+  const op = root.operatorToken.getText();
+  return (left ? `${counter} ${op} ${bound}` : `${bound} ${op} ${counter}`) + rest;
+}
+
 /** Check whether a counter `for` loop has a canonical monotone finite form. */
 function canonicalFor(node: ts.ForStatement): string | undefined {
   const initializer = node.initializer;
@@ -202,8 +234,11 @@ function canonicalFor(node: ts.ForStatement): string | undefined {
   const counter = declaration.name.text;
   const condition = node.condition;
   const boundedCondition = finiteCounterComparison(condition, counter);
-  if (!boundedCondition)
+  if (!boundedCondition) {
+    const moved = condition && counterOffsetRewrite(condition, counter);
+    if (moved) return `keep the counter alone on one side of the comparison and move the arithmetic to the bound: write \`${moved}\``;
     return 'compare the counter with one bound using <, <=, > or >=, optionally joined by && to an early-exit condition such as `i < n && !found`';
+  }
   const comparison = boundedCondition.comparison;
   const counterLeft = ts.isIdentifier(comparison.left) && comparison.left.text === counter;
   const bound = counterLeft ? comparison.right : comparison.left;
@@ -340,7 +375,9 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
     else if (ts.isDoStatement(node)) report(node, 'forbidden-loop', '`do ... while` loops are not allowed here.' + loopHint);
     else if (ts.isForStatement(node)) {
       const problem = canonicalFor(node);
-      if (problem) report(node, 'forbidden-loop', `This \`for\` loop is not a checked finite counter loop: ${problem}.` + loopHint);
+      // A rewrite of this loop's own condition is the whole fix; the general list of loop forms would bury it.
+      if (problem) report(node, 'forbidden-loop', `This \`for\` loop is not a checked finite counter loop: ${problem}.` +
+        (problem.startsWith('keep the counter alone') ? '' : loopHint));
     } else if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isMethodDeclaration(node)) && node.asteriskToken)
       report(node, 'forbidden-loop', 'Generator functions are not allowed here.' + loopHint);
     else if (ts.isYieldExpression(node)) report(node, 'forbidden-loop', '`yield` is not allowed here.');

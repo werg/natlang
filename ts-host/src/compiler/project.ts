@@ -427,8 +427,15 @@ function compileProjectInSession(options: BuildOptions, files: SourceFiles): Bui
   const problem = (file: string, message: string, code: NatlangDiagnostic['code'] = 'callable-scope', line = 1, hint?: string) =>
     diagnostics.push({ file, start: 0, end: 0, line, column: 1, code, message, severity: 'error', ...(hint ? { hint } : {}) });
   // A source error names its own file (a folder's item, not the folder) and, when it knows it, the line.
-  const sourceProblem = (fallback: string, error: unknown) => error instanceof NatlangSourceError ?
-    problem(rel(error.path), error.reason, 'callable-scope', error.line, error.hint) : problem(rel(fallback), String(error));
+  // Positioned diagnostics (a refused loop, a TypeScript syntax error) keep their own line, column and code.
+  const sourceProblem = (fallback: string, error: unknown) => {
+    if (!(error instanceof NatlangSourceError)) return problem(rel(fallback), String(error));
+    if (!error.diagnostics?.length)
+      return problem(rel(error.path), error.reason, (error.code ?? 'callable-scope') as NatlangDiagnostic['code'], error.line, error.hint);
+    for (const item of error.diagnostics)
+      diagnostics.push({ file: rel(error.path), start: 0, end: 0, line: item.line, column: item.column,
+        code: item.code as NatlangDiagnostic['code'], message: item.message, severity: 'error' });
+  };
 
   // TypeScript program over ordinary project files, with generated `.nl` declarations.
   const configHost: ts.ParseConfigFileHost = { useCaseSensitiveFileNames: true, getCurrentDirectory: () => root,

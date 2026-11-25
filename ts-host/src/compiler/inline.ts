@@ -13,7 +13,7 @@ export type NatlangDiagnostic = SourceSpan & {
   code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-not-tag' | 'nl-shadowed' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
     'nl-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
-    'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | `TS${number}` | 'nl-undeclared-type' |
+    'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'frontmatter-yaml' | `TS${number}` | 'nl-undeclared-type' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-untyped-literal' |
     'neuralese-nested' | 'neuralese-readout-sync' | 'neuralese-crisp-result' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments' | 'undeclared-field' | 'decision-compare' | 'untrusted-instruction' | 'iteration-unbounded' |
     'nl-sequential-loop' | 'idiom-decision-readout' | 'idiom-fixed-cursor-iterate' | 'idiom-code-in-prose' |

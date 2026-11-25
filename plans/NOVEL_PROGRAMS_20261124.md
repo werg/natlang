@@ -84,13 +84,17 @@ the collector's own code), **judged** ones by `meetsBar.nl` (a scored decision b
 | S1 | semantic | crisp | >= 3 distinct judgments of meaning (`.nl` files or inline `nl`) |
 | S2 | semantic | crisp | **the answer depends on every judgment**: replaying the reference with one judgment's answers set to its trap reading is rejected (`ablate.mjs`) |
 | S3 | semantic | crisp | a keyword baseline (root script, no `nl` call) per instance runs to an answer and is rejected |
-| S4 | semantic | judged | each judgment is one narrow question with one defensible answer per item; outside text is `Untrusted`; each judgment receives what it needs and nothing it must not see |
+| S4 | semantic | judged | each judgment is one narrow question with one defensible answer per item and one canonical value per meaning; every text people wrote (names, titles, nicknames, labels and record fields included) is `Untrusted`; each judgment receives what it needs and nothing it must not see |
+| S5 | semantic | judged | no input note states a judgment's answer; >= 1 judgment reads a passage of two or more sentences; NOTES' hardest items are hard for the reason given |
+| S6 | semantic | crisp | no `.nl` function reads a plain `string` argument or record field (through aliases) unless named or documented as an identifier, code or date |
 | C1 | complexity | crisp | >= 5 functions (`.nl` + exported TS); call chain >= 3 deep |
-| C2 | complexity | crisp | each instance >= 8 items or >= 1,200 words |
-| C3 | complexity | judged | a judgment reads another judgment's result (or an exact stage built from judgments); >= 2 rules or stages whose order or precedence decides the outcome |
-| D1 | code depth | crisp | >= 40 lines of exact TypeScript logic in the callable folder that the answer depends on |
+| C2 | complexity | crisp | each instance >= 800 words of outside text or >= 15 items with text; and >= 90% of the words the idea card's `inputs` declares |
+| C3 | complexity | judged | a judgment reads the results of two earlier judgments, or carried state; >= 2 rules or stages whose order or precedence decides the outcome |
+| C4 | complexity | crisp | NOTES.md has `## Hardest items` with >= 3 entries |
+| D1 | code depth | crisp | >= 100 lines of exact TypeScript logic in the callable folder that the answer depends on |
 | D2 | code depth | crisp | >= 3 semantic-FP constructs (decide/readout, std combinator, higher-order judgment, iterateOn...until, structural recursion, ensures, Is/Untrusted, Neuralese<T>, folder transaction, pluggable), found in the source |
-| D3 | code depth | judged | every exact step is TypeScript; `.nl` instructions state judgments and name helpers, no algorithm in prose |
+| D3 | code depth | judged | every exact step is TypeScript, counting, ordinals and positions included (judgments map words to referents); `.nl` instructions state judgments and name helpers, no algorithm in prose |
+| D5 | code depth | judged | at least one non-trivial algorithm (graph walk, fixed point, search, enumeration) the answer depends on |
 | D4 | code depth | crisp | the root returns a named, doc-commented type from `types.ts`; no output-contract paragraph |
 | N1 | novelty | judged | `isNew` (§3) |
 | N2 | novelty | crisp | no generator: instances are literal JSON in `submission.json`, at most three; no script in the submission outside `program/` |
@@ -299,6 +303,76 @@ answer through the real code. Their weak points, all reported by their own build
 4. **One template per inventor family** (round 2 above).
 5. **F5 is met for only 2 of 6** so far: strong teachers fail most of these whole-output exact checks, which is
    either wrong `expected` values (adjudication above) or the difficulty noted in 2.
+
+## 12b. Sonnet calibration (2026-11-25): why the builds were shallow, and what changed
+
+Three Sonnet builders (`/home/werg/data/natlang-novel-programs/sonnet-cal-20261125/`) each invented and built one
+program: `shelf-list-filing-keys`, `gig-chart-key-resolver`, `caller-directions-incident-locator`. All three qualified
+in 2-5 rounds. The Opus review (`sub/*/review.json`) found them correct and novel but below the bar on depth: the
+smallest instances and the shallowest judgments that pass the checks. Owner (2026-11-25): "You can also analyze the way
+in which Sonnet falls short and adjust its prompt and our authoring skill. That's the preferred method." The evidence
+is the cards, the built files, the friction logs and the final reports; the transcripts' reasoning blocks are redacted,
+so the decision points are read from what each builder had read and what it wrote next.
+
+| Size | shelf | gig | caller | Opus pilot (6 programs) |
+|---|---|---|---|---|
+| words per instance | 335 / 226 | 292 / 268 | 616 / 462 | 636-2,060 |
+| items with text | 23 / 14 | 10 / 10 | 14 / 12 | 13-31 |
+| exact TypeScript lines | 125 | 98 | 180 | 178-418 |
+
+Causes, each with the change that addresses it:
+
+1. **The floor was the target.** inventIdea.nl step 5 and C2 both said "at least eight items or about 1,200 words".
+   gig's card declared ten messages of about 250 words in all and was built at 10 items; caller's instance a has
+   exactly 8 calls. Change: inventIdea.nl step 5 describes one real working session (1,000-2,000 words in 15-30 items,
+   evidence spread through the text) and the card's `inputs` states the size the build is held to; C2 is 800 words or
+   15 items with text, and the card's declared words bind (crisp, `invented.py`); BUILD_BRIEF "Depth" opens with
+   instances at full size.
+2. **Every item costs reference work.** caller kept transcripts to 5-8 sentences "to stay near 100" reference model
+   calls (friction 8; the card declared 80-140 words per transcript, the build averages 77); shelf named the
+   hand-written reference children and ablation entries as the main authoring cost, and gig and shelf wrote assembly
+   scripts for their tables. Change: BUILD_BRIEF says the episode budget grows with the reference (size is not
+   penalised) and gives the default-entry idiom (an entry with only the instruction fragment answers every remaining
+   call of a judgment), so per-item scripting is only for items that differ.
+3. **The examples it read are small.** BUILD_BRIEF's "Read first" named `examples/review` and `sem-merge`, both small
+   by design; the builders opened a pilot submission only for import style. Change: "Read first" names one pilot
+   submission (`nonvisual-interaction-parity-auditor`, 1,700-2,000 words, ~220 lines) as the scale to build at, and
+   BUILD_BRIEF carries a worked judgment at the target depth (a tenancy letter read as a whole, against a complaint and
+   repair reports that two earlier judgments selected).
+4. **One defensible answer was bought by stating it.** S4 asks for exactly one defensible answer and NOTES asked "why
+   each instance item has one reading"; the cheapest way there is an item that states its answer (shelf: "her surname
+   is Le Guin", "filed under the pen name alone"). Change: NOTES asks for the evidence in the text that settles each
+   item and a `## Hardest items` section (C4, crisp); "Depth" shows evidence a reader weighs instead of the answer; S5
+   (judged) asks that no note states an answer.
+5. **Judgments read one line.** Nothing asked for a passage, and C3 was met by a single chain (shelf's C3 rests on one
+   slice after one judgment). Change: S5 asks one judgment to read two or more sentences, C3 asks one judgment to read
+   two earlier judgments' results or carried state; inventIdea.nl step 4 designs both in from the card.
+6. **Counting went into a judgment because the skill had no idiom for run-time choices.** caller's `sideRoadChoice`
+   returns a road id and counts "the second right" in prose (friction 6: "no documented idiom" for a finite choice
+   among run-time ids; the review's D3 finding). Change: composition.md "Judgments map words to referents; code finds
+   the item" with the description result and the per-candidate `decide` idiom; SKILL.md design step 3; D3 names
+   counting, ordinals and positions; BUILD_BRIEF "Depth" uses the same example.
+7. **Names and titles read as labels.** S4 listed "documents, notes, descriptions, messages" and exempted "closed
+   labels"; SKILL.md said `Untrusted` on "every value that comes from outside", and a map's feature names or a chart's
+   title did not feel outside. Change: S4, SKILL.md and refinements.md define outside text as everything people wrote,
+   names, titles, nicknames and labels in records included; `invented.py` S6 reports every plain `string` a `.nl`
+   function reads through its argument types (on the three builds it finds exactly the review's fields).
+8. **Two values for one meaning.** gig's `anchorSection` returns `first` or `last` for a section that occurs once. No
+   text said a result type has one value per meaning. Change: S4 wording, composition.md decisions, "Depth".
+9. **The checks ate the attention.** 55 of 70-80 minutes went to the ledger queue at the briefed 3-4 GB budgets, and
+   whole qualify rounds went to tooling defects (a `match` fragment broken by a line wrap, N2 on the friction log, an
+   unnamed unmatched ablation call, a refused loop reported at 1:1). Change: 1.5 GB budgets started in the background,
+   `qualify` alone (it runs `natlang check`), one absolute `LOGS`, the friction log beside the submission; the runtime
+   errors now name the place and the fix (loop at its line with the counted form, `frontmatter-yaml` with the quoted
+   value, the replay quoting the last tool result and naming the unmatched child call with its arguments, an ablation
+   of a failing reference reported as "not judged").
+10. **40 lines of code depth was easy to reach.** D1 rises to 100 lines and D5 (judged) asks for one real algorithm.
+
+The friction logs' skill gaps (ambient `Untrusted`, `../types.js`, mixed literal unions as decisions, derived substrings
+into `Untrusted` slots, decisions and `untrusted` from helper TypeScript, graph walks and union-find without
+recursion, eval-scope names of helpers) were each checked against the runtime and written into language.md and
+refinements.md, with tests (`ts-host/test/authoring-diagnostics.test.mjs`). The second calibration round runs the
+revised briefs on idea-bank cards.
 
 ## 13. What is not built or not checked
 

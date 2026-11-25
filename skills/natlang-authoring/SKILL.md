@@ -91,8 +91,8 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
 
 ## Design the program
 
-1. **Write the types first.** Records and literal unions in `types.ts`, with `Untrusted<T>` on every value that comes
-   from outside and `Is<T, "...">` on every property you would otherwise ask for in a sentence
+1. **Write the types first.** Records and literal unions in `types.ts`, with `Untrusted<T>` on every text people wrote
+   (messages, notes, and names, titles and labels too) and `Is<T, "...">` on every property you would otherwise ask for in a sentence
    ([refinements](references/refinements.md)). Doc comments on fields reach the model: describe formats, units and
    what `null` means there.
 2. **Exact steps are TypeScript.** Arithmetic, parsing, sorting, joining, counting, record assembly, I/O: functions in
@@ -101,7 +101,8 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
 3. **Each judgment is one typed function.** Inline `nl<T>` in the code that needs it, or a `.nl` file when it is
    reused or tested on its own. When the instructions are several steps of judgment, number them and name the data
    each step uses. Children get distinct sub-questions and the inputs they need, and a parent gets its children's
-   results, not their raw inputs.
+   results, not their raw inputs. A judgment reads meaning, a whole passage when the meaning is spread over it, and
+   maps words to referents (`{ side: 'right', ordinal: 2 }`); code counts, ranks and finds the item they pick.
 4. **Finite answers are decisions.** `readout: decision` on a literal-union, boolean or finite-record result: the
    model reasons, then every value is scored, and `decide(fn, ...args)` returns the probabilities. Gate actions and
    escalate unsure or high-risk cases with `escalate(fn, { to: 'teacher', floor, risk?, policy? })` from
@@ -155,7 +156,8 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `nl-unknown-return`, `nl-ambiguous-signature` | Annotate the binding or write `nl<T>`; don't widen to `any`. |
 | `nl-undeclared-type` (in eval) | Declare the type in that eval's scope or write the structure in the annotation. |
 | `no-such-function` from a child | The callee is a sibling, not in the caller's folder: nest it (`root/inspect/decide.nl`) or list it in `uses:`. |
-| `` `while` loops are not allowed here `` (`callable-scope`) | Rewrite as `for...of`, a counted loop, an array method or `iterateOn`; the message gives the file and position. |
+| `forbidden-loop` (`` `while` loops are not allowed here ``, `not a checked finite counter loop`) | Rewrite as `for...of`, a counted loop with the counter alone against its bound (the message gives that form for your loop), an array method or `iterateOn`; it is reported at the loop. |
+| `frontmatter-yaml` | Write the value it names in double quotes (a `description:` holding `: `). |
 | `called itself without a smaller argument` | Recurse on part of the input, a shorter array or string, or a smaller non-negative integer. A `.nl` function declares `recursive: structural` to allow it. |
 | `called itself, and its frontmatter does not declare recursion` | Declare `recursive: structural` (descent on part of an argument) or `measure: "<expression over the arguments>"` in the function's frontmatter. |
 | `called itself with measure M, which is not smaller than N` | Make the self-call advance what the measure counts, or change the measure to the quantity that does fall. |

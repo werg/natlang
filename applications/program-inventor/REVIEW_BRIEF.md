@@ -1,7 +1,7 @@
 # Review brief: judge one built program against the judged requirements
 
 A reviewer reads one submission (`SUBMISSION/` with `program/`, `submission.json`, `NOTES.md`, `qualification/`) and
-decides the judged requirements of `requirements.json`: **S4, C3, D3** (the program) and **N1** (the idea). The crisp
+decides the judged requirements of `requirements.json`: **S4, S5, C3, D3, D5** (the program) and **N1** (the idea). The crisp
 requirements are already decided by `invented.py qualify`: do not redo them, but read `qualification/report.json`
 (metrics, reference calls, stage counts) as context. Review as a model of another family than the builder when one is
 available, and never review a program you built.
@@ -27,18 +27,31 @@ inline `nl`):
   reader could defend two answers, fails S4: name the item and both readings. The pilot's typical defect: notes worded
   as associations ("heavy users are far less likely to cancel") where the judgment asks whether an influence is
   stated.
-- Every free text from outside (documents, notes, descriptions, messages, titles, labels written by people) that a
-  judgment reads is typed `Untrusted<...>`, including text a TypeScript helper assembles from outside fields before
-  passing it on. Identifiers, numbers and closed labels need not be.
+- **One canonical value per meaning.** If two values of a judgment's result type name the same thing on some item (a
+  section that occurs once is both its `first` and its `last`), the type is wrong: S4 fails, naming the item and the
+  two values.
+- Every text written by people that a judgment reads (documents, notes, descriptions, messages, names, titles,
+  nicknames, labels), including fields of records passed to it and text a TypeScript helper assembles from outside
+  fields before passing it on, is typed `Untrusted<...>`. Identifiers, numbers and closed value sets need not be
+  (`invented.py qualify` flags plain `string` fields as S6; you judge the rest).
 - Each judgment receives what it needs to answer and nothing it must not see (no expected answers, no other items'
   verdicts it should not depend on, no ids that leak the answer).
 
-**C3. Interaction.** At least one judgment reads the result of another judgment, or of an exact stage computed from
-judgments; and at least two rules or stages interact so that their order or precedence decides the outcome. Name them.
+**S5. Reading for meaning.** No input note or field states a judgment's answer (a note "her surname is Le Guin" makes
+the entry-element judgment a copy): name each such item. At least one judgment reads a passage of two or more
+sentences. The `## Hardest items` of NOTES.md are items a careful reader could really get wrong, for the reason given.
 
-**D3. Exact work in TypeScript.** Every exact step (arithmetic, counting, sorting, parsing, record assembly, state
-updates, walks over items) is TypeScript. `.nl` instructions state judgments of meaning and name the helpers they call;
-a root or judgment that spells out a per-item walk or an algorithm in prose fails D3.
+**C3. Interaction.** At least one judgment reads the results of two earlier judgments, or state carried across items;
+and at least two rules or stages interact so that their order or precedence decides the outcome. Name them.
+
+**D3. Exact work in TypeScript.** Every exact step (arithmetic, counting, ordinals and positions, sorting, parsing,
+record assembly, state updates, walks over items) is TypeScript. Judgments map words to referents: "the second right"
+is read as `{side: 'right', ordinal: 2}` by the judgment and resolved to a road by code, or code numbers the roads
+before the judgment sees them. `.nl` instructions state judgments of meaning and name the helpers they call; a root or
+judgment that spells out a per-item walk, a count or an algorithm in prose fails D3.
+
+**D5. An algorithm.** The exact logic includes at least one non-trivial algorithm the answer depends on (a graph walk, a
+fixed point, a search, an enumeration), beyond sorting and grouping. Name it and the file.
 
 **N1. Novelty.** Build the current atlas and retrieve the nearest existing ideas:
 
@@ -68,8 +81,10 @@ instructions literally on that instance at each difference and rule `expected-wr
   "digest": "<output of: .venv-neuralese/bin/python scripts/rl_tasks/sources/invented.py digest SUBMISSION>",
   "requirements": {
     "S4": {"met": true, "findings": []},
+    "S5": {"met": true, "findings": []},
     "C3": {"met": true, "findings": ["<the judgments and rules that interact>"]},
     "D3": {"met": true, "findings": []},
+    "D5": {"met": true, "findings": ["<the algorithm and its file>"]},
     "N1": {"met": true, "findings": ["<nearest entries and the respects in which the idea differs>"]}
   },
   "F5": null
@@ -78,4 +93,4 @@ instructions literally on that instance at each difference and rule `expected-wr
 
 `findings` of an unmet requirement name each defect concretely (file, item id, the two readings, the untyped field), so
 the builder can fix it without asking. `invented.py admit` admits only a submission whose review names its current
-digest (any edit after the review needs a new review) and meets all four.
+digest (any edit after the review needs a new review) and meets all six.
