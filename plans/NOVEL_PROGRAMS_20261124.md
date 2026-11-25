@@ -423,7 +423,14 @@ friction logs and the brief they read, each with its change (commit after `f8e62
    helper exports and a judgment names now fails with the file to move it from (the replay-only failure the ledger
    builder saw did not reproduce: check reports it at the `.nl` line); a decision child no entry answers is named
    instead of reading as a malformed choice. The structured-field N2 warning (91 hits for `celsius`, `minutes` beside
-   the step text) was noise and is gone; N2 says each input field is written by hand, once.
+   the step text) was noise and is gone; N2 says each input field is written by hand, once. The idiom reviewer's
+   default profile (`dgx-qwen`, 127.0.0.1:8082) has no server any more; Anthropic credits are out, Groq's free tier
+   is 8k tokens a minute, Gemini's quota is spent and two NVIDIA models are retired, so the brief runs it on OpenRouter
+   `deepseek/deepseek-v4-flash` (checked on household: four `mechanism-in-prose` findings).
+9. **The bar moved while builders iterated** (six of the subtitle builder's eleven rounds met new rules). From
+   `c3b2d3472` every `report.json` records `bar` (`BAR_VERSION` and the requirements digest), and the checks change only
+   between waves. The card's size binds the inputs' prose; the 800-word floor is on items read by an entry of their own
+   (a card's cue budget caps judged words below its word count).
 
 ## 13. What is not built or not checked
 

@@ -223,6 +223,15 @@ answered which item (the same text is in `qualification/reference.txt`). What th
 `/home/werg/.local/bin/natlang check --json > LOGS/check-<slug>-<n>.json 2>&1`. Both run in 1.5 GB, which the ledger
 admits at once.
 
+The model-backed idiom review (`natlang check --idiom`) runs on a hosted model; the default profile's local server is
+not running. Run it the same way, with `--workdir SUBMISSION/program`:
+
+```
+-- /bin/bash -c 'set -a; . /home/werg/.config/natlang/openrouter.env; set +a; /home/werg/.local/bin/natlang check --json --idiom --provider openrouter --model deepseek/deepseek-v4-flash > LOGS/idiom-<slug>-<n>.json 2>&1'
+```
+
+Its findings are warnings: weigh each against the skill.
+
 `run` waits in the foreground while the job is queued, so start it as a background command (or add `--detach`), and
 read the log once `systemctl --user is-active pinv-qual-<slug>-<n>` is no longer `active`. Each run needs a new unit
 name (append -2, -3, ...). It writes `SUBMISSION/qualification/report.json`; fix every problem it lists and rerun
