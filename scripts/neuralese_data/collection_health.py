@@ -510,13 +510,33 @@ def report(current, previous=(), earlier=(), *, cache_dir=None, label='', sfp=No
             'compared': compared, 'flags': found, 'sfp_flagged': any(f.get('sfp') for f in found)}
 
 
+def add_mix_diversity(health, build_json):
+    """Add a round mix's diversity (``sft_sources build``'s ``mix.diversity``: per part effective program shapes, the
+    top shape's share, the near-duplicate share) to ``health`` as ``mix_diversity``, and its regression flags
+    (``mix.diversity_flags``, ``diversity.regression_flags`` against the previous build) to ``health['flags']``. A build
+    without a diversity report (an older pin's) adds nothing."""
+    build_json = Path(build_json)
+    if not build_json.exists():
+        return health
+    mix = json.loads(build_json.read_text()).get('mix') or {}
+    report = mix.get('diversity')
+    if not report:
+        return health
+    keep = ('units', 'shapes', 'effective_shapes', 'top_shape_share', 'top10_shape_share', 'near_duplicate_share')
+    health['mix_diversity'] = {'build': str(build_json), 'baseline': report.get('baseline'),
+                               'all': {k: (report.get('all') or {}).get(k) for k in keep},
+                               'parts': {part: {k: v.get(k) for k in keep} for part, v in (report.get('parts') or {}).items()}}
+    health['flags'] = list(health.get('flags') or []) + list(mix.get('diversity_flags') or [])
+    return health
+
+
 def summary_line(health):
     """One line for the drive log."""
     o = health['current']['overall']
     infra = health['current']['infrastructure']
     names = []
     for f in health['flags']:
-        subject = f.get('family') or f.get('construct') or f.get('reason') or ''
+        subject = f.get('family') or f.get('construct') or f.get('reason') or f.get('part') or ''
         names.append(f'{f["flag"]}{"(" + subject + ")" if subject else ""}{"[sfp]" if f.get("sfp") else ""}')
     rate = f'{o["pass_rate"]:.3f}' if o['pass_rate'] is not None else 'n/a'
     irate = f'{infra["rate"]:.3f}' if infra['rate'] is not None else 'n/a'

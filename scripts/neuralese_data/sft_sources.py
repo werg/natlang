@@ -818,7 +818,7 @@ def settle_deferred(deferred, admitted_tasks, task_of):
 
 
 def student_selection(unique, rng, funnel, cap_of, family_share, is_wrapper, wrapper_share, trained=frozenset(),
-                      tiers=None, recent=None):
+                      tiers=None, recent=None, shape_of=None, shape_share=0.):
     """The student's own distribution of a build: unguided own successes (``rl-own``) and leak-checked JOLT+ guided
     successes (``jolt-guided``) under one per-task cap, one family share and one wrapper share, own first under each
     (``capped`` ``rank``). With a frontier (``tiers``): a task's guided successes go where it has unguided ones
@@ -843,7 +843,8 @@ def student_selection(unique, rng, funnel, cap_of, family_share, is_wrapper, wra
 
     def rank(c):
         return (int(c['source'] == 'jolt-guided'), own_policy_tier(c, *recent) if recent and recent[0] else 0)
-    pool = wrapper_capped(capped(candidates, rng, funnel, cap_of, family_share, lambda c: 0, trained, rank=rank), rng,
+    pool = wrapper_capped(capped(candidates, rng, funnel, cap_of, family_share, lambda c: 0, trained, rank=rank,
+                                 shape_of=shape_of, shape_share=shape_share), rng,
                           funnel, is_wrapper, wrapper_share, trained, rank=rank)
     if tiers is None:
         return pool, set(), set()
@@ -1351,55 +1352,8 @@ def replay_episodes(args, episodes):
 
 
 # ---- build -----------------------------------------------------------------------------------------------------------
-WORD = None
-
-
-def shingles(text, n=5):
-    import re
-    global WORD
-    WORD = WORD or re.compile(r'\w+')
-    words = [w.lower() for w in WORD.findall(text)]
-    words = ['0' if w.isdigit() else w for w in words]
-    return {' '.join(words[i:i + n]) for i in range(max(1, len(words) - n + 1))} if words else set()
-
-
-def minhash(items, perms=64):
-    """64-permutation MinHash of a shingle set (the DATA_MIX_DIVERSITY.md method)."""
-    import numpy as np
-    if not items:
-        return None
-    hashes = np.array([int.from_bytes(hashlib.blake2b(s.encode(), digest_size=8).digest(), 'little') for s in items],
-                      dtype=np.uint64)
-    rng = np.random.RandomState(20261117)
-    a = rng.randint(1, 2**31 - 1, size=perms).astype(np.uint64)
-    b = rng.randint(0, 2**31 - 1, size=perms).astype(np.uint64)
-    return ((hashes[None, :] * a[:, None] + b[:, None]) % np.uint64(2**61 - 1)).min(axis=1)
-
-
-class NearDuplicates:
-    """LSH (16 bands of 4) over MinHash signatures; `seen(sig)` is true when an admitted item has estimated Jaccard >=
-    threshold, else the item is admitted."""
-
-    def __init__(self, threshold=0.8, bands=16, rows=4):
-        self.threshold, self.bands, self.rows = threshold, bands, rows
-        self.buckets = collections.defaultdict(list)
-        self.signatures = []
-
-    def seen(self, signature):
-        if signature is None:
-            return False
-        candidates = set()
-        for band in range(self.bands):
-            key = (band, signature[band * self.rows:(band + 1) * self.rows].tobytes())
-            candidates.update(self.buckets.get(key, ()))
-        for index in candidates:
-            if (self.signatures[index] == signature).mean() >= self.threshold:
-                return True
-        index = len(self.signatures)
-        self.signatures.append(signature)
-        for band in range(self.bands):
-            self.buckets[(band, signature[band * self.rows:(band + 1) * self.rows].tobytes())].append(index)
-        return False
+# shingles, MinHash and the LSH near-duplicate index: one implementation (``natlang_neuralese.common.diversity``)
+from natlang_neuralese.common.diversity import NearDuplicates, minhash, shingles  # noqa: E402,F401
 
 
 def action_text(turns):
@@ -2130,14 +2084,17 @@ def round_robin(members, rng, order):
     return out
 
 
-def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozenset(), rank=lambda c: 0):
-    """Per-task caps (`cap_of(task_id)`, producers taking turns), then a per-family cap of `family_share` of the rest.
-    Episodes whose key is in `trained` (an earlier build the start checkpoint learned, ``--prefer-unseen``) go after
-    every untrained one under each cap; with none the selection is unchanged. ``rank`` orders tiers sharing one cap
-    (own unguided successes 0 before JOLT+ guided 1) after that."""
+def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozenset(), rank=lambda c: 0,
+           shape_of=None, shape_share=0.):
+    """Per-task caps (`cap_of(task_id)`, producers taking turns), then a per-family cap of `family_share` of the rest,
+    then (``shape_of``, ``shape_share`` > 0) a per-program-shape cap of `shape_share` of what the family cap kept (at
+    least ``diversity.SHAPE_CAP_FLOOR``): one template spanning many families (a reasoning-gym wrapper over 57) is held
+    like one family (``--max-shape-share``). Episodes whose key is in `trained` (an earlier build the start checkpoint
+    learned, ``--prefer-unseen``) go after every untrained one under each cap; with none the selection is unchanged.
+    ``rank`` orders tiers sharing one cap (own unguided successes 0 before JOLT+ guided 1) after that."""
     by_task = collections.defaultdict(list)
-    for c in candidates:
-        by_task[c['task_id']].append(c)
+    for c in candidates:     # a Neuralese variant shares its original's cap (``item``: the task it was made from)
+        by_task[c.get('item') or c['task_id']].append(c)
     selected = []
     for task_id, members in sorted(by_task.items(), key=lambda item: str(item[0])):
         members = round_robin(members, rng, order)
@@ -2157,7 +2114,21 @@ def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozens
         final += members[:limit]
         for c in members[limit:]:
             funnel[c['source']]['over_family_cap'] += 1
-    return final
+    if shape_of is None or not shape_share or shape_share <= 0:
+        return final
+    from natlang_neuralese.common.diversity import SHAPE_CAP_FLOOR
+    by_shape = collections.defaultdict(list)
+    for c in final:
+        by_shape[shape_of(c['task_id'])].append(c)
+    limit = max(SHAPE_CAP_FLOOR, int(shape_share * len(final)))
+    kept = []
+    for shape, members in sorted(by_shape.items(), key=lambda item: str(item[0])):
+        rng.shuffle(members)
+        members.sort(key=lambda c: (c.get('key') in trained, rank(c)))
+        kept += members[:limit]
+        for c in members[limit:]:
+            funnel[c['source']]['over_shape_cap'] += 1
+    return kept
 
 
 # Program constructs the held set tests heavily (held-v3: 30% Neuralese results, 30% folder reducers, 18% iterateOn,
@@ -2757,10 +2728,64 @@ def publish_sft_rows(rows, mix, minimum_open_goal_share):
     rows.close()
 
 
-def distinct_candidates(core, threshold, funnel):
-    """Prefer whole successful demonstrations, while keeping distinct independently checked partial actions."""
+def trim_shares(chains, shares, mass_of=None):
+    """(kept chains, report): each part in ``shares`` (name -> share) holds at most its share of the mix's weighted
+    target tokens, the mix as it is (every other rule applied): its last-admitted units leave until it fits. The
+    total falls as units leave, so it iterates to a fixed point (``--aux-share-of actual``)."""
+    if mass_of is None:
+        from exp0_sft import chain_mass as mass_of
+    units = collections.OrderedDict()
+    for chain in chains:
+        units.setdefault(unit_key(chain), []).append(chain)
+    mass = {key: float(sum(mass_of(c) for c in members)) for key, members in units.items()}
+    dropped = set()
+    report = {'dropped_units': collections.Counter(), 'dropped_weighted_target_tokens': collections.Counter()}
+    for _ in range(50):
+        total = sum(m for key, m in mass.items() if key not in dropped)
+        changed = False
+        for name, share in shares.items():
+            own = [key for key in units if key[0] == name and key not in dropped]
+            held = sum(mass[key] for key in own)
+            while own and held > share * total + 1e-6:
+                key = own.pop()
+                dropped.add(key)
+                held -= mass[key]
+                total -= mass[key]
+                report['dropped_units'][name] += 1
+                report['dropped_weighted_target_tokens'][name] += int(mass[key])
+                changed = True
+        if not changed:
+            break
+    report = {k: dict(v) for k, v in report.items()}
+    return [c for c in chains if unit_key(c) not in dropped], report
+
+
+def mix_diversity(chains, shape_of, signatures, args):
+    """(report, flags) of a built mix: ``diversity.diversity_report`` per part (units, mass, distinct and effective
+    program shapes, top-shape and top-10 shares, near-duplicate share of the target tokens) and
+    ``diversity.regression_flags`` against the baseline build's report (``--diversity-baseline``, default the newest
+    ``--prefer-unseen`` build that has one)."""
+    from exp0_sft import chain_mass
+    from natlang_neuralese.common.diversity import diversity_report, mix_units, regression_flags
+    report = diversity_report(mix_units(chains, shape_of, chain_mass, signatures))
+    baseline = getattr(args, 'diversity_baseline', None)
+    candidates = [baseline] if baseline else list(reversed(getattr(args, 'prefer_unseen', None) or []))
+    previous = None
+    for build in candidates:
+        path = Path(build) / 'build.json'
+        if path.exists():
+            previous = (json.loads(path.read_text()).get('mix') or {}).get('diversity')
+            if previous:
+                report['baseline'] = str(build)
+                break
+    return report, regression_flags(report, previous)
+
+
+def distinct_candidates(core, threshold, funnel, index=None):
+    """Prefer whole successful demonstrations, while keeping distinct independently checked partial actions.
+    ``index``: the ``NearDuplicates`` to fill (October candidates are checked against it afterwards)."""
     core = sorted(core, key=lambda c: (not bool(c.get('open_goal')), c.get('task_completed') is False, c['source'] != 'teacher'))
-    dedup = NearDuplicates(threshold)
+    dedup = NearDuplicates(threshold) if index is None else index
     unique = []
     seen_goals = set()
     for c in core:
@@ -2841,7 +2866,25 @@ def build(args):
             kept.append(c)
     core = kept
     rng.shuffle(core)
-    unique = distinct_candidates(core, args.dup_threshold, funnel)
+    dedup = NearDuplicates(args.dup_threshold)
+    unique = distinct_candidates(core, args.dup_threshold, funnel, dedup)
+    # teacher episodes the diversity rules leave out (near duplicates here, task/family/shape/wrapper caps below): a
+    # filled unit standing in for one (``replaces=teacher``) is left out with it (``--aux-teacher-selection follow``)
+    unique_keys = {c['key'] for c in unique}
+    teacher_left_out = {c['key'] for c in core if c['source'] not in OWN_SOURCES and c['key'] not in unique_keys}
+    # program shapes of every candidate task (``diversity.task_shapes``); a unit of a task without a row is its own shape
+    from natlang_neuralese.common.diversity import MIX_SHAPE_SHARE, shape_lookup, task_shapes
+    shape_share = MIX_SHAPE_SHARE if getattr(args, 'max_shape_share', None) is None else args.max_shape_share
+    shape_of = shape_lookup(task_shapes(tasks.values()))
+    # one item, one allowance: a Neuralese variant (neuralese_variants.py: the same inputs and oracle under a helper
+    # framing, another task id) counts with its original under the per-task caps and per-task token caps
+    variant_of = {tid: ((t.get('curriculum') or {}).get('external') or {}).get('variant_of') or tid
+                  for tid, t in tasks.items()}
+
+    def item_of(task_id):
+        return variant_of.get(task_id, task_id)
+    for c in unique:
+        c['item'] = item_of(c['task_id'])
 
     constructs = {task_id: task_constructs(task) for task_id, task in tasks.items()}
 
@@ -2871,7 +2914,8 @@ def build(args):
     student_pool, own_tasks, guided_tasks = student_selection(
         unique, rng, funnel, core_cap, args.max_family_share, is_wrapper, args.wrapper_share, trained_keys,
         tiers if frontier else None,
-        (frontier_policy, previous_policy) if getattr(args, 'own_cap_order', 'recent') == 'recent' else None)
+        (frontier_policy, previous_policy) if getattr(args, 'own_cap_order', 'recent') == 'recent' else None,
+        shape_of=shape_of, shape_share=shape_share)
     deferred = {'teacher': [], 'aux': []}
     teacher_candidates = []
     for c in unique:
@@ -2883,7 +2927,12 @@ def build(args):
         else:
             teacher_candidates.append(c)
     teacher_pool = wrapper_capped(capped(teacher_candidates, rng, funnel, core_cap, args.max_family_share, lambda c: 0,
-                                         trained_keys), rng, funnel, is_wrapper, args.wrapper_share, trained_keys)
+                                         trained_keys, shape_of=shape_of, shape_share=shape_share),
+                                  rng, funnel, is_wrapper, args.wrapper_share, trained_keys)
+    pool_keys = {c['key'] for c in teacher_pool}
+    teacher_left_out |= {c['key'] for c in teacher_candidates if c['key'] not in pool_keys}
+    if getattr(args, 'aux_teacher_selection', 'follow') != 'follow':
+        teacher_left_out = set()
 
     renderer = TemplateRenderer(args.tokenizer)
     rows_out = ZstdWriter(out / 'rows.jsonl.zst')
@@ -3101,7 +3150,7 @@ def build(args):
         if c['key'] in trained_keys:
             funnel[c['source']]['admitted_trained_before'] += 1
         teacher_forward += sft_episodes[-1]['forward_tokens']
-        task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
+        task_tokens[item_of(c['task_id'])] += sft_episodes[-1]['weighted_target_tokens']
 
     for c in ordered:
         if c['key'] in filled_keys:
@@ -3196,7 +3245,7 @@ def build(args):
 
     for e in sft_episodes:
         if e['source'].startswith('october:'):
-            task_tokens[e['task_id']] += e['weighted_target_tokens']
+            task_tokens[item_of(e['task_id'])] += e['weighted_target_tokens']
 
     # 3. the loss shares: the teacher and October actions are the rest after the student's own share and each prebuilt
     #    part's share (``--aux``), all in weighted target tokens (the loss is token-normalized)
@@ -3204,8 +3253,13 @@ def build(args):
     fixed_share = args.own_loss_share + sum(part['share'] for part in aux_parts if part['share'] != 'all')
     if fixed_share >= 1:
         raise SystemExit(f'own and aux loss shares sum to {fixed_share} >= 1')
+    # a share is a share of the mix as admitted (``--aux-share-of actual``, default): the share=all parts count by what
+    # they take (taken first, below), not by every unit they hold. ``nominal`` (the old rule) counted every loaded unit,
+    # so a share=all part whose units the exposure rule leaves out (aei1 r0009: filled held 15,480 units and took 470)
+    # inflated every share's budget: operators at share 0.05 took 23% of r0009's loss
+    share_of = getattr(args, 'aux_share_of', 'actual')
     all_tokens = sum(sum(u['weighted'] for u in units) for part, units in loaded if part['share'] == 'all')
-    total_tokens = (actions_tokens + all_tokens) / (1 - fixed_share)
+    total_tokens = nominal_total = (actions_tokens + all_tokens) / (1 - fixed_share)
     aux_report, replaced_rounds = {}, {}
     taken_rounds = set()    # an episode two parts both hold (a cycle's own Neuralese graph and an older graph build) trains once
     aux_state = {}
@@ -3222,15 +3276,21 @@ def build(args):
         if state['budget'] is not None and state['taken'] + unit['weighted'] > state['budget']:
             used['over_share'] += 1     # a unit that would overshoot: a smaller one may fit
             return
-        if part['task_tokens'] and per_task[unit['task']] + unit['weighted'] > part['task_tokens']:
+        if part['task_tokens'] and per_task[item_of(unit['task'])] + unit['weighted'] > part['task_tokens']:
             used['over_task_tokens'] += 1
             return
-        per_task[unit['task']] += unit['weighted']
+        replaced = replaced_round(part, unit)
+        if part.get('replaces') == 'teacher' and replaced in teacher_left_out:
+            used['teacher_not_selected'] += 1   # its teacher episode is a near duplicate or over a task/family/shape cap
+            return
+        if not state['shapes'].allow(shape_of(unit['task']), unit['weighted'] if state['budget'] is not None else 1):
+            used['over_shape_share'] += 1
+            return
+        per_task[item_of(unit['task'])] += unit['weighted']
         state['taken'] += unit['weighted']
         if unit_seen((part['name'], unit['task'], unit['round']), trained_keys, trained_unit_keys):
             used['trained_before'] += 1
         taken_rounds.add((unit['task'], unit['round']))
-        replaced = replaced_round(part, unit)
         if replaced is not None:
             replaced_rounds[(part['replaces'], replaced)] = part['name']
         used['units'] += 1
@@ -3240,10 +3300,20 @@ def build(args):
         for chain in unit['chains']:
             chain['part'] = part['name']
 
-    for part, units in loaded:
-        aux_state[part['name']] = {'budget': None if part['share'] == 'all' else part['share'] * total_tokens,
+    budgets_set = share_of != 'actual'
+    for part, units in sorted(loaded, key=lambda item: item[0]['share'] != 'all') if share_of == 'actual' else loaded:
+        if not budgets_set and part['share'] != 'all':     # every share=all part is taken: the mix's fixed mass
+            taken_all = sum(aux_state[q['name']]['taken'] for q, _ in loaded if q['share'] == 'all')
+            total_tokens = (actions_tokens + taken_all) / (1 - fixed_share)
+            budgets_set = True
+        budget = None if part['share'] == 'all' else part['share'] * total_tokens
+        from natlang_neuralese.common.diversity import ShapeQuota
+        aux_state[part['name']] = {'budget': budget,
                                    'taken': 0, 'used': collections.Counter(), 'per_task': collections.Counter(),
-                                   'units': len(units)}
+                                   'units': len(units),
+                                   # one program shape: at most --max-shape-share of the part (its budget's tokens,
+                                   # else its units)
+                                   'shapes': ShapeQuota(budget if budget is not None else len(units), shape_share)}
         rng.shuffle(units)
         # unseen units first (``--prefer-unseen``: a share-bounded part takes the units no earlier build trained before
         # repeats; stable, so the shuffle orders each group)
@@ -3259,10 +3329,15 @@ def build(args):
                     continue
             take_unit(part, unit)
 
+    if not budgets_set:      # no share-bounded part: the own share is still a share of what was taken
+        total_tokens = (actions_tokens + sum(aux_state[q['name']]['taken'] for q, _ in loaded)) / (1 - fixed_share)
     # 4. the student's own verified successes (their reasoning included) up to their share, breadth-first over tasks,
     #    held constructs and low base pass rates first, each task's loss capped (``--max-task-target-tokens``);
     #    leak-checked JOLT+ guided successes follow unguided own successes within the student-distribution share
-    own_budget = args.own_loss_share * total_tokens if args.own_loss_share else None
+    # the own share is a floor, not a ceiling against scarce teacher data: fresh own successes are the student's own
+    # distribution, so their budget never falls below the old rule's (trial r0009 inputs: the actual-mix total alone
+    # cut own successes from 1,054 chains to 207); the aux parts are held to their actual share by ``trim_shares``
+    own_budget = args.own_loss_share * max(total_tokens, nominal_total) if args.own_loss_share else None
     own_tokens = 0
     ordered = ordered_pool(student_pool, priority)   # own before guided within each task, breadth-first over tasks
     ahead.walk(ordered)
@@ -3279,7 +3354,7 @@ def build(args):
             funnel[c['source']]['over_loss_share'] += 1
             left_over['own'].append(c)
             continue
-        if args.max_task_target_tokens and task_tokens[c['task_id']] + weighted > args.max_task_target_tokens:
+        if args.max_task_target_tokens and task_tokens[item_of(c['task_id'])] + weighted > args.max_task_target_tokens:
             funnel[c['source']]['over_task_target_tokens'] += 1
             continue
         if not admit(c, *rendered(c)):
@@ -3288,7 +3363,7 @@ def build(args):
         if c['key'] in trained_keys:
             funnel[c['source']]['admitted_trained_before'] += 1
         own_tokens += sft_episodes[-1]['weighted_target_tokens']
-        task_tokens[c['task_id']] += sft_episodes[-1]['weighted_target_tokens']
+        task_tokens[item_of(c['task_id'])] += sft_episodes[-1]['weighted_target_tokens']
     # 5. a task whose teacher data waited for its JOLT+ guided successes: those that entered replace it
     #    (``frontier_jolt_guided``); where none did (the own share or a cap left them out) the teacher data trains
     admitted_student = {e['task_id'] for e in sft_episodes if e['source'] in OWN_SOURCES}
@@ -3341,12 +3416,33 @@ def build(args):
                                                      and str(c.get('round')).startswith('live:')})
     # the round size (``--max-target-tokens``): every part scaled alike, unseen episodes first; an episode the cap
     # dropped is not trained (admitted_episode_keys, round.json, and the next build's prefer-unseen leave it out)
+    # one copy of a demonstration across all parts: a unit whose targets near-duplicate a kept unit's goes (own
+    # successes first, then teacher, filled and the aux parts; ``--mix-near-duplicates keep`` opts out)
+    from natlang_neuralese.common.diversity import drop_near_duplicate_units
+    signatures = {}
+    priority = {name: rank for rank, name in enumerate(('rl-own', 'jolt-guided', 'teacher', 'filled'))}
+    all_chains[:], near_report = drop_near_duplicate_units(
+        all_chains, args.dup_threshold if getattr(args, 'mix_near_duplicates', 'drop') == 'drop' else 0,
+        priority=lambda part: priority.get(part, len(priority)), signatures=signatures)
+    for name, n in near_report['parts'].items():
+        (aux_report[name] if name in aux_report else funnel[name])['near_duplicate_units'] = n
     all_chains[:], exposure_cap = drop_overexposed(all_chains, exposure, max_prior)
+    # the units each rule left out before this point (the chains above no longer hold them, so the cap's own report
+    # is empty when the candidate rules did the work)
+    exposure_cap['candidates_over_exposed'] = {
+        **{source: n for source, counts in funnel.items() if (n := counts.get('over_exposed'))},
+        **{name: n for name, state in aux_state.items() if (n := state['used'].get('over_exposed'))}}
+    if share_of == 'actual':     # each share-bounded part at most its share of the mix as it now is
+        all_chains[:], share_trim = trim_shares(all_chains, {q['name']: q['share'] for q in aux_parts
+                                                             if q['share'] != 'all'})
+        for name, n in share_trim['dropped_units'].items():
+            aux_report[name]['over_actual_share'] = n
     all_chains[:], target_cap = cap_target_tokens(all_chains, getattr(args, 'max_target_tokens', 0) or 0, trained_keys,
                                                   trained_unit_keys, getattr(args, 'max_forward_tokens', 0) or 0,
                                                   exposure=exposure)
     target_cap['exposure_cap'] = exposure_cap
-    if target_cap['applied'] or exposure_cap.get('parts'):
+    target_cap['near_duplicates'] = near_report
+    if target_cap['applied'] or exposure_cap.get('parts') or near_report['dropped_units']:
         kept_rounds = {str(c.get('round')) for c in all_chains}
         target_cap['dropped_episode_keys'] = sorted(e['round'] for e in sft_episodes if str(e['round']) not in kept_rounds)
         dropped = set(target_cap['dropped_episode_keys'])
@@ -3356,6 +3452,7 @@ def build(args):
     chains = all_chains
     open_goal_scope = getattr(args, 'open_goal_scope', None) or 'all'
     mix = mix_report(chains, aux_report, open_goal_scope)
+    mix['diversity'], mix['diversity_flags'] = mix_diversity(chains, shape_of, signatures, args)
     minimum_open_goal_share = getattr(args, 'min_open_goal_share', None)
     if minimum_open_goal_share is None and (open_goals_only or any(
             task.get('source') == 'observed-live-workspace' and
@@ -3425,6 +3522,9 @@ def build(args):
                    'cap_rule': 'round(1 + (cap - 1) * (1 - base pass rate)); cap = rich_max_per_task for a task '
                                'declaring a held construct, else max_per_task',
                    'max_family_share': args.max_family_share, 'dup_threshold': args.dup_threshold, 'seed': args.seed,
+                   'max_shape_share': shape_share, 'aux_share_of': share_of,
+                   'aux_teacher_selection': getattr(args, 'aux_teacher_selection', 'follow'),
+                   'mix_near_duplicates': getattr(args, 'mix_near_duplicates', 'drop'),
                    'admit_drifted': getattr(args, 'admit_drifted', 'on'), 'october_share': args.october_share, 'october_max_per_task': args.october_max_per_task,
                    'october_family_share': args.october_family_share,
                    'teacher_think': args.teacher_think, 'think_treatment': treatment.report(),
@@ -3971,6 +4071,23 @@ def main():
                    help='dataset-wrapper episodes kept to at most this share of the GRPO-pool selection (1 = no cap)')
     b.add_argument('--max-family-share', type=float, default=0.05)
     b.add_argument('--dup-threshold', type=float, default=0.8)
+    b.add_argument('--max-shape-share', type=float, default=None,
+                   help='the share of each part one program shape (diversity.task_shapes: the program with item data '
+                        'abstracted) may take: own and teacher selections after the family share, every aux part of its '
+                        'budget (default diversity.MIX_SHAPE_SHARE; 0: no shape cap)')
+    b.add_argument('--aux-teacher-selection', choices=('follow', 'ignore'), default='follow',
+                   help='follow (default): a replaces=teacher unit (a filled episode) whose teacher episode the build left '
+                        'out (near duplicate, task/family/shape/wrapper cap) is left out with it; ignore: the old rule')
+    b.add_argument('--mix-near-duplicates', choices=('drop', 'keep'), default='drop',
+                   help='drop (default): a unit of any part whose targets near-duplicate a kept unit (token 5-gram '
+                        'MinHash >= --dup-threshold; own, teacher, filled first) is dropped; keep: opt-out')
+    b.add_argument('--aux-share-of', choices=('actual', 'nominal'), default='actual',
+                   help="actual (default): an aux part's share is of the mix as admitted (share=all parts count by what "
+                        'they take; a part above its share after every other rule loses its last units); nominal: the '
+                        'old rule (every loaded share=all unit counted)')
+    b.add_argument('--diversity-baseline', metavar='BUILD',
+                   help="the build whose mix diversity this one's flags compare with (default: the newest --prefer-unseen "
+                        'build with a diversity report)')
     b.add_argument('--seed', type=int, default=20261117)
     b.add_argument('--teacher-pool', action='append', default=None,
                    help='teacher pools whose current manifests the extraction must cover (default: teacher-gen pool-v1)')

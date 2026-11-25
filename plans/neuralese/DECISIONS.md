@@ -12320,3 +12320,66 @@ transport. Three generic `terminated` records remain under investigation rather
 than being blanket-reclassified. All original packets and receipts stay intact;
 status recomputes their accounting under the repaired driver at resume. Actual
 53 campaign tests passed; collection's existing accounting opt-out still applies.
+
+## 2026-11-25 04:30 Diversity end to end: one shape key, one near-duplicate index, caps at every stage that chooses data; aux shares are shares of the actual mix
+
+**Why.** Owner 2026-11-24 "I don't want to train on repetition at all"; 2026-11-25 "truly counteract all that repetition
+throughout and make sure everything end to end is moving towards diversity". Inventory with file citations and every
+number: `plans/neuralese/DIVERSITY_END_TO_END_20261125.md`.
+
+**One mechanism.** `natlang_neuralese/common/diversity.py`: the program-shape key (moved from `measure_repetition`),
+`task_shapes` merging base shapes of one file skeleton whose abstracted texts share word trigrams at Jaccard >= 0.7
+(fixes the known split of one template by lowercase item words: pool 6,637 base shapes / 1,272 effective -> 4,043 /
+828; natlang-codebase 1,031 -> 152, top 36.5%; git-history 322 -> 35), `id_shape` for row-less aux units, MinHash
+`NearDuplicates` (moved from `sft_sources`) with a vectorized token-id `token_signature`, `cap_shapes` (moved from
+`grpo`), `ShapeQuota`, `drop_near_duplicate_units`, `diversity_report` / `regression_flags`, and a CLI
+(`python -m natlang_neuralese.common.diversity mix BUILD`).
+
+**Changes (each default on, each with an opt-out).**
+- Collection select and the GRPO walk use the merged shape; GRPO's learnable (in-band) cycle is shape-capped too
+  (`--explore-shape-cap`).
+- Teacher campaign order: `cap_shapes` after `order_tasks` (`teacher_gen.py --shape-cap`, default 1%; 0 opts out;
+  next campaign WORK). teacher-r0008's order, 2,000 prefix: top shape 3.15% -> 1.0%, effective 397 -> 455.
+- Filled-reasoning order: breadth-first over tasks, then `cap_shapes` (`filled_reasoning.py generate --shape-cap`).
+- Mix build (`sft_sources build`): a program-shape share after the family share in own and teacher selection
+  (`--max-shape-share`, default 0.02; 0 opts out); a shape quota per aux part; a fill whose teacher episode the build
+  left out (near duplicate, task/family/shape/wrapper cap) leaves with it (`--aux-teacher-selection follow`; `ignore`);
+  one cross-part near-duplicate pass over target token 5-grams, own > teacher > filled > rest
+  (`--mix-near-duplicates drop`; `keep`); a Neuralese variant counts with its original under the per-task and
+  per-task-token caps; `mix.diversity` and `mix.diversity_flags` in build.json. Fixed on the way: the October path's
+  near-duplicate check referenced an undefined `dedup` (it uses the build's index now).
+- Round health: `collection_health.add_mix_diversity` adds the mix's diversity and its flags to `rN/health.json`.
+- Driver: `async-drive --build-args` (and cycle `--build-args`) passes mix-build flags, so every opt-out is reachable
+  at a restart: `--build-args "--max-shape-share 0 --aux-teacher-selection ignore --mix-near-duplicates keep
+  --aux-share-of nominal"`.
+
+**Aux shares (coordinator's r0009 observation, confirmed).** `build` computed every share-bounded part's budget as
+share x (teacher actions + *every loaded unit* of the share=all parts) / (1 - fixed shares). With `--max-prior-exposures
+1`, r0009's filled part held 15,480 units and took 470, so the budgets were set against a 53.8M-token total while the
+mix had 11.6M: operators (share 0.05, budget 2.69M) carried 23.1%, own-neuralese-graph 8.1%, fallow22 4.6%. Fix
+(`--aux-share-of actual`, default; `nominal` opts out): share=all parts are taken first and count by what they took;
+after every other rule `trim_shares` holds each share-bounded part to its share of the mix as it is (its last-admitted
+units leave). The own share stays a floor at the old rule's budget: on the trial with r0009's inputs the actual total
+alone cut own successes to 207 chains (r0009: 1,054). The empty `target_cap.exposure_cap.parts` was a reporting gap,
+not a missing cap: exposure is filtered at the candidates (funnel and aux `over_exposed`) before `drop_overexposed`
+sees the chains; `exposure_cap.candidates_over_exposed` now reports those counts (trial: teacher 29,963, rl-own 7,195,
+filled 14,960, operators 5,131, fallow22 3,358).
+
+**Checked.** Targeted tests (`tests/neuralese/test_diversity.py`, 12; with the sft_sources, filled_reasoning,
+grpo task supply, expert_iteration, collection_health, bgkit, broad_graph, async_train suites: 283 passed). Trial builds
+on real inputs (scratch registry copy, deleted after): (1) r0008 inputs (new code, `--max-prior-exposures 1`): runs end to end, 24.5 GB peak; over_shape_cap teacher 26, rl-own 15; fallow22 over_shape_share 7,706 (195 units left); filled teacher_not_selected 36; cross-part near duplicates 0 (the core MinHash already removes them; the pass is a backstop). (2) r0009 inputs with the actual-share fix: total 6.97M weighted target tokens (r0009 as built: 11.64M); loss shares rl-own 63.2% (4.40M; r0009 4.97M), teacher 20.3%, filled 7.9% (281 units; 539 left with their teacher episode), operators 2.9% (r0009 23.1%), own-neuralese-graph 2.9% (8.1%), neuralese-graph 2.9%, fallow22 0.06% (4.6%); whole mix 3,037 units over 1,702 shapes, 487 effective, top shape 1.6%. The share-bounded parts now land below their nominal share (their budgets are set before the own floor is admitted; `trim_shares` only ever lowers): a ceiling, never more.
+
+**Measured, final mixes before the change.** r0007: 11,803 units, 6,471 shapes, 1,526 effective, top 2.1%, top 10 8.1%,
+near-duplicate mass 0.04%; r0008 similar. Largest shares: rl-own's top shape 3.6% (a reasoning-gym wrapper),
+neuralese-graph's top 10 shapes 46% of its mass; fallow22 is 6 id templates over 11,259 units (3 datasets x root/child),
+which the per-part shape quota now holds to 2% each (the part underfills its share: intended, opt-out
+`--max-shape-share 0`). Held-v3: 177 of 256 tasks share a merged shape with 7,235 training rows; left as is
+(i.i.d. by design; sibling closure stays the leakage rule).
+
+**Driver.** No flag is required: the defaults apply at the next pin. Opt-outs above via `--build-args` /
+`--select-args "--shape-cap 0"`.
+
+**Not checked.** Shapes are declared program text, not behaviour; identifier-only differences still merge; the 0.7 merge
+threshold was read on the largest merges, not calibrated against audited counts; the subagent->Neuralese rebuild,
+operator and fallow22 builders unchanged (the mix enforces on their output); no unit test of `Collector._pick`'s cycle
+(it reuses tested `cap_shapes`); held effect of any of this: enters with the next held measurement.
