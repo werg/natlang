@@ -13,7 +13,7 @@ import { hexDigest } from '../native/hash.js';
 import { readTypeAliases } from '../native/type-aliases.js';
 import { parseAliases, parseTypeCached, TypeEnv } from '../native/types.js';
 import { decisionDomain } from '../native/decision.js';
-import { RESERVED_CALLABLE_PROPERTIES, invalidNameMessage, reservedNameMessage } from '../compiler/intrinsics.js';
+import { JS_RESERVED_WORDS, RESERVED_CALLABLE_PROPERTIES, camelCaseName, invalidNameMessage, reservedNameMessage, reservedWordMessage } from '../compiler/intrinsics.js';
 import { closestName } from '../compiler/suggest.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { checkItems, expressionError, parseEnsures, unknownName, type EnsuresClause } from './ensures.js';
@@ -298,7 +298,18 @@ export function readNatlangFrontmatter(source: string): Record<string, unknown> 
 
 function checkName(path: string, name: string): void {
   if (!IDENTIFIER.test(name)) throw new NatlangSourceError(path, invalidNameMessage(name));
+  if (JS_RESERVED_WORDS.has(name)) throw new NatlangSourceError(path, reservedWordMessage(name));
   if (RESERVED_CALLABLE_PROPERTIES.has(name)) throw new NatlangSourceError(path, reservedNameMessage(name));
+}
+
+/** An argument is a binding in the call's eval scope (`const { name } = ...`), so its name is a JavaScript identifier. */
+function checkArgumentNames(path: string, args: Record<string, string>, text: string): void {
+  for (const raw of Object.keys(args)) {
+    const name = raw.replace(/\?$/, ''), line = frontmatterLine(text, 'args', name);
+    if (!IDENTIFIER.test(name)) throw new NatlangSourceError(path, `${JSON.stringify(name)} is not a valid argument name; name it with ` +
+      `letters, digits, _ and $, such as ${JSON.stringify(camelCaseName(name) || 'input')}.`, line);
+    if (JS_RESERVED_WORDS.has(name)) throw new NatlangSourceError(path, reservedWordMessage(name, 'an argument name'), line);
+  }
 }
 
 /** The TypeScript helper beside a `.nl` file (or in a folder above it) that declares type `name`, if one does. */
@@ -364,6 +375,7 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   checkName(path, name);
   const types = { ...inherited, ...(meta.types as Record<string, string> ?? {}) };
   const args = (meta.args ?? {}) as Record<string, string>;
+  if (args && typeof args === 'object' && !Array.isArray(args)) checkArgumentNames(path, args, text);
   let generic: GenericResult | undefined;
   try { generic = genericResult(meta.generic as Record<string, string> | undefined, meta.returns); }
   catch (error) { throw new NatlangSourceError(path, (error as Error).message, frontmatterLine(text, 'generic')); }

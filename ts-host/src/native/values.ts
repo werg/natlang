@@ -128,6 +128,57 @@ export function hostCopy(value: unknown, seen = new Map<object, unknown>()): unk
     { value: hostCopy(item, seen), enumerable: true, writable: true, configurable: true });
   return out;
 }
+/**
+ * Seeds `seen` (hostCopy's map) with each part of the inputs as eval saw them (`copied`, frozen there) mapped to the
+ * host's own value at the same place (`original`), so a local that holds a part of an input keeps holding that very
+ * value, as in JavaScript. Places whose shape differs (a pending call, a handle) are left out.
+ */
+export function mapCopiedParts(seen: Map<object, unknown>, copied: unknown, original: unknown, top = true): void {
+  if (!copied || !original || typeof copied !== 'object' || typeof original !== 'object' || seen.has(copied) ||
+      isLive(original) || isPending(original as Value) || original instanceof Folder || original instanceof FolderHandle ||
+      original instanceof FileHandle) return;
+  if (Array.isArray(copied) !== Array.isArray(original)) return;
+  if (Array.isArray(copied)) {
+    const items = original as unknown[];
+    if (copied.length !== items.length) return;
+    seen.set(copied, original);
+    for (let i = 0; i < copied.length; i++) mapCopiedParts(seen, copied[i], items[i], false);
+    return;
+  }
+  if (!plain(original)) return;
+  const keys = Object.keys(copied);
+  // The top-level bag of inputs leaves out those without a value yet; a record below it has every key.
+  if (!top && (keys.length !== Object.keys(original).length || keys.some(key => !Object.hasOwn(original, key)))) return;
+  if (!top) seen.set(copied, original);
+  for (const key of keys) if (Object.hasOwn(original, key))
+    mapCopiedParts(seen, (copied as Record<string, unknown>)[key], (original as Record<string, unknown>)[key], false);
+}
+
+/**
+ * `coerced` with every part that equals its `source` part replaced by the source itself. coerce builds new arrays and
+ * records; an eval local keeps the objects it held (one object held by two locals, or by a local and an input, stays
+ * one object), so identity checks keep their meaning in later evals.
+ */
+export function withSourceIdentity(source: unknown, coerced: Value): Value {
+  const keep = (from: unknown, to: unknown): unknown => {
+    if (Object.is(from, to) || !from || !to || typeof from !== 'object' || typeof to !== 'object') return to;
+    if (Array.isArray(from) && Array.isArray(to)) {
+      if (from.length !== to.length) return to;
+      const items = to.map((item, i) => keep(from[i], item));
+      return items.every((item, i) => item === from[i]) ? from : items.every((item, i) => item === to[i]) ? to : items;
+    }
+    if (Array.isArray(from) || Array.isArray(to) || !plain(from) || !plain(to) || isLive(to) || isPending(to as Value)) return to;
+    const keys = Object.keys(to), fromKeys = Object.keys(from);
+    const fields = keys.map(key => keep((from as Record<string, unknown>)[key], (to as Record<string, unknown>)[key]));
+    if (keys.length === fromKeys.length && keys.every((key, i) => key === fromKeys[i] && fields[i] === (from as Record<string, unknown>)[key]))
+      return from;
+    if (fields.every((field, i) => field === (to as Record<string, unknown>)[keys[i]!])) return to;
+    const out: Record<string, unknown> = {};
+    keys.forEach((key, i) => Object.defineProperty(out, key, { value: fields[i], enumerable: true, writable: true, configurable: true }));
+    return out;
+  };
+  return keep(source, coerced) as Value;
+}
 const depth = (path: string) => path.split('/').length;
 /** Of a union's member misses, the one deepest below `path` that is a wrong field value, not a wrong variant. */
 function closestMiss(misses: Reject[], path: string): Diagnostic | undefined {
@@ -448,15 +499,25 @@ export function unboundParts(node: Pending, env: TypeEnv, path: string): Diagnos
   return out;
 }
 
-export function dump(value: Value, full = false): unknown {
+export function dump(value: Value, full = false, shared?: Map<object, unknown>): unknown {
   if (value === MISSING) return null;
   if (value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle)
     return { $host: { kind: value instanceof FileHandle ? 'file' : 'folder',
       path: value instanceof Folder ? '' : value.relativePath, reconstructable: false } };
   if (isLive(value)) return { $live: { type: liveLabel(value as object), id: liveId(value as object) } };
-  if (Array.isArray(value)) return value.map(item => dump(item, full));
-  if (value && typeof value === 'object' && !isPending(value))
-    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, dump(child, full)]));
+  // `shared` keeps an array or record reached twice as one copy (an eval scope's aliasing, native/runtime.ts).
+  if (shared?.has(value as object)) return shared.get(value as object);
+  if (Array.isArray(value)) {
+    const out: unknown[] = []; shared?.set(value, out);
+    for (const item of value) out.push(dump(item, full, shared));
+    return out;
+  }
+  if (value && typeof value === 'object' && !isPending(value)) {
+    const out: Record<string, unknown> = {}; shared?.set(value, out);
+    for (const [key, child] of Object.entries(value))
+      Object.defineProperty(out, key, { value: dump(child, full, shared), enumerable: true, writable: true, configurable: true });
+    return out;
+  }
   if (!isPending(value)) return value;
   const body: Record<string, unknown> = { type: formatType(value.type) };
   if (Object.keys(value.typesSrc).length) body.types = value.typesSrc;

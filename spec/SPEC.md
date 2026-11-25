@@ -462,7 +462,10 @@ The scope holds the parameters, captures, callable items, services, and
 persistent locals. Parameters are `const` and deeply frozen; derive a new
 variable instead of changing one. A `let` capture's assignments are written
 back to the caller. Top-level `const` and `let` declarations persist across eval
-calls. The conversation opens with the runtime's own eval: ambient `declare`
+calls, and so does object identity, as in one JavaScript scope: an object two
+locals hold, or a part of a parameter a local holds, is the same object in later
+evals (`needs.indexOf(e)`, `item !== hit`), and a parameter's part stays frozen
+through the local. The conversation opens with the runtime's own eval: ambient `declare`
 lines for callable items and services, then the parameters and locals declared
 with their current values (large values cut off; see Cut-offs). An
 eval is atomic: a failed compilation or execution commits no local or capture
@@ -485,8 +488,8 @@ In eval, awaiting an inline `nl` without calling it (`await nl`...``) calls it
 with no arguments: it judges the names its instructions mention and its
 interpolated values.
 Types an eval declares (`type State = …`, `interface Row { … }`, without type
-parameters) annotate its locals like the call's own types, in that eval and in
-later ones; a type the runtime cannot express leaves a local so annotated open.
+parameters, recursive ones such as `type Node = { kids: Node[] }` included)
+annotate its locals like the call's own types, in that eval and in later ones; a type the runtime cannot express leaves a local so annotated open.
 What an eval leaves unawaited (a promise in a local, the final value or a
 `return`, or arrays and objects holding promises) is awaited before it is kept.
 Natural-language calls belong to the eval that starts them. When an eval fails

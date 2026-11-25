@@ -5,6 +5,7 @@ import { packageNameFromSpecifier } from './package-specifier.js';
 import { markRaces } from './runtime/context.js';
 import type { EnvironmentMode, HostEvent } from './native/evaluator.js';
 import { RealmEnvironment, globalBindingNames, type EvalImports, type Realm } from './native/realm.js';
+import { PRELUDE_BINDINGS } from './native/eval-compile.js';
 import { evalMemoryLimitMb, evalSyncLimitSeconds, type HeapProbe } from './native/eval-memory.js';
 export { EvalFailure } from './native/evaluator.js';
 export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './native/evaluator.js';
@@ -145,7 +146,7 @@ export class TypeScriptEnvironment extends RealmEnvironment {
     };
   }
 
-  override get globalBindings(): readonly string[] { return globalBindingNames(this.makeGlobals()); }
+  override get globalBindings(): readonly string[] { return [...PRELUDE_BINDINGS, ...globalBindingNames(this.makeGlobals())]; }
 
   private makeGlobals(): Record<string, unknown> {
     // Node's host globals are available to eval code as they are to any module in the application.

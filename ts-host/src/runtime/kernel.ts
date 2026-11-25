@@ -15,7 +15,7 @@ import { CRISP, representationType, type GenericResult, type Representation } fr
 import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
 import { RefinementError, canonicalValue, checkServiceResults, failureError, refinementCodeOf, type RefinementCode, type RefinementFailure } from '../native/refinement.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
-import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, descend, runInFrame, type ActiveCall, type DecisionReadout, type Descent, type Frame } from './context.js';
+import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, descend, noSmallerArgument, runInFrame, type ActiveCall, type DecisionReadout, type Descent, type Frame } from './context.js';
 import { recordingServices, type LiveEvent, type LiveSink } from './runtime.js';
 import { kernelHooks } from './hooks.js';
 import { protectedSources } from './loader.js';
@@ -604,9 +604,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         `measure ${measure}, which is not smaller than ${same.measure} in the call it runs below; recurse only where ${JSON.stringify(definition.measure)} falls.`);
     } else {
       descent = descend(same, positional);
-      if (!descent.length) throw new NatlangRecursionError(definition.id, frame.chain, name, `\`${name}\` called itself without a smaller ` +
-        'argument. Recurse only on a part of the input, a shorter array or string, or a smaller non-negative integer; otherwise use a ' +
-        'bounded loop or iterateOn.');
+      if (!descent.length) throw new NatlangRecursionError(definition.id, frame.chain, name, noSmallerArgument(name));
     }
   }
   const nlActive: ActiveCall | undefined = declared ? { id: callIdentity, args: positional, parent: frame.nlActive, same, descent,

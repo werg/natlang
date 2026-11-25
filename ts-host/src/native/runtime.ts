@@ -14,13 +14,13 @@ import { PageStore } from './pages.js';
 import { isRecording, recordingServices, type EffectEvent } from './effects.js';
 import { DEFAULT_DIALECT, TypeEnv, TypeSyntaxError, containsRefinement, formatType, parseType, parseTypeCached, typeAliasNames, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
-import { MISSING, Reject, coerce, hostCopy, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
+import { MISSING, Reject, coerce, hostCopy, mapCopiedParts, withSourceIdentity, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
   isPlainRecord, type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
 import { fileDiffPreview } from './file-diff-preview.js';
 import type { PythonHost } from './folder-python.js';
-import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE, type PersistentScopeHelper } from '../scope-compiler.js';
+import { compileScopeSnippet, evalDeclaredNames, SCOPE_RUNTIME_PRELUDE, type PersistentScopeHelper } from '../scope-compiler.js';
 import { livePreview, renderValue } from './agent.js';
 import { UntrustedRegistry, containsUntrusted, hostUntrusted, scopedUntrusted } from './untrusted.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
@@ -296,8 +296,15 @@ export function evalStdEnabled(): boolean {
   const setting = typeof process === 'undefined' ? undefined : process.env?.NATLANG_EVAL_STD;
   return !/^(?:0|off|false|no)$/i.test((setting ?? '').trim());
 }
-/** An `import` of the standard library in eval source (the std built-ins are in scope without one). */
-const STD_IMPORT = /\bimport\s+(?:type\s+)?[^;'"]*?\bfrom\s*['"]@natlang\/(?:node|browser|core)\/std['"]\s*;?/g;
+
+/**
+ * Eval locals keep JavaScript object identity across evals (one copy of the whole scope, input parts mapped back to the
+ * host's values, coerced locals keeping their objects); NATLANG_EVAL_IDENTITY=0 copies each value on its own as before.
+ */
+export function evalIdentityEnabled(): boolean {
+  const setting = typeof process === 'undefined' ? undefined : process.env?.NATLANG_EVAL_IDENTITY;
+  return !/^(?:0|off|false|no)$/i.test((setting ?? '').trim());
+}
 
 /** read_code documentation of the std built-ins (the declarations are those of `@natlang/node/std`). */
 export const STD_BUILT_IN_DOCS: Record<string, string> = {
@@ -674,12 +681,12 @@ function containsLive(value: unknown): boolean {
   return false;
 }
 /** Split scope values into portable snapshot data and live references. */
-function splitScope(values: Record<string, Value>): { portable: Record<string, unknown>; live: Record<string, unknown> } {
+function splitScope(values: Record<string, Value>, shared?: Map<object, unknown>): { portable: Record<string, unknown>; live: Record<string, unknown> } {
   const portable: Record<string, unknown> = {}, live: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(values)) {
     if (value === MISSING || isPending(value)) continue;
     if (containsLive(value)) live[name] = value;
-    else portable[name] = dump(value);
+    else portable[name] = dump(value, false, shared);
   }
   return { portable, live };
 }
@@ -1644,7 +1651,24 @@ export class NativeSession {
   private activeScopeLocals?: Map<string, [() => unknown, ((value: unknown) => void)?]>;
   /** The std built-ins the eval being compiled has (hooks.ts evalDeclarations types them from `@natlang/node/std`). */
   evalStdBindings: readonly string[] = [];
-  constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) { this.markUntrusted(); }
+  /** The call's type environment; a recursive type an eval declares joins it (bindLocalTypeNames). */
+  env: TypeEnv;
+  constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, env: TypeEnv) { this.env = env; this.markUntrusted(); }
+
+  /**
+   * An eval's types are inlined into a local's type where it is used; a recursive one (`type Node = { kids: Node[] }`)
+   * cannot be, so the names a type still refers to join this call's type environment, with the local types they reach.
+   */
+  private bindLocalTypeNames(type: Type, localTypes: Record<string, Type>): void {
+    const pending = typeAliasNames(type), add: Record<string, Type> = {};
+    while (pending.length) {
+      const name = pending.pop()!;
+      if (Object.hasOwn(add, name) || !Object.hasOwn(localTypes, name) || this.env.lookup(name)) continue;
+      add[name] = localTypes[name]!;
+      pending.push(...typeAliasNames(localTypes[name]!));
+    }
+    if (Object.keys(add).length) this.env = this.env.child(add);
+  }
 
   /** The standard library eval's std built-ins come from: the platform's instance, unless NATLANG_EVAL_STD turns them off. */
   private stdLibrary(): Record<string, unknown> | undefined {
@@ -1661,11 +1685,10 @@ export class NativeSession {
   private evalStdNames(source: string): string[] {
     const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const services = this.availableServices(), captures = this.lam.captures ?? {};
-    const own = source.replace(STD_IMPORT, '');
+    const declared = evalDeclaredNames(source);
     return this.stdCombinators().filter(name => !inputs.includes(name) && !Object.hasOwn(this.lam.let, name) &&
       !Object.hasOwn(this.lam.codebase, name) && !Object.hasOwn(services, name) && !Object.hasOwn(captures, name) &&
-      !this.persistentScopeHelpers.has(name) &&
-      !new RegExp(`\\b(?:const|let|var|function|class)\\s+${name}\\b|[{,]\\s*${name}\\s*[,}=]`).test(own));
+      !this.persistentScopeHelpers.has(name) && !declared.has(name));
   }
 
   executionOccurrence(): import('../contracts.js').NativeExecutionOccurrence | undefined {
@@ -2755,7 +2778,11 @@ export class NativeSession {
     // return_result also works as a function in eval: return_result(value) stages a result, and
     // return_result(value, status, reason) carries out the tool's request once the eval has succeeded.
     // A finisher name the snippet declares itself stays the snippet's own variable.
-    const declaredHere = (name: string) => new RegExp(`\\b(?:const|let|var|function|class)\\s+${name}\\b|[{,]\\s*${name}\\s*[,}=]`).test(code);
+    // Names this eval's own top-level declarations take; a name it only uses (an argument, a shorthand property) keeps the
+    // saved helper or built-in of that name. A regex here once read `f(a, grade, b)` as declaring grade, and dropped the
+    // saved helper grade (authored wave 1, 2026-11-25).
+    const declaredNames = evalDeclaredNames(code);
+    const declaredHere = (name: string) => declaredNames.has(name);
     const finishers = ['return_result'].filter(name => !taken(name) && !declaredHere(name));
     opaqueNames.push(...finishers);
     let requested: { tool: string; args: Record<string, unknown> } | undefined;
@@ -2841,9 +2868,11 @@ export class NativeSession {
       return { kind: 'rejected', text: text + this.captureScopeFailure('compile', code, scopeBefore, text, compiled.diagnostics),
         codes: [...new Set(compiled.diagnostics.map(item => item.code))] };
     }
-    const inputs = splitScope(this.lam.args);
-    const locals = splitScope(Object.fromEntries(localNames.map(name => [name, this.lam.let[name]!])));
-    let finished: unknown;
+    // One copy of inputs and locals together: an object two of them hold stays one object in eval (JavaScript identity).
+    const identity = evalIdentityEnabled(), scopeCopies = identity ? new Map<object, unknown>() : undefined;
+    const inputs = splitScope(this.lam.args, scopeCopies);
+    const locals = splitScope(Object.fromEntries(localNames.map(name => [name, this.lam.let[name]!])), scopeCopies);
+    let finished: unknown, scopeInputs: unknown;
     let evalStop: AbortController | undefined;
     const plans = compiled.plans ?? [];
     const origin: InlineInstructionOrigin | undefined = toolCallId && this.runtime.currentCallId ? {
@@ -2965,7 +2994,8 @@ export class NativeSession {
       // so its std:<name> span and child calls nest under this call.
       std: Object.fromEntries(stdNames.map(name => [name, (...args: unknown[]) =>
         runInFrame(currentFrame() ?? this.runtime.frame, () => (stdLibrary![name] as (...items: unknown[]) => unknown)(...args))])),
-      finish: (value: unknown) => { finished = value; } };
+      finish: (value: unknown) => { finished = value; },
+      scopeInputs: (value: unknown) => { scopeInputs = value; } };
     const prologue = [
       ...(this.lam.projectTransaction ? ['const folder = __live.folder;'] : []),
       ...(inputsBinding ? ['const read_inputs = () => __live.callInputs;'] : []),
@@ -3010,7 +3040,10 @@ export class NativeSession {
         throw new Reject([{ path: 'code', code: 'bad-action',
           expected: 'named eval bindings; wrap a final comma expression in parentheses' }]);
       // Plain data is rebuilt in this realm; captured values keep their identity for write-back.
-      const output = { ...hostCopy({ result: raw.result, bindings: raw.bindings }) as
+      // A part of an input that a local or the result holds is the host's own input value, not a copy of it.
+      const inputParts = new Map<object, unknown>();
+      if (identity) mapCopiedParts(inputParts, scopeInputs, this.lam.args);
+      const output = { ...hostCopy({ result: raw.result, bindings: raw.bindings }, inputParts) as
         { result?: unknown; bindings: Record<string, unknown> }, captures: raw.captures };
       const thenable = (value: unknown) => !!value && (typeof value === 'object' || typeof value === 'function') &&
         typeof (value as PromiseLike<unknown>).then === 'function';
@@ -3043,9 +3076,12 @@ export class NativeSession {
           }
         }
         inferred[name] = type;
+        this.bindLocalTypeNames(type, localTypes);
         // A local holds what eval computed (a service's or a callee's value): as in TypeScript, fields its type does
         // not list are kept, so storing a provider value never asks for a retyped copy.
-        staged.push([name, type, coerce(value, type, this.env, `let/${name}`, { preserveRecordExtras: true, functions: 'keep' })]);
+        // The coerced copy gives way to the value itself wherever they agree, so the objects a local holds stay the same objects.
+        const coerced = coerce(value, type, this.env, `let/${name}`, { preserveRecordExtras: true, functions: 'keep' });
+        staged.push([name, type, identity ? withSourceIdentity(value, coerced) : coerced]);
       }
       // A top-level return proposes the call's result; it is taken only if it has the declared type.
       let functionResult: Value | undefined, notResult = '';

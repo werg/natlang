@@ -30,6 +30,20 @@ export const camelCaseName = (name: string): string => {
 export const invalidNameMessage = (name: string): string =>
   `${JSON.stringify(name)} is not a valid callable name; name it with letters, digits, _ and $, such as ${JSON.stringify(camelCaseName(name) || 'stage')}.`;
 
+/**
+ * Words JavaScript reserves in strict-mode code, where eval and callable-folder code run: none can name a binding, so
+ * none can name a function or an argument (an argument is a binding in eval).
+ */
+export const JS_RESERVED_WORDS: ReadonlySet<string> = new Set(['arguments', 'await', 'break', 'case', 'catch', 'class',
+  'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else', 'enum', 'eval', 'export', 'extends', 'false',
+  'finally', 'for', 'function', 'if', 'implements', 'import', 'in', 'instanceof', 'interface', 'let', 'new', 'null',
+  'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch', 'this', 'throw', 'true', 'try',
+  'typeof', 'var', 'void', 'while', 'with', 'yield']);
+
+/** One sentence for a name that is a JavaScript reserved word, naming a rename. */
+export const reservedWordMessage = (name: string, what = 'a callable name'): string =>
+  `${JSON.stringify(name)} is a reserved word in JavaScript, so it cannot be ${what}; rename it, for example to ${JSON.stringify(name + 'Item')}.`;
+
 /** One sentence for a callable name that is a function property, naming a rename. */
 export const reservedNameMessage = (name: string, what = 'callable name'): string =>
   `${JSON.stringify(name)} is a property every function already has, so it cannot be a ${what}; rename it, for example to ${JSON.stringify(name + 'Step')}.`;

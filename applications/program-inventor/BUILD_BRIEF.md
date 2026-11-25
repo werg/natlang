@@ -111,7 +111,7 @@ The replay records every call. Your trajectory answers each call below the root 
 | Fixed point | `fixedPoint(revise, first)` (a value revised until a revision only rewords it: a summary tightened, a plan reconciled) | each step's calls, then `settled` on `revision: Revision = { previous: ..., current: ... }`: `false` while the step still changes what the value says, `true` when it only rewords |
 | `iterateOn` with an NL check | ``await iterateOn(draft => revise(draft, notes), first).until(nl<(d: Draft) => boolean>`...`)`` | the check is called on the first state and after every step (`false`, step, ..., `true`); each step's calls. Each check's opening shows its state, and earlier states may be quoted in it: match a sentence only this state contains. A check still false after about ten steps also asks a `progress_judge` call |
 | `iterateOn` with a measure | `.withMeasure(state => state.pending.length).until(state => state.pending.length === 0)` | each step's calls until the code check holds |
-| Structural recursion | `recursive: structural` (or `measure:`), the function calls itself on a part: a reply and its replies, a section and its subsections, a claim and the claims it depends on | one call per level, each with its own entry. An input type may be recursive (`type Reply = { text: Untrusted<string>; replies: Reply[] }`) |
+| Structural recursion | `recursive: structural` (or `measure:`), the function calls itself on a part: a reply and its replies, a section and its subsections, a claim and the claims it depends on | one call per level, each with its own entry. Types may be recursive, results included (`type Reply = { text: Untrusted<string>; replies: Reply[] }`). A graph walk recurses on the nodes not yet visited (a shorter array), not on a growing visited path. Data that relies on itself in a cycle (claims supporting each other) is a counted loop of passes or a `fixedPoint` |
 | Postcondition | `ensures:` with `check:` (code, no call) or `predicate:` with `against: [args]` | a `predicate` is judged by a call named `holds` with `value: unknown`, `predicate: string` and `context: unknown` (the `against` values): `{fn: "holds", match: ["value: unknown = <start of the value>"], value: true}` |
 | Refinement | `refine(value, 'predicate', { context })` in eval, or a result typed `Is<T, "...">` | one `holds` call per value produced (`value: unknown`, `predicate: string`). A refinement that fails: `holds` answers `false` for the first value, and the producing call's entry has `turns` with two `return_result` turns, the refused value and the corrected one (the refusal is not an `expected_failures` action) |
 | Folder reducer | root `kind: directory-reducer` with `writes:`; the instance gives `folder_files` (a program that maintains a folder: a manuscript's chapter files, a suite's test files, a household's notes) | the root's turns use `list_files`, `read_file`, `write_file`, `edit_file`; `folder.apply(reducer, ...)` runs a nested reducer |
@@ -188,7 +188,8 @@ entry.
 }
 ```
 
-- **`root`**: the root call's turns in order. An eval's local `const`s persist to the next eval. The last turn is
+- **`root`**: the root call's turns in order. An eval's local `const`s persist to the next eval, with object identity:
+  `items.indexOf(x)` and `===` work across evals. The last turn is
   `["eval", {..., "finish": true}]` returning the result, or `["return_result", {"status": "success", "value": ...}]`.
   Look at a result before using it the way a model would (end an eval with the value to inspect), and split work into
   several evals where a model would want to see an intermediate result.

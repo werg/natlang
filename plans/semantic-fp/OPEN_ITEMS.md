@@ -47,7 +47,26 @@ Closed 2026-11-23 by the language-gaps agent (DECISIONS "Semantic-FP language ga
   type file outside the loaded root (a sub-function loaded on its own whose `types.ts` lives in the program root), since
   the loader never reads past its root.
 - **`Untrusted<string>` in a saved eval helper's annotation fails `invalid-binding`** (authored-program calibration
-  builder cal2, 2026-11-25; worked around with `typeof` of another const). Not yet reproduced. Owner: unassigned.
+  builder cal2, 2026-11-25): closed 2026-11-25 (authored wave-1 gaps): natlang's ambient types (`Untrusted`, `Is`, the
+  iteration types) count as known in a saved helper's annotation.
+- **Authored wave 1 language gaps (2026-11-25, MODEL_FACING_CHANGES "eval locals keep JavaScript identity").** Fixed:
+  eval-local identity across evals, saved helpers passed as arguments, recursive eval-local types, `interface` in
+  `types.ts`, reserved-word argument names, the recursion error's graph hint. Decided, not changed:
+  - **Recursion over a growing visited path stays refused.** A path that grows toward a finite set terminates only if the
+    set is finite, which the runtime cannot see (an id can be generated); the sound and equally short form recurses on
+    the nodes not yet visited (a shorter array), and the error now names it. No `measure:` for eval helpers: a `.nl`
+    function has one, an eval helper can switch to the shrinking argument.
+  - **Cycles in data** (claims that support each other) have no construct of their own: a counted loop of passes (at most
+    one per node) or `fixedPoint` settles them, and the nodes left unsettled are the cycle (authoring skill,
+    verification.md). Mutual recursion between eval helpers already works under the per-function re-entry rule (each
+    re-entry of a helper must get a smaller argument; tested).
+- **Mutual recursion between `.nl` functions** (annotated-game-claim-checker wanted `tryMove`/`mateIn`): a `uses:` chain
+  back to the function is a load error ("merge functions that call each other into one"). Sound under the kernel's
+  per-definition re-entry guard (any infinite chain re-enters some function infinitely often, each time smaller), but
+  enabling it needs named, cyclic codebase declarations (`.d.nl.ts` nests each `uses:` item's type structurally, and the
+  loader binds a `uses:` item with its own companion folder), and `recursive:`/`measure:` on every function of the
+  cycle. Too large for the wave-1 fix pass; the merge advice works. Owner: the next language-gaps pass, when a wave
+  report shows it again.
 - **Runtime function synthesis is NL literals (owner 2026-11-25: "It's just built in our ability to make these nl
   literals").** Works under replay today: a literal built in eval from derived values, and a `.nl` function with a
   function result whose call finishes with `return nl`...``. Not checked yet: a synthesized function stored as data

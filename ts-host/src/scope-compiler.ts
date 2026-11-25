@@ -122,8 +122,16 @@ const PREFIX = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, u
 export const SCOPE_RUNTIME_PRELUDE = `const __natlang_plain = (value: any) => !!value && typeof value === 'object' && !Array.isArray(value) &&
   Object.prototype.toString.call(value) === '[object Object]' &&
   (Object.getPrototypeOf(value) === null || Object.getPrototypeOf(Object.getPrototypeOf(value)) === null);
-const __natlang_copy = (value: any): any => Array.isArray(value) ? value.map(__natlang_copy) :
-  __natlang_plain(value) ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, __natlang_copy(v)])) : value;
+// One copy of the whole scope: an object two names hold (two locals, or a local and a part of an input) stays one
+// object, as in JavaScript, so identity checks (indexOf, ===) keep their meaning from one eval to the next.
+const __natlang_copy = (value: any, seen: Map<object, any> = new Map()): any => {
+  if (!Array.isArray(value) && !__natlang_plain(value)) return value;
+  if (seen.has(value)) return seen.get(value);
+  if (Array.isArray(value)) { const out: any[] = []; seen.set(value, out); for (const item of value) out.push(__natlang_copy(item, seen)); return out; }
+  const out: Record<string, any> = {}; seen.set(value, out);
+  for (const [k, v] of Object.entries(value)) Object.defineProperty(out, k, { value: __natlang_copy(v, seen), enumerable: true, writable: true, configurable: true });
+  return out;
+};
 const __natlang_frozen = (value: any): any => {
   if (Array.isArray(value) || __natlang_plain(value)) { Object.freeze(value); for (const item of Object.values(value)) __natlang_frozen(item); }
   return value;
@@ -193,6 +201,30 @@ const MODULE_AMBIENTS = new Set(['require', 'module']);
 function namesOf(name: ts.BindingName): ts.Identifier[] {
   if (ts.isIdentifier(name)) return [name];
   return name.elements.flatMap(element => ts.isOmittedExpression(element) ? [] : namesOf(element.name));
+}
+
+/**
+ * The names an eval's top-level statements declare: `const`/`let`/`var` (destructuring included), functions, classes,
+ * and imports other than the std combinators'. A name the eval only uses (an argument, a shorthand property) is not
+ * declared: the runtime keeps giving it the saved helper, std combinator or built-in of that name.
+ */
+export function evalDeclaredNames(source: string): Set<string> {
+  const file = ts.createSourceFile('eval.ts', source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+  const names = new Set<string>();
+  for (const statement of file.statements) {
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) for (const name of namesOf(declaration.name)) names.add(name.text);
+    } else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name) {
+      names.add(statement.name.text);
+    } else if (ts.isImportDeclaration(statement) && statement.importClause && !(ts.isStringLiteral(statement.moduleSpecifier) &&
+        (STD_SPECIFIERS as readonly string[]).includes(statement.moduleSpecifier.text))) {
+      const clause = statement.importClause, bindings = clause.namedBindings;
+      if (clause.name) names.add(clause.name.text);
+      if (bindings && ts.isNamespaceImport(bindings)) names.add(bindings.name.text);
+      if (bindings && ts.isNamedImports(bindings)) for (const element of bindings.elements) names.add(element.name.text);
+    }
+  }
+  return names;
 }
 
 /** Static type-only projections for destructured bindings; never run these expressions at runtime. */
@@ -349,7 +381,9 @@ const PERSISTENT_HELPER_TYPES = new Set(['any', 'unknown', 'never', 'void', 'str
   'Pick', 'Omit', 'Exclude', 'Extract', 'NonNullable', 'ReturnType', 'Parameters', 'Awaited', 'Neuralese', 'FileHandle',
   'Folder', 'FolderSnapshot', 'FolderProposal', 'Entry', 'Date', 'Map', 'Set', 'WeakMap', 'WeakSet', 'RegExp', 'Error',
   'Uint8Array', 'Uint16Array', 'Uint32Array', 'Int8Array', 'Int16Array', 'Int32Array', 'Float32Array', 'Float64Array',
-  'ArrayBuffer', 'Promise']);
+  'ArrayBuffer', 'Promise',
+  // natlang's own ambient types, declared in every eval (compiler/intrinsics.ts); a helper annotated with them persists.
+  'Untrusted', 'Is', 'IterationEvent', 'IterationTrajectory', 'ProgressVerdict', 'ProgressJudge']);
 
 /** Free value names from checker-resolved lexical scopes, including parameter defaults and nested scopes. */
 function persistentHelperFreeNames(fn: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression,
@@ -1640,10 +1674,15 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
   if (diagnostics.length) return result;
   const mutableCaptures = captureOptions.filter(binding => binding.mutable).map(binding => binding.name);
   const prologue = [
-    inputNames.length ? `const { ${inputNames.join(', ')} } = __natlang_frozen(__natlang_copy(__inputs));` : '',
+    'const __natlang_seen = new Map<object, any>();',
+    // The inputs as the eval sees them, handed to the host so it maps their parts back to its own values.
+    `const __natlang_in = __natlang_frozen(__natlang_copy(__inputs, __natlang_seen));`,
+    '__live.scopeInputs?.(__natlang_in);',
+    inputNames.length ? `const { ${inputNames.join(', ')} } = __natlang_in;` : '',
     // Your own locals come back as mutable copies (only parameters are frozen); the eval commits them when it succeeds.
+    // A local that holds a part of an input holds that (frozen) part itself.
     ...localOptions.filter(binding => !shadowedLocals.has(binding.name)).map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
-      `${binding.annotation ? `: ${binding.annotation}` : ''} = __natlang_copy(__locals.${binding.name});`),
+      `${binding.annotation ? `: ${binding.annotation}` : ''} = __natlang_copy(__locals.${binding.name}, __natlang_seen);`),
     ...localOptions.filter(binding => binding.mutable && !shadowedLocals.has(binding.name)).map(binding =>
       `__live.bindLocal?.(${JSON.stringify(binding.name)}, () => ${binding.name}, (__v: any) => { ${binding.name} = __v; });`),
     ...captureOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name} = __captures.${binding.name};`),

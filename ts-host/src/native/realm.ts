@@ -6,7 +6,7 @@
  */
 import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
   type EvalResult, type HostEvent } from './evaluator.js';
-import { compileEval, evalRealmBody } from './eval-compile.js';
+import { PRELUDE_BINDINGS, compileEval, evalRealmBody } from './eval-compile.js';
 import { isNeuraleseRef, neuraleseDisplayText } from './neuralese.js';
 import { MEMORY_CHECK, combinedGuard, instrumentMemoryChecks, memoryGuard, segmentGuard, syncGuard, syncLimitMessage,
   type HeapProbe } from './eval-memory.js';
@@ -45,7 +45,11 @@ export function constructorRealm(newFunction: (body: string, name: string, ...pa
   return { call: (body, parameters, args) => newFunction(`"use strict";\n${body}`, name, ...parameters)(...args) };
 }
 
-export function portable(value: unknown, seen = new Set<object>(), path = '$', scope = false): unknown {
+/**
+ * A copy of plain data that holds only what eval may receive or return. `shared`, when given, keeps an object reached
+ * twice (by two names or two paths) as one copy, so the scope's aliasing survives the copy.
+ */
+export function portable(value: unknown, seen = new Set<object>(), path = '$', scope = false, shared?: Map<object, unknown>): unknown {
   if (scope && value === undefined) return value;
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return value;
@@ -54,9 +58,11 @@ export function portable(value: unknown, seen = new Set<object>(), path = '$', s
   if (typeof (value as Promise<unknown>).then === 'function')
     throw new TypeError('await the asynchronous imported function call');
   if (seen.has(value)) throw new TypeError('eval result contains a cycle');
+  if (shared?.has(value)) return shared.get(value);
   seen.add(value);
   if (Array.isArray(value)) {
-    const out = value.map((item, index) => portable(item, seen, `${path}[${index}]`, scope));
+    const out = value.map((item, index) => portable(item, seen, `${path}[${index}]`, scope, shared));
+    shared?.set(value, out);
     seen.delete(value); return out;
   }
   if (Object.prototype.toString.call(value) !== '[object Object]')
@@ -65,13 +71,14 @@ export function portable(value: unknown, seen = new Set<object>(), path = '$', s
   if (proto !== null && (Object.getPrototypeOf(proto) !== null || proto.constructor?.name !== 'Object'))
     throw new TypeError('eval result contains a native class instance');
   const out: Record<string, unknown> = Object.create(null);
-  for (const [key, child] of Object.entries(value)) out[key] = portable(child, seen, `${path}.${key}`, scope);
+  for (const [key, child] of Object.entries(value)) out[key] = portable(child, seen, `${path}.${key}`, scope, shared);
+  shared?.set(value, out);
   seen.delete(value); return out;
 }
 
 /** Eval scope follows TypeScript: an absent optional property may be undefined. Published results use `portable`. */
 export function snapshot(value: unknown): unknown {
-  const copy = portable(value, new Set(), '$', true);
+  const copy = portable(value, new Set(), '$', true, new Map());
   function freeze(item: unknown): void {
     if (item && typeof item === 'object') { for (const child of Object.values(item)) freeze(child); Object.freeze(item); }
   }
@@ -131,7 +138,8 @@ export class RealmEnvironment implements EvalEnvironment {
     if (limit !== undefined && !(Number.isFinite(limit) && limit >= 0)) throw new RangeError('memory limitMb must be a non-negative number');
   }
 
-  get globalBindings(): readonly string[] { return this.options.globalBindings ?? []; }
+  /** Names eval code may use besides its scope: the crisp prelude every eval here compiles with, and the realm's globals. */
+  get globalBindings(): readonly string[] { return [...PRELUDE_BINDINGS, ...(this.options.globalBindings ?? [])]; }
 
   /** The eval memory bound in MB, or undefined when evals are unbounded. */
   get memoryLimitMb(): number | undefined { return this.options.memory?.limitMb || undefined; }
