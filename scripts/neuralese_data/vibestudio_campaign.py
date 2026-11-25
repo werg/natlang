@@ -204,6 +204,36 @@ def provider_transport_cause(cause):
         cause))
 
 
+def captured_provider_deadline(call, exchange, teacher):
+    """A failed native provider request, never an authored/tool timeout or quoted reply.
+
+    Some provider SDKs flatten TimeoutError to Error.message. Require its original
+    request identity and the runtime's failed model-request event in that case.
+    This identifies the operational boundary, not DNS/connect/stream causality.
+    """
+    record = call.get('record') or {}
+    error = exchange.get('error') or {}
+    request = exchange.get('request') or {}
+    executor = record.get('executor') or {}
+    terminal = teacher.get('executionError') or {}
+    if (exchange.get('schema') != 'natlang.model-exchange/1'
+            or exchange.get('reply') is not None
+            or error.get('name') not in ('Error', 'TimeoutError')
+            or error.get('message') != 'The operation was aborted due to timeout'
+            or terminal.get('name') in ('AbortError', 'NatlangAbortError', 'NatlangTimeoutError',
+                                        'NatlangBudgetError', 'NatlangModelBudgetError',
+                                        'NatlangCancelledError')
+            or request.get('invocation_id') != record.get('call_id')
+            or not isinstance(request.get('messages'), list) or not request['messages']
+            or executor.get('kind') != 'agent'
+            or not isinstance(executor.get('model_id'), str) or not executor['model_id']):
+        return False
+    return any(event.get('kind') == 'model_request' and event.get('phase') == 'error'
+               and event.get('call_id') == record['call_id']
+               and (event.get('actor') or {}).get('id') == executor['model_id']
+               for event in call.get('events') or [])
+
+
 def captured_provider_transport_errors(teacher):
     """Unrecovered native driver failures in an errored authored call tree, never model prose."""
     roots = teacher.get('rootCallIds') or []
@@ -254,7 +284,8 @@ def captured_provider_transport_errors(teacher):
             continue
         last = exchanges[-1]
         message = (last.get('error') or {}).get('message')
-        if last.get('reply') is None and provider_transport_cause(message):
+        if last.get('reply') is None and (provider_transport_cause(message)
+                                         or captured_provider_deadline(call, last, teacher)):
             failures.append({'call_id': call_id, 'kind': last['kind'],
                              'error_sha256': hashlib.sha256(json.dumps(last['error'], sort_keys=True,
                                  separators=(',', ':'), ensure_ascii=True).encode('ascii')).hexdigest()})
