@@ -3482,3 +3482,25 @@ It excludes reference props/component IDs and never invents uncaptured final DOM
 text/control state. A bound accepted reviewer exchange is required before a
 completed outcome can be emitted. This changes offline data admission, not the
 language or executing teacher prompt; the existing original trajectory is reused.
+
+### 2026-11-25 — eval locals keep JavaScript identity; saved helpers passed as arguments stay bound; recursion error names the graph walk (authored wave 1)
+
+Found by the authored-program wave 1 builders (`/home/werg/data/natlang-novel-programs/authored-w1-20261125/sub/*.FRICTION.md`).
+- **Identity.** Each eval received every input and local as a separate copy (host `dump`, realm `snapshot`, prologue
+  `__natlang_copy`, then a per-local `coerce` on the way back), so `needs.indexOf(e)` across evals answered -1 and
+  `item !== hit` was always true: silently wrong state. The whole scope is now copied as one graph at every layer
+  (shared memo), parts of inputs a local holds map back to the host's own input values, and a coerced local keeps its
+  source objects wherever they agree (`withSourceIdentity`). A local that holds a part of an input sees it frozen, as
+  the input is. Spec "Eval" and the authoring skill say so.
+- **Saved helpers.** The runtime's `declaredHere` regex read `f(a, grade, b)` as a declaration of `grade` and dropped
+  the saved helper, giving `Saved helper "step" cannot persist because it refers to unavailable grade` and
+  `unbound-name: grade`. Declarations are now parsed (`evalDeclaredNames`); the std-combinator shadowing used the same
+  regex and is fixed too. A helper annotated with `Untrusted<...>`/`Is<...>` persists (OPEN_ITEMS cal2 note).
+- **Recursion error.** One message for eval/callable-folder and `.nl` self-calls (`noSmallerArgument`), adding
+  "(to walk a graph, pass the nodes not yet visited and recurse on fewer of them)".
+- **Types.** A recursive type declared in an eval (`type Node = { kids: Node[] }`) types its locals (it joins the call's
+  type environment); `interface X { ... }` of properties in `types.ts` is a record type (was silently ignored:
+  `unknown type name X`).
+- **Reserved words.** An argument or function named by a JavaScript reserved word (`case`) is a load error naming a
+  rename; it used to load and break every eval's prologue.
+- The eval preflight knows the crisp prelude's helpers (`chunk`, `range`, ...), which it had reported as unbound.

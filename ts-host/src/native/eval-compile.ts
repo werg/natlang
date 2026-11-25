@@ -4,6 +4,9 @@
  */
 import ts from 'typescript';
 import { PRELUDE } from './prelude.generated.js';
+
+/** The helpers the crisp prelude (prelude.js) defines in every eval compiled here; `_`-prefixed ones are internal. */
+export const PRELUDE_BINDINGS: readonly string[] = [...PRELUDE.matchAll(/^const ([A-Za-z$][\w$]*) =/gm)].map(match => match[1]!);
 import { instrumentMemoryChecks } from './eval-memory.js';
 
 export type EvalCompileOptions = {

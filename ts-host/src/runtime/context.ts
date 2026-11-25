@@ -226,6 +226,15 @@ export class NatlangRecursionError extends Error {
   }
 }
 
+/**
+ * The error of a self-call on nothing smaller, for eval and callable-folder functions and `.nl` functions alike. A walk
+ * over a graph (claims citing claims, prerequisites) grows a visited path, which is not smaller: the shrinking form of
+ * the same walk passes the nodes not yet visited (authored wave 1, 2026-11-25).
+ */
+export const noSmallerArgument = (name: string): string => `\`${name}\` called itself without a smaller argument. Recurse ` +
+  'only on a part of the input, a shorter array or string, or a smaller non-negative integer (to walk a graph, pass the ' +
+  'nodes not yet visited and recurse on fewer of them); otherwise use a bounded loop or iterateOn.';
+
 /** The readable name in an authored callable's guard ID (`prefix#name@position`). */
 export const guardName = (id: string): string => /#([^#@]+)@\d+$/.exec(id)?.[1] ?? id;
 
@@ -246,9 +255,7 @@ export function guard<T>(id: string, fn: () => T, args: readonly unknown[] = [],
     if (!descent.length) {
       const name = label ?? guardName(id);
       // One sentence that names the fix: small models repair from the error, and the system prompt does not teach this.
-      throw new NatlangRecursionError(id, frame.chain, name, `\`${name}\` called itself without a smaller argument. Recurse ` +
-        'only on a part of the input, a shorter array or string, or a smaller non-negative integer; otherwise use a ' +
-        'bounded loop or iterateOn.');
+      throw new NatlangRecursionError(id, frame.chain, name, noSmallerArgument(name));
     }
   }
   return runInFrame({ ...frame, active: { id, args, parent: frame.active, same, descent } }, fn);

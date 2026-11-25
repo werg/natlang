@@ -43,7 +43,8 @@ test('failed evals do not persist new helpers or replace an earlier helper', asy
   assert.equal(lam.return, 4);
   assert.equal((await session.applyAsync('eval', { code: 'function fresh(n: number) { return n; } throw new Error("rollback fresh");' })).kind, 'error');
   const missing = await session.applyAsync('eval', { code: 'return fresh(value);' });
-  assert.equal(missing.kind, 'error'); assert.match(missing.text, /fresh is not defined/);
+  // The eval preflight refuses the unbound name before anything runs (unbound-name, 2026-11-25).
+  assert.equal(missing.kind, 'rejected'); assert.match(missing.text, /fresh is not bound in this call's eval scope/);
 });
 
 test('a helper that calls another helper of the same eval persists with it', async () => {
