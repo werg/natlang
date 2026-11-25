@@ -330,8 +330,16 @@ export function containsQaSpan(actual: unknown, expected: unknown): boolean {
   if (canonical(qaNumbers(actual)) !== canonical(qaNumbers(expected))) return false;
   const got = words(actual, true), want = words(expected, true);
   if (want.length < 2 || got.length > 2 * want.length) return false;
-  for (let start = 0; start + want.length <= got.length; start++)
-    if (want.every((word, index) => got[start + index] === word)) return true;
+  // Words around the span that hedge or add a second answer ("X and something else", "X or Y", "not X") absent from
+  // the gold make it a different answer. NATLANG_QA_CONTAINMENT_HEDGES=0 restores the earlier rule.
+  const hedges = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+    ?.NATLANG_QA_CONTAINMENT_HEDGES !== '0';
+  const gold = new Set(want);
+  for (let start = 0; start + want.length <= got.length; start++) {
+    if (!want.every((word, index) => got[start + index] === word)) continue;
+    const extra = [...got.slice(0, start), ...got.slice(start + want.length)];
+    if (!hedges || !extra.some(word => QA_HEDGES.has(word) && !gold.has(word))) return true;
+  }
   return false;
 }
 const QA_HEDGES = new Set(['or', 'and', 'nor', 'either', 'neither', 'not', 'no', 'never', 'maybe', 'perhaps', 'possibly',

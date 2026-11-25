@@ -236,6 +236,11 @@ test('a short QA answer holding the whole multi-token gold span passes; one-toke
   assert.equal((await checkOracle('Duke Lemur Center', 'Duke', qa)).accepted, false);
   assert.equal(containsQaSpan('Celine Dion: Loved Me Because You', 'Because You Loved Me'), false);   // contiguous, in order
   assert.equal(containsQaSpan('Celine Dion: Because You Loved Me', 'Because You Loved Me'), true);
+  // a hedge or a second answer around the span is a different answer
+  assert.equal((await checkOracle('Paul J. Hagerty High School and something else entirely', 'Paul J. Hagerty High School', qa)).accepted, false);
+  assert.equal(containsQaSpan('Because You Loved Me or Unbreak My Heart', 'Because You Loved Me'), false);
+  assert.equal(containsQaSpan('not Because You Loved Me', 'Because You Loved Me'), false);
+  assert.equal(containsQaSpan('Romeo and Juliet', 'Romeo and Juliet'), true);              // the gold's own hedge words
   assert.equal((await checkOracle('the 2010 UCI BMX World Championships', 'UCI BMX World Championships 2009', qa)).accepted, false);
   // A unit word the answer adds needs the question that asks for it (below), or the rubric's judge.
   assert.equal((await checkOracle('14 surgeries', '14', qa)).accepted, false);
