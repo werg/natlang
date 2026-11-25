@@ -13994,3 +13994,8 @@ episode labels are weak early in an episode. Criterion (0.78) not met; diagnosis
 (DGX `cmp-t1-build-4`): 2,052 rollouts, 178 twins / 47 episodes after removing answer-verdict feedback (681 failed
 episodes have no diagnostic fact): OPSD supply from these worlds is thin; richer diagnostic facts (verifier diffs that
 name no answer) are the lever. T1 training queued on g4b (`cmp-t1-opsd`).
+
+
+## 2026-11-25: retain independently native-certified calls from failed live goals
+
+Failed aggregate summaries previously prevented export of every call, including native-proven useful subinvocations; cancellation without progress names also hid actual completed per-case packets. Fix shared collector/exporter admission to inspect every retained packet, retaining whole-goal failure and all raw evidence. Automatic scope/2 requires complete source/native/capture-bound closed return proof, initially GAD question/participant judgments; arbitrary successful prefixes are not sufficient. Both readers enforce certificates and old reader 2a877 rejects the new schema. Deploy the new reader before registering a new partial cohort. Actual archived failed GAD raw yields exactly one correct interpretQuestion decision; incorrect roster and whole goal remain failed. Host135/Python203/Node63 controls plus quick passed; one existing optional archived test skipped. See INDEPENDENT_NATIVE_PARTIAL_20261125.md. No model calls or registry writes.
