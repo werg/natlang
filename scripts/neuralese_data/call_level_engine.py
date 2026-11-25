@@ -141,6 +141,13 @@ def decision_labels(messages):
     return labels or None
 
 
+def native_state(messages):
+    """Whether a request carries Neuralese state as non-text content parts (a ``native_state`` import): only a
+    native-state server reads those; a hosted teacher refuses the request."""
+    return any(isinstance(p, dict) and p.get('type', 'text') != 'text'
+               for m in messages if isinstance(m.get('content'), list) for p in m['content'])
+
+
 def call_kind(turn, n_header):
     if not turn.get('tools'):
         return 'decision' if decision_labels(turn['messages']) else 'readout'
@@ -264,7 +271,7 @@ def site_rows(episode, turns, source, invocations=None, *, kinds=DEFAULT_KINDS, 
             'parent_definition': functions.get(parent) if parent else None,
             'argument_binding_sha256': inv.get('argument_binding_sha256'),
             'header_sha': header_sha, 'input_sha': input_sha, 'header_messages': n_header,
-            'messages': messages, 'tools': turn.get('tools') or [],
+            'messages': messages, 'tools': turn.get('tools') or [], 'native_state': native_state(messages),
             **({'prompt_ids': exact['prompt_ids']} if exact and exact.get('prompt_ids') else {}),
             'task_id': episode['task_id'], 'family': episode.get('family'),
             'source_groups': episode.get('source_groups') or [], 'source': source,
@@ -586,6 +593,9 @@ def select_sites(args, funnel):
         row = json.loads(line)
         funnel['sites_read'] += 1
         if row['kind'] not in rank:
+            continue
+        if native_state(row['messages']):
+            funnel['native_state'] += 1
             continue
         size = len(json.dumps(row['messages'], ensure_ascii=False)) + len(json.dumps(row['tools'], ensure_ascii=False))
         if size > args.max_prompt_chars:
