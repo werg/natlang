@@ -3504,3 +3504,6 @@ Found by the authored-program wave 1 builders (`/home/werg/data/natlang-novel-pr
 - **Reserved words.** An argument or function named by a JavaScript reserved word (`case`) is a load error naming a
   rename; it used to load and break every eval's prologue.
 - The eval preflight knows the crisp prelude's helpers (`chunk`, `range`, ...), which it had reported as unbound.
+### 2026-11-25 — retain nested TypeScript entries without stale invocation scopes
+
+Fresh loaded TypeScript entries now retain their typed crisp child records and actual NL descendants; ordinary same-task helpers remain native implementation. Causal trace links are checked at actual entry and expire when the owning invocation ends, including crisp/strict/error paths. Expired invocation-bound callbacks receive a context error directing hosts to start a new task; task-scope callbacks remain valid. No fallback widens expired service/source grants. Existing `traceParent:false` and `recording.nativeRoots:false` remain explicit independent-trace/root-recording choices. Integration skill and host reference explain recovery. Node/Workerd actual compiled-entry, callback and standalone-root tests use no model calls; original0064 records remain immutable. Inventory: `plans/neuralese/NESTED_INVOCATION_LIFETIME_20261125.md`.
