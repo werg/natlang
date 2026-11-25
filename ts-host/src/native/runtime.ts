@@ -159,11 +159,11 @@ export type NativeRuntimeHooks = {
   finiteAsync(source: unknown, label?: string): unknown;
   guard(id: string, fn: () => unknown, args?: readonly unknown[]): unknown;
   /** Type-checked analysis of `nl` in eval snippets. */
-  analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
+  analyze(session: NativeSession, source: string, bindings?: readonly string[]): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
     neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[]; readouts?: import('../compiler/neuralese.js').NeuraleseReadout[];
     instantiations?: import('../compiler/neuralese.js').GenericInstantiation[] };
   /** Reads of fields a value's declared type does not have, checked in every eval. */
-  checkFields?(session: NativeSession, source: string): NatlangDiagnostic[];
+  checkFields?(session: NativeSession, source: string, bindings?: readonly string[]): NatlangDiagnostic[];
   /** The snippet with typed `refine<Is<T, "p">>(value)` / `assume<R>(value)` calls in their predicate form. */
   lowerRefinements?(session: NativeSession, source: string): string;
 };
@@ -177,6 +177,7 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
   /** Sees each service call this runtime wraps, with its exact arguments and result (a standalone run's call record). */
   observeEffect?: (event: EffectEvent) => void;
   maxActions?: number; maxToolCalls?: number;
+  checkEvalBindings?: boolean;
   /**
    * The root call's ID: unique per run (it keys the call record, its children's parent link and the trace). Without one a
    * fresh `native-run:<uuid>` is used. `runLabel` is the logical name shared by runs of one kind (`curriculum-reference`),
@@ -1013,7 +1014,7 @@ export const runSeedKey = (options: { runId: string; runLabel?: string; seedId?:
 export class NativeRuntime {
   readonly events: HostEvent[] = [];
   readonly trace: NativeTraceRecorder;
-  readonly options: { maxActions?: number; maxToolCalls?: number; runId: string; runLabel?: string; seedId?: string; parentCallId?: string; returnErrorText?: ReturnErrorText };
+  readonly options: { checkEvalBindings?: boolean; maxActions?: number; maxToolCalls?: number; runId: string; runLabel?: string; seedId?: string; parentCallId?: string; returnErrorText?: ReturnErrorText };
   readonly seedPolicy: { mode: 'derived' | 'backend'; root?: number };
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
@@ -1038,7 +1039,7 @@ export class NativeRuntime {
     this.displayLiveId = options.frame ? scopedLiveIdentity(options.frame.task) : createLiveIdentity();
     this.untrusted = options.frame ? scopedUntrusted(options.frame.task) : new UntrustedRegistry(hostUntrusted);
     const run = runIdentity(options);
-    this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: run.runId,
+    this.options = { checkEvalBindings: options.checkEvalBindings, maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: run.runId,
       ...(run.runLabel !== undefined ? { runLabel: run.runLabel } : {}), seedId: options.seedId,
       parentCallId: options.parentCallId, returnErrorText: options.returnErrorText };
     for (const [name, value] of Object.entries({ maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls }))
@@ -2705,8 +2706,8 @@ export class NativeSession {
       persistentHelpers: savedHelpers, persistentHelperNames: savedHelperNames, persistentTypeNames,
       opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
-      serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source), neuralese: this.holdsNeuralese(),
-      ...(hooks.checkFields ? { checkFields: (source: string) => hooks.checkFields!(this, source) } : {}),
+      serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source, [...opaqueNames, ...savedHelperNames]), neuralese: this.holdsNeuralese(),
+      ...(hooks.checkFields ? { checkFields: (source: string) => hooks.checkFields!(this, source, [...opaqueNames, ...savedHelperNames]) } : {}),
       guardPrefix: `eval:${this.runtime.options.runId}`, ...this.runtime.environment.scopeCapabilities });
     // Model-written literals in this eval are graph nodes: the block, its contextual type, the reference written.
     if (compiled.ok) {

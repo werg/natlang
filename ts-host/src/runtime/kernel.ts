@@ -853,6 +853,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       ? { refinement: { checker: task.refinementChecker(), ...task.refinementJudges(model, frame) } } : {}),
   }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
+    checkEvalBindings: task.runtime.options.checkEvalBindings,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,
     sharedEpisodeBudget: task.episodeBudget,

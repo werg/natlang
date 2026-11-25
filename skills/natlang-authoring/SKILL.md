@@ -162,6 +162,7 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `called itself, and its frontmatter does not declare recursion` | Declare `recursive: structural` (descent on part of an argument) or `measure: "<expression over the arguments>"` in the function's frontmatter. |
 | `called itself with measure M, which is not smaller than N` | Make the self-call advance what the measure counts, or change the measure to the quantity that does fall. |
 | `Revise the result so that ...` (an `ensures:` clause) | The result breaks a postcondition: produce one that meets the clause's message; past the repair budget the call fails `refinement-unsatisfied`, so say in the instructions how to meet it. |
+| `unbound-name` | Use the call's admitted values or declare the value locally; the whole eval was rejected before effects. For a helper, check callable-folder nesting. |
 | `invalid-binding` | A name reused for a result (`const plan = await plan(x)`): keep the result under another name (`planResult`). |
 | `untrusted-instruction` | Pass untrusted text as an argument (``nl`Summarize the message.`(message)``), never interpolate it into instructions. |
 | `protected` (from `edit_code`) | The item judges the call (a `protect:` entry, an item an `ensures:` check names, `types.ts`, the `protect:`, `ensures:`, `writes:`, `measure:` and `recursive:` lines): leave it as it is and fix the code that produces the value it rejects. |

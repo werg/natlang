@@ -3431,3 +3431,7 @@ chooser, not the authorized reader. No grant is broadened. Authored
 regressions exercise actual TS coordinator and NL reader method values, chooser
 refusal, exact/descendant selectors, program/context identities and shadows.
 Serving engines do not execute this shared host evaluator; no inference change.
+
+### 2026-11-25 — eval names match callable scope before effects
+
+Unknown value names now reject the whole eval before effects with `unbound-name`, instead of silently dropping TypeScript's diagnostic and failing after earlier statements ran. Actual injected helpers, saved functions, lexical shadows, erased type names and safe `typeof` existence probes keep their semantics. `checkEvalBindings:false` restores legacy ordinary-name handling; excluded-service authority is still enforced. Named, inline and module-owned calls share this check. Scope priming no longer advertises other services' owner names as helpers when they are unavailable to this call. Actual V27 canonical and Luna provider requests showed these misleading names. Model-free Node/Workerd effect-order and Pi/Luna translation regressions cover the repair; no paid inference was used. Inventory: `plans/EVAL_SCOPE_BINDINGS_20261125.md`.
