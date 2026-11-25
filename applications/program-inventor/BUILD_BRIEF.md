@@ -96,7 +96,7 @@ TypeScript helpers.
 From `SUBMISSION/program/`, through the memory ledger on the DGX (logs go to `SUBMISSION/../logs/`; create it):
 
 ```
-python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-check-<slug>-<n> --budget-gb 3 --wait 3600 \
+python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-check-<slug>-<n> --budget-gb 3 --reserve-gb 3 --priority low --wait 3600 \
   --workdir $PWD \
   -- /bin/bash -c '/home/werg/.local/bin/natlang check --json > ../../logs/check-<slug>.json 2>&1'
 ```
@@ -105,7 +105,7 @@ Then the full qualification (packaging, reference replay, wrong answers, ablatio
 requirements):
 
 ```
-python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-qual-<slug>-<n> --budget-gb 4 --wait 3600 \
+python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-qual-<slug>-<n> --budget-gb 4 --reserve-gb 3 --priority low --wait 3600 \
   --workdir /home/werg/natlang \
   -- /bin/bash -c '/home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/sources/invented.py qualify SUBMISSION > SUBMISSION/../qualify-<slug>.log 2>&1'
 ```
@@ -114,3 +114,17 @@ The ledger queues a job until memory frees up (minutes on a busy DGX); `run` ret
 so wait until the unit has ended (`systemctl --user is-active pinv-qual-<slug>-<n>` is no longer `active`) and then
 read the output file. Each run needs a unit name not used before (append -2, -3, ...). It writes
 `SUBMISSION/qualification/report.json`. Fix every problem it lists and rerun until `ok` is true.
+
+Qualification also replays each reference call by call: every case declares its episode budget (twice the reference
+run's model calls) and each leaf judgment call becomes a stage task (`qualification/stages.jsonl`). Keep the idea card
+you built as `SUBMISSION/idea.json`.
+
+## In a campaign
+
+1. Take a card: `PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python scripts/rl_tasks/program_atlas.py take
+   BANK_DIR --by <agent-name>` (one builder per card; prints the card; exit 1 when the bank is exhausted).
+2. Build and qualify as above until `report.json` is ok.
+3. A reviewer (`REVIEW_BRIEF.md`) writes `SUBMISSION/review.json`; fix its findings, requalify, have it reviewed again.
+4. `invented.py admit SUBMISSION` (through the memory ledger) admits it: train ideas to the pool batch, dev and
+   confirmation ideas to the held slice. A card you cannot build: `program_atlas.py release SLUG --status failed
+   --reason "..."`.

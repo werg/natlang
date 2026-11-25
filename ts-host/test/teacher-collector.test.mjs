@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
-import { KvBudget, collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, expectedProvenance, jobKey,
+import { KvBudget, caseModelRequestBudget, collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, expectedProvenance, jobKey,
   loadRecords, nativeJobRunner, programRunId, recordDigest, withExecutionPlans } from '../dist/teacher/collector.js';
 
 const record = id => ({ version: 'natlang.program/2', id, kind: 'lambda_source', source: 'fixture',
@@ -468,6 +468,40 @@ test('a reasoned decision counts once against the whole-case request budget', as
       } } };
     await collectBatch([item], options, nativeJobRunner(options));
     assert.equal(requests, 5, 'four reasoning samples and one action were sent; the third counted call was refused');
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('a case that declares episode_model_calls raises the run budget for itself, never lowers it', async () => {
+  const declared = n => ({ ...record('declared'), semantics: { ...record('declared').semantics, episode_model_calls: n } });
+  assert.equal(caseModelRequestBudget(record('plain'), 40), 40);
+  assert.equal(caseModelRequestBudget(declared(84), 40), 84);
+  assert.equal(caseModelRequestBudget(declared(12), 40), 40, 'a declaration below the run budget keeps the run budget');
+  assert.equal(caseModelRequestBudget(declared(84), undefined), undefined, 'an unbudgeted run stays unbudgeted');
+  assert.throws(() => caseModelRequestBudget(declared(0), 40), /positive integer/);
+  process.env.NATLANG_CASE_MODEL_CALLS = '0';
+  try { assert.equal(caseModelRequestBudget(declared(84), 40), 40, 'the opt-out ignores declarations'); }
+  finally { delete process.env.NATLANG_CASE_MODEL_CALLS; }
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-declared-budget-'));
+  let requests = 0;
+  const server = createServer((request, response) => {
+    requests++;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'continue' } }],
+      usage: { prompt_tokens: 10, completion_tokens: 2 } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: declared(3) };
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, maxModelRequests: 1, transportRetries: 0,
+      execution: { identity: 'declared-budget-test/1', run: async (_record, driver) => {
+        const request = { messages: [{ role: 'user', content: 'one request' }], tools: [] };
+        for (let index = 0; index < 3; index++) await driver(request);
+        await assert.rejects(driver(request), error => error.code === 'NATLANG_MODEL_REQUEST_BUDGET');
+        return { trace: [] };
+      } } };
+    await collectBatch([item], options, nativeJobRunner(options));
+    assert.equal(requests, 3, 'the case declared three calls against a run budget of one');
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 

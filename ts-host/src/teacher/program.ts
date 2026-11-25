@@ -33,6 +33,9 @@ export type EvaluationFixtureSpec = {
 export type ProgramSemantics = {
   /** Path of the root `.nl` function within `files`. */
   root: string;
+  /** The episode's model-call budget this task declares (about twice its reference run's calls); the collector uses
+   * the larger of it and the run's budget (`caseModelRequestBudget`). */
+  episode_model_calls?: number;
   files: Record<string, string>;
   inputs: Record<string, unknown>;
   expected: unknown;
