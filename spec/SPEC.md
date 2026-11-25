@@ -628,6 +628,14 @@ restores the task across `await`, and `runtime.bind` wraps callbacks from
 uncompiled code). A call with no task fails. Tasks run concurrently. Each
 invocation produces a trace of messages, tools, actions, observations, effects,
 and its outcome.
+A function value may outlive the invocation that created it while its owning task
+remains live. Its lexical captures and service authority remain those of that
+owner; calling it never adopts ambient services. Its causal parent is the actual
+live caller when authenticated to the same recorder, otherwise it is an independent
+root in the owning task. A completed creator is never a causal parent. A function
+whose owning task has closed or been cancelled cannot be invoked implicitly in a
+new task. The same rules apply to callbacks wrapped with `runtime.bind`.
+
 While a task runs, a host may subscribe to its live events (`onLive`, on the runtime or per task): each
 `model_delta` event carries a piece of one of a call's model turns as it streams (text, reasoning, a tool-call
 fragment, a written Neuralese block, or `reset` when the turn's request is sent again and what was shown of it is

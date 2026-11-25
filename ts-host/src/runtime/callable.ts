@@ -12,7 +12,7 @@ import { invokeDefinition, type CallableDefinition, type CaptureCell, type Insta
 import { checkRepresentation, type Representation } from '../native/representation.js';
 import { parseNatlang, PATH_ONLY, type ItemRecord, type ModuleRecord, type NatlangRecord } from './loader.js';
 import { moduleInstance, moduleInstanceAsync, moduleRealmUsesAsync } from './modules.js';
-import { resolveFrame } from './runtime.js';
+import { resolveBoundFrame, resolveFrame } from './runtime.js';
 import type { Platform } from './platform.js';
 import { iterateOn, stableHash } from './iterate.js';
 import { traceFor } from '../native/graph.js';
@@ -24,9 +24,9 @@ export const NATLANG_CALLABLE: unique symbol = Symbol.for('natlang.callable') as
 export type CallableMeta = {
   definition: CallableDefinition;
   kind: 'named' | 'inline';
-  /** Frame in which an inline callable was created; a fallback when no frame propagates to the call. */
+  /** Lexical creation frame of an inline callable; ambient calls cannot replace its authority. */
   created?: Frame;
-  /** A frame the callable always runs in (callables handed to an interpreter session's eval). */
+  /** Lexical task and capability owner; dynamic caller ancestry is resolved for each invocation. */
   bound?: Frame;
   /** Capture cells an inline or soft function was created with, kept so rebinding preserves them. */
   captures?: Record<string, CaptureCell>;
@@ -100,18 +100,7 @@ function startCall(meta: CallableMeta, args: unknown[], at?: Instantiation): Pro
   // A call model code starts and never awaits must not end the host as an unhandled rejection (see invokeDefinition).
   let started: unknown;
   const call = CallPromise.resolve((async () => {
-    const bound = meta.bound ?? resolveFrame(meta.created);
-    // Called from an eval of the invocation it is bound to: the call stops with that eval (spec: Eval), and reports
-    // its decision readout to a decide(...) around it.
-    const current = currentFrame();
-    // Started in a std combinator's span that the bound call opened: the call nests under the span (std/trace.ts).
-    const span = !!current && current.task === bound.task && current.spanOf !== undefined && current.spanOf === bound.parentCallId &&
-      current.parentCallId !== bound.parentCallId;
-    const same = current && current.task === bound.task && (span || current.parentCallId === bound.parentCallId);
-    const signal = same && current.signal && current.signal !== bound.signal ? current.signal : undefined;
-    const readout = same && current.readout !== bound.readout ? current.readout : undefined;
-    const frame = signal || readout || span ? { ...bound, ...(span ? { parentCallId: current!.parentCallId } : {}),
-      ...(signal ? { signal } : {}), ...(readout ? { readout } : {}) } : bound;
+    const frame = meta.bound ? resolveBoundFrame(meta.bound) : resolveFrame(meta.created);
     return started = meta.invoke(args, frame, at);
   })());
   if (started && typeof started === 'object') startedCalls.set(call, started);
@@ -213,7 +202,7 @@ export function makeCallable(meta: CallableMeta): NatlangCallable {
   } });
   if (meta.definition.subtype === 'directory-reducer')
     Object.defineProperty(fn, APPLY_TO_FOLDER, { value: async (folder: FolderHandle, args: unknown[]) =>
-      meta.invoke([folder, ...args], meta.bound ?? resolveFrame(), undefined,
+      meta.invoke([folder, ...args], meta.bound ? resolveBoundFrame(meta.bound) : resolveFrame(), undefined,
         { transaction: await folder.beginTransaction(true), mode: 'apply' }) });
   return fn as unknown as NatlangCallable;
 }
@@ -279,13 +268,13 @@ export function itemValue(item: ItemRecord, level: Record<string, ItemRecord>, b
 function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bound?: Frame, home?: Platform): unknown {
   // The module's instances live in the platform of the runtime whose task calls it, else where the folder was loaded.
   const instance = () => {
-    const platform = currentFrame()?.task.runtime.platform ?? home;
+    const platform = (bound?.task.runtime.platform ?? currentFrame()?.task.runtime.platform) ?? home;
     if (!platform) throw new NatlangContextError();
     return moduleRealmUsesAsync(platform) ? moduleInstanceAsync(platform, record, level) : moduleInstance(platform, record, level);
   };
-  const enter = <T>(fn: () => T): T => bound ? runInFrame(bound, fn) : fn();
+  const enter = <T>(fn: () => T): T => bound ? runInFrame(resolveBoundFrame(bound), fn) : fn();
   const invoke = (exportName: string, args: unknown[]) => enter(() => {
-    recordSkillHelperUse(record.source, exportName, bound ?? currentFrame());
+    recordSkillHelperUse(record.source, exportName, currentFrame());
     const invokeExport = (exports: Record<string, unknown>): unknown => {
       const target = exports[exportName];
       if (typeof target !== 'function')throw new TypeError(
@@ -294,7 +283,7 @@ function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bo
     };
     const value = instance();
     const result = value instanceof Promise ? value.then(invokeExport) : invokeExport(value);
-    const frame = bound ?? currentFrame();
+    const frame = currentFrame();
     if (!frame?.task.runtime.options.traceStepStates) return result;
     const noteState = (state: unknown) => {
       try { traceFor(frame.parentCallId)?.emit('step_state', { helper: `${record.source}#${exportName}`, state_hash: stableHash(state) }); }
@@ -315,10 +304,10 @@ function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bo
       throw new TypeError(reservedNameMessage(name, 'natlang child item'));
     Object.defineProperty(node, name, spec.kind === 'function' ?
       { value: (...args: unknown[]) => invoke(name, args), enumerable: true } :
-      { get: () => {
+      { get: () => enter(() => {
         const value = instance();
         return value instanceof Promise ? value.then(exports => exports[name]) : value[name];
-      }, enumerable: true });
+      }), enumerable: true });
   }
   attachChildren(node, record.codebase, bound, home);
   return typeof node === 'function' ? node : Object.freeze(node);

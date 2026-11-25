@@ -16,7 +16,7 @@ import { callableMeta } from './callable.js';
 import { invokeDefinition } from './kernel.js';
 import { builtinBody } from '../builtin/index.js';
 import { builtinDefinition } from './builtin.js';
-import { resolveFrame } from './runtime.js';
+import { resolveBoundFrame, resolveFrame } from './runtime.js';
 import { graphNode, invocationNodeId, traceFor, producerScopeForTrace, valueInputs } from '../native/graph.js';
 
 export type IterationEvent<T> = Readonly<{
@@ -195,7 +195,7 @@ export class Iteration<T> {
   withCompilerSite(id: string): this { this.compilerSite ??= id; return this; }
 
   until(done: Done<T>): Promise<T> {
-    const frame = this.frame ?? currentFrame() ?? resolveFrame();
+    const frame = this.frame ? resolveBoundFrame(this.frame) : resolveFrame();
     // An eval can start an iteration without awaiting `.until()`. Track it like an
     // async Natlang call so its rejection is observed and drained with its caller,
     // rather than surfacing later as an unhandled worker rejection. Returning the
@@ -240,7 +240,7 @@ export class Iteration<T> {
     if (this.started) throw new Error('an Iteration can be started only once; call iterateOn again for another run');
     this.started = true;
     // The iteration stops with the eval or call that started it; its steps' calls derive their signal from it.
-    const base = this.frame ?? currentFrame() ?? resolveFrame();
+    const base = this.frame ? resolveBoundFrame(this.frame) : resolveFrame();
     const frame = signal ? { ...base, signal } : base;
     const task = frame.task;
     const iterationId = `iter-${Math.random().toString(36).slice(2, 10)}`;
@@ -320,7 +320,7 @@ export class Iteration<T> {
     const check = async (): Promise<boolean> => {
       try {
         if (doneMeta) {
-          const base = doneMeta.bound ?? frame;
+          const base = doneMeta.bound ? resolveBoundFrame(doneMeta.bound) : frame;
           return await doneMeta.invoke([state], { ...base, systemAddendum: predicatePrompt(steps.length, unchanged()) }) === true;
         }
         return await runInFrame(frame, () => done(state)) === true;

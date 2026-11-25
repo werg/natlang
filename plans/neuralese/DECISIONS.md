@@ -13577,3 +13577,28 @@ builds). Also found:
   would add ~1.0-1.3K new reasoning tokens each (~30-40M in all); about 0.9K of each fill's ~2K weighted tokens are
   the actions that already trained. This is the owner's call.
 - The per-round family share: 2,089 unseen teacher episodes left out in r0011.
+
+## 2026-11-25 — escaped higher-order functions retain actual training decisions
+
+A zero-inference TEST-only Base capture executed creator → returned callable → later consumer → scalar ten through the official Workerd SDK and real NativeRecordsDO. Canonical Python live admission and Node disk verification/materialization retained all four original model decisions, including prompts with the consumer's live function binding and escaped lexical capture. Exact LFM3 tokenizer-only rendering confirmed prompt context and action loss masks. Keep the existing honest nonportable function snapshots; no codec or admission waiver is needed for this observed training path. Add real capture/bridge regressions, leave portable replay and training/held gains explicitly unchecked, and never register these scripted fixtures as teacher data. Details and source/evidence identities: `plans/neuralese/HIGHER_ORDER_TRAINING_PROOF_20261125.md`. Source35 collection was not gated or modified.
+
+## 2026-11-25 15:40 Compaction captures splice on the fork and the page (capture-kind strand)
+
+The Python engines store a reply captured in its own context as `producer_kind` 'capture' and splice it when read
+(15:00 "Learned compaction on by default", item 2). The managed llama-server and the page now do the same:
+- Fork b536c7379 (`neuralese`): 'capture' is valid native-state metadata; it splices as stored (`exact-native-state`)
+  unless `NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1` (read per request); a chat completion's
+  `x_natlang_producer_kind: "capture"` stamps the spans that request produces (any value but "capture"/"span" refused);
+  `/v1/neuralese/info` lists `native.producer-kind.capture`. Release natlang-b12094 (dispatched, quick archives and
+  the page's wllama); natlang pinned to it with `update_llama_runtime.mjs --fork` (page build vendored from the same
+  release), `llama-fork-source.ts` to b536c7379.
+- Client: `grammarCapture` sends the field for a reply capture (never for a write, which stays 'span' and is read in
+  context) when the server lists the capability, and refuses a stored kind other than 'capture'. The ts-host stores
+  refused 'capture' (`validateNativeState` knew only text/span), so a Python-engine capture archived to a ts-host store
+  failed; fixed in the same commit.
+- Checks: fork unit tests `test_natlang_native_state.py` 7/7 on the 8e634a0f Q8_0 GGUF (CPU build); live
+  `check_llama_native_state_protocol.py` passes with the new capture leg: stored kind 'capture', id equal to the
+  reference codec's (`serve/store.native_state_id`) for the same tensors with that kind, consumer receipt
+  `exact-native-state`. Content ids match the Python engines' rule; the literal ids differ across engines only through
+  the tensors (Q8_0 vs BF16). ts-host targeted tests pass. The page has no capture of its own yet (ENGINE_PARITY
+  text-write table), so it gains only the read rule and validation; no page smoke ran.
