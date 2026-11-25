@@ -97,7 +97,7 @@ def refine_site_latents(
     for step in range(1, cfg.steps + 1):
         optimizer.zero_grad(set_to_none=True)
         sup_loss = support_loss_fn(z, k_fixed, w_fixed)
-        prox_penalty = 0.5 * float(cfg.prox_lambda) * (z - z_ref).pow(2).mean()
+        prox_penalty = 0.5 * float(cfg.prox_lambda) * (z - z_ref).pow(2).sum()
         total = sup_loss + prox_penalty
         total.backward()
         if cfg.clip_norm > 0:
@@ -206,7 +206,7 @@ def refine_compiled_site(
                     for row in support_rows
                 ]
                 if cfg.prox_lambda > 0.0:
-                    (0.5 * float(cfg.prox_lambda) * (z - z_ref).pow(2).mean()).backward()
+                    (0.5 * float(cfg.prox_lambda) * (z - z_ref).pow(2).sum()).backward()
                 if cfg.clip_norm > 0:
                     torch.nn.utils.clip_grad_norm_([z], cfg.clip_norm)
                 optimizer.step()
