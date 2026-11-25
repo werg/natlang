@@ -158,3 +158,15 @@ test('finite decision domains resolve intersections, indexed slots and utilities
     {status:'matched'},{status:'absent'}]);
   assert.equal(decisionDomain(parseType('"matched" & "absent"'),env).size,0);
 });
+
+
+test('aliased discriminants discard impossible variants before callback signature fitting', () => {
+  const env=new TypeEnv({ Good:parseType('"matched"'), Bad:parseType('"absent"'),
+    Result:parseType('{kind:Good;value:number} | {kind:Bad;reason:string}'),
+    RecursiveA:parseType('{value:number;next?:RecursiveA}'),RecursiveB:parseType('{value:number;next?:RecursiveB}') });
+  const narrowed=parseType('Result & {kind:"matched"}');
+  assert.equal(formatType(env.resolve(narrowed)),'{ kind: "matched", value: number }');
+  assert.equal(fitsType(narrowed,parseType('{kind:"matched";value:number}'),env),true);
+  assert.deepEqual(coerce({value:1},parseType('RecursiveA & RecursiveB'),env),{value:1});
+  assert.deepEqual(coerce({value:1,next:{value:2}},parseType('RecursiveA & RecursiveB'),env),{value:1,next:{value:2}});
+});
