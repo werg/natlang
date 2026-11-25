@@ -162,14 +162,8 @@ def swap(link: Path, staging: Path, quiet_checks: int = 3, wait_seconds: float =
 def update_registry(link: Path, target: Path) -> list[str]:
     from natlang_neuralese.common import data_registry as reg
     archived = reg.portable(target)
-    latest = {}
-    for line in reg.journal_path().open():
-        try:
-            record = json.loads(line)
-        except ValueError:
-            continue
-        if record.get('op', 'dataset') == 'dataset' and record.get('id'):
-            latest[record['id']] = record
+    # Relocation publishes active ownership, never resurrects quarantined history.
+    latest = {identity: snapshots[-1] for identity, snapshots in reg.load().snapshots.items() if snapshots}
     moved = []
     for ident, record in latest.items():
         path = str(record.get('path', ''))

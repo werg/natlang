@@ -13945,3 +13945,7 @@ on_lineage). Not applicable: actor binding and serving checks (`endpoint_alive`,
 `ops_dashboard/ei_export.collection_dirs` selects by version (lines 548-557), which already includes 4dec. New
 collections are still written under the canonical sha (`collection_base`). Test:
 `test_a_rebuilt_policys_earlier_file_sha_counts_as_the_policy_everywhere`.
+
+### 2026-11-25 — isolate scratch registrations and quarantine exact missing orphan declarations
+
+The live campaign ingested all402 useful episodes; later native-state housekeeping exposed two November23 GRPO benchmark declarations with absolute scratch paths in the shared DGX journal. ALLOW_UNREGISTERED_DATA had also relaxed producer path registration, poisoning later strict readers. Require an explicit separate scratch registry for that opt-out and validate final dataset paths. Add exact-hash append-only quarantine for owner-local missing unreferenced declarations, retaining immutable journal/file provenance and all held/protected/reference guards. Active projection deactivates only checked declarations; future registrations remain active. Apply the public operation to these exact orphans after source-bound closure checks, rather than rewrite history or waive retirement validation. See REGISTRY_ORPHAN_DECLARATIONS_20261125.md; collection remains independent.
