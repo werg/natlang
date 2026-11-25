@@ -34,7 +34,7 @@ import sys
 import time
 from pathlib import Path
 
-from .jsonio import json_line, utf8
+from .jsonio import canonical_json_bytes, json_line, utf8
 from .paths import root
 
 RECORD_SCHEMA = 'natlang.data-registry-record/1'
@@ -330,7 +330,7 @@ def _append(record: dict) -> dict:
 
 
 def _store_manifest(manifest: dict) -> str:
-    data = utf8(json.dumps(manifest, sort_keys=True, ensure_ascii=False, separators=(',', ':')))
+    data = canonical_json_bytes(manifest)
     sha = hashlib.sha256(data).hexdigest()
     path = registry_dir() / 'manifests' / f'{sha}.json'
     if not path.exists():

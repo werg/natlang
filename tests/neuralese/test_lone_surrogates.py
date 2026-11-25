@@ -59,13 +59,13 @@ def test_recorded_turns_and_port_records(tmp_path):
     import common
     import recorded_turns
     recorded_turns.write(tmp_path, 'episode', [{'messages': [{'role': 'tool', 'content': ROW['error']}]}])
-    assert '\ufffd' in zstandard.ZstdDecompressor().decompress(recorded_turns.path(tmp_path, 'episode').read_bytes(),
-                                                               max_output_size=1 << 20).decode()
+    assert recorded_turns.read(tmp_path, 'episode')[0]['messages'][0]['content'] == ROW['error']
     sink = common.Sink(tmp_path, 'demo')
     sink.accept({'split': 'train', 'text': ROW['error']})
     sink.reject('store', 0, 'bad: ' + ROW['error'])
     sink.close()
-    assert '\ufffd' in (tmp_path / 'demo.port-records.jsonl').read_text()
+    assert json.loads((tmp_path / 'demo.port-records.jsonl').read_text())['text'] == ROW['error']
+    assert json.loads((tmp_path / 'demo.rejects.jsonl').read_text())['reason'] == 'bad: ' + ROW['error']
 
 
 def test_opt_out_keeps_the_strict_failure(tmp_path, monkeypatch):
