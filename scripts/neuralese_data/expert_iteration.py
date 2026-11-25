@@ -2147,7 +2147,7 @@ class Cycle:
             os.replace(tmp, script)
         # 12 GB: neuralese-graph's reader processes (sft_sources --workers, ~0.15 GB each) beside its ~7 GB parent
         with self.prep_yield(self.a.name):
-            self.ledger(f'{self.a.name}-data', 12, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log',
+            self.ledger(f'{self.a.name}-data', DATA_STAGE_GB, STAGE_PRIORITY, ['/bin/sh', str(script)], self.dir / 'data.log',
                         repo=self.data_repo(), room=True)
         self.mark('data')
 
@@ -2813,6 +2813,10 @@ def write_round_manifest(round_dir, *, round_id, base_policy_sha, previous_polic
     return manifest
 
 
+# The round data step's ledger claim. 12 GB OOM-killed aei1 r0011's data step after 2.5 h (2026-11-25 10:01): its
+# peak follows the pool and episode volume (68,887 eligible rows after the broad-external admissions), and a
+# learned budget cannot grow past a cap the unit was killed at.
+DATA_STAGE_GB = float(os.environ.get('NATLANG_EI_DATA_GB', '24'))
 PREPARE_STEPS = ('frontier', 'data', 'build')
 
 
@@ -4165,7 +4169,7 @@ class AsyncRoundDriver:
                 tmp = script.with_name(script.name + '.tmp')
                 tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
                 os.replace(tmp, script)
-            step('data', 12, ['/bin/sh', str(script)], repo=self.c.data_repo())
+            step('data', DATA_STAGE_GB, ['/bin/sh', str(script)], repo=self.c.data_repo())
             # 24 GB: r0004-r0007 peaked at 17.0-17.5 GiB (18.7 GB) with the aux parts loaded before the teacher
             # admission and --prefer-unseen reading older mixes (the 32 GB of 2026-11-24 morning anticipated them);
             # r0001's 21.2 GB was before. The guard raises an over-budget unit while memory is plentiful.
