@@ -13491,6 +13491,10 @@ least we are training up some Neuralese capabilities. Please implement this."
   clearly best, the loop moves to it.
 - Teacher campaign ledger budget 6 -> 10 GB: the standing unit was OOM-killed at 14:21 (6.1 GB peak after 6 h).
 
+## 2026-11-25 — escaped higher-order functions retain actual training decisions
+
+A zero-inference TEST-only Base capture executed creator → returned callable → later consumer → scalar ten through the official Workerd SDK and real NativeRecordsDO. Canonical Python live admission and Node disk verification/materialization retained all four original model decisions, including prompts with the consumer's live function binding and escaped lexical capture. Exact LFM3 tokenizer-only rendering confirmed prompt context and action loss masks. Keep the existing honest nonportable function snapshots; no codec or admission waiver is needed for this observed training path. Add real capture/bridge regressions, leave portable replay and training/held gains explicitly unchecked, and never register these scripted fixtures as teacher data. Details and source/evidence identities: `plans/neuralese/HIGHER_ORDER_TRAINING_PROOF_20261125.md`. Source35 collection was not gated or modified.
+
 ## 2026-11-25 16:30 aei1 supply: the fills reach the campaigns, unfilled campaign episodes wait for their fill, solved own episodes leave, rounds wait for 5M new tokens, a fixed held-like validation set (ei-supply agent)
 
 **Observation (DECISIONS 14:20).** New supervision per round collapsed after r1: r1 trained 19.6M teacher-derived
@@ -13577,10 +13581,6 @@ builds). Also found:
   would add ~1.0-1.3K new reasoning tokens each (~30-40M in all); about 0.9K of each fill's ~2K weighted tokens are
   the actions that already trained. This is the owner's call.
 - The per-round family share: 2,089 unseen teacher episodes left out in r0011.
-
-## 2026-11-25 — escaped higher-order functions retain actual training decisions
-
-A zero-inference TEST-only Base capture executed creator → returned callable → later consumer → scalar ten through the official Workerd SDK and real NativeRecordsDO. Canonical Python live admission and Node disk verification/materialization retained all four original model decisions, including prompts with the consumer's live function binding and escaped lexical capture. Exact LFM3 tokenizer-only rendering confirmed prompt context and action loss masks. Keep the existing honest nonportable function snapshots; no codec or admission waiver is needed for this observed training path. Add real capture/bridge regressions, leave portable replay and training/held gains explicitly unchecked, and never register these scripted fixtures as teacher data. Details and source/evidence identities: `plans/neuralese/HIGHER_ORDER_TRAINING_PROOF_20261125.md`. Source35 collection was not gated or modified.
 
 ## 2026-11-25 15:40 Compaction captures splice on the fork and the page (capture-kind strand)
 
