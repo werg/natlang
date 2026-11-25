@@ -13466,3 +13466,25 @@ another case's state. Differences are paired (sign-flip p).
    transport sends as `x_natlang_rl_capture` (contracts.ts, chat-completion.ts, agent.ts).
 4. Leaf judges (separate strand, 7ecfac2d8): a decision readout sees its values whole up to half the context, and under
    `nl` a value past that gets its compact-params state.
+
+## 2026-11-25 14:50 Neutral rounds continue; the SFT <-> GRPO switch is a deliberate choice
+
+Owner 2026-11-25: the rollback rule is not to be followed slavishly ("we keep rolling back"); "if it's neutral, at
+least we are training up some Neuralese capabilities. Please implement this."
+
+- Evidence: aei1 rolled back twice to r1 (8e634a0f) on neutral verdicts while raw held successes rose 293 (r1, 18
+  infrastructure errors) -> 307 (3eb3f435, rounds 2-5) -> 312 (6f19fe3a, round 9) of 512. Both paired comparisons ran
+  on a different code and scoring series than r1's measurement (`same_code: false, same_series: false`), at 2 samples
+  per task, and the second lost 56 pairs to infrastructure errors. The second rollback also switched to GRPO
+  (two consecutive neutrals), restarting from r1 and discarding rounds 9-10 (6f19, 4dec7ca9).
+- Change (`expert_iteration.judge`, `PhaseController.record_verdict`): a neutral verdict adopts the candidate; only a
+  significant regression (failure: below -fail_pts with p < 0.05) rolls back and halts for a bug hunt. Opt-out
+  `NATLANG_EI_NEUTRAL_ADOPT=0`. The automatic phase switch after two neutral rounds is off; opt in with
+  `NATLANG_EI_AUTO_PHASE_SWITCH=1`. The phase is chosen deliberately in DECISIONS from evidence.
+- Live state: the phase state is set to what the new rule gives: reference 6f19 (round 9, neutral -> adopted),
+  lineage head 4dec7ca9 (v9, round 10, trained from 6f19), phase sft; round 11 (prepared from 4dec) continues. The
+  GRPO round 12 from r1 (never started training: queued for memory) is dropped. Backup: `phase-state.json.pre-neutral-20261125`.
+- Measurement: r1, 3eb3 and 6f19 are being re-measured side by side on one pin and series at 4 samples (diagnosis
+  agent, units `aeirm-*`); the 56 lost pairs are being explained. If a policy other than the lineage's measures
+  clearly best, the loop moves to it.
+- Teacher campaign ledger budget 6 -> 10 GB: the standing unit was OOM-killed at 14:21 (6.1 GB peak after 6 h).
