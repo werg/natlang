@@ -231,22 +231,23 @@ def test_a_teacher_reply_without_reasoning_trains_only_the_action_after_the_empt
     target = [1, 2, 3, 4, 5, 6]          # </think> \n\n <tool_call> eval </tool_call> <|im_end|>
     no_reasoning = {'role': 'assistant', 'content': '', 'tool_calls': [{'function': {'name': 'eval'}}]}
     context = s.think_context(renderer, 'teacher', no_reasoning, target)
-    assert context == 2                  # </think> and the whitespace after it are context
+    # </think>, the whitespace after it and the token predicted there (serve.targets.empty_think_first_end) are context
+    assert context == 3
     weight = (np.arange(len(target)) >= context).astype(np.float32)
-    assert weight.tolist() == [0, 0, 1, 1, 1, 1]
+    assert weight.tolist() == [0, 0, 0, 1, 1, 1]
     # the same weights reach the loss through exp0_sft's chains (row['weight'])
     import exp0_sft
     row = {'prompt': np.array([0], np.int32), 'sample': np.array(target, np.int32), 'weight': weight,
            'invocation': 'i', 'index': 0}
     chain = exp0_sft.chains_of([{'task_id': 't', 'round': 'r', 'rows': [row]}])[0]
-    assert exp0_sft.chain_weights(chain, 'cpu').tolist() == [0, 0, 1, 1, 1, 1]
+    assert exp0_sft.chain_weights(chain, 'cpu').tolist() == [0, 0, 0, 1, 1, 1]
     # October rows too; the student's own replies keep every token as a target
-    assert s.think_context(renderer, 'october:luna-curricula', no_reasoning, target) == 2
+    assert s.think_context(renderer, 'october:luna-curricula', no_reasoning, target) == 3
     assert s.think_context(renderer, 'rl-own', {**no_reasoning, 'reasoning_content': 'plan'}, [7, 1, 3, 4, 5, 6]) == 0
     # except an own reply without reasoning (a decision readout the actor scored, never sampled): its empty think
     # block is context and the option trains; own_empty_think='train' opts out
     readout = {'role': 'assistant', 'content': '"ENTY"'}
-    assert s.think_context(renderer, 'rl-own', readout, [1, 2, 7, 6]) == 2
+    assert s.think_context(renderer, 'rl-own', readout, [1, 2, 7, 6]) == 3
     assert s.think_context(renderer, 'rl-own', readout, [1, 2, 7, 6], own_empty_think='train') == 0
 
 
@@ -260,7 +261,7 @@ def test_a_teacher_reasoning_block_is_context_by_default_and_a_target_with_train
         assert s.think_context(renderer, source, reasoning, target) == 4      # the summary and </think> are context
         assert s.think_context(renderer, source, reasoning, target, 'train') == 0
     # train still keeps an empty think block as context
-    assert s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ''}, [1, 2, 3, 6], 'train') == 2
+    assert s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ''}, [1, 2, 3, 6], 'train') == 3
     with pytest.raises(ValueError):
         s.think_context(renderer, 'teacher', reasoning, target, 'drop')
 
@@ -285,7 +286,7 @@ def test_a_weighted_teacher_think_block_trains_at_its_weight_and_its_lead_in_sta
     assert row['weight'].tolist() == pytest.approx([0.25, 0.25, 0, 1, 1, 1, 1])
     # an empty block stays context; W 0 is context; W 1 is the full-weight train rule; own replies are untouched
     empty = s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ' '}, [1, 2, 3, 6], 'train@0.1')
-    assert empty == 2 and not isinstance(empty, s.WeightedLead)
+    assert empty == 3 and not isinstance(empty, s.WeightedLead)
     assert s.think_context(renderer, 'teacher', reasoning, target, 'train@0') == 4
     assert s.think_context(renderer, 'teacher', reasoning, target, 'train@1') == 0
     assert s.think_context(renderer, 'rl-own', reasoning, target, 'train@0.1') == 0
@@ -305,13 +306,14 @@ def test_text_a_teacher_writes_before_its_tool_call_is_context_and_a_final_answe
     target = [1, 8, 3, 4, 5, 6]          # </think> note <tool_call> eval </tool_call> <|im_end|>
     for source in ('teacher', 'october:qwen-s72', 'live'):
         assert s.think_context(renderer, source, narrated, target) == 2          # the action trains from <tool_call>
-        assert s.think_context(renderer, source, narrated, target, lead_in='train') == 1
+        assert s.think_context(renderer, source, narrated, target, lead_in='train') == 2
     reasoned = {**narrated, 'reasoning_content': 'plan'}
     assert s.think_context(renderer, 'teacher', reasoned, [7, 1, 8, 3, 4, 5, 6]) == 3
     assert s.think_context(renderer, 'teacher', reasoned, [7, 1, 8, 3, 4, 5, 6], 'train') == 0
-    # a final answer (no tool call) keeps its text as the target; the student's own text stays a target
+    # a final answer (no tool call) keeps its text as the target after the token predicted at an empty block's
+    # </think> (serve.targets.empty_think_first_end); the student's own text stays a target
     answer = {'role': 'assistant', 'content': 'note'}
-    assert s.think_context(renderer, 'teacher', answer, [1, 8, 6]) == 1
+    assert s.think_context(renderer, 'teacher', answer, [1, 8, 8, 6]) == 2
     assert s.think_context(renderer, 'rl-own', {**narrated, 'reasoning_content': 'plan'}, [7, 1, 8, 3, 4, 5, 6]) == 0
     with pytest.raises(ValueError):
         s.think_context(renderer, 'teacher', narrated, target, lead_in='drop')
@@ -404,7 +406,7 @@ def test_load_aux_masks_empty_think_drops_held_tasks_and_groups_units(tmp_path):
     assert part['think_masked_rows'] == 1 and part['held_dropped'] == 1
     by_round = {u['chains'][0]['round']: u for u in units}
     assert set(by_round) == {'r1', 'r2'}
-    assert by_round['r1']['weighted'] == 2 + 4          # </think> \n\n masked in the first chain
+    assert by_round['r1']['weighted'] == 1 + 4          # </think> \n\n and the token after them masked in the first chain
     assert by_round['r2']['weighted'] == 2
 
 
@@ -876,7 +878,7 @@ def test_render_ahead_gives_the_serial_results_and_byte_identical_rows(tmp_path)
         return out
     # pickle memoizes dtypes by identity: rows from worker processes must pickle to the same bytes as serial ones
     assert pickle.dumps(rows(serial), protocol=4) == pickle.dumps(rows(parallel), protocol=4)
-    assert s.call_row(AheadRenderer(), 'teacher', 'k', 0, serial['teacher:p:e1'][0][0])[0]['weight'].tolist() == [0, 1, 1]
+    assert s.call_row(AheadRenderer(), 'teacher', 'k', 0, serial['teacher:p:e1'][0][0])[0]['weight'].tolist() == [0, 0, 1]
 
 
 def test_light_episodes_read_by_workers_equal_the_serial_reading(tmp_path):

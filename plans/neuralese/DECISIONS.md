@@ -13816,6 +13816,101 @@ about 3-12/h, ERNIE (OpenRouter free) at most about 26 episodes/day, Gemini 3.5 
 `teacher_free_models.py signups` prints the exact steps. Once a key file exists, the next 6-hourly run lists the
 provider, probes it, qualifies its models and admits the ones that pass.
 
+## 2026-11-25 16:10 Collector application controllers run as the episode's root invocation (capabilities-probe fix)
+
+Observation: `ts-host/dist/teacher/cli.js --capabilities json` threw `NatlangContextError: The invocation that owns
+this callback has finished` from its application-controller probe; four shared-collector tests in
+`tests/test_bonsai_queue.py` failed with it. Cause: 7f4bafb63 (invocation-bound liveness) made `resolveFrame` refuse a
+frame whose `parentCallId` is not a live invocation. `NodeNativeRuntime.frame` names the run id as its parent, but that
+invocation is begun only inside `run()`/`evaluate()`. The collector's controller path (`executeProgramInEpisode`)
+entered `runtime.frame` directly with `runInFrame`, so the controller's first Natlang operation ran under an invocation
+that never began. db4aa4b4e is not the cause (it only reroutes through the same check). Fix: `NodeNativeRuntime.runHosted`
+begins and ends the run invocation around host code (shared with `evaluate`); the collector controller path uses it.
+Inventory: the only out-of-`run()` entry into a native runtime's frame is that collector path (`git grep
+"runInFrame(.*runtime\.frame"`; `native/agent.ts` uses run inside `run()`). Tests: `ts-host/test/application-controller.test.mjs`
+(child is parented under the run; `runHosted` owns the invocation only while it runs), the capabilities probe, and the
+shared-collector tests. Production: `--capabilities` is called only by `scripts/run_reviewed_luna_dispatcher.py`, not by
+the expert-iteration collectors. Pin exposure: pins with 7f4bafb63 (ee84247cab9a, the v0009 collections and teacher;
+8b06ad22876b, the driver and Colab fill; 35a778eb9bc1; edd23ec451d3) fail any task with `application_controller`.
+The v0009 collections hold no such case (0 of 171 group `cases.jsonl`) and their logs never show the error, so aei1
+data is unaffected; the fix enters at the next pin. The driver was not restarted.
+
+## 2026-11-25 17:30 Program-tuning merged arms far below the base: the fits taught the policy to skip its reasoning (program-tuning strand)
+
+**Observation.** `progtune-l4-seq-*` (dev64, l4 series d5a5e29de5e6, 2 samples): merged arm vs base verdict -23.4,
+tally -46.1, tree -40.6, apigen retail -78.1 (all p 0.0005), route -3.9 (p 0.29), pubmed +9.4 (p 0.11).
+
+**What the merged arms do.** They stop reasoning. Share of model turns with a non-empty think block, base -> merged
+(mean reasoning chars): tally 100% -> 0.0% (2,127 -> 1), apigen 100% -> 3.7% (1,741 -> 24), tree 99.9% -> 7.3%,
+route 100% -> 56% (2,624 -> 146), verdict 99.7% -> 95% (3,377 -> 1,217), pubmed 98% -> 74%. Episodes get shorter and
+answer blind: a tally episode writes `intent.map(...)` (intent is a function), gets a TypeError and returns all zeros;
+apigen's arm writes prose and half-formed calls with no `</think>` (380 of 1,121 replies with text and no call).
+The degradation orders with the rows' share of replies without reasoning: apigen 64% (teacher only), tally 65%
+(incl. 153 own), tree 67% (incl. 96 own), route 26%, verdict 16%, pubmed 12%.
+
+**Localized (forward-only, DGX, base 5ff07638 vs adapter applied unmerged vs merged checkpoint).** At the generation
+position of dev serving prompts (prompt ends `<think>`):
+- tally: P(`</think>`) 3e-9 (base) -> 0.977 (adapter) / 0.977 (merged); the fit's own row NLL equal under adapter and
+  merged (teacher-noR 2.03 -> 0.13, own readouts 4.93 -> 0.09, own reasoned 0.54 -> 0.79: it got worse at its own
+  reasoning).
+- apigen: P(`</think>`) 3e-9 -> 2e-4, but P(`<tool_call>`) ~0 -> 0.28 (top token; "We" 0.96 -> <0.11).
+So the merge, export and SGLang are not the cause: the unmerged adapter does the same.
+
+**Causes.**
+1. *Own readouts trained `</think>` (bug).* Own decision readouts ("Answer this call now, without tools"; recorded
+   `sample_ids` empty: scored, never sampled) render as `</think>"label"<|im_end|>`; `tune.rows.turn_graph` trains
+   every token of an own (`rl`) reply, so `</think>` right after `<think>` trained at full weight (tally 153 rows,
+   tree 96, pubmed 105, searchqa 25). `sft_sources.think_context` already masked this for EI builds
+   (`own_empty_think`, sft-v4-run1); the tune path did not share the rule. Fixed in 1ff53eec6
+   (`serve.targets.own_empty_think_context`, opt-out `NATLANG_TUNE_OWN_EMPTY_THINK=train`).
+2. *The token after an empty think block trains acting at the think tag.* Teacher replies without reasoning
+   (Luna/Gemini: hidden reasoning) render `<think></think><tool_call>...`; the think block is context, but
+   `<tool_call>` is predicted at the `</think>` position adjacent to `<think>`. First-order attribution at the start
+   weights (gradient of the trainer's row loss vs gradient of log P(tok | serving prompt) on the top layers'
+   targets, 6 rows per class): that first token's gradient has cosine 0.19 (apigen) / 0.31 (tally) with raising
+   P(`<tool_call>` | `<think>`) and lowers the reasoning start "We"; the rest of the action 0.02-0.03; teacher rows
+   with reasoning 0.03-0.09; own reasoned rows push the other way (-0.05, "We" +0.11). Readout answers after an empty
+   block (`"label"`, NLL 11-16 nats at the base) push "We" down hardest. Fixed in c1abc6a47
+   (`serve.targets.empty_think_first_end`): that token is context in tune rows, `sft_sources.think_context` (EI
+   builds) and `exp0_sft.mask_empty_think` (aux parts, operator rows, grpo replay corpora); opt-out
+   `NATLANG_EMPTY_THINK_FIRST=train`. EI picks it up at its next pin.
+3. *Rows at a stale system prompt.* Every program's rows were replayed 11-17..11-20 (18.2k-character system prompt);
+   the arms (pin de2b36add) serve a 14.8k one: 0% of rows carry the served prompt. `program_tune rows` now records
+   `system_prompts`, `colab-measure` writes `DIR/eval/ARM/prompt-parity.json` and warns below 50% (1ff53eec6).
+4. *Amplifier, not cause:* Adam 2e-3 on the only (tree) node at scale 1 (the Recipe default for tree is 0.25;
+   program_tune sets 1), 60 x 8 rows, row losses driven to 0.1-0.2. The diffuse push of the remaining action tokens
+   (the "rest" term above) stays; own reasoned rows are the counterweight, and apigen has none.
+
+**Dragnet.**
+| Item | Status | Evidence |
+|---|---|---|
+| Rows and masking | bug found (1, 2) | lowered-row layout dumps; own readouts weight 1 on `</think>` |
+| Rendering/templates | checked | serving prompts end `<think>` (all 24 probed); training generation prompt identical |
+| Base trained on vs merged into | checked | fits' `base_native_identity` 5ff07638 = plan = merge base = base arm policy |
+| LoRA scale/alpha, dtype, merge precision | ruled out | alpha = rank (scale 1) in fit and merge; served/true delta 1.001, cos >= 0.987; adapter == merged on row NLL and P(`</think>`) to 3 digits |
+| Export and SGLang config | ruled out | unmerged adapter on the native engine reproduces the merged arm's first-token distribution |
+| Prompt at serving vs training | defect found (3) | system prompt sha 372ea75e (rows) vs 485a2aad (arms), 0% overlap; tool schemas match for apigen |
+| LR, steps, overfitting | amplifier (4) | 2e-3 x 60 steps, row NLL to 0.1-0.2; not changed (recipe choice, measured by the rerun) |
+| Eval code and series | ruled out | base and merged arms: one series d5a5e29de5e6, code de2b36add, seed 4200000, 2 samples |
+| Parser on unclosed think | found, not fixed | a reply without `</think>` is all content (`serve.chat.build_message`), so the history renders `<think></think>` + text that was sampled inside the think block; only hit by policies that never close the block (base: ~0). Cross-engine (SGLang, native, llama-server, wllama); open item, not done here |
+| Not checked | - | dev-split row NLL (no held-out rows lowered); whether 2 is fully removed by the mask (the rerun measures it); the A100 searchqa fit beyond its rows |
+
+An independent static read (subagent, briefed with observations only) reached 2 and 4 and flagged 3 and the parser.
+
+**Invalid.** Every program-tuning fit, merged checkpoint and merged/adapter arm: route (11-18 fit), verdict, tally,
+tree, apigen retail, pubmed, multihop, plus the in-progress searchqa and neuralese_iterate fits (stopped 15:35 with
+lanes `progtune-l4-fits4-a/b` and their VM learners; `progtune-l4-seq-4` stopped 15:40). Base arms stay valid (same
+series). The multihop base arm completes on its own.
+
+**Rerun (running).** `program-tune-20261117/rows-20261125.sh` (`progtune-rows-20261125b`, low): the nine programs'
+4,013 support episodes replayed with the arms' runtime (pin-de2b36add32f, so base arms stay one series), rows rebuilt
+(old rows kept as `rows.jsonl.replay-20261117`). Then `rerun-20261125.sh PIN TENANT_COMMIT`: old fits/merged/arms to
+`fit/invalid-reasoning-20261125/`, VM fit state deleted, fresh plans (same recipe), fit lanes `progtune-l4-fits5-a/b`
+at a tenant commit with c1abc6a47, measurement lane `progtune-l4-seq-5` (episodes pin de2b36add). Success per
+program: merged > base with p < 0.05; failure: a regression with p < 0.05, after which the merged arm's reasoning
+share is read first. If reasoning still falls (> 10 points of turns), the next change is own reasoned support
+samples in the rows (`program_tune rows --rollouts`) and the Recipe's tree scale 0.25.
+
 ## 2026-11-25 — Preserve completed collection across individual capture parser failures
 
 Source35 produced 24 locally verified captures before host memory pressure checkpointed collection. Its automatic resume then failed in `outcomes`: a truthful independently scoped nested task met a stale same-task child predicate. Python and Node now accept authenticated cross-task causal children while retaining exact declared membership, own-task custody and digest/owner/run checks; the original untouched 21-call capture materialized all 26 decisions. No teacher rerun or invented graph edge is needed.

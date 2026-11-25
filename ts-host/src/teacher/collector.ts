@@ -71,7 +71,7 @@ import { createTeacherTextNeuralese, TEACHER_TEXT_NEURALESE_PROMPT } from '../mo
 import { createInContextNeuralese } from '../model/in-context-neuralese.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import { nodePlatform } from '../runtime/node.js';
-import { currentFrame, runInFrame, type Frame } from '../runtime/context.js';
+import { currentFrame, type Frame } from '../runtime/context.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -1908,7 +1908,9 @@ async function executeProgramInEpisode(record: ProgramRecord, driver:(request: M
           root: record.semantics.root, task_id: record.id });
         try {
           if (!runtime.frame) throw new Error('application controller requires the collector task runtime frame');
-          const value = await runInFrame(runtime.frame,
+          // The controller runs as the episode's root invocation (begun and ended around it), so its Natlang
+          // operations are live children of the run rather than calls under an invocation that never began.
+          const value = await runtime.runHosted(
             () => (callable as (...values: unknown[]) => Promise<unknown>)(...args, operations));
           const childCalls = runtime.frame.task.traces;
           runtime.trace.emit('application_controller_call', { schema: controller.schema, phase: 'completed',

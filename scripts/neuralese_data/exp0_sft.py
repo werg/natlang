@@ -394,7 +394,11 @@ def mask_empty_think(chains, tokenizer):
     A reply that was not sampled by the student and carries no reasoning (a written or dataset target: operator seeds,
     operator consumers' exact answers) renders the template's empty think block, ``</think>`` at the first target
     position. Training it teaches the student to close its reasoning at once on ordinary calls; no verified outcome
-    selects that (the same rule as ``sft_sources.think_context`` for teacher replies). The action after it trains."""
+    selects that (the same rule as ``sft_sources.think_context`` for teacher replies). So is the first token after it,
+    predicted at the ``</think>`` position the student never reaches (``serve.targets.empty_think_first_end``,
+    opt-out ``NATLANG_EMPTY_THINK_FIRST=train``). The rest of the action trains."""
+    import os
+    first = os.environ.get('NATLANG_EMPTY_THINK_FIRST', 'context') != 'train'
     close_id = tokenizer.convert_tokens_to_ids('</think>')
     cache = {}
 
@@ -409,6 +413,7 @@ def mask_empty_think(chains, tokenizer):
             lead = empty_think_lead(row['sample'], close_id, blank)
             if not lead:
                 continue
+            lead = min(lead + 1, length) if first else lead
             weight = np.array(row['weight'], np.float32) if 'weight' in row else np.ones(length, np.float32)
             if weight[:lead].any():
                 weight[:lead] = 0

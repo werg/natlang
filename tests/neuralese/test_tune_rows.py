@@ -214,7 +214,7 @@ def test_correction_rows_weight_only_the_teacher_continuation(tmp_path):
 
 class _ThinkTokens:
     """A tokenizer stand-in for a thinking template: ids index a fixed vocabulary."""
-    vocab = ['<|im_start|>', '<think>', '</think>', '"min_payment"', '<|im_end|>', 'plan', '<tool_call>']
+    vocab = ['<|im_start|>', '<think>', '</think>', '"', '<|im_end|>', 'plan', '<tool_call>', 'min_payment']
 
     def convert_tokens_to_ids(self, token):
         return self.vocab.index(token) if token in self.vocab else None
@@ -223,14 +223,14 @@ class _ThinkTokens:
         return ''.join(self.vocab[i] for i in ids)
 
 
-def _own_readout_weights(monkeypatch, reply, target):
-    """turn_graph's target weights for an own ('rl') reply rendered as `target` after `<|im_start|> <think>`."""
+def _own_readout_weights(monkeypatch, reply, target, teacher='rl'):
+    """turn_graph's target weights for a reply (own: 'rl') rendered as `target` after `<|im_start|> <think>`."""
     import types
     import natlang_neuralese.serve.targets as targets
     monkeypatch.setattr(targets, 'target_items', lambda engine, messages, tools, message, **_: (
         [('tok', 0), ('tok', 1)], [('tok', t) for t in target]))
     engine = types.SimpleNamespace(tokenizer=_ThinkTokens(), model_config={'tokenizer_fingerprint': 'f'})
-    row = turn(teacher='rl', reply=reply, evidence={**turn()['evidence'], 'actionEvents': []})
+    row = turn(teacher=teacher, reply=reply, evidence={**turn()['evidence'], 'actionEvents': []})
     return turn_graph(engine, row, prompt_weight=0.)['graph']['nodes'][0]['target_weights']
 
 
@@ -238,20 +238,29 @@ def test_an_own_reply_without_reasoning_trains_its_answer_but_not_the_empty_thin
     # 2026-11-25: own decision readouts (scored, never sampled) trained </think> right after <think>; the merged
     # program fits closed the think block at once (P 3e-9 -> 0.98) and reasoned in 0-7% of their turns
     monkeypatch.delenv('NATLANG_TUNE_OWN_EMPTY_THINK', raising=False)
+    monkeypatch.delenv('NATLANG_EMPTY_THINK_FIRST', raising=False)
     readout = {'text': '"min_payment"', 'calls': []}
-    assert _own_readout_weights(monkeypatch, readout, [2, 3, 4]) == [0., 0., 0., 1., 1.]
+    answer = [2, 3, 7, 3, 4]                       # </think> " min_payment " <|im_end|>
+    # the empty block and the token predicted at its </think> are context; the rest of the answer trains
+    assert _own_readout_weights(monkeypatch, readout, answer) == [0., 0., 0., 0., 1., 1., 1.]
     # an own reply with reasoning keeps every sampled token, its think block included
     reasoned = {**readout, 'reasoning': 'plan'}
-    assert _own_readout_weights(monkeypatch, reasoned, [5, 2, 3, 4]) == [0., 0., 1., 1., 1., 1.]
-    # opt-out: NATLANG_TUNE_OWN_EMPTY_THINK=train
+    assert _own_readout_weights(monkeypatch, reasoned, [5] + answer) == [0., 0.] + [1.] * 6
+    # a teacher reply without reasoning: the same rule (tune.rows -> serve.targets.non_student_context)
+    assert _own_readout_weights(monkeypatch, readout, answer, teacher='teacher') == [0., 0., 0., 0., 1., 1., 1.]
+    # opt-outs: NATLANG_EMPTY_THINK_FIRST=train trains the first token again, NATLANG_TUNE_OWN_EMPTY_THINK=train
+    # the own empty block too
+    monkeypatch.setenv('NATLANG_EMPTY_THINK_FIRST', 'train')
+    assert _own_readout_weights(monkeypatch, readout, answer) == [0., 0., 0., 1., 1., 1., 1.]
     monkeypatch.setenv('NATLANG_TUNE_OWN_EMPTY_THINK', 'train')
-    assert _own_readout_weights(monkeypatch, readout, [2, 3, 4]) == [0., 0., 1., 1., 1.]
+    assert _own_readout_weights(monkeypatch, readout, answer) == [0., 0., 1., 1., 1., 1., 1.]
 
 
-def test_own_empty_think_context_masks_only_an_empty_block():
+def test_own_empty_think_context_masks_only_an_empty_block(monkeypatch):
     from natlang_neuralese.serve.targets import own_empty_think_context
+    monkeypatch.delenv('NATLANG_EMPTY_THINK_FIRST', raising=False)
     tokens = _ThinkTokens()
-    assert own_empty_think_context(tokens, {'role': 'assistant', 'content': 'x'}, [2, 3, 4]) == 1
+    assert own_empty_think_context(tokens, {'role': 'assistant', 'content': 'x'}, [2, 3, 7, 3, 4]) == 2
     assert own_empty_think_context(tokens, {'role': 'assistant', 'content': 'x', 'reasoning_content': 'p'},
                                    [5, 2, 3, 4]) == 0
     assert own_empty_think_context(tokens, {'role': 'assistant', 'content': 'x'}, [3, 4]) == 0   # no think block
