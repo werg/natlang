@@ -37,3 +37,24 @@ non-idempotent operation and retains its existing named-unit check. SSH connecti
 and liveness timeouts bound silent disconnections. Explicit opt-out:
 `NATLANG_ARCHIVE_TRANSPORT_ATTEMPTS=1` (default4). Existing captures remain owned
 until checksum validation and receipt publication; retries never invoke a teacher.
+
+## 2026-11-25: cohort circuit breaker
+
+Inventory before editing: repository-wide search finds one hold implementation
+(`scripts/neuralese_data/vibestudio_campaign.py:195`), one driver call (718),
+its CLI threshold declaration (745), and direct tests in
+`tests/test_vibestudio_campaign.py`. `infrastructure_failure` also serves
+`publish_status`: retry accounting must remain unchanged. Recovery replays
+original receipts; no other engine, collector, export, or ingestion code applies
+this campaign wave stop rule. The serving-engine exclusions above still apply.
+
+The current rule is absolute: any two infrastructure failures stop a wave,
+including two isolated provider transports among64 attempts. Keep the absolute
+threshold for structural/build/capture/workerd failures, but apply a separate
+provider-transport fraction (default0.5) among noninterrupted attempts, also
+requiring the count threshold. `--provider-transport-hold-fraction 0` restores
+the previous absolute rule. Capture corruption accompanying a transport remains
+structural; cancelled cases neither trigger holds nor dilute the denominator.
+This is a bounded circuit-breaker policy change, not a diagnosis of the network
+failure. Original captures, exposure, goal retries, and semantic checks remain
+unchanged; the underlying transport cause remains open.

@@ -174,12 +174,13 @@ def provider_transport_failure(outcome):
         cause))
 
 
-def infrastructure_failure(outcome, case):
+def infrastructure_failure(outcome, case, *, include_provider_transport=True):
     if capture_integrity_errors(outcome.get('capture_errors')):
         return True
     if workerd_failure(outcome):
         return True
-    if (os.environ.get("NATLANG_CAMPAIGN_TRANSPORT_FAILURES_AS_GOAL_FAILURES") != "1"
+    if (include_provider_transport
+            and os.environ.get("NATLANG_CAMPAIGN_TRANSPORT_FAILURES_AS_GOAL_FAILURES") != "1"
             and provider_transport_failure(outcome)):
         return True
     if outcome['status'] == 'no-capture':
@@ -192,15 +193,30 @@ def infrastructure_failure(outcome, case):
     return case.get('requiresAndroidEmulator') and 'ready disposable Android emulator' in reason
 
 
-def wave_infrastructure_hold(receipt, cases, threshold=2):
+def wave_infrastructure_hold(receipt, cases, threshold=2, provider_transport_fraction=0.5):
     if threshold < 0:
         raise ValueError('infrastructure hold threshold must be nonnegative')
-    failures = [name for name, outcome in receipt.items() if not outcome.get('interrupted') and infrastructure_failure(outcome, cases.get(name, {}))]
-    if not threshold or len(failures) < threshold:
+    if not 0 <= provider_transport_fraction <= 1:
+        raise ValueError('provider transport hold fraction must be between 0 and 1')
+    attempted = {name: outcome for name, outcome in receipt.items()
+                 if not outcome.get('interrupted') and outcome['status'] != 'interrupted'}
+    failures = [name for name, outcome in attempted.items()
+                if infrastructure_failure(outcome, cases.get(name, {}))]
+    structural = [name for name in failures if infrastructure_failure(
+        attempted[name], cases.get(name, {}), include_provider_transport=False)]
+    transport = [name for name in failures if name not in structural]
+    fraction = len(transport) / len(attempted) if attempted else 0
+    if not threshold or (len(structural) < threshold and not (
+            len(transport) >= threshold and fraction >= provider_transport_fraction)
+            and not (provider_transport_fraction == 0 and len(failures) >= threshold)):
         return None
     return {'infrastructure_failures': failures, 'infrastructure_hold_threshold': threshold,
-            'workerd_resets': [name for name, outcome in receipt.items() if workerd_failure(outcome)],
-            'all_captures_missing': bool(receipt) and all(outcome['status'] == 'no-capture' for outcome in receipt.values())}
+            'structural_failures': structural, 'provider_transport_failures': transport,
+            'provider_transport_failure_fraction': fraction,
+            'provider_transport_hold_fraction': provider_transport_fraction,
+            'noncancelled_attempts': len(attempted),
+            'workerd_resets': [name for name, outcome in attempted.items() if workerd_failure(outcome)],
+            'all_captures_missing': bool(attempted) and all(outcome['status'] == 'no-capture' for outcome in attempted.values())}
 
 
 def prerequisite_holds(cases, host):
@@ -715,7 +731,9 @@ def _drive(args, checkpoint):
                            attempt_epoch=attempt_epoch, receipt_epochs=[*epochs, plan.get('attempt_epoch')])
             sync_index(args, [root/'status.json', root/'reused.json'])
             return
-        runtime_hold = wave_infrastructure_hold(receipt, cases, getattr(args, 'infrastructure_hold_threshold', 2))
+        runtime_hold = wave_infrastructure_hold(
+            receipt, cases, getattr(args, 'infrastructure_hold_threshold', 2),
+            getattr(args, 'provider_transport_hold_fraction', 0.5))
         if runtime_hold is not None:
             publish(root / 'runtime-hold.json', {'wave': started.stem, **runtime_hold})
             (root / 'stop-after-wave').touch()
@@ -743,7 +761,9 @@ def main():
                      help='use the former epoch-only retry ordering (default: cumulative fresh coverage first)')
     run.add_argument('--attempt-epoch', help='explicit retry epoch; defaults to the pinned release manifest SHA-256')
     run.add_argument('--infrastructure-hold-threshold', type=int, default=2,
-                     help='hold after this many infrastructure failures in one wave; 0 disables the hold')
+                     help='hold after this many structural failures, or provider failures also reaching the fraction limit; 0 disables holds')
+    run.add_argument('--provider-transport-hold-fraction', type=float, default=0.5,
+                     help='provider transport failures must reach this fraction of noncancelled wave attempts and the count threshold; 0 restores absolute infrastructure holds')
     run.add_argument('--wave-size', type=int, default=6)
     run.add_argument('--max-waves', type=int, help='stop after archiving this many waves and syncing status')
     run.add_argument('--concurrency', type=int, default=1)
@@ -763,7 +783,7 @@ def main():
         export_trajectories(args.archive, read(args.receipt), held, training)
         return
     reviewer = (args.review_model or '').split(':')[-1].lower().split('-')
-    if (args.teacher_timeout_ms < 1 or args.attempts < 1 or args.cases_per_instance < 0 or args.deployment_concurrency < 1 or args.infrastructure_hold_threshold < 0 or (args.attempt_epoch is not None and not args.attempt_epoch.strip())
+    if (args.teacher_timeout_ms < 1 or args.attempts < 1 or args.cases_per_instance < 0 or args.deployment_concurrency < 1 or args.infrastructure_hold_threshold < 0 or not 0 <= args.provider_transport_hold_fraction <= 1 or (args.attempt_epoch is not None and not args.attempt_epoch.strip())
             or (args.max_waves is not None and args.max_waves < 1)
             or not 1 <= args.concurrency <= args.wave_size or 'sol' in reviewer or 'luna' in reviewer):
         parser.error('provide positive limits, concurrency within the wave size, and an independent non-Sol reviewer when configured')

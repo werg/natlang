@@ -465,7 +465,9 @@ def test_mixed_wave_holds_only_repeated_typed_infrastructure_failures():
                'missing-b': {'status': 'no-capture'}, 'wrong': {'status': 'test-failed', 'reason': 'wrong contents'}}
     hold = vibestudio_campaign.wave_infrastructure_hold(receipt, {})
     assert hold == {'infrastructure_failures': ['missing-a', 'missing-b'], 'infrastructure_hold_threshold': 2,
-                    'workerd_resets': [], 'all_captures_missing': False}
+                    'structural_failures': ['missing-a', 'missing-b'], 'provider_transport_failures': [],
+                    'provider_transport_failure_fraction': 0, 'provider_transport_hold_fraction': 0.5,
+                    'noncancelled_attempts': 4, 'workerd_resets': [], 'all_captures_missing': False}
     assert vibestudio_campaign.wave_infrastructure_hold(receipt, {}, 0) is None
     assert vibestudio_campaign.wave_infrastructure_hold(receipt, {}, 3) is None
     assert vibestudio_campaign.wave_infrastructure_hold({'wrong-a': receipt['wrong'], 'wrong-b': receipt['wrong']}, {}) is None
@@ -646,3 +648,64 @@ def test_archive_checksum_mismatch_keeps_original_capture(monkeypatch, tmp_path)
         vibestudio_campaign.transfer(source, 'dgx', Path('/archive/capture'))
     assert len(commands) == 3
     assert original.read_text() == '{"kept":true}'
+
+
+def transport_wave(failures, attempts):
+    return {**{f'network-{i}': {'status': 'test-failed',
+                'reason': 'natlang decide: failed: fetch failed (record actual/2)'}
+               for i in range(failures)},
+            **{f'other-{i}': {'status': 'test-failed', 'reason': 'wrong user outcome'}
+               for i in range(attempts - failures)}}
+
+
+def test_sparse_provider_failures_keep_large_cohort_running():
+    receipt = transport_wave(9, 64)
+    assert vibestudio_campaign.wave_infrastructure_hold(receipt, {}) is None
+    assert vibestudio_campaign.wave_infrastructure_hold(receipt, {}, provider_transport_fraction=0)
+    assert all(vibestudio_campaign.infrastructure_failure(value, {})
+               for name, value in receipt.items() if name.startswith('network-'))
+
+
+def test_provider_wave_fraction_boundary_and_minimum_count():
+    assert vibestudio_campaign.wave_infrastructure_hold(transport_wave(2, 5), {}) is None
+    hold = vibestudio_campaign.wave_infrastructure_hold(transport_wave(2, 4), {})
+    assert hold['provider_transport_failure_fraction'] == 0.5
+    assert hold['noncancelled_attempts'] == 4
+    assert hold['structural_failures'] == []
+    assert vibestudio_campaign.wave_infrastructure_hold(transport_wave(1, 1), {}) is None
+    assert vibestudio_campaign.wave_infrastructure_hold(transport_wave(2, 2), {}, 0) is None
+
+
+def test_cancelled_attempts_neither_trigger_nor_dilute_provider_hold():
+    receipt = transport_wave(2, 4)
+    receipt['cancelled'] = {'status': 'interrupted'}
+    receipt['cancelled-raw'] = {'status': 'no-capture', 'interrupted': True}
+    hold = vibestudio_campaign.wave_infrastructure_hold(receipt, {})
+    assert hold['noncancelled_attempts'] == 4
+    assert len(hold['infrastructure_failures']) == 2
+    receipt['network-0']['interrupted'] = True
+    assert vibestudio_campaign.wave_infrastructure_hold(receipt, {}) is None
+
+
+def test_structural_damage_remains_strict_even_with_transport_cause():
+    receipt = transport_wave(2, 64)
+    receipt['network-0']['capture_errors'] = ['missing call record']
+    receipt['network-1']['capture_errors'] = ['missing call record']
+    hold = vibestudio_campaign.wave_infrastructure_hold(receipt, {})
+    assert hold['structural_failures'] == ['network-0', 'network-1']
+    assert hold['provider_transport_failures'] == []
+
+
+def test_mixed_single_structural_and_sparse_transport_only_hold_in_legacy_mode():
+    receipt = transport_wave(1, 64)
+    receipt['missing'] = {'status': 'no-capture'}
+    assert vibestudio_campaign.wave_infrastructure_hold(receipt, {}) is None
+    assert vibestudio_campaign.wave_infrastructure_hold(receipt, {}, provider_transport_fraction=0)
+    receipt['second-missing'] = {'status': 'no-capture'}
+    assert vibestudio_campaign.wave_infrastructure_hold(receipt, {})
+
+
+@pytest.mark.parametrize('fraction', [-0.1, 1.1, float('nan')])
+def test_invalid_provider_hold_fraction_rejected(fraction):
+    with pytest.raises(ValueError, match='fraction'):
+        vibestudio_campaign.wave_infrastructure_hold({}, {}, provider_transport_fraction=fraction)

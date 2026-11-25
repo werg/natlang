@@ -12543,3 +12543,20 @@ SOURCES `searchswarm`; 0e6a11cbe). One real SearchSwarm item per task, no templa
   endpoints `encode`, `embed`, gradients and optimizers) still reload the native model; on Pop's CPU front any of
   them can do the same. No guard refuses a reload that cannot fit the unit's cap. The live Pop actor was not
   watched through an init-body call after the fix (it serves the old code until its next serve).
+
+## 2026-11-25 — keep productive cohorts running through sparse provider failures
+
+Wave0056 produced26 native successes alongside9 infrastructure failures; the
+absolute two-failure circuit breaker repeatedly held the whole64-case queue.
+The shared campaign driver now keeps structural/build/missing-capture/workerd
+failures on the count threshold (default2), while isolated operational provider
+transport failures must also comprise at least half of noncancelled attempts.
+Interrupted attempts do not count toward either numerator or denominator.
+Transport plus capture damage remains structural. Explicit
+`--provider-transport-hold-fraction 0` restores the former absolute policy;
+threshold0 still disables holds. Retry accounting/exposure and immutable raw
+receipts are unchanged. The existing anchored failed-call classifier excludes
+model answers merely quoting network errors. This policy does not claim the
+underlying provider/network cause is resolved. Inventory and scope are recorded
+in `VIBESTUDIO_TRANSPORT_ACCOUNTING_20261124.md`; no engine/Host/SST changes or
+new paid inference are involved.
