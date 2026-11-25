@@ -694,6 +694,23 @@ def prefer(episodes, rates):
     return sorted(episodes, key=rank)
 
 
+def untrained(episodes, builds, funnel=None):
+    """``episodes`` less those an earlier build (``--skip-trained`` BUILD dirs: the lineage's trained mixes) trained,
+    raw or as a fill (``sft_sources.Exposures``: a fill unit and the teacher episode it stands in for share one exposure,
+    and with ``--max-prior-exposures 1`` an episode that trained once never trains again). A fill of such an episode is
+    left out of every later mix, so drawing it spends actor time for nothing: aei1 2026-11-25, 32,515 of the build's
+    43,321 teacher successes had trained, and the standing fills worked through those seed WORKs while the new
+    campaign episodes were not listed at all."""
+    if not builds:
+        return list(episodes)
+    from sft_sources import trained_exposures
+    exposure = trained_exposures(builds)
+    kept = [e for e in episodes if not exposure(('teacher', e['task_id'], e['key']))]
+    if funnel is not None:
+        funnel['teacher']['trained_before_skipped'] += len(episodes) - len(kept)
+    return kept
+
+
 def ordered(episodes, prefer_works, rates, seed, shape_cap=None):
     """The generation order: shuffled (``seed``), tasks the student fails first (``prefer``, with ``rates``), and
     episodes of the ``prefer_works`` WORKs before every other (stable: each group keeps that order). Within each of the
@@ -868,13 +885,15 @@ def generate(args):
     funnel = collections.defaultdict(collections.Counter)
     episodes = teacher_episodes(works, held, funnel, drifted=args.admit_drifted == 'on',
                                 skip_mismatched_live=args.live_mismatch == 'skip')
+    listed = {e['key'] for e in episodes}
+    episodes = untrained(episodes, args.skip_trained, funnel)
     done = done_keys(out)
     rates = load_rates(args.prefer_rates) if args.prefer_rates else None
     todo = ordered([e for e in episodes if e['key'] not in done], prefer_works, rates, args.seed,
                    getattr(args, 'shape_cap', None))
     if args.limit:
         todo = todo[:args.limit]
-    queue = EpisodeQueue(todo, seen=done | {e['key'] for e in episodes}, standing=bool(args.rescan_minutes))
+    queue = EpisodeQueue(todo, seen=done | listed, standing=bool(args.rescan_minutes))
     args.partial_dir = None if args.no_partial else out / 'partial'
     if args.partial_dir is not None:
         args.partial_dir.mkdir(exist_ok=True)
@@ -954,9 +973,10 @@ def generate(args):
                 data_registry.consume([*prefer_works, held], run=f'filled-reasoning:{out}',
                                       how='standing teacher episode rescan',
                                       **registry_options(registry_repo, ref=selected_ref))
-                found = teacher_episodes(prefer_works, held, collections.defaultdict(collections.Counter),
-                                         drifted=args.admit_drifted == 'on',
-                                         skip_mismatched_live=args.live_mismatch == 'skip')
+                found = untrained(teacher_episodes(prefer_works, held, collections.defaultdict(collections.Counter),
+                                                   drifted=args.admit_drifted == 'on',
+                                                   skip_mismatched_live=args.live_mismatch == 'skip'),
+                                  args.skip_trained)
                 record_fills(out, works, held,
                              **registry_options(registry_repo, ref=selected_ref, writer=True))
                 registry_ref = selected_ref
@@ -1580,6 +1600,9 @@ def build_parser():
                    help='task pass rates ({id: {successes, scored}}): episodes of failed tasks first, then unmeasured')
     g.add_argument('--prefer-work', action='append', default=[], metavar='WORK',
                    help='a WORK (also read as --work, first) whose episodes are filled before every other WORK\'s')
+    g.add_argument('--skip-trained', action='append', default=[], metavar='BUILD',
+                   help='an earlier mix build (OUT of sft_sources build: rows.jsonl.zst, trained-units.json) whose '
+                        'trained episodes are not filled: their fills would never train (sft_sources.Exposures)')
     g.add_argument('--rescan-minutes', type=float, default=0.,
                    help='list the --prefer-work WORKs again this often and queue their new episodes first; the '
                         'generation then keeps running until stopped (a standing fill beside an ingester)')

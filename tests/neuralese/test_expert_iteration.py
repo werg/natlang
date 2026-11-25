@@ -212,8 +212,17 @@ def test_cycle_fill_command_parses_as_filled_reasoning_generate(tmp_path, monkey
     command = cycle.fill_command({'sglang': 'http://127.0.0.1:1', 'url': 'http://127.0.0.1:2', 'export': '/e'})
     assert command[1].endswith('scripts/neuralese_data/filled_reasoning.py')
     parsed = filled_reasoning.build_parser().parse_args(command[2:])
-    assert parsed.command == 'generate' and parsed.work == ['/data/seed', '/data/demos']
+    # the loop's own sources WORK (the teacher campaigns' successes) first and rescanned, then the seed and role WORKs
+    assert parsed.command == 'generate' and parsed.work == [str(tmp_path / 'w'), '/data/seed', '/data/demos']
+    assert parsed.prefer_work == [str(tmp_path / 'w')] and parsed.rescan_minutes == 30 and parsed.skip_trained == []
     assert parsed.prefer_rates == [str(cycle.dir / 'tasks.rates.json')] and parsed.polite
+    trained = filled_reasoning.build_parser().parse_args(cycle.fill_command(
+        {'sglang': 'a', 'url': 'b', 'export': 'c'}, skip_trained=['/r1/mix', '/r2/mix'])[2:])
+    assert trained.skip_trained == ['/r1/mix', '/r2/mix']
+    args.no_fill_campaigns = True           # the opt-out: seed and role WORKs only, as before 2026-11-25
+    off = filled_reasoning.build_parser().parse_args(cycle.fill_command({'sglang': 'a', 'url': 'b', 'export': 'c'})[2:])
+    assert off.work == ['/data/seed', '/data/demos'] and off.prefer_work == []
+    del args.no_fill_campaigns
     # beside the collection: the actor runs fill_inflight more requests than collection slots; 2x workers reach the cap
     assert (parsed.min_inflight, parsed.max_inflight, parsed.max_running, parsed.workers) == (16, 32, 144, 32)
     assert cycle.max_running() == 144
@@ -1012,3 +1021,109 @@ def test_a_stand_in_unit_and_the_episode_it_replaces_share_one_exposure():
     assert exposure(('filled', 'task-b', 'filled:teacher:pool:t000002:0')) == 1
     assert exposure(('teacher', 'task-c', 'teacher:pool:t000003:0')) == 0
     assert exposure(('operators', 'task-a', '0:abc')) == 0       # a round whose rest is no episode key
+
+
+def test_mix_supply_counts_everything_but_the_own_successes_as_new_supervision():
+    report = {'mix': {'parts': {'rl-own': {'weighted_target_tokens': 4_800_000},
+                                'own-neuralese-graph': {'weighted_target_tokens': 100_000},
+                                'teacher': {'weighted_target_tokens': 990_000},
+                                'filled': {'weighted_target_tokens': 210_000}}}}
+    supply = ei.mix_supply(report)
+    assert supply['new_weighted_target_tokens'] == 1_200_000 and supply['own_weighted_target_tokens'] == 4_900_000
+    assert supply['weighted_target_tokens'] == 6_100_000 and supply['parts']['filled'] == 210_000
+    assert ei.mix_supply({})['new_weighted_target_tokens'] == 0
+
+
+def test_round_validation_reads_each_sets_loss_before_the_first_step_and_after_the_last(tmp_path):
+    log = tmp_path / 'train.jsonl'
+    log.write_text('\n'.join(json.dumps(r) for r in [
+        {'step': 0, 'val_loss:val-fixed-own': 0.80, 'val_loss:val-fixed-teacher': 1.20},
+        {'step': 1, 'loss': 0.5}, 'not json',
+        {'step': 20, 'val_loss:val-fixed-own': 0.70, 'val_loss:val-fixed-teacher': 1.10},
+        {'step': 41, 'val_loss:val-fixed-own': 0.75, 'val_loss:val-fixed-teacher': 1.00}]) + '\n')
+    out = ei.round_validation(log)
+    assert out['val-fixed-own'] == {'before': 0.8, 'after': 0.75, 'change': -0.05, 'before_step': 0, 'after_step': 41}
+    assert out['val-fixed-teacher']['change'] == -0.2
+    assert ei.round_validation(tmp_path / 'missing.jsonl') == {}
+
+
+def test_own_successes_of_solved_tasks_leave_the_mix_by_frontier_tier_or_recorded_rate():
+    funnel = collections.defaultdict(collections.Counter)
+    cands = [{'source': 'rl-own', 'task_id': t} for t in ('solved', 'some', 'old-solved', 'old-some', 'once', 'new')]
+    cands.append({'source': 'teacher', 'task_id': 'solved'})
+    tiers = {'solved': 'solved', 'some': 'sometimes'}
+    rates = {'some': (4, 4), 'old-solved': (3, 4), 'old-some': (2, 4), 'once': (1, 1)}
+    kept = sft_sources.drop_solved_own(cands, tiers, rates, 0.75, funnel)
+    # the frontier's tier wins over a recorded rate; one sample is not a measurement; teacher episodes are not own
+    assert [(c['source'], c['task_id']) for c in kept] == [('rl-own', 'some'), ('rl-own', 'old-some'),
+                                                          ('rl-own', 'once'), ('rl-own', 'new'), ('teacher', 'solved')]
+    assert funnel['rl-own']['own_task_solved'] == 2
+    assert len(sft_sources.drop_solved_own(cands, tiers, rates, 0, funnel)) == 6     # rate 0: the frontier tier only
+
+
+def test_a_new_campaign_episode_waits_for_its_fill_until_attempted_or_old(tmp_path):
+    work = tmp_path / 'ops' / 'aei1' / 'teacher-r0010'
+    for d in ('t000001-a1', 't000002', 't000003'):
+        (work / 'episodes' / d).mkdir(parents=True)
+        (work / 'episodes' / d / 'rollouts.jsonl').write_text('{}\n')
+    now = 1_000_000_000.
+    import os
+    os.utime(work / 'episodes' / 't000003' / 'rollouts.jsonl', (now - 13 * 3600, now - 13 * 3600))
+    for d in ('t000001-a1', 't000002'):
+        os.utime(work / 'episodes' / d / 'rollouts.jsonl', (now - 3600, now - 3600))
+    pending = sft_sources.FillPending([work], {'teacher:aei1/teacher-r0010:t000002:0'}, 12, now=now)
+    assert pending('teacher:aei1/teacher-r0010:t000001-a1:0')           # young, not attempted: waits
+    assert not pending('teacher:aei1/teacher-r0010:t000002:0')          # the fill attempted it: trains raw
+    assert not pending('teacher:aei1/teacher-r0010:t000003:0')          # older than the hours
+    assert not pending('teacher:aei1/teacher-r0009:t000001-a1:0')       # not a listed campaign
+    assert not pending('teacher:aei1/teacher-r0010:t000009:0')          # no episode directory
+    assert not pending('live:vibestudio:x:y')
+    fills = tmp_path / 'fill'
+    fills.mkdir()
+    (fills / 'fills.jsonl').write_text(json.dumps({'key': 'teacher:aei1/teacher-r0010:t000001-a1:0'}) + '\n{"cut')
+    import types
+    args = types.SimpleNamespace(defer_unfilled_hours=12, campaign_work=[str(work)], fill_out=str(fills))
+    assert not sft_sources.FillPending.from_args(args)('teacher:aei1/teacher-r0010:t000001-a1:0')
+    args.defer_unfilled_hours = 0
+    assert sft_sources.FillPending.from_args(args) is None
+
+
+def test_the_fixed_val_set_is_chosen_once_from_untrained_held_family_tasks_and_then_frozen(tmp_path):
+    import pickle
+    manifest = tmp_path / 'held.json'
+    manifest.write_text(json.dumps({'tasks': [{'id': 'held-1', 'family': 'fam_a'}, {'id': 'held-2', 'family': 'fam_b'}]}))
+    cands = [{'source': src, 'task_id': f'{src}-{fam}-{i}', 'family': fam, 'key': f'{src}:{fam}:{i}:0'}
+             for src in ('rl-own', 'teacher') for fam in ('fam_a', 'fam_b', 'other') for i in range(5)]
+    cands.append({'source': 'rl-own', 'task_id': 'trained', 'family': 'fam_a', 'key': 'k'})
+    val = sft_sources.FixedVal.open(tmp_path / 'val', manifest, per_kind=3)
+    val.choose(cands, trained_tasks={'trained'})
+    assert val.new and {k: len(v) for k, v in val.tasks.items()} == {'own': 3, 'teacher': 3}
+    chosen = {t for v in val.tasks.values() for t in v}
+    family = {c['task_id']: c['family'] for c in cands}
+    assert {family[t] for t in chosen} <= {'fam_a', 'fam_b'} and 'trained' not in chosen
+    variant_of = {t: t for t in chosen} | {'variant-of-one': sorted(chosen)[0], 'unrelated': 'unrelated'}
+    assert val.closure(variant_of) == chosen | {'variant-of-one'}
+
+    def rendered(c):
+        return ([{'turn': 0}], [('ids',)]) if c['task_id'] != sorted(val.tasks['teacher'])[0] else (ValueError(), [])
+    rows = lambda call, source, key, index, turn, workarounds: ({'key': key},)     # noqa: E731
+    chains_of = lambda episodes: [{'task': e['task_id'], 'segs': [(0, 1, {'prompt': 1, **e['rows'][0]})]}  # noqa: E731
+                                  for e in episodes]
+    val.write(rendered, rows, chains_of, 'context')
+    record = json.loads((tmp_path / 'val' / 'tasks.json').read_text())
+    assert len(record['tasks']['own']) == 3 and len(record['tasks']['teacher']) == 2     # the unrendered one is out
+    own = pickle.loads((tmp_path / 'val' / 'val-fixed-own.pkl').read_bytes())['chains']
+    assert len(own) == 3 and 'prompt' not in own[0]['segs'][0][2]
+    again = sft_sources.FixedVal.open(tmp_path / 'val', manifest)        # frozen: the next build reads the record
+    assert not again.new and again.tasks == record['tasks'] and again.report()['tasks'] == {'own': 3, 'teacher': 2}
+
+
+def test_the_fill_skips_episodes_the_lineage_already_trained(monkeypatch):
+    import filled_reasoning
+    episodes = [{'key': 'teacher:p:t1:0', 'task_id': 'a'}, {'key': 'teacher:p:t2:0', 'task_id': 'b'}]
+    assert filled_reasoning.untrained(episodes, []) == episodes
+    monkeypatch.setattr(sft_sources, 'trained_exposures',
+                        lambda builds: sft_sources.Exposures([({'teacher:p:t1:0'}, {'a'}, set())]))
+    funnel = collections.defaultdict(collections.Counter)
+    assert filled_reasoning.untrained(episodes, ['/r1/mix'], funnel) == [episodes[1]]
+    assert funnel['teacher']['trained_before_skipped'] == 1
