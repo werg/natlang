@@ -54,6 +54,7 @@ from types import SimpleNamespace
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO / 'training' / 'neuralese'), str(REPO)]
 from natlang_neuralese.common.paths import resolve  # noqa: E402
+from natlang_neuralese.common.policy_identity import entry_shas  # noqa: E402
 from natlang_neuralese.rl import episode_files  # noqa: E402
 from natlang_neuralese.train.checkpoint_offload import replace_with_link, verified_copy  # noqa: E402
 from scripts.prune_stale_checkouts import (configured_consumers, process_references, references,  # noqa: E402
@@ -98,7 +99,8 @@ def _shas(node) -> set[str]:
 
 def protected_policies(state: dict, current_policy: dict | None) -> set[str]:
     lineage = state.get('lineage') or []
-    keep = {e['sha256'] for e in lineage[-2:] if e.get('sha256')}
+    # a lineage policy under every file sha of its weights (a rebuilt checkpoint's earlier sha: ``policy_identity``)
+    keep = {s for e in lineage[-2:] for s in entry_shas(e)}
     for key in ('active_round', 'measuring', 'reference_policy', 'start_policy'):
         keep |= _shas(state.get(key))
     verdicts = state.get('applied_verdicts') or []
@@ -166,7 +168,7 @@ def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[di
     keep = protected_policies(state, current_policy)
     lineage = state.get('lineage') or []
     head = (lineage[-1].get('sha256') or '') if lineage else ''
-    on_lineage = {e.get('sha256') for e in lineage}
+    on_lineage = {s for e in lineage for s in entry_shas(e)}
     trained = set(state.get('trained_rounds') or [])
     active = (state.get('active_round') or {}).get('round_id')
     active_n = int(active[1:]) if active and ROUND.match(active) else None
@@ -240,7 +242,7 @@ def _tier_plan(driver: Path, state: dict, current_policy: dict | None) -> list[d
     # round builds read only the current and previous policy's collections (and the active round's base); the
     # reference and start policies are what a rollback returns to, whose collection then resumes (2026-11-24 19:12:
     # aei1 rolled back to r1, whose collections were on the HDD, and its live collectors wrote there)
-    keep12 = {e['sha256'][:12] for e in lineage[-2:] if e.get('sha256')} | \
+    keep12 = {s[:12] for e in lineage[-2:] for s in entry_shas(e)} | \
         {s[:12] for key in ('active_round', 'reference_policy', 'start_policy') for s in _shas(state.get(key))}
     by_round = {e.get('round_id'): e for e in lineage if e.get('round_id')}
     last_two = {e.get('round_id') for e in lineage[-2:]}

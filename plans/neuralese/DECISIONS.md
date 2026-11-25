@@ -13918,3 +13918,30 @@ Source35 produced 24 locally verified captures before host memory pressure check
 The controller must also retain other completed cases if an individual artifact is genuinely malformed. Canonical parser errors now produce the existing structural `export-rejected` receipt with original artifact paths preserved; model/held/registered-task identity errors still stop the campaign. Corrupt raw gzip/JSON is isolated similarly, and interrupted incomplete packets do not manufacture a hold. All 103 campaign controls passed, including per-case corruption and fail-closed policy negatives. The independent native graph/read-side fix remains required; this containment does not relax verification.
 
 Resume the captured wave from a fresh official driver/reader pin and archive its existing successes before further collection. Keep workspace builds and teacher execution local, Luna only with no fallback, and preserve all 1748 training goals. The native cold-build watcher path remains under repair (39 focused coordinator/schema controls passed); do not call that quota attribution closed or activate the diagnostics-only Source36 as if it solved cold watcher admission. The broader native-bound goal-meaning review and unrequested report/length/route gate removal proceed in parallel on separate coherent sources.
+
+## 2026-11-25 17:35 aei1: policy identity is the weights; a rebuilt checkpoint's earlier sha selects its collections (policy-identity agent)
+
+**Evidence (excluded today).** r0010 published v9 as 4dec7ca9; retention deleted the file and the rebuild (r0009 +
+r0010/sft/factors) is cde55352 with the same effective policy f005e7f6 (`r0010/policy/published.json` `rebuilt`). The
+lineage names cde5 only, and every reader selected collections by `collect/vNNNN-<sha12>`: r0012's `frontier.json`
+lists `v0008-6f19*` and `v0009-cde55352685b*` only, and `episodes-aei1-r0012-extract.json` (16:38) has no
+`v0009-4dec7ca9c301*` source; r0011's extraction (11:01, prepared from 8e63/6f19) had none either, so the 595 groups
+collected 08:50-13:45 under 4dec (DGX 246, remote0 349) were never extracted into `/home/werg/data/ei-sources`.
+Passing them alone would also have failed: `expert_iteration frontier` refuses a collection whose `runs.jsonl`
+policy is outside {policy, previous}, the build's own-policy tier (`sft_sources.own_policy_tier`) ranks their
+episodes as an older policy's, and `ei_round_tier` protected only the lineage file shas (the 4dec dirs are being
+tiered to `/mnt/external`). The fill build excludes only failed policies, so 4dec fills were not affected.
+
+**Change (default on, opt-out `NATLANG_EI_POLICY_EQUIVALENTS=0`).** `natlang_neuralese/common/policy_identity.py`:
+a lineage entry's `equivalent_sha256` comes from its `published.json` `rebuilt.previous_checkpoint_sha256` when the
+rebuilt record's effective sha equals the publication's; `PhaseController` attaches it on load (saved with the next
+state write). Matched everywhere a policy sha selects collections or attests episodes: `collections_of` and
+`collection_dirs` (frontier, extraction, own Neuralese graph, selection rates, teacher campaign, health report,
+round manifest, snapshot), `in_lineage`, `prepare_policies`, `failed_policies` (a failed policy under every file
+sha), `frontier --equivalent-policy ALIAS=SHA` (allowed set; recorded as `equivalent_policies` in frontier.json),
+the build's own-policy tier and cap order (read from frontier.json), and `ei_round_tier` protection (keep, keep12,
+on_lineage). Not applicable: actor binding and serving checks (`endpoint_alive`, `pop_rl_actor` rebind attestation,
+`filled_reasoning --expect-policy`) compare what an actor serves now with the canonical file it was given;
+`ops_dashboard/ei_export.collection_dirs` selects by version (lines 548-557), which already includes 4dec. New
+collections are still written under the canonical sha (`collection_base`). Test:
+`test_a_rebuilt_policys_earlier_file_sha_counts_as_the_policy_everywhere`.
