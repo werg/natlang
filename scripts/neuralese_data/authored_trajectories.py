@@ -283,6 +283,17 @@ def program_rows(admission, home, scratch, runtime=None):
     return rows, refused
 
 
+def promote(dataset, role, role_file, no_check):
+    """``data_registry.py promote`` run by the registry owner's checkout (the main one): promotion commits
+    ``training/corpora/`` where it runs, and a pin (which renders and replays) takes no commits."""
+    from natlang_neuralese.common import data_registry
+    owner = Path(data_registry.registry_owner_repo())
+    subprocess.run([str(owner / '.venv-neuralese' / 'bin' / 'python'), str(owner / 'scripts/data_registry.py'),
+                    'promote', dataset, '--role', role, *(['--role-file', role_file] if role_file else []),
+                    *(['--no-check'] if no_check else [])], check=True, cwd=owner, stdout=sys.stderr,
+                   env={**os.environ, 'PYTHONPATH': f'{owner}/training/neuralese:{owner}'})
+
+
 def register_pool(pool, stamp, summary, slugs, no_check=False):
     from natlang_neuralese.common import data_registry
     dataset = f'natlang-sft-invented-authored-{stamp}'
@@ -296,8 +307,7 @@ def register_pool(pool, stamp, summary, slugs, no_check=False):
         note='authored execution trajectories of admitted invented programs (train split): every judgment call with '
              'its runtime-rendered input and the scripted answer; no reasoning (filled_reasoning fills it); programs: '
              + ', '.join(slugs))
-    subprocess.run([str(PYTHON), str(REPO / 'scripts/data_registry.py'), 'promote', dataset, '--role', POOL_ROLE,
-                    *(['--no-check'] if no_check else [])], check=True, cwd=REPO, stdout=sys.stderr)
+    promote(dataset, POOL_ROLE, 'manifest.jsonl', no_check)
     return dataset
 
 
@@ -324,33 +334,43 @@ def promote_fill_work(work, no_check=False):
     """The fill WORK's role (once): its sft-work dataset (sft_sources record_work) into ``grpo-sd-teacher``."""
     from natlang_neuralese.common import data_registry
     dataset = data_registry.dataset_id(work, 'sft-work')
-    if Path(work).resolve().as_posix() in {Path(p).resolve().as_posix() for p in data_registry.role_paths(FILL_ROLE)}:
+    members = data_registry.role_paths(FILL_ROLE, repo=data_registry.registry_owner_repo())
+    if Path(work).resolve().as_posix() in {Path(p).resolve().as_posix() for p in members}:
         return dataset, False
-    subprocess.run([str(PYTHON), str(REPO / 'scripts/data_registry.py'), 'promote', dataset, '--role', FILL_ROLE,
-                    *(['--no-check'] if no_check else [])], check=True, cwd=REPO, stdout=sys.stderr)
+    promote(dataset, FILL_ROLE, None, no_check)
     return dataset, True
 
 
 def feed(root=None, *, work=None, runtime=None, replay=True, register=True, dry_run=False, no_check=False,
-         workers=6):
+         workers=6, resume=None):
     root = Path(root or inventor_root())
     work = Path(work or default_work())
     pending = pending_programs(root)
     summary = {'programs': [a['slug'] for a, _ in pending]}
     if dry_run or not pending:
         return summary
-    stamp = time.strftime('%Y%m%d-%H%M%S')
     base = root / 'authored'
-    pool = base / stamp
-    scratch = base / 'scratch' / stamp
-    rows, refused = [], {}
-    for admission, home in pending:
-        mine, why = program_rows(admission, home, scratch / admission['slug'], runtime)
-        rows += mine
-        refused.update(why)
-    result = write_pool(rows, pool)
-    result['render_refused'] = refused
-    (pool / 'pool.json').write_text(json.dumps(result, indent=1) + '\n')
+    if resume:      # a pool this feed already rendered and wrote (a registration or replay that failed after it)
+        pool = Path(resume)
+        stamp = pool.name
+        scratch = base / 'scratch' / stamp
+        result = json.loads((pool / 'pool.json').read_text())
+        exported = {r['task']['id'].split(':')[1] for r in read_jsonl(pool / 'authored.jsonl')}
+        pending = [(a, h) for a, h in pending if a['slug'] in exported]
+        summary['programs'] = [a['slug'] for a, _ in pending]
+    else:
+        stamp = time.strftime('%Y%m%d-%H%M%S')
+        pool = base / stamp
+        scratch = base / 'scratch' / stamp
+        rows, refused = [], {}
+        for admission, home in pending:
+            mine, why = program_rows(admission, home, scratch / admission['slug'], runtime)
+            rows += mine
+            refused.update(why)
+        result = write_pool(rows, pool)
+        result['render_refused'] = refused
+        (pool / 'pool.json').write_text(json.dumps(result, indent=1) + '\n')
+    refused = result.get('render_refused') or {}
     summary.update(stamp=stamp, pool=str(pool), episodes=result['episodes'], turns=result['turns'],
                    refused=len(result['refused']) + len(refused))
     if register and result['episodes']:
@@ -390,6 +410,7 @@ def main(argv=None):
     f.add_argument('--no-register', action='store_true')
     f.add_argument('--no-check', action='store_true', help='registry promotion without check-main --quick')
     f.add_argument('--dry-run', action='store_true')
+    f.add_argument('--resume-pool', help='an already written ROOT/authored/<stamp> pool: register and replay it')
     args = parser.parse_args(argv)
     if args.command == 'render':
         cases = [c for path in args.cases for c in read_jsonl(path)]
@@ -404,7 +425,7 @@ def main(argv=None):
     else:
         print(json.dumps(feed(args.root, work=args.work, runtime=args.runtime, replay=not args.no_replay,
                               register=not args.no_register, dry_run=args.dry_run, no_check=args.no_check,
-                              workers=args.workers), indent=1))
+                              workers=args.workers, resume=args.resume_pool), indent=1))
     return 0
 
 

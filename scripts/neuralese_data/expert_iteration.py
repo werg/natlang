@@ -1143,7 +1143,8 @@ def authored_teacher_pools():
     except (OSError, ValueError) as error:
         log({'event': 'authored_teacher_pools_unavailable', 'error': repr(error)[:300]})
         return []
-    return [Path(p) for p in paths if (Path(p) / 'manifest.jsonl').exists()]
+    pools = [Path(p).parent if Path(p).name == 'manifest.jsonl' else Path(p) for p in paths]   # role file: manifest
+    return [p for p in pools if (p / 'manifest.jsonl').exists()]
 
 
 def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None,
