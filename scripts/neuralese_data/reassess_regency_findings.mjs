@@ -52,9 +52,12 @@ export function reassessRegencyFindings(packet,pins,task,source,world,checker,en
  const outcomeContract={effects:{checks:effects,rationale:'Every original independent native realm, account, forecast, protected-state and negative-scope check remains required.'},returnedValue:{checks:returns,required:true,rationale:'The original capture-bound query result remains required; its requested factual meaning is independently reviewed against exact native accounts.'},incidentalValues:{checks:legacy,rationale:'Legacy private reference claim source, position, array count and exact finding-token conformance are retained as diagnostic observations, not requested semantic values.'}};
  const select=names=>Object.fromEntries(names.map(name=>[name,original[name]]));
  const outcomeDimensions={effects:{passed:true,checks:select(effects)},returnedValue:{required:true,passed:true,checks:select(returns)},incidentalValues:{passed:legacy.every(name=>original[name]===true),checks:select(legacy),incorrectReturns:[]}};
- const projected={...prior,witnesses:reviewed};
+ const domainFacts=(world.plan.claims??[]).map(claim=>{const input=request(claim);return {claim,request:input,result:{claim,review:input?checker.exampleReference({kind:'realm',goal:'Qualify exact installed Regency accounts',review:input}):{decision:'not-observed',finding:'missing-source',evidenceIds:[]}},origin:'offline-installed-domain-property-check'};});
+ const witnesses=[...reviewed.map(row=>({...row,origin:'actual-returned-claim'})),...domainFacts];
+ const projected={...prior,witnesses};
  const review=checker.observedContentReview(projected,outcomeContract,report,['index','frontiers','forecasts','witnesses','advance'],['artifact']);
- return {prior,native,reviewInput:review.semanticReviewInput,checks:select(needed),outcomeContract,outcomeDimensions,masks,legacy,witnesses:reviewed};
+ review.semanticReviewInput.rubric += " Offline installed-domain property checks are independent numeric facts computed from the captured accounts. They do not attest a new actor call, prescribe a tool route, or require an output list matching their count, order, source-label spelling or wording. Judge the actual requested propositions wherever the original answer expresses them.";
+ return {prior,native,reviewInput:review.semanticReviewInput,checks:select(needed),outcomeContract,outcomeDimensions,masks,legacy,witnesses};
 }
 async function main(){
  const args=Object.fromEntries(process.argv.slice(2).reduce((rows,value,index,all)=>index%2===0?[...rows,[value.slice(2),all[index+1]]]:rows,[]));
@@ -71,7 +74,7 @@ async function main(){
  await mkdir(out,{recursive:false,mode:0o700});const store=async(name,bytes)=>{await writeFile(join(out,name),bytes,{mode:0o600});return {path:name,sha256:sha(bytes)};};
  const bundled=await build({stdin:{contents:`export {exampleReference} from ${JSON.stringify(join(examples,oraclePath))};export {matchesNativeRegencyFinding} from ${JSON.stringify(join(sst,'skills/system-testing/regency-finding-evidence.ts'))};export {observedContentReview} from ${JSON.stringify(join(base,'packages/application-outcomes/observed-content-review.ts'))};`,resolveDir:host},bundle:true,platform:'node',format:'esm',write:false,metafile:true,alias:{'@vibestudio/content-addressing':join(host,'packages/content-addressing/src/index.ts')}});
  const bundle=await store('checker.bundle.mjs',bundled.outputFiles[0].contents),checker=await import(pathToFileURL(join(out,bundle.path)));
- const worldBundle=await build({stdin:{contents:originalWorlds.toString(),resolveDir:sst},bundle:true,platform:'node',format:'esm',write:false});
+ const worldBundle=await build({stdin:{contents:originalWorlds.toString(),loader:"ts",sourcefile:"original-regency-worlds.ts",resolveDir:sst},bundle:true,platform:'node',format:'esm',write:false});
  await store('original-worlds.bundle.mjs',worldBundle.outputFiles[0].contents);
  const {openRegencyWorlds}=await import(pathToFileURL(join(out,'original-worlds.bundle.mjs'))),world=openRegencyWorlds.find(world=>world.id===packet.execution.diagnostics.openGoalVerification.caseId);
  const {applicationEntryBinding}=await import(pathToFileURL(join(host,'scripts/export-live-workflow-teacher.mjs')));
