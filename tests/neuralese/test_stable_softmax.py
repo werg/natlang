@@ -170,13 +170,50 @@ def test_topk_teacher_matches_old_definition():
         return (t.exp() * (t - s)).sum(-1)
 
     ref = _ref_grad(old, zs)
-    got = _grad(lambda x: S.topk_forward_kl(x, t_ids, t_logp), zs)
+    got = _grad(lambda x: S.topk_forward_kl(x, t_ids, t_logp, tail=False), zs)
     assert _rel(got, ref) < 1e-5
-    torch.testing.assert_close(S.topk_forward_kl(zs, t_ids, t_logp).double(), old(zs.double()), rtol=1e-5, atol=1e-6)
+    torch.testing.assert_close(S.topk_forward_kl(zs, t_ids, t_logp, tail=False).double(), old(zs.double()),
+                               rtol=1e-5, atol=1e-6)
     # At agreement on the support with no student tail the gradient is exactly zero.
     zs_eq = torch.full((9, 80), -float('inf')).scatter(-1, t_ids, t_logp)
     zs_eq = torch.where(torch.isinf(zs_eq), torch.full_like(zs_eq, -1e4), zs_eq)
-    assert float(_grad(lambda x: S.topk_forward_kl(x, t_ids, t_logp), zs_eq).abs().max()) < 1e-12
+    assert float(_grad(lambda x: S.topk_forward_kl(x, t_ids, t_logp, tail=False), zs_eq).abs().max()) < 1e-12
+
+
+def test_topk_tail_bucket_keeps_both_tails():
+    torch.manual_seed(6)
+    zs = torch.randn(7, 60) * 3
+    teacher = torch.log_softmax(torch.randn(7, 60) * 3, -1)
+    t_logp, t_ids = teacher.topk(6, -1)
+    t_tail = torch.logsumexp(teacher.scatter(-1, t_ids, float('-inf')), -1)
+
+    def reference(x, kind):
+        q = torch.log_softmax(x.double(), -1)
+        qh, qt = q.gather(-1, t_ids), torch.logsumexp(q.scatter(-1, t_ids, float('-inf')), -1)
+        lp = torch.cat((t_logp.double(), t_tail.double()[:, None]), -1)
+        lq = torch.cat((qh, qt[:, None]), -1)
+        if kind == 'forward_kl':
+            return (lp.exp() * (lp - lq)).sum(-1)
+        m = torch.logaddexp(lp + math.log(.5), lq + math.log(.5))
+        return .5 * (lp.exp() * (lp - m)).sum(-1) + .5 * (lq.exp() * (lq - m)).sum(-1)
+
+    for kind in ('forward_kl', 'jsd'):
+        got = S.topk_tail_divergence(zs, t_ids, t_logp, kind)
+        torch.testing.assert_close(got.double(), reference(zs, kind), rtol=1e-4, atol=1e-6)
+        ref_g = _ref_grad(lambda x: reference(x, kind), zs)
+        assert _rel(_grad(lambda x: S.topk_tail_divergence(x, t_ids, t_logp, kind), zs), ref_g) < 1e-4
+    # the default tail (1 - sum of the head) equals the exact one, and is the default of topk_forward_kl
+    torch.testing.assert_close(S.topk_tail_divergence(zs, t_ids, t_logp, 'forward_kl', teacher_log_tail=t_tail),
+                               S.topk_forward_kl(zs, t_ids, t_logp), rtol=1e-4, atol=1e-6)
+    # a student proportional to the teacher on the head but with 2 nats more off-head mass: renormalizing both sides
+    # over the k (the old OPSD/compiler form) sees no difference; the tail bucket does
+    student = torch.where(torch.zeros_like(teacher, dtype=torch.bool).scatter(-1, t_ids, True), teacher, teacher + 2.)
+    s_head = torch.log_softmax(student.gather(-1, t_ids), -1)
+    t_head = torch.log_softmax(t_logp, -1)
+    m = torch.logaddexp(s_head, t_head) - math.log(2.)
+    renormalized_jsd = .5 * (s_head.exp() * (s_head - m)).sum(-1) + .5 * (t_head.exp() * (t_head - m)).sum(-1)
+    assert float(renormalized_jsd.abs().max()) < 1e-6
+    assert bool((S.topk_tail_divergence(student, t_ids, t_logp, 'jsd') > 1e-3).all())
 
 
 def test_teacher_must_be_detached():

@@ -1,0 +1,41 @@
+{
+  "recipe": "natlang.compiler.t2-unified-compiler-hkb/1",
+  "backbone": "LiquidAI/LFM3-1.7B",
+  "backbone_revision": "40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd",
+  "target_host": "colab-g4a",
+  "reserve_colab_g4a": true,
+  "aei1_behavior": "continue_on_dgx_fallback",
+  "warmstart_source": "/home/werg/hindsight-kb-recovery/2026-10-21/model-checkpoint-000000002.tar.zst",
+  "warmstart_extractor": "/home/werg/hindsight-kb/scripts/extract_lfm3_warmstart.py",
+  "adapter_rank": 16,
+  "adapter_inner_rank": 4,
+  "adapter_heads": 4,
+  "memory_bank_size": 32,
+  "header_slots": 16,
+  "batch_mix": {
+    "context_distillation": 0.4,
+    "live_kb_experience": 0.3,
+    "judge_and_decision": 0.2,
+    "tier15_fo_maml": 0.1
+  },
+  "train": {
+    "total_steps": 20000,
+    "fresh_lr": 0.0002,
+    "warm_lr": 2e-05,
+    "weight_decay": 0.01,
+    "clip_norm": 1.0,
+    "warmup_steps": 500,
+    "gate_floor_init": 0.1,
+    "gate_floor_steps": 1000,
+    "kv_drop": 0.1,
+    "adapter_drop": 0.1,
+    "topk_kl": 64,
+    "ce_weight": 0.25,
+    "meta_inner_steps": 4,
+    "meta_inner_lr": 0.05,
+    "meta_prox_lambda": 0.01,
+    "reptile_weight": 0.1,
+    "memory_mode": "positioned"
+  },
+  "mandatory_defect_check": "shuffled_minus_joint > 0 on paired held validation"
+}
