@@ -12,7 +12,7 @@ import { parseAliases, parseType, refinements as crispTable, TypeEnv } from '../
 import { normalizePredicate } from '../native/refinement-settings.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
 import { currentFrame, guard, runInFrame } from './context.js';
-import { callableMeta, callableTree, inlineCallable, invokeAt, namedCallable, type NatlangCallable } from './callable.js';
+import { callableMeta, callableTree, inlineCallable, invokeAt, makeCallable, namedCallable, type NatlangCallable } from './callable.js';
 import type { Representation } from '../native/representation.js';
 import { registerFileRecords, type ItemRecord, type NatlangRecord } from './loader.js';
 import type { CallableDefinition, CaptureCell } from './kernel.js';
@@ -281,8 +281,31 @@ function validateReboundCaptures(plan: InlineLambdaPlan, next: Record<string, un
     coerce(next[capture.name], parseType(targetType(capture.type)), env, `capture/${capture.name}`)]));
 }
 
+/**
+ * Top-level code of a module instance that every task of its platform shares (no task isolation) is the module's, not
+ * the task whose call happened to load it. An inline `nl` value it creates has no lexical creator: each call resolves
+ * its caller's frame. A value created inside a call keeps that call's task (spec "Tasks"). Synchronous evaluators run
+ * the top level inside `inSharedModuleTopLevel`; asynchronous ones pass their values through `sharedModuleValue`.
+ */
+let sharedModuleTopLevel = 0;
+export function inSharedModuleTopLevel<T>(evaluate: () => T): T {
+  sharedModuleTopLevel++;
+  try { return evaluate(); } finally { sharedModuleTopLevel--; }
+}
+export function sharedModuleValue<T>(value: T): T {
+  const meta = callableMeta(value);
+  return meta?.created ? makeCallable({ ...meta, created: undefined }) as T : value;
+}
+
 /** Create an inline natlang callable instance for a compiled `nl` expression. */
 export function inline(plan: InlineLambdaPlan, values: readonly unknown[], accessors: CaptureAccessors,
+  context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame,
+  origin?: InlineInstructionOrigin): NatlangCallable {
+  const value = inlineInstance(plan, values, accessors, context, version, bound, origin);
+  return sharedModuleTopLevel ? sharedModuleValue(value) : value;
+}
+
+function inlineInstance(plan: InlineLambdaPlan, values: readonly unknown[], accessors: CaptureAccessors,
   context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame,
   origin?: InlineInstructionOrigin): NatlangCallable {
   if (version !== NATLANG_COMPILE_VERSION)

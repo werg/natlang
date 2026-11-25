@@ -635,6 +635,10 @@ live caller when authenticated to the same recorder, otherwise it is an independ
 root in the owning task. A completed creator is never a causal parent. A function
 whose owning task has closed or been cancelled cannot be invoked implicitly in a
 new task. The same rules apply to callbacks wrapped with `runtime.bind`.
+A function value created by the top-level code of a callable-folder module whose
+instance all tasks of a platform share (no task isolation) belongs to the module, not
+to the task that happened to load it: it has no owning task, and each call runs in
+its caller's task.
 
 While a task runs, a host may subscribe to its live events (`onLive`, on the runtime or per task): each
 `model_delta` event carries a piece of one of a call's model turns as it streams (text, reasoning, a tool-call
