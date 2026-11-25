@@ -106,11 +106,13 @@ def prepare(args):
             for row in _jsonl(path):
                 cases.setdefault(row['id'], row)
     for extra_cases in (getattr(args, 'cases', None) or ()):
-        cpath = Path(extra_cases)
-        if cpath.exists():
-            for row in _jsonl(cpath):
-                if isinstance(row, dict) and row.get('id'):
-                    cases.setdefault(row['id'], row)
+        # case rows, or rows wrapping one (an authored pool's authored.jsonl: {id, task: CASE, ...}); a missing file
+        # or a row without a case id fails: held closure is checked over these rows
+        for row in _jsonl(extra_cases):
+            case = row['task'] if isinstance(row.get('task'), dict) else row
+            if not case.get('id'):
+                raise ValueError(f'{extra_cases}: a row without a case id')
+            cases.setdefault(case['id'], case)
 
     excluded = training_exclusion_ids(list(cases.values()))
     funnel = {
@@ -715,7 +717,7 @@ def main(argv=None):
     p = sub.add_parser('prepare')
     p.add_argument('--collections', nargs='*', default=[], help='collection directories (each with groups/g*/)')
     p.add_argument('--call-level', nargs='*', default=[], help='call_level_engine teach outputs (DIR or its call-level.jsonl.zst)')
-    p.add_argument('--cases', nargs='*', default=[], help='additional task case JSONL files (e.g. authored pool) for held closure checks')
+    p.add_argument('--cases', nargs='*', default=[], help='more case rows for call-level tasks (case JSONL, or an authored pool\'s authored.jsonl); held closure is checked over them')
     p.add_argument('--out', required=True)
     p.add_argument('--max-prompt-tokens', type=int, default=4096)
     p.add_argument('--per-site', type=int, default=8)
