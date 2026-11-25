@@ -1005,7 +1005,8 @@ def test_void_application_return_requires_exact_completed_typed_contract():
         verify_application_return({key: value for key, value in binding.items() if key != 'selectedResult'}, {'root': record}, ['root'], entry)
 
 
-def test_void_entry_can_complete_effects_before_root_error_without_inventing_a_return(tmp_path):
+@pytest.mark.parametrize("result_type", ["void", "SourceAttributionReport"])
+def test_optional_entry_can_complete_reviewed_effects_before_root_error_without_inventing_a_return(tmp_path, result_type):
     path, spec, root, verification = fixture(tmp_path)
     interaction = open_goal(root, spec, verification)
     child = copy.deepcopy(root)
@@ -1016,10 +1017,10 @@ def test_void_entry_can_complete_effects_before_root_error_without_inventing_a_r
     child['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
     for turn in child['record']['model_turns']:
         turn['request']['invocation_id'] = 'child'
-    root['record'].update(outcome='failed', executor={'kind': 'crisp'}, model_turns=[], program_root='skills/reference')
-    root['record']['definition'] = {'id': 'ts:review.ts#default', 'name': 'review', 'source': 'review.ts', 'returns': 'void'}
+    root['record'].update(outcome='error', executor={'kind': 'crisp'}, model_turns=[], program_root='skills/reference')
+    root['record']['definition'] = {'id': 'ts:review.ts#default', 'name': 'review', 'source': 'review.ts', 'returns': result_type}
     root['summary']['definition_id'] = 'ts:review.ts#default'
-    entry = {'program': 'skills/reference/review.ts', 'callable': 'review', 'resultType': 'void',
+    entry = {'program': 'skills/reference/review.ts', 'callable': 'review', 'resultType': result_type,
              'arguments': {'goal': interaction['goal']}, 'argumentJson': {'goal': json.dumps(interaction['goal'])}}
     interaction.update(program=entry['program'], entry=entry)
     spec['interaction'] = copy.deepcopy(interaction)
@@ -1030,7 +1031,12 @@ def test_void_entry_can_complete_effects_before_root_error_without_inventing_a_r
     proof = {'goal': interaction['goal'], 'entry': entry, 'passed': True, 'contextId': 'owned-context', 'caseId': 'void-case',
              'checks': {'ownedNoteReadback': True}, 'outcomeDimensions': {
                  'effects': {'passed': True}, 'returnedValue': {'required': False, 'passed': True}}}
-    payload = {'proof': proof}
+    proof['semanticReviewRequired'] = True
+    # TEST-only exchange: exercises canonical bound-review admission, never teacher registration.
+    payload = {'proof': proof, 'semanticReview': {
+        'schema': 'natlang.live-workflow-review/1', 'model': 'TEST-only-local-review',
+        'input': {'actual': {'retainedText': 'hello'}, 'expected': {'goal': interaction['goal']}},
+        'verdict': {'accepted': True}, 'exchange': {'request': {}, 'reply': {}}}}
     def persist():
         verification['evidence'] = [{**artifact(tmp_path, 'void-goal.json', payload), 'kind': 'workspace'}]
         spec['calls'] = [artifact(tmp_path, 'root.json', root), artifact(tmp_path, 'child.json', child)]
@@ -1041,15 +1047,25 @@ def test_void_entry_can_complete_effects_before_root_error_without_inventing_a_r
     assert episode['trajectory_ir']['outcome']['task_completed'] is True
     assert episode['trajectory_ir']['outcome']['status'] == 'passed'
     assert len(episode['turns']) == 1 and episode['turns'][0]['invocation_id'] == 'child'
+    assert episode['call_tree'][0]['outcome'] == 'error'
+    payload['semanticReview']['verdict']['accepted'] = False
+    persist()
+    assert live.load_episode(path)['trajectory_ir']['outcome']['task_completed'] is False
+    payload['semanticReview']['verdict']['accepted'] = True
+    proof['outcomeDimensions']['returnedValue'].update(required=True, passed=False)
+    persist()
+    assert live.load_episode(path)['trajectory_ir']['outcome']['task_completed'] is False
+    proof['outcomeDimensions']['returnedValue'].update(required=False, passed=True)
     payload['applicationReturn'] = {'kind': 'void', 'root_call_id': 'call-one', 'valueJson': 'null', 'selectedResult': None}
     persist()
     with pytest.raises(ValueError, match='original root output'):
         live.load_episode(path)
     payload.pop('applicationReturn')
-    root['record']['definition']['returns'] = 'string'
-    persist()
-    with pytest.raises(ValueError, match='declared return contract'):
-        live.load_episode(path)
+    if result_type == 'void':
+        root['record']['definition']['returns'] = 'string'
+        persist()
+        with pytest.raises(ValueError, match='declared return contract'):
+            live.load_episode(path)
 
 
 def test_ts_application_entry_binds_actual_default_export():

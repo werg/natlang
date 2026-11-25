@@ -25,27 +25,31 @@ if kind.startswith('partial'):
   verification['training_scope']['invocations'][0]['ordinals']=[0]
  spec['verification']=artifact(root,'verification.json',verification);path.write_text(json.dumps(spec))
 else:
- if kind in ('caught-child','incidental-nested','goal-void-error'):
+ if kind in ('caught-child','incidental-nested','goal-void-error','goal-nonvoid-error'):
   path,spec,_,verification=tree_fixture(root);detail=json.loads((root/'call.json').read_text())
   child=json.loads((root/'child.json').read_text());child['events']=[{'kind':'action','outcome':'completed','tool_call_id':'actual-tool-id'}]
   spec['calls'][1]=artifact(root,'child.json',child)
  else:path,spec,detail,verification=fixture(root)
  interaction=open_goal(detail,spec,verification)
  detail['events']=[{'kind':'action','outcome':'completed','tool_call_id':'actual-tool-id'}]
- if kind in ('goal-root-error','goal-root-error-text','goal-void-error'):
+ if kind in ('goal-root-error','goal-root-error-text','goal-void-error','goal-nonvoid-error'):
   detail['record']['outcome']='error'
-  if kind=='goal-void-error':
-   entry={'program':'skills/open-user-goal/apply.ts','callable':'apply','resultType':'void','arguments':{'goal':interaction['goal']},'argumentJson':{'goal':json.dumps(interaction['goal'])}}
+  if kind in ('goal-void-error','goal-nonvoid-error'):
+   entry={'program':'skills/open-user-goal/apply.ts','callable':'apply','resultType':('SourceAttributionReport' if kind=='goal-nonvoid-error' else 'void'),'arguments':{'goal':interaction['goal']},'argumentJson':{'goal':json.dumps(interaction['goal'])}}
    interaction.update(program=entry['program'],entry=entry);verification['interaction']=copy.deepcopy(interaction)
    detail['record'].update(program_root='skills/open-user-goal',executor={'kind':'crisp'},model_turns=[])
-   detail['record']['definition'].update(name='apply',source='apply.ts',id='ts:apply.ts#default',returns='void')
+   detail['record']['definition'].update(name='apply',source='apply.ts',id='ts:apply.ts#default',returns=entry['resultType'])
    detail['summary']['definition_id']='ts:apply.ts#default'
    verification['calls'][0]=copy.deepcopy(detail['summary'])
   verification['world'].update(context_id='actual-context',case_id='actual-case')
   spec['world']=copy.deepcopy(verification['world'])
   proof={'goal':interaction['goal'],'contextId':'actual-context','caseId':'actual-case','passed':True,'checks':{'actualEffect':True}}
   if interaction.get('entry'):proof['entry']=copy.deepcopy(interaction['entry'])
-  verification['evidence']=[{**artifact(root,'actual-goal.json',{'proof':proof}),'kind':'workspace'}]
+  payload={'proof':proof}
+  if kind=='goal-nonvoid-error':
+   proof.update(semanticReviewRequired=True,outcomeDimensions={'effects':{'passed':True},'returnedValue':{'required':False,'passed':True}})
+   payload['semanticReview']={'schema':'natlang.live-workflow-review/1','model':'TEST-only-local-review','input':{'actual':{'retainedText':'hello'},'expected':{'goal':interaction['goal']}},'verdict':{'accepted':True},'exchange':{'request':{},'reply':{}}}
+  verification['evidence']=[{**artifact(root,'actual-goal.json',payload),'kind':'workspace'}]
   if kind=='goal-root-error-text':
    extra=copy.deepcopy(detail['record']['model_turns'][0])
    extra['reply'].update(text='A later unexecuted conclusion',raw_calls=[],calls=[])
@@ -103,7 +107,7 @@ else:
   text=json.dumps(actual,separators=(',',':'))
   detail['record']['output']={'complete':True,'bytes':len(text.encode()),'hash':hashlib.sha256(text.encode()).hexdigest()}
   verification['evidence']=[{**artifact(root,'native-return.json',{'applicationReturn':{'root_call_id':'call-one','valueJson':text,'selectedResult':selected}}),'kind':'workspace'}]
- if kind in ('caught-child','incidental-nested','goal-void-error'):
+ if kind in ('caught-child','incidental-nested','goal-void-error','goal-nonvoid-error'):
   spec['calls'][0]=artifact(root,'call.json',detail);spec['verification']=artifact(root,'verification.json',verification);path.write_text(json.dumps(spec))
  else:rewrite(root,spec,detail,verification)
 if kind in ('completed','completed-roles','completed-review'):
@@ -148,7 +152,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['incidental',1],['incidental-nested',1]]) {
+for (const [kind, expected] of [['goal-nonvoid-error',1],['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['incidental',1],['incidental-nested',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {

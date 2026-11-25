@@ -14124,3 +14124,7 @@ factored in FP32, and the parity reference used the merged form; serving is now 
 `NATLANG_FACTORED_LORA=0`). Whether (2) accounts for llama's 12/32 is unmeasured: the real-weights rerun of all phases
 (including the new page phase) is next. Undeclared same-base states under an adapter still re-encode silently on
 native and SGLang (documented best-effort); every production client found declares the mode.
+
+### 2026-11-25: optional nonvoid application returns after a proven effect
+
+Inventoried the exporter `openOutcomeGoalEvidence`, Python `verify_application_return`/`semantic_goal_completed`/`load_episode`, Node disk verifier `verifyObservedWorkspaceEvidence`, and native materializer. Explicit `returnedValue.required=false` already separates a requested native effect from an optional typed application return. No production change or return-binding waiver was needed. Added TEST-only model-free coverage for declared `SourceAttributionReport`, root ERROR, no output witness, independently reviewed native note effect, and one executed child decision through Python NativeIR, Node disk verification, materialization and CLI. The root stays ERROR; no return is fabricated. Rejected meaning review or a missing required returned value does not complete the goal; fabricated void witness remains rejected. These synthetic review exchanges are test fixtures, never registered as teacher data. Genuine campaign post-effect-error recovery and training gain remain unchecked.
