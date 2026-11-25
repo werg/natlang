@@ -928,6 +928,9 @@ def detached_waiter_command(argv, unit):
 
 
 def run(args):
+    if getattr(args, 'wait_exit', False) and args.resumable is not False:
+        raise SystemExit('--wait-exit needs --no-resumable (a resumable unit the ledger stops is relaunched later, after '
+                         'this wait has returned)')
     if getattr(args, 'detach', False):
         unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
         if not args.wait:
@@ -1022,7 +1025,33 @@ def run(args):
             state['claims'].pop(unit, None)
         raise SystemExit(1)
     print(json.dumps({'unit': unit, 'budget_gb': round(budget / GIB, 1), 'class': args.cls, 'priority': priority,
-                      'free_gb': round(free / GIB, 1)}))
+                      'free_gb': round(free / GIB, 1)}), flush=True)
+    if getattr(args, 'wait_exit', False):
+        raise SystemExit(wait_exit(unit))
+
+
+def unit_exit(unit):
+    """(finished, exit status) of a launched unit: running units are not finished; a finished one reports its main
+    process's status, or 1 when systemd records another result (stopped, killed, out of memory)."""
+    out = subprocess.run(['systemctl', '--user', 'show', unit, '-p', 'ActiveState', '-p', 'Result', '-p',
+                          'ExecMainStatus'], capture_output=True, text=True).stdout
+    fields = dict(line.split('=', 1) for line in out.splitlines() if '=' in line)
+    if fields.get('ActiveState') not in ('inactive', 'failed'):
+        return False, None
+    status = int(fields.get('ExecMainStatus') or 0)
+    return True, status if fields.get('Result', 'success') == 'success' else (status or 1)
+
+
+def wait_exit(unit, poll=5.0):
+    """--wait-exit: block until the launched unit ends and return its exit status, so a caller (a builder's background
+    command) knows the job finished rather than started. launch() returns once systemd has started the unit, so the
+    first poll already sees it."""
+    while True:
+        finished, status = unit_exit(unit)
+        if finished:
+            print(json.dumps({'unit': unit, 'exit_status': status}), flush=True)
+            return status
+        time.sleep(poll)
 
 
 def main_command(unit):
@@ -1646,6 +1675,9 @@ def main():
                    help='wait for admission in its own user unit (<unit>-waiter) instead of this process, so the queue '
                         'entry survives the end of the calling shell or agent session; needs --wait. Output goes to the '
                         'journal of that unit')
+    r.add_argument('--wait-exit', action='store_true',
+                   help='after launch, wait until the unit ends and exit with its status (with --no-resumable): a '
+                        'background command then completes when the job has finished, not when it started')
     r.add_argument('--shrunk', action='store_true',
                    help='the job starts at a reduced share of its full size and restores its claim later (resize '
                         'restore): admit it at --budget-gb, not the family\'s learned peak (which stays its MemoryMax)')

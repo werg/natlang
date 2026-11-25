@@ -5,11 +5,10 @@
 // with children entry `entry` answering `value` (another answer of the same judgment) instead of its own; the entry
 // matters when the replay then returns another value or does not run to an answer.
 import fs from 'node:fs';
+import { canonical } from './replay_trace.mjs';
 const [runtime, input, out] = process.argv.slice(2);
 const { replayReference } = await import(runtime + '/dist/teacher/curriculum.js');
 const { TOOLS_PROMPT } = await import(runtime + '/dist/native/prompt.js');
-const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ?
-  Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 const results = [];
 for (const { case: record, probes } of JSON.parse(fs.readFileSync(input, 'utf8'))) {
   const base = JSON.stringify(canonical((await replayReference(record, TOOLS_PROMPT)).run.outcome.value ?? null));
