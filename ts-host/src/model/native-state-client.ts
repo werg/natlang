@@ -239,5 +239,6 @@ export async function writeContextBody(context: NativeWriteContext | undefined):
   if (context.promptSegments?.length) return { prompt_segments: context.promptSegments, reply_token_ids: context.reply ?? [] };
   if (context.prompt?.length) return { prompt_token_ids: context.prompt, reply_token_ids: context.reply ?? [] };
   const { materializeNativeStateSentinels } = await import('./neuralese-server.js');
-  return { messages: materializeNativeStateSentinels(context.messages), tools: context.tools };
+  return { messages: materializeNativeStateSentinels(context.messages), tools: context.tools,
+    ...(context.chat_template_kwargs ? { chat_template_kwargs: context.chat_template_kwargs } : {}) };
 }

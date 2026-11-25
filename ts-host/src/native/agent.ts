@@ -39,7 +39,7 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { pluggable, pluggableMode, type PluggableSetting } from '../runtime/pluggable.js';
 import { modelFacing, promptRevision } from '../runtime/model-facing.js';
-import { argumentInstructions, callContext, compactionPageChars, framedState, noteProducingCall, producingCall, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_REASONING_TOKENS, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
+import { argumentInstructions, callContext, compactionPageChars, framedState, noteProducingCall, producingCall, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, operatorPurpose, valueInstructions, OPERATOR_SPAN_CAPS, viewSiteMessages, type CompactSite } from './operator-frames.js';
 import { neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { literalText, writtenReturnResult } from './pseudo-call.js';
@@ -797,8 +797,12 @@ export class NativeToolAgent {
       temperature: this.options.temperature !== undefined && this.options.temperature > 0 ? this.options.temperature : 1,
       seed: session.runtime.seedPolicy.mode === 'backend' ? null :
         deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, `operator-${index}`, 0),
-      // Reasoning and reply share the actual request allowance; the shared graph reservation below may lower it.
-      max_tokens: OPERATOR_REASONING_TOKENS + OPERATOR_SPAN_CAPS[site.operator],
+      // No reasoning, as the operator rows train it (an empty think block, then the summary): the template's
+      // `enable_thinking: false`, so the reply is the summary from its first token. Before, a 2048-token reasoning
+      // allowance ran out inside the reasoning on long values and the capture had no content to keep.
+      thinking: false,
+      // The reply cap; the shared graph reservation below may lower it.
+      max_tokens: OPERATOR_SPAN_CAPS[site.operator],
       // Its reply is captured from the exact ids it was sampled as: a host outside collection asks for them too (before,
       // every product-runtime operator write failed with "native.capture needs the call's exact prompt and sampled reply ids").
       exact_ids: true };

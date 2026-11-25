@@ -685,6 +685,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       if(message)reply.x_natlang_recorded_turn = recordingId;
       if(message)recorder.record({recording_id:recordingId,messages:structuredClone((nativeRecording?preparedMessages:body.messages) as unknown[]),
         tools:body.tools?structuredClone(body.tools as unknown[]):undefined,reply:structuredClone(message),
+        ...(body.chat_template_kwargs?{chat_template_kwargs:structuredClone(body.chat_template_kwargs as Record<string,unknown>)}:{}),
         blocks:structuredClone((((reply.native_state as Json|undefined)?.blocks??[]) as Json[])),
         ...(adapters.length?{adapters:[...adapters]}:{}),
         ...(consumptionModes?{native_state_modes:{...consumptionModes}}:{}),...(native?{native}:{}),

@@ -17,7 +17,8 @@ def _capture(turn):
 
 def _prompt_items(engine,turn):
     expected=[]
-    for kind,value in engine._prompt_plan(turn['messages'],turn.get('tools')):
+    for kind,value in engine._prompt_plan(turn['messages'],turn.get('tools'),
+                                        engine.template_kwargs(turn.get('chat_template_kwargs'))):
         if kind=='tokens':expected.extend(('token',token,False) for token in value)
         elif kind in ('native_state','native_state_constant'):
             expected.extend([('token',engine.role_tokens.consume_open,False),('state',value['id'] if isinstance(value,dict) else value,kind=='native_state_constant',value.get('source_occurrence') if isinstance(value,dict) else None),

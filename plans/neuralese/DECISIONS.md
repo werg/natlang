@@ -13491,6 +13491,20 @@ least we are training up some Neuralese capabilities. Please implement this."
   clearly best, the loop moves to it.
 - Teacher campaign ledger budget 6 -> 10 GB: the standing unit was OOM-killed at 14:21 (6.1 GB peak after 6 h).
 
+## 2026-11-25 15:20 Operator calls render without reasoning, as trained (operator-thinking strand)
+
+- Observation: with learned compaction on by default, the operator call (`operatorWrite`: view's site, `max_tokens` =
+  2048 reasoning + span cap) ran live on the Colab actor (6f19fe3a) with a 28k-character argument; twice the reply used
+  all 2432 tokens reasoning and `native.capture` refused it ("ended inside its reasoning"), so the consumer kept the
+  text cut. The operator rows train an empty think block (context) then the summary: serving did not match training.
+- Change: the operator call renders with `enable_thinking: false` on every engine (request field
+  `ModelTurnRequest.thinking: false` -> `chat_template_kwargs`; Python engine/SGLang front `Engine.template_kwargs`,
+  refusing unknown switches; fork and wllama already honour per-request kwargs; grammar capture re-renders with the
+  call's switches) and `max_tokens` drops the reasoning room (span cap 384/512 only). The prompt then equals the rows'
+  prompt plus their first reply token `</think>`; the capture's content starts at reply token 0. Model-facing entry in
+  `plans/MODEL_FACING_CHANGES.md`. The Colab actor gets the engine change at its next restart (it serves the ts change
+  only once its engine honours the kwarg).
+
 ## 2026-11-25 16:30 aei1 supply: the fills reach the campaigns, unfilled campaign episodes wait for their fill, solved own episodes leave, rounds wait for 5M new tokens, a fixed held-like validation set (ei-supply agent)
 
 **Observation (DECISIONS 14:20).** New supervision per round collapsed after r1: r1 trained 19.6M teacher-derived

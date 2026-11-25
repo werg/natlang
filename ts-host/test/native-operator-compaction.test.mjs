@@ -11,7 +11,8 @@ const ID = 'nzs1_' + 'a'.repeat(52);
 async function run(compaction, temperature) {
   const captures = [], calls = [], operatorCalls = [];
   const capture = async (call, options) => {
-    captures.push({ tokens: { prompt: call.prompt, reply: call.reply }, text: call.text, options });
+    captures.push({ tokens: { prompt: call.prompt, reply: call.reply }, text: call.text, options,
+      ...(call.chat_template_kwargs ? { kwargs: call.chat_template_kwargs } : {}) });
     return { id: ID, dialect: 'native-state/test', type: 'Neuralese<string>', length: 3, width: 8,
       producer: { native_source_capture: { segments: [], payload_start: 5, payload_stop: 8 } } };
   };
@@ -38,14 +39,16 @@ test('compact-params is an operator call at view\'s site plus the in-context cap
   assert.equal(operatorCalls.length, 1);
   const [call] = operatorCalls;
   assert.match(call.invocation_id, /#operator-1$/);
-  assert.equal(call.max_tokens, 2048 + 384);
+  // Rendered without reasoning, as the operator rows train it: the reply is the summary, within the span cap.
+  assert.equal(call.thinking, false);
+  assert.equal(call.max_tokens, 384);
   // Its reply is captured from its exact ids, so it asks for them (a host outside collection gets them too).
   assert.equal(call.exact_ids, true);
   assert.deepEqual(call.tools, []);
   assert.equal(call.messages[0].content, VIEW_PROMPT);
   assert.match(call.messages[1].content, /^instructions:\nThe call that receives this argument as value \(string\) answers: Count the lines of value\.\n\nvalue:\n"line of data/);
   assert.deepEqual(captures, [{ tokens: { prompt: [1, 2, 3, 4], reply: [9, 10] }, text: 'value: 20000 lines of "line of data"',
-    options: { type: 'Neuralese<string>' } }]);
+    options: { type: 'Neuralese<string>' }, kwargs: { enable_thinking: false } }]);
   // The fake state has no archived artifact, so the model turn refuses it for provenance: it was placed in the request.
   assert.match(String(error?.message), new RegExp(`${ID} is unavailable for provenance`));
 });
@@ -101,6 +104,36 @@ test('the grammar capture forces the exact reply ids around produce markers and 
   assert.equal(forced.temperature, 0);
   assert.equal(forced.x_natlang_rl_capture, undefined);
   assert.deepEqual(forced.messages, [{ role: 'user', content: 'x' }]);
+});
+
+test('the grammar capture of a call rendered without reasoning re-renders it so and captures its reply from token 0', async () => {
+  const { grammarCapture } = await import('../dist/model/native-operator.js');
+  const { MemoryNeuraleseStore: Store } = await import('../dist/native/neuralese-store.js');
+  const requests = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const body = init?.body ? JSON.parse(init.body) : undefined;
+    requests.push({ url: String(url), body });
+    if (String(url).endsWith('/tokenize'))
+      return new Response(JSON.stringify({ tokens: body.content === '<think>' ? [6] : body.content === '</think>' ? [7] : body.content === '<|im_end|>' ? [2] : [50, 51] }));
+    if (String(url).endsWith('/apply-template')) return new Response(JSON.stringify({ prompt: 'p<think></think>' }));
+    return new Response(JSON.stringify({ error: 'stop here' }), { status: 500 });
+  };
+  const kwargs = { enable_thinking: false };
+  try {
+    const capture = grammarCapture({ endpoint: 'http://fork', store: new Store(), info: {
+      native_state: { enabled: true, production: true, role_marker_ids: [100, 101, 102, 103] } } });
+    // the exact ids: the prompt closed an empty think block, so the content starts at the reply's first token
+    await assert.rejects(capture({ messages: [{ role: 'user', content: 'x' }], tools: [], prompt: [1, 6, 7], reply: [12, 13, 2],
+      chat_template_kwargs: kwargs }), /forced span failed \(500\)/);
+    // without ids: the reply is its text alone (no `</think>` before it), the prompt rendered with the same switch
+    await assert.rejects(capture({ messages: [{ role: 'user', content: 'x' }], tools: [], text: 'summary',
+      chat_template_kwargs: kwargs }), /forced span failed \(500\)/);
+  } finally { globalThis.fetch = realFetch; }
+  const forced = requests.filter(r => r.url.endsWith('/v1/chat/completions')).map(r => r.body);
+  assert.deepEqual(forced.map(body => body.grammar), ['root ::= <[100]> <[12]> <[13]> <[101]>', 'root ::= <[100]> <[50]> <[51]> <[101]>']);
+  assert.ok(forced.every(body => JSON.stringify(body.chat_template_kwargs) === JSON.stringify(kwargs)));
+  assert.deepEqual(requests.find(r => r.url.endsWith('/apply-template')).body.chat_template_kwargs, kwargs);
 });
 
 test('a compact_history note carries the state of the note captured in place in the reply that wrote it', async () => {

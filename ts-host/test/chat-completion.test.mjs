@@ -374,6 +374,19 @@ test('exact_ids asks a native server for the RL capture of the reply; other serv
   assert.ok(sent.every(body => !('exact_ids' in body)));
 });
 
+test('thinking: false renders a native call without reasoning (enable_thinking), merged into the profile\'s switches', async () => {
+  const sent = [];
+  const transport = async body => { sent.push(body); return { choices: [{ finish_reason: 'stop', message: { content: 'ok' } }] }; };
+  await chatCompletionModelTurn(transport, { adapters: true, request: { chat_template_kwargs: { preserve_thinking: true } } })(
+    { ...request(), thinking: false });
+  await chatCompletionModelTurn(transport, { adapters: true })({ ...request(), thinking: false });
+  await chatCompletionModelTurn(transport, { adapters: true })(request());
+  await chatCompletionModelTurn(transport)({ ...request(), thinking: false });
+  assert.deepEqual(sent.map(body => body.chat_template_kwargs), [{ preserve_thinking: true, enable_thinking: false },
+    { enable_thinking: false }, undefined, undefined]);
+  assert.ok(sent.every(body => !('thinking' in body)));
+});
+
 
 test('HTTP chat and decision scoring reject native states when none are loaded', async () => {
   const { openAICompatibleModelTurn } = await import('../dist/model/openai-compatible.js');

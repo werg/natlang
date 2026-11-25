@@ -112,7 +112,7 @@ def test_chunked_prefill_forced_replay_preserves_exact_capture(tmp_path, monkeyp
     try:
         forced_ids = [7, next(iter(engine.stop_ids))]
         monkeypatch.setattr(engine, '_forced_message_plan',
-            lambda _forced, _tools, opening: list(forced_ids))
+            lambda _forced, _tools, opening, template_kwargs=None: list(forced_ids))
         def replay(chunk, request_id):
             engine.prefill_tokens = chunk
             return engine.generate(GenerationRequest(messages=[{'role': 'user', 'content': 'tiny prompt'}],
