@@ -1269,6 +1269,7 @@ def test_capture_after_an_imported_state_matches_the_native_engine(tmp_path):
     assert (actual['source_capture']['payload_start'], actual['source_capture']['payload_stop']) == \
         (expected['source_capture']['payload_start'], expected['source_capture']['payload_stop'])
     mine, theirs = stored['front'][-1], stored['native'][-1]
+    assert mine.producer_kind == theirs.producer_kind == 'capture'   # spliced when read (engine.reads_in_context)
     for index, (a, b) in enumerate(zip(mine.layers, theirs.layers)):
         for key in a:
             if key != 'kind':

@@ -760,11 +760,12 @@ class SglangEngine(Engine):
         ids.extend(prefix[last:])
         start = len(ids)
         ids.extend(span)
+        kind = 'capture' if text is None else 'span'   # engine._native_capture_impl
         if text is None:
             text = self.tokenizer.decode(span, skip_special_tokens=False)
         block, record = self._native_store_capture(span, [{'ids': ids, 'start': start, 'end': len(ids),
                                                            **({'imports': spliced} if spliced else {})}], text=text,
-                                                   producer_kind='span')
+                                                   producer_kind=kind)
         with self._sglang_lock:
             self.sglang_state_writes += 1
         return self._capture_result(block, record, prefix, span, value_type, imports, blocks, text=text)

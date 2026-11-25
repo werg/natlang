@@ -102,3 +102,21 @@ def test_capture_in_a_context_that_imported_a_state(tmp_path):
     with pytest.raises(RequestError, match='role markers'):
         engine.native_capture(None, [7, 12, stop], prompt_segments=[*segments(soft),
                                                                      {'kind': 'tokens', 'token_ids': [roles.consume_open]}])
+
+
+def test_a_captured_reply_is_a_capture_and_splices_when_read(tmp_path, monkeypatch):
+    """A reply captured in its own context (a compaction operator's reply, a note) is stored with producer_kind
+    'capture' and is read spliced as stored, not as its tokens inline (DECISIONS 2026-11-25 "Learned compaction on by
+    default": the spliced state beats the inline tokens in the use ablation). NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1
+    reads it inline like a span. A value's text written after its producing call stays a 'span'."""
+    engine = actor(tmp_path, 'lfm', lexical=True, words=THINK)
+    stop = sorted(engine.stop_ids)[0]
+    result = engine.native_capture([4, 9, 10], [11, 7, 12, 13, stop])
+    block = engine.store.get_native_state(result['id']).block
+    assert block.producer_kind == 'capture'
+    assert not engine.reads_in_context(result['id'], block)
+    monkeypatch.setenv('NATLANG_NEURALESE_CAPTURE_IN_CONTEXT', '1')
+    assert engine.reads_in_context(result['id'], block)
+    monkeypatch.delenv('NATLANG_NEURALESE_CAPTURE_IN_CONTEXT')
+    written = engine._native_capture_impl([4, 9, 10], [11, 7, 12, stop], text='t6 t7')
+    assert engine.store.get_native_state(written['id']).block.producer_kind == 'span'
