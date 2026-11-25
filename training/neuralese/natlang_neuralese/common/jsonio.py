@@ -21,10 +21,11 @@ from pathlib import Path
 # ---- lone UTF-16 surrogates ------------------------------------------------------------------------------------------
 # JavaScript strings may hold half of a surrogate pair (code that slices '🙂' by UTF-16 unit); JSON.stringify writes
 # it as a `\ud83d` escape and `json.loads` turns that back into a lone surrogate code point, which UTF-8 cannot encode.
-# Every UTF-8 writer of trajectory, episode and teacher text encodes with SURROGATE_ERRORS: a split pair is joined, a
-# lone surrogate becomes U+FFFD. NATLANG_KEEP_LONE_SURROGATES=1 opts out (strict: the write raises as before).
+# Plain UTF-8 text uses JS-compatible replacement: a split pair is joined and a
+# lone surrogate becomes U+FFFD. JSON writers instead escape lone code units losslessly. NATLANG_KEEP_LONE_SURROGATES=1 opts out (strict: the write raises as before).
 SURROGATE_ERRORS = 'natlang-replace-surrogates'
 _SURROGATE = re.compile('[\ud800-\udfff]')
+_JSON_SURROGATE = re.compile('[\ud800-\udbff][\udc00-\udfff]|[\ud800-\udfff]')
 
 
 def _replace_surrogates(error):
@@ -58,15 +59,26 @@ def utf8(text: str) -> bytes:
     return text.encode('utf-8', SURROGATE_ERRORS)
 
 
+def _json_surrogates(text: str) -> str:
+    """Preserve JS string code units in JSON, joining pairs and escaping lone halves."""
+    if os.environ.get('NATLANG_KEEP_LONE_SURROGATES') == '1':
+        return text
+    def escape(match):
+        value = match.group()
+        if len(value) == 2:
+            return chr(0x10000 + ((ord(value[0]) - 0xd800) << 10) + ord(value[1]) - 0xdc00)
+        return '\\u%04x' % ord(value)
+    return _JSON_SURROGATE.sub(escape, text)
+
+
 def json_line(value: Any, **kwargs) -> str:
-    """`json.dumps(value, ensure_ascii=False, **kwargs)` + newline, with lone surrogates scrubbed."""
-    return scrub_surrogates(json.dumps(value, ensure_ascii=False, **kwargs)) + '\n'
+    """UTF-8-safe JSON plus newline, preserving every original string value/key."""
+    return _json_surrogates(json.dumps(value, ensure_ascii=False, **kwargs)) + '\n'
 
 
 def canonical_json_str(value: Any, *, allow_nan: bool = True) -> str:
-    """Canonical text; strict artifact boundaries can reject nonfinite numbers. Lone surrogates become U+FFFD
-    (`scrub_surrogates`), so the text always encodes as UTF-8; text without them is unchanged."""
-    return scrub_surrogates(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    """Canonical JSON; lone UTF-16 units are escaped, never replaced or conflated."""
+    return _json_surrogates(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
                                        allow_nan=allow_nan))
 
 
@@ -121,14 +133,14 @@ def write_jsonl_text(path: str | Path):
     """Write exact UTF-8/LF text, compressing zstd incrementally and checking its exit."""
     path = Path(path)
     if path.suffix != '.zst':
-        with path.open('w', encoding='utf-8', errors=SURROGATE_ERRORS, newline='\n') as stream:
+        with path.open('w', encoding='utf-8', errors=('strict' if os.environ.get('NATLANG_KEEP_LONE_SURROGATES') == '1' else 'backslashreplace'), newline='\n') as stream:
             yield stream
         return
     with path.open('wb') as raw:
         proc = subprocess.Popen(['zstd', '-q', '-3', '--long=27', '-T1', '-c'],
                                 stdin=subprocess.PIPE, stdout=raw)
         try:
-            with io.TextIOWrapper(proc.stdin, encoding='utf-8', errors=SURROGATE_ERRORS, newline='\n') as stream:
+            with io.TextIOWrapper(proc.stdin, encoding='utf-8', errors=('strict' if os.environ.get('NATLANG_KEEP_LONE_SURROGATES') == '1' else 'backslashreplace'), newline='\n') as stream:
                 yield stream
         except BaseException:
             if proc.poll() is None:
