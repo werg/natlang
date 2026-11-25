@@ -552,6 +552,8 @@ def test_cohort_exports_are_resumable_for_ledger_backfill(monkeypatch, tmp_path)
     'Circuit breaker is open; last failure: POST https://chatgpt.com/backend-api/codex/responses: fetch failed',
     'Circuit breaker is open; last failure: GET https://chatgpt.com/backend-api/codex/responses: Client network socket disconnected before secure TLS connection was established',
     'connect ECONNRESET',
+    'getaddrinfo EAI_AGAIN chatgpt.com',
+    'Circuit breaker is open; last failure: POST https://chatgpt.com/backend-api/codex/responses: getaddrinfo EAI_AGAIN chatgpt.com',
 ])
 def test_provider_transport_errors_do_not_spend_goal_retries(tmp_path, cause):
     outcome = {'status': 'test-failed', 'teacher_model_sampled': True,
@@ -574,6 +576,8 @@ def test_provider_transport_errors_do_not_spend_goal_retries(tmp_path, cause):
     'natlang chooseScope: failed: schema validation failed: fetch failed',
     'natlang chooseScope: failed: unauthorized',
     'natlang chooseScope: failed: Circuit breaker is open',
+    'natlang chooseScope: failed: The document says getaddrinfo EAI_AGAIN chatgpt.com',
+    'natlang chooseScope: failed: schema validation failed: getaddrinfo EAI_AGAIN chatgpt.com',
 ])
 def test_described_network_failures_are_not_operational_transport_errors(reason):
     assert not vibestudio_campaign.infrastructure_failure({'status': 'test-failed', 'reason': reason}, {})

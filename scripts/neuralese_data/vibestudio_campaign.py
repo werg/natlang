@@ -169,7 +169,8 @@ def provider_transport_failure(outcome):
     cause = re.sub(r'^(?:GET|POST|PUT|PATCH|DELETE) https?://\S+: ', '', cause)
     return bool(re.match(
         r'^(?:fetch failed(?: \(record |$)|Client network socket disconnected before secure TLS connection was established'
-        r'|(?:connect |read )?(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN)\b|socket hang up(?: \(record |$))',
+        r'|(?:connect |read )?(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN)\b'
+        r'|getaddrinfo (?:EAI_AGAIN|ETIMEDOUT)\b|socket hang up(?: \(record |$))',
         cause))
 
 
