@@ -11824,6 +11824,29 @@ passed on Node+Workerd (including actual allowed method calls and lexical
 shadowing). No model/inference or native full-scope claim. This correctness fix
 enters the next source pin; collection does not wait on a full reference sweep.
 
+### 2026-11-25 — reuse unchanged VibeStudio seed archives during resume
+
+Local V27 preparation completed and the full Luna collector resumed with eight
+actually overlapping teacher calls; no build or collection moved to the DGX.
+Startup inspection found that every resume retransferred and rechecksummed all
+41 admitted seed episodes. Reuse now compares the exact immutable receipt and
+content on both endpoints with the existing strict inode/size/mtime/ctime hash
+cache. One readonly SSH helper replaces redundant copy/checksum/receipt trips;
+changed content still transfers, and requested export still runs after reuse.
+`NATLANG_REUSE_SEED_ARCHIVES=0` opts out. Inventory and scope are in
+`VIBESTUDIO_ARCHIVE_REUSE_20261125.md`; raw waves and native-state retirement
+keep their existing path.
+
+The same investigation found stat-only sends could detect but fail to repair
+same-size remote corruption with restored mtime. Checksum sends now repair it
+for captures, immutable records and mutable indexes;
+`NATLANG_ARCHIVE_CHECKSUM_TRANSFER=0` restores the old sending behavior without
+disabling post-transfer capture verification. Targeted archive/campaign/retained
+state tests pass, including real rsync and remote-helper execution, warm-cache
+reuse, corruption repair, mismatched receipts, continued export and both opt-outs.
+This enters the next official collector pin at a graceful resume; current paid
+Luna work is not interrupted.
+
 ## 2026-11-24 20:45 No invented task worlds: procedural task generation removed (owner)
 
 Owner, verbatim: "I want to rip out task worlds from our generation process. That's not helpful. No procedural
@@ -12231,6 +12254,20 @@ program-tuning tenants through admission).
 report shows it); node-side episode reads of files outside the scanned set (no audit there); the L4's capacity for an
 actor alone plus a 64-slot collector; behaviour when a session is replaced mid-collection beyond the code path (push of
 small files) — not exercised; memetic family seconds seed only from the collection's own groups on the VM.
+
+### 2026-11-25 — fix remote-collector path roots exposed by the merge push gate
+
+Normal integration of newer origin/main exposed a failing machine-path ratchet
+in the new `remote_collect.py`. The shared mechanism was the hardcoded mirror
+root set, its independently hardcoded byte regex, and the standalone VM audit
+using those roots. Resolve the canonical checkout and logical data/model roots through
+`common.paths`, derive the regex from that set, and pass the exact coordinator
+roots into the VM wrapper through `NATLANG_COLLECT_MIRROR_ROOTS` (also the explicit
+operator override). The standalone wrapper therefore needs no machine-config
+import, and a VM's different home/storage cannot silently change its audit scope.
+Directory scanning, canonical pin placement and symlink replication are unchanged;
+no VibeStudio build or collection moved. Existing mirror/VM/driver tests and the
+machine-path ratchet cover the change.
 
 ## 2026-11-25 04:00 Episode files compacted once nothing reads them raw; the EI collection collects its native-state cache
 

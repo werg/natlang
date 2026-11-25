@@ -69,10 +69,11 @@ def test_source_mutation_rejected_optout_and_nonopaque_roots_not_hidden(tmp_path
 
 
 def test_transfer_and_checksum_use_only_identical_validated_anchored_exclusions(tmp_path, monkeypatch):
+    from subprocess import CompletedProcess
     capture, root = fixture(tmp_path)
     calls = []
-    monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', lambda command, **kw: calls.append(command))
-    monkeypatch.setattr(vibestudio_campaign.subprocess, 'check_output', lambda command, **kw: calls.append(command) or '')
+    monkeypatch.setattr(vibestudio_campaign.subprocess, 'run',
+                        lambda command, **kw: calls.append(command) or CompletedProcess(command, 0, stdout=''))
     vibestudio_campaign.transfer(capture, 'archive', Path('/durable/capture'))
     sent, checked = calls[1:]
     assert [arg for arg in sent if arg.startswith('--exclude=')] == ['--exclude=/retained-state-owned/']

@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 for p in (REPO / 'training/neuralese', REPO, REPO / 'scripts/neuralese_data', REPO / 'scripts'):
@@ -46,6 +47,36 @@ def test_scanned_paths_are_existing_files_and_deep_directories(tmp_path, monkeyp
     found = rc.scan_paths([str(pool)], cache)
     assert found == [str(assets), str(tmp_path / 'f.json')]          # x.db inside assets; a too shallow; missing gone
     assert rc.scan_paths([str(pool)], cache) == found and cache.exists()
+
+
+def test_mirror_roots_follow_machine_paths_and_preserve_coordinator_paths_on_vm(tmp_path, monkeypatch):
+    monkeypatch.delenv('NATLANG_COLLECT_MIRROR_ROOTS', raising=False)
+    monkeypatch.setenv('NATLANG_DATA_HDD', str(tmp_path / 'archive'))
+    roots = rc.mirror_roots()
+    assert str(tmp_path / 'archive') + '/' in roots
+    monkeypatch.setenv('NATLANG_COLLECT_MIRROR_ROOTS', json.dumps(roots))
+    monkeypatch.setenv('NATLANG_DATA_HDD', str(tmp_path / 'different-vm-storage'))
+    assert rc.mirror_roots() == roots
+    monkeypatch.setattr(rc, 'MIRROR_ROOTS', roots)
+    cfg = {'python': '/c/python', 'admission': '/c/admission.py', 'env': '/c/env.sh'}
+    assert 'NATLANG_COLLECT_MIRROR_ROOTS=' in rc.vm_command(cfg, '/pin', '/work', ['/pin/python', 'collect'], 1)
+
+
+def test_mirror_roots_reject_relative_or_empty_configuration(monkeypatch):
+    for value in ['[]', '["relative/path"]', '"/not-a-list"']:
+        monkeypatch.setenv('NATLANG_COLLECT_MIRROR_ROOTS', value)
+        with pytest.raises(ValueError, match='absolute paths'):
+            rc.mirror_roots()
+
+
+def test_standalone_vm_wrapper_keeps_coordinator_roots_without_common_import(tmp_path):
+    script = tmp_path / 'standalone.py'
+    script.write_text(Path(rc.__file__).read_text())
+    environment = {**os.environ, 'PYTHONPATH': '',
+                   'NATLANG_COLLECT_MIRROR_ROOTS': json.dumps(['/coordinator/data/'])}
+    result = subprocess.run([sys.executable, str(script), '--help'], cwd=tmp_path,
+                            env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_pull_end_to_end_with_a_local_vm(tmp_path, monkeypatch):

@@ -55,20 +55,22 @@ if (REPO / 'training' / 'neuralese').is_dir():     # not the VM wrapper's copy i
 
 REMOTE_SYNC_GB = 3          # the DGX unit: this process and its rsyncs (file lists of ~100k files), no episodes
 SYNC_SECONDS = 60
-from natlang_neuralese.common import paths as _paths   # noqa: E402
-
-
 def mirror_roots():
-    """The logical machine roots (``common.paths``: data_nvme, data_hdd, models and the canonical checkout, as configured
-    here) whose files the VM mirrors at the same absolute path."""
-    names = ('data_nvme', 'data_hdd', 'models')
-    found = {str(_paths.root(n)).rstrip('/') + '/' for n in names}
-    # the canonical checkout, not a pin NATLANG_REPO may name (the pin lies under data_nvme)
-    found.add(str(Path(_paths._profile().get('repo') or _paths.DEFAULTS['repo']).expanduser()).rstrip('/') + '/')
-    return tuple(sorted(found))
+    """Logical coordinator roots, preserved when the standalone wrapper runs on its VM."""
+    configured = os.environ.get('NATLANG_COLLECT_MIRROR_ROOTS')
+    if configured is not None:
+        roots = json.loads(configured)
+        if not isinstance(roots, list) or not roots or any(not isinstance(p, str) or not Path(p).is_absolute() for p in roots):
+            raise ValueError('NATLANG_COLLECT_MIRROR_ROOTS must be a nonempty JSON list of absolute paths')
+    else:
+        from natlang_neuralese.common import paths
+        roots = [paths.root(name) for name in ('data_nvme', 'data_hdd', 'models')]
+        # Use the configured canonical checkout, not a pin NATLANG_REPO may name.
+        roots.append(Path(paths._profile().get('repo') or paths.DEFAULTS['repo']).expanduser())
+    return tuple(sorted({str(root).rstrip('/') + '/' for root in roots}))
 
 
-MIRROR_ROOTS = mirror_roots()      # data the VM mirrors at the same absolute path
+MIRROR_ROOTS = mirror_roots()   # coordinator paths, also passed to the standalone VM wrapper
 # a group's scoring outputs: a DGX reader takes a group's outcome from these, so they arrive after its content
 MARKERS = ('rollouts.jsonl', 'rewards.jsonl', 'score.json', 'versions.json')
 # pin outputs never mirrored: aarch64 native modules of an application the collector does not run
@@ -440,6 +442,7 @@ def vm_command(cfg, pin, work, collect_argv, slots):
     admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', '0', '--host-ram-gib', str(claim),
                 '--label', f'collect-{Path(work).name}', '--wait', '86400', '--workdir', str(pin), '--',
                 '/usr/bin/env', f'NATLANG_REPO={pin}', f'PYTHONPATH={pin}/training/neuralese:{pin}',
+                'NATLANG_COLLECT_MIRROR_ROOTS=' + json.dumps(MIRROR_ROOTS),
                 'HF_HUB_OFFLINE=1', 'OMP_NUM_THREADS=2', 'MKL_NUM_THREADS=1', *inner]
     body = (f'{shlex.join(admitted)} >> {q(str(work) + "/collect.log")} 2>&1; '
             f'echo $? > {q(str(work) + "/remote-collect.exit")}')
