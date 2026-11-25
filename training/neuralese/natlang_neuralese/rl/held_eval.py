@@ -1541,6 +1541,10 @@ def main(argv=None):
                    help='relocated exact source pool; its SHA256 must match the original immutable manifest')
     y.add_argument('--avoid-ids', type=Path, action='append', default=[])
     y.add_argument('--avoid-groups', type=Path, action='append', default=[])
+    y.add_argument('--avoid-cases', type=Path, action='append', default=[],
+                   help='task rows (JSONL) training takes: their ids and their own split/source groups are avoided. '
+                        'Use this for a new data source: --avoid-ids alone resolves groups only for ids that are rows '
+                        'of the held set\'s pinned pool, so a new source\'s rows would be checked by id only')
     y.add_argument('--avoid-from', type=Path, action='append', default=[])
     m = sub.add_parser('measure', help='standalone: N samples per held task of a served actor or a checkpoint -> result.json')
     m.add_argument('--manifest', type=Path, required=True, help='e.g. ops/held-v2/manifest.json')
@@ -1697,6 +1701,8 @@ def main(argv=None):
 
 def _avoid_set(args):
     avoid = set(read_ids(args.avoid_ids))
+    for path in getattr(args, 'avoid_cases', None) or ():
+        avoid |= {row['id'] for _, row in iter_jsonl_rows(path)}
     for directory in args.avoid_from:
         state = json.loads((directory / 'state.json').read_text()) if (directory / 'state.json').exists() else {}
         avoid |= avoid_ids(state, [directory])
@@ -1704,7 +1710,20 @@ def _avoid_set(args):
 
 
 def _avoid_group_set(args):
-    return set(read_ids(args.avoid_groups))
+    groups = set(read_ids(args.avoid_groups))
+    for path in getattr(args, 'avoid_cases', None) or ():
+        groups |= avoided_case_groups(path)
+    return groups
+
+
+def avoided_case_groups(path):
+    """The split group and source groups of every row of a task file (rows that need not be in any held pool)."""
+    groups = set()
+    for _, row in iter_jsonl_rows(path):
+        groups.add(_split_group(row))
+        groups |= _source_groups(row)
+    groups.discard(None)
+    return groups
 
 
 def verify(manifest_path, avoid, avoid_groups=(), *, pool_path=None):
