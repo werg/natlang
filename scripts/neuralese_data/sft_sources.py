@@ -879,12 +879,22 @@ def frontier_drop(task_id, tiers, own_tasks, guided_tasks=()):
     return None
 
 
-def own_policy_tier(candidate, frontier_policy, previous_policy=None):
+def load_frontier_equivalents(path):
+    """A frontier's ``equivalent_policies`` ({alias sha: policy sha}: file shas of the same weights as the frontier
+    or previous policy, e.g. a rebuilt checkpoint's earlier sha; ``expert_iteration frontier --equivalent-policy``)."""
+    if not path:
+        return {}
+    return dict(json.loads(Path(path).read_text()).get('equivalent_policies') or {})
+
+
+def own_policy_tier(candidate, frontier_policy, previous_policy=None, equivalents=None):
     """0 for own successes from ``frontier_policy`` or ``previous_policy`` (including rebind-straddling episodes
-    whose per-call policies all lie within that adjacent pair, async-train §3); 1 for older policies."""
+    whose per-call policies all lie within that adjacent pair, async-train §3), each under its file sha or an
+    equivalent one (``equivalents``: {alias: sha}, the same weights); 1 for older policies."""
     if not frontier_policy:
         return 0
     allowed = {p for p in (frontier_policy, previous_policy) if p}
+    allowed |= {a for a, c in (equivalents or {}).items() if c in allowed}
     policies = [p for p in (candidate.get('policies') or ()) if p]
     if not policies:
         p = candidate.get('policy')
@@ -915,8 +925,8 @@ def student_selection(unique, rng, funnel, cap_of, family_share, is_wrapper, wra
     (``frontier_drop``). Returns (pool, own tasks, guided-only tasks); the guided-only tasks' teacher data waits for
     the own share (``build`` step 5: it trains unless their guided successes enter the mix).
 
-    ``recent`` (frontier policy, previous policy): under each cap the successes of the trained (or adjacent previous)
-    policy go before older policies' (``own_policy_tier``), as the step-4 priority orders them across tasks; without
+    ``recent`` (frontier policy, previous policy[, {equivalent sha: policy sha}]): under each cap the successes of
+    the trained (or adjacent previous) policy go before older policies' (``own_policy_tier``), as the step-4 priority orders them across tasks; without
     it the cap picked producers at random, and in aei1 round 7 55% of the own target tokens came from grpo-v3/v4/v5
     and sft-v7..v9 collections (DECISIONS 2026-11-24 aei1 ran-out). ``--own-cap-order any`` restores the random pick."""
     own = [c for c in unique if c['source'] == 'rl-own']
@@ -3215,6 +3225,8 @@ def build(args):
     # the frontier: the trained policy's own measured rates replace every other rate of its tasks
     frontier_policy, frontier_prev_policy, frontier = load_frontier_full(getattr(args, 'frontier', None))
     previous_policy = getattr(args, 'previous_policy', None) or frontier_prev_policy
+    # file shas of the same weights as the frontier / previous policy (a rebuilt checkpoint's earlier sha)
+    policy_equivalents = load_frontier_equivalents(getattr(args, 'frontier', None))
     rates.update({k: (v['successes'], v['scored']) for k, v in frontier.items() if v.get('scored')})
     tiers = {k: v.get('tier') for k, v in frontier.items()}
     treatment = ThinkTreatment.load(getattr(args, 'think_treatment', None), args.teacher_think,
@@ -3321,7 +3333,8 @@ def build(args):
     student_pool, own_tasks, guided_tasks = student_selection(
         unique, rng, funnel, core_cap, args.max_family_share, is_wrapper, args.wrapper_share, trained_keys,
         tiers if frontier else None,
-        (frontier_policy, previous_policy) if getattr(args, 'own_cap_order', 'recent') == 'recent' else None,
+        (frontier_policy, previous_policy, policy_equivalents)
+        if getattr(args, 'own_cap_order', 'recent') == 'recent' else None,
         shape_of=shape_of, shape_share=shape_share)
     deferred = {'teacher': [], 'aux': []}
     teacher_candidates = []
@@ -3518,7 +3531,7 @@ def build(args):
     def priority(c):
         p = base_rate(c['task_id'])
         # a frontier build takes the trained (or adjacent previous) policy's own successes before older policies' (async-train §3)
-        return (not bool(c.get('open_goal')), own_policy_tier(c, frontier_policy, previous_policy),
+        return (not bool(c.get('open_goal')), own_policy_tier(c, frontier_policy, previous_policy, policy_equivalents),
                 not bool(constructs.get(c['task_id'], ((), False))[0]), 0.5 if p is None else p, rng.random())
 
     # the prebuilt parts (``--aux``), loaded before the teacher admission: a teacher episode that a share=all part
@@ -3954,6 +3967,7 @@ def build(args):
                    'teacher_think': args.teacher_think, 'think_treatment': treatment.report(),
                    'frontier': {'path': getattr(args, 'frontier', None), 'policy': frontier_policy,
                                 'previous_policy': previous_policy,
+                                **({'equivalent_policies': policy_equivalents} if policy_equivalents else {}),
                                 'sha256': sha256_file(args.frontier) if getattr(args, 'frontier', None) else None,
                                 'tiers': dict(collections.Counter(tiers.values())),
                                 'anchor_per_task': getattr(args, 'anchor_per_task', 1),

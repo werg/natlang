@@ -828,8 +828,12 @@ def frontier(args):
         dirs += sorted(work.glob('groups/g*'))
     prev_policy = getattr(args, 'previous_policy', None)
     allowed_policies = {args.policy} | ({prev_policy} if prev_policy and getattr(args, 'allow_adjacent_policies', False) else set())
-    if not policies or not policies.issubset(allowed_policies):
-        raise SystemExit(f'collections served {sorted(policies)}, not allowed frontier policy set {sorted(allowed_policies)}')
+    # ALIAS=CANON: a file sha of the same weights as an allowed policy (a rebuilt checkpoint, ``policy_identity``)
+    equivalents = dict(e.split('=', 1) for e in getattr(args, 'equivalent_policy', None) or ())
+    equivalents = {a: c for a, c in equivalents.items() if c in allowed_policies}
+    if not policies or not policies.issubset(allowed_policies | set(equivalents)):
+        raise SystemExit(f'collections served {sorted(policies)}, not allowed frontier policy set {sorted(allowed_policies)}'
+                         + (f' (equivalents {sorted(equivalents)})' if equivalents else ''))
     rates = group_outcomes(dirs)
     held = set(training_exclusion_ids([{'id': t} for t in rates], args.held_manifest or grpo.default_held()))
     leaked = sorted(set(rates) & held)
@@ -839,6 +843,7 @@ def frontier(args):
              for t, (s, n) in sorted(rates.items())}
     data = {'schema': FRONTIER_SCHEMA, 'policy': args.policy,
             **({'previous_policy': prev_policy} if prev_policy else {}),
+            **({'equivalent_policies': equivalents} if equivalents else {}),
             'collections': [str(Path(c).resolve()) for c in args.collect],
             'thresholds': {'solved': args.solved, 'min_scored': args.min_scored},
             'tiers': dict(collections.Counter(v['tier'] for v in tasks.values())), 'tasks': tasks}
@@ -3036,6 +3041,10 @@ class PhaseController:
             raise ValueError(f'PhaseController requires state or existing {self.path}')
         if self.state.get('schema') != PHASE_STATE_SCHEMA:
             raise ValueError(f'{self.path}: schema {self.state.get("schema")!r}, not {PHASE_STATE_SCHEMA}')
+        # policy identity is the weights: each entry carries the file shas of the same effective policy its
+        # published.json records (a rebuilt checkpoint, ``policy_identity``); saved with the state's next write
+        from natlang_neuralese.common.policy_identity import with_equivalents
+        self.state['lineage'] = [with_equivalents(e) for e in self.state.get('lineage') or ()]
 
     @classmethod
     def initialize(cls, state_path, *, start_checkpoint, start_sha, held_every=2, held_every_max=8,
@@ -3135,7 +3144,9 @@ class PhaseController:
         return dict(self.state['lineage'][-2]) if len(self.state['lineage']) > 1 else None
 
     def in_lineage(self, sha):
-        return any(p['sha256'] == sha for p in self.state['lineage'])
+        """Whether ``sha`` names a lineage policy (its file sha or an equivalent one: ``policy_identity``)."""
+        from natlang_neuralese.common.policy_identity import entry_shas
+        return any(sha in entry_shas(p) for p in self.state['lineage'])
 
     def begin_round(self, base_sha):
         """The active round (resumed after a restart while its base is still the lineage head), else a new one."""
@@ -4041,15 +4052,27 @@ class AsyncRoundDriver:
         return [p for p in (self.controller.previous, self.controller.current) if p]
 
     # -- 1. prepare ---------------------------------------------------------------------------------------------------
+    def policy_aliases(self, policy):
+        """``policy`` under each file sha naming its weights (``policy_identity.entry_shas``: its own first, then a
+        rebuilt checkpoint's earlier sha): collections written under an equivalent sha are this policy's samples."""
+        from natlang_neuralese.common.policy_identity import entry_shas
+        return [{**policy, 'sha256': s} for s in entry_shas(policy) or [policy['sha256']]]
+
     def collection_dirs(self, policy, suffix=''):
-        """``policy``'s collection directories of one actor (``suffix``): the base and its NVMe continuations."""
-        base = self.collection_base(policy, suffix)
-        rx = re.compile(re.escape(base.name) + r'(-n\d+)?')
-        return sorted(d for d in base.parent.glob(base.name + '*') if rx.fullmatch(d.name) and d.is_dir())
+        """``policy``'s collection directories of one actor (``suffix``): the base and its NVMe continuations, under
+        its sha and every equivalent one."""
+        out = []
+        for alias in self.policy_aliases(policy):
+            base = self.collection_base(alias, suffix)
+            rx = re.compile(re.escape(base.name) + r'(-n\d+)?')
+            out += sorted(d for d in base.parent.glob(base.name + '*') if rx.fullmatch(d.name) and d.is_dir())
+        return out
 
     def collections_of(self, policies):
-        """Every collection of ``policies`` (the DGX one and the remote actors'), in policy order."""
-        return [d for p in policies for d in sorted(self.collection_base(p).parent.glob(self.collection_base(p).name + '*'))
+        """Every collection of ``policies`` (the DGX one and the remote actors'; under each policy's sha and its
+        equivalents), in policy order."""
+        return [d for p in policies for a in self.policy_aliases(p)
+                for d in sorted(self.collection_base(a).parent.glob(self.collection_base(a).name + '*'))
                 if (d / 'runs.jsonl').exists()]
 
     def dgx_round_size(self, why='DGX'):
@@ -4136,7 +4159,9 @@ class AsyncRoundDriver:
         collections_ = self.collections_of(policies)
         frontier = [*self.c.py('expert_iteration.py', 'frontier', '--out', round_dir / 'frontier.json',
                                *[x for d in collections_ for x in ('--collect', d)], '--policy', cur['sha256']),
-                    *(['--previous-policy', prev['sha256'], '--allow-adjacent-policies'] if prev else [])]
+                    *(['--previous-policy', prev['sha256'], '--allow-adjacent-policies'] if prev else []),
+                    *[x for p in (prev, cur) if p for a in self.policy_aliases(p)[1:]
+                      for x in ('--equivalent-policy', f'{a["sha256"]}={p["sha256"]}')]]
         w = self.c.work
         lines = []
         rl = [*collections_, *[d for d in sorted(self.root.glob('r*/grpo')) if (d / 'groups').exists()]]
@@ -4191,6 +4216,16 @@ class AsyncRoundDriver:
             v = json.loads(path.read_text())
             if v.get('verdict') == 'failure':
                 out.append(v['sha256'])
+        # a failed policy's weights under every file sha (a rebuilt checkpoint's earlier one: ``policy_identity``)
+        from natlang_neuralese.common.policy_identity import enabled, published_equivalents
+        if out and enabled():
+            for path in sorted(self.root.glob('r[0-9]*/policy/published.json')):
+                try:
+                    published = json.loads(path.read_text())
+                except (OSError, ValueError):
+                    continue
+                if published.get('checkpoint_sha256') in out:
+                    out += [s for s in published_equivalents(published) if s not in out]
         return out
 
     def prepare_policies(self, round_dir, policies):
@@ -4210,7 +4245,7 @@ class AsyncRoundDriver:
             shas = [s for s in (f.get('previous_policy'), f.get('policy')) if s]
         if not shas:
             return list(policies)
-        by_sha = {p['sha256']: p for p in self.controller.state['lineage']}
+        by_sha = {a['sha256']: p for p in self.controller.state['lineage'] for a in self.policy_aliases(p)}
         if all(s in by_sha for s in shas):
             return [by_sha[s] for s in shas]
         self.note(round=round_dir.name, prepare_restarted='its recorded policies left the lineage', policies=shas)
@@ -5471,6 +5506,9 @@ def main():
     f.add_argument('--previous-policy', help='adjacent previous policy sha256 recorded for top-priority own tier (async-train §3)')
     f.add_argument('--allow-adjacent-policies', action='store_true',
                    help='allow collections whose runs.jsonl spans --policy and --previous-policy (standing rebind)')
+    f.add_argument('--equivalent-policy', action='append', default=[], metavar='ALIAS=SHA',
+                   help='ALIAS is a file sha of the same weights (effective policy) as allowed policy SHA, e.g. a '
+                        'rebuilt checkpoint\'s earlier sha: its collections count as SHA\'s (recorded in frontier.json)')
     f.add_argument('--held-manifest')
     f.add_argument('--solved', type=float, default=0.75)
     f.add_argument('--min-scored', type=int, default=2)

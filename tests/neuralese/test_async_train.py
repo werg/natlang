@@ -3091,3 +3091,68 @@ def test_the_colab_fill_is_kept_running_beside_each_serving_session_and_never_on
     assert d.colab_fill_check() == []                                    # its actor does not serve the head
     _, off = _driver(tmp_path / 'off', monkeypatch, argv=['--fill', str(tmp_path / 'fill'), '--no-colab-fill'])
     assert off.colab_fill_check() == []
+
+
+def test_a_rebuilt_policys_earlier_file_sha_counts_as_the_policy_everywhere(tmp_path, monkeypatch):
+    """aei1 2026-11-25: retention deleted r0010's checkpoint 4dec7ca9; the rebuild from r0009 + its factors has the same
+    effective policy and a new file sha (cde55352), which the lineage names. The 08:50-13:45 collections under 4dec
+    (``v0009-4dec7ca9c301*``) are samples of the same weights: the lineage entry carries the earlier sha from
+    published.json ``rebuilt``, and collections_of, collection_dirs, the frontier's allowed set, the build's own-policy
+    tier, in_lineage, failed_policies and retention's protection match it. NATLANG_EI_POLICY_EQUIVALENTS=0 opts out."""
+    import argparse
+    import sft_sources
+    ei, d = _driver(tmp_path, monkeypatch)
+    old, new, eff = '4' * 64, '5' * 64, 'f' * 64
+    ckpt = d.root / 'r0001' / 'policy' / 'checkpoint.pt'
+    ckpt.parent.mkdir(parents=True)
+    (ckpt.parent / 'published.json').write_text(json.dumps({
+        'checkpoint_sha256': new, 'merge': {'effective_policy_sha256': eff, 'checkpoint_sha256': new},
+        'rebuilt': {'previous_checkpoint_sha256': old, 'effective_policy_sha256': eff}}))
+    d.controller.record_round_published('r0001', ckpt, new, base_sha256=d.controller.current['sha256'])
+    prev, cur = d.controller.previous, d.controller.current
+    alias = {**cur, 'sha256': old}
+    for p in (prev, cur, alias):
+        for suffix in ('', '-remote0'):
+            c = d.collection_base(p, suffix)
+            (c / 'groups').mkdir(parents=True)
+            (c / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': p['sha256'], 'started': 0}) + '\n')
+    names = [x.name for x in d.collections_of(d.lineage_policies())]
+    assert {d.collection_base(alias).name, d.collection_base(alias, '-remote0').name} <= set(names)
+    assert d.collection_base(alias) in d.collection_dirs(cur)
+    assert d.controller.in_lineage(old) and d.controller.in_lineage(new)
+    # the frontier: the rebuilt policy's earlier sha is allowed, and recorded for the build
+    rd = d.root / 'r0002'
+    frontier, lines, build = d.prepare_plan(rd, d.lineage_policies())
+    assert f'{old}={new}' in frontier
+    extract = next(x for x in lines if 'extract' in x)
+    assert f'{d.collection_base(alias)}:{d.collection_base(alias)}' in extract
+    import natlang_neuralese.rl.held_eval as held_eval
+    monkeypatch.setattr(held_eval, 'training_exclusion_ids', lambda rows, manifest: [])
+    rd.mkdir(parents=True, exist_ok=True)
+    args = argparse.Namespace(out=str(rd / 'frontier.json'), collect=[str(x) for x in d.collections_of([prev, cur])],
+                              policy=new, previous_policy=prev['sha256'], allow_adjacent_policies=True,
+                              equivalent_policy=[f'{old}={new}'], held_manifest='unused', solved=0.75, min_scored=2)
+    ei.frontier(args)
+    assert json.loads((rd / 'frontier.json').read_text())['equivalent_policies'] == {old: new}
+    with pytest.raises(SystemExit):
+        ei.frontier(argparse.Namespace(**{**vars(args), 'equivalent_policy': []}))
+    # the build's own-policy tier: an episode drawn under the earlier sha is the frontier policy's own
+    eq = sft_sources.load_frontier_equivalents(rd / 'frontier.json')
+    assert sft_sources.own_policy_tier({'policy': old}, new, prev['sha256'], eq) == 0
+    assert sft_sources.own_policy_tier({'policy': old}, new, prev['sha256']) == 1
+    # a failed policy is failed under its earlier sha too
+    (d.root / 'verdicts').mkdir()
+    (d.root / 'verdicts' / 'x.json').write_text(json.dumps({'verdict': 'failure', 'sha256': new}))
+    monkeypatch.setattr(d.c, 'failed_policies', lambda: [])
+    assert set(d.failed_policies()) == {new, old}
+    # retention protects the earlier sha's collections with the lineage's
+    monkeypatch.syspath_prepend(str(REPO / 'scripts'))
+    import ei_round_tier as tier
+    state = {'lineage': d.controller.state['lineage']}
+    assert old in tier.protected_policies(state, None)
+    assert not [a for a in tier._tier_plan(d.root, state, None) if old[:12] in a['path']]
+    # the opt-out
+    monkeypatch.setenv('NATLANG_EI_POLICY_EQUIVALENTS', '0')
+    assert d.collection_base(alias) not in d.collection_dirs(cur) and not d.controller.in_lineage(old)
+    assert old not in tier.protected_policies({'lineage': [{**e, 'equivalent_sha256': []} for e in state['lineage']]},
+                                              None)
