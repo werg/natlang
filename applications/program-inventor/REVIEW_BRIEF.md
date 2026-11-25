@@ -1,10 +1,10 @@
-# Review brief: one sampled pass over an admitted program
+# Review brief: one pass over a drawn sample of admitted authored programs
 
-Automated qualification admits invented programs; reviews read a random sample of them (owner 2026-11-25: "reviews
-should only be on a drawn sample"). A review is one pass with three outputs: grades, the expected answers a careful
-reader rejects, and the patterns this program shows that the build brief and the authoring skill should change. It
-sends nothing back to the builder: there are no requests and no rounds. Review as a model of another family than the
-builder when one is available, and never review a program you built.
+Reviews read a random sample of admitted programs (owner 2026-11-25: "reviews should only be on a drawn sample"; "it's
+fine if individual samples are not perfect"). A review is one pass. It sends nothing back to the builder. Its main
+product is what the next wave's brief should change; the wave report's statistics are the other half of that
+feedback. Review as a model of another family than the builder when one is available, and never review a program you
+built.
 
 Draw the sample (admitted submissions without a review of their current version):
 
@@ -17,49 +17,39 @@ You only read and judge. Do not edit the submission. Write exactly one file, `SU
 
 ## Read
 
-1. `requirements.json` (beside this brief), and the "One answer per item" section of `BUILD_BRIEF.md`: the habits
-   the program was built to.
-2. `skills/natlang-authoring/SKILL.md` and `references/language.md` as needed.
-3. The submission: the root `.nl`, `types.ts`, every file of the root's callable folder, `submission.json`, `NOTES.md`,
-   `qualification/report.json` and `qualification/reference.txt` (which children entry answered which item). Run
-   `invented.py dry-run SUBMISSION` through the memory ledger (`--priority medium --no-resumable --wait-exit`, as in
-   BUILD_BRIEF's Tools) when you want the calls listed fresh.
+1. `BUILD_BRIEF.md` (beside this brief): the program shape, the construct inventory and the trajectory format.
+2. The submission: the root `.nl`, `types.ts`, the callable folders, `submission.json`.
+3. `authored_programs.py check SUBMISSION` through the memory ledger (BUILD_BRIEF "Tools"): the call tree of each
+   instance and its statistics.
 
-## What to do
+## What to judge
 
-1. **Recompute each instance's expected answer as a careful reader would**, from the items and the program's written
-   rules (instructions, doc comments, code), not from the builder's simulations. Re-answer the scripted judgment calls
-   along the way, the shared entries and the NOTES.md hardest items first.
-2. **`wrong_expected`**: list each place where the expected answer, or a scripted reading it rests on, is one a careful
-   reader rejects: the instance, the item and judgment, what the script says, what the careful reader says, and why.
-   Only that. An item where two readings are both defensible, a rule written nowhere, a judgment doing arithmetic, a
-   note that states its answer: these are funnel findings, not wrong expected answers. A non-empty `wrong_expected` on
-   the admitted version keeps the program out of every batch published from now on; it is not sent back for a fix.
-3. **Grades, 1-5**: idiomatic natlang, semantic depth, code-based depth, instance realism and size, novelty (for
-   novelty, the atlas: `PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python scripts/rl_tasks/program_atlas.py
-   atlas -o /tmp/<you>-atlas.md`, the entries nearest the idea compared on user and job, core judgments, computational
-   shape and input kind). Mark each judged requirement (S4, S5, C3, D3, D5, N1) met or not, in one line each.
-4. **`funnel_findings`**: up to five patterns this program shows that would recur in other builds, each as the change
-   to `BUILD_BRIEF.md`, the authoring skill or the tooling that would have prevented it, with one example from this
-   program (file and item). These are the review's main product: they are read across the sample and folded into the
-   brief and skill.
+1. **Grades, 1-5**:
+   - `semantic_fp`: functions composed as values, combinators over semantic values, effects at the edges, crisp code
+     only where exactness requires it.
+   - `depth`: a deep tree of interior functions that decide and compose, not a flat list of leaves.
+   - `synthesis`: NL literals built from data that the program then uses, and how much of the work runs through them.
+   - `trajectory_realism`: whether each call's turns and answer read like what a competent model running that function
+     would do and write.
+   - `instance_realism`: a real working session at the card's size.
+2. **`bad_answers`**: authored answers a careful reader of that call's own opening rejects (a summary that
+   misstates its input, a decision the call's evidence contradicts), each with the instance, the call (function and
+   item), and why. Training would teach these, so they are counted across the sample. Imperfect but defensible
+   answers are not listed.
+3. **`funnel_findings`**: up to five patterns this program shows that would recur in other builds, each as the change to
+   `BUILD_BRIEF.md`, the wave's `EMPHASIS.md`, the authoring skill or the tooling that would prevent it, with one
+   example from this program (file and call).
 
-## `review.json` (`natlang.invented-review/1`)
+## `review.json` (`natlang.authored-review/1`)
 
 ```json
 {
-  "schema": "natlang.invented-review/1",
+  "schema": "natlang.authored-review/1",
   "reviewer": "<your model id>",
   "digest": "<output of: .venv-neuralese/bin/python scripts/rl_tasks/sources/invented.py digest SUBMISSION>",
-  "grades": {"idiomatic_natlang": 4, "semantic_depth": 3, "code_based_depth": 4, "instance_realism_and_size": 4, "novelty": 4},
-  "requirements": {"S4": {"met": true, "findings": ["<one line>"]}, "S5": {"met": true, "findings": []},
-                   "C3": {"met": true, "findings": []}, "D3": {"met": true, "findings": []},
-                   "D5": {"met": true, "findings": []}, "N1": {"met": true, "findings": []}},
-  "wrong_expected": [{"instance": "b", "item": "u34 (contradicts, entry 109)", "script": "consistent",
-                      "careful_reader": "contradicts", "why": "<the text that settles it>"}],
-  "funnel_findings": ["<pattern> -> <change to BUILD_BRIEF/skill/tooling>; e.g. <file, item>"]
+  "grades": {"semantic_fp": 4, "depth": 3, "synthesis": 3, "trajectory_realism": 4, "instance_realism": 4},
+  "bad_answers": [{"instance": "a", "call": "summarizeTopic (topic venue)", "authored": "<what it says>",
+                   "why": "<what in the call's opening contradicts it>"}],
+  "funnel_findings": ["<pattern> -> <change to BUILD_BRIEF/EMPHASIS/skill/tooling>; e.g. <file, call>"]
 }
 ```
-
-A review names the digest of the version it read; `invented.py publish` reads `wrong_expected` only from a review of
-the admitted version.

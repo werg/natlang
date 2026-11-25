@@ -271,8 +271,10 @@ def exports(root):
 
 def program_rows(admission, home, scratch, runtime=None):
     """Authored-trajectory rows of one admitted program (whole-program cases, then stage tasks) and the refusals."""
-    cases = [*read_jsonl(home / 'cases.jsonl'), *(read_jsonl(home / 'stages.jsonl')
-                                                  if (home / 'stages.jsonl').exists() else [])]
+    # An authored program (natlang.authored-program/1, authored_programs.py admit) keeps every instance's authored
+    # trajectory in trajectories.jsonl (cases.jsonl holds only its instances with an RL oracle)
+    first = home / 'trajectories.jsonl' if (home / 'trajectories.jsonl').exists() else home / 'cases.jsonl'
+    cases = [*read_jsonl(first), *(read_jsonl(home / 'stages.jsonl') if (home / 'stages.jsonl').exists() else [])]
     author = {'program': admission['slug'], 'digest': admission.get('digest'),
               'submission': admission.get('submission'), 'kind': 'invented-program reference'}
     rendered = render(cases, source='invented-reference', author=author, runtime=runtime, scratch=scratch)

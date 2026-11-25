@@ -128,3 +128,15 @@ def test_async_driver_extracts_authored_pools_from_the_registry_owner(tmp_path, 
     assert seen == {'name': ei.AUTHORED_TEACHER_ROLE, 'repo': Path('/owner')}
     monkeypatch.setattr(data_registry, 'role_paths', lambda *a, **k: (_ for _ in ()).throw(ValueError('no git')))
     assert ei.authored_teacher_pools() == []
+
+
+def test_an_authored_program_feeds_its_trajectories_not_only_its_oracle_cases(tmp_path, monkeypatch):
+    """authored_programs.py admit writes every instance to trajectories.jsonl and only the RL instances to cases.jsonl."""
+    home = tmp_path / 'p'
+    home.mkdir()
+    (home / 'trajectories.jsonl').write_text(json.dumps({'id': 't1'}) + '\n' + json.dumps({'id': 't2'}) + '\n')
+    (home / 'cases.jsonl').write_text(json.dumps({'id': 't1'}) + '\n')
+    seen = []
+    monkeypatch.setattr(at, 'render', lambda cases, **kw: seen.extend(c['id'] for c in cases) or [({'id': c['id']}, None) for c in cases])
+    rows, refused = at.program_rows({'slug': 'p'}, home, tmp_path)
+    assert seen == ['t1', 't2'] and len(rows) == 2 and refused == {}
