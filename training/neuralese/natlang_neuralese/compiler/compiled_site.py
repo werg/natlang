@@ -328,6 +328,7 @@ def compile_release(engine, head, *, adapter_id, init_block, out, site_id, prove
     persist_artifacts(engine, [state], out / 'artifacts', out / 'states')
     result = {'schema': 'natlang.tune.build-result/1', 'compiler': COMPILED_SITE_SCHEMA,
               'artifacts': [{'artifact': artifact, 'node': node or f'lambda:{site_id}'}],
-              'softStates': {STATE_NAME: {'state': state, 'site': site_id}}, 'provenance': provenance}
+              'softStates': {STATE_NAME: {'state': state, 'site': site_id}}, 'provenance': provenance,
+              'receipt': {'base_native_identity': dict(engine.native_identity)}}
     (out / 'result.json').write_text(json.dumps(result, indent=1, sort_keys=True))
     return result
