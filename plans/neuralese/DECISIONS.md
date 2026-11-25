@@ -12059,6 +12059,10 @@ seed 20261120; 35,841 eligible, 6,040 shapes): uncapped -> 1% cap, prefix 500: 4
 prefix 2,000: 1,340 -> 1,419 shapes, effective 876 -> 1,131, top 3.45% -> 1.0%, top 5 11.5% -> 4.8%; prefix 8,000:
 effective 1,156 -> 1,872, top 4.55% -> 1.0%. 2% and 0.5% arms: effective 987 / 1,238 at 2,000; at 0.5% the 4-row floor
 binds at 500 and 2,000-prefix families fall 521 -> 479 (many-family wrappers deferred), so 1% is the default.
+`simulate_selection.py --grpo --groups 2000` (GRPO walk, latent outcomes): explored groups 779 -> 773, their top shape
+3.47% -> 0.52%, distinct shapes 593 -> 645, groups with reward spread 73.6% -> 75.9%. That run also found 42 grpo-pool
+rows with `curriculum.rl.qualification: source-only-live-pending`, which `curriculum.metadata` refuses for production
+selection but neither collector reads (open: they are still selected).
 
 **Not checked / left out.** Shapes are declared program text, not episode behaviour; item words that are lowercase
 prose (an item's topic inside a template sentence) still split a template into several shapes, and two genuinely
