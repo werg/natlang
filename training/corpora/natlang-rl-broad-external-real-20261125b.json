@@ -1,0 +1,40 @@
+{
+  "id": "natlang-rl-broad-external-real-20261125b",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-broad-external-real-20261125b",
+  "include": [
+    "cases.jsonl",
+    "receipt.json",
+    "verification.json",
+    "funnel.json",
+    "held-checks.json"
+  ],
+  "kind": "rl-tasks",
+  "format": "natlang.broad-rl-task-source/1: cases.jsonl (train), receipt.json, verification.json, funnel.json, held-checks.json",
+  "rows": 8809,
+  "license": "mixed (recorded per row in `license`): TabFact CC-BY-4.0, ToolACE Apache-2.0, MSR SQA MS-PL, WikiSQL BSD-3-Clause, NESTFUL Apache-2.0, ConvFinQA MIT, MultiHiertt MIT, DataBench MIT, BIRD CC-BY-SA-4.0 (per-row license field is authoritative)",
+  "protected": false,
+  "note": "Real-dataset train rows of broad-rl-tasks-20261031/full-core-effects-20261102 (the verified successor build) that natlang-rl-broad-external-20261031-v2 lacks: 8,809 rows over 9 sources not already in grpo-pool. Held: training_exclusion_ids 0, held-v3/v4/inv id and group overlap 0 (held_eval verify --avoid-cases), the successor build's own dev/confirmation packets 0, held_texts content hits removed. Requalified on pin b053651cdc5f (fb11b6359 hedge-aware QA containment) by its own verify.mjs: 8,810 -> 8,809. DECISIONS 2026-11-25 \"Broad-external real datasets admitted\" (follow-up).",
+  "admission": "grpo-task-pool",
+  "inputs": [
+    {
+      "id": "archive-broad-rl-tasks-20261031",
+      "manifest_sha256": "4248df2c3bda9a38ed49d3384e1c43fac54e2b4799334f90ae0cf54e017ae2e6"
+    }
+  ],
+  "producer": {
+    "script": "/home/werg/data/natlang-rl-broad-external-real-20261125/tools/{funnel2,admit2}.py + scripts/rl_tasks/verify.mjs",
+    "argv": [],
+    "git_commit": "99f6536e8238f582da19d29beb7e828b330ea4a9",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "e96571f000c833f0bfda449d65dafc74505d969c87992b74e99ac0e86f32e51b",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "grpo-pool": {
+      "order": 27,
+      "file": "cases.jsonl"
+    }
+  }
+}

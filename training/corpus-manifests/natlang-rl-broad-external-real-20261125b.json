@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-broad-external-real-20261125b",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-broad-external-real-20261125b",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 60746680,
+      "sha256": "7b1e580022adc8d9d966f9eb8ef2e6f5c015e94e958465822e34aea591bf3790",
+      "lines": 8809
+    },
+    {
+      "path": "funnel.json",
+      "bytes": 1666,
+      "sha256": "4374282743428bd7ca01b52aa788ceaa96b0c1107775694b3bc4a81adaa98fc6"
+    },
+    {
+      "path": "held-checks.json",
+      "bytes": 1363,
+      "sha256": "c9d32fdca6735a4d158ad36f110356d62ccac70cfdc08be1af9261eeb02fdea2"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1283,
+      "sha256": "a923d724ef693b2ec62c137be4387fb52c56ac07b2a6e70b1324fb947405a239"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 5945,
+      "sha256": "b4f9f80fb66a21be64f3ce1f61530667f45ffafc67a10b2fee369871f207b67f"
+    }
+  ],
+  "bytes": 60756937
+}
