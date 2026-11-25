@@ -26,16 +26,8 @@ from hindsight_kb.models.adapters import AdapterLinear
 from natlang_neuralese.third_party.lfm3.configuration_lfm3 import Lfm3Config
 from natlang_neuralese.third_party.lfm3.modeling_lfm3 import Lfm3ForCausalLM
 
-from natlang_neuralese.compiler import (
-    HeaderEncoder,
-    HeaderEncoderConfig,
-    UnifiedCompilerHead,
-    collapse_mode_p_memory,
-    collapse_to_lora_factors,
-    compose_cores,
-    default_lfm3_tap_layers,
-    provenance_key,
-)
+from natlang_neuralese.compiler import HeaderEncoder, HeaderEncoderConfig, default_lfm3_tap_layers, provenance_key
+from natlang_neuralese.compiler.unified_head import UnifiedCompilerHead, compose_cores
 from natlang_neuralese.compiler.train_compiler import (
     CompilerTrainConfig,
     build_dual_lr_optimizer,
@@ -60,7 +52,6 @@ from natlang_neuralese.tune.decision_compile import (
     should_settle_fast,
 )
 from natlang_neuralese.tune.latent_ttt import LatentTTTConfig, refine_site_latents, split_support_and_query
-import call_level_engine
 
 
 def _tiny_lfm3_decoder(rank: int = 4):
@@ -146,22 +137,8 @@ def test_header_encoder_unified_head_and_collapse_exact_parity():
     c_twice = compose_cores(compiled.c_cores, compiled.c_cores)
     assert torch.allclose(c_twice, compiled.c_cores * 2.0)
 
-    # Collapse B_eff = B @ C and verify exact matrix equality against B @ C @ A for every wrapped layer
-    factors = collapse_to_lora_factors(dec, compiled.c_cores)
-    assert len(factors) == dec.adapter_count
-    by_id = {m.module_id: m for m in dec.modules() if isinstance(m, AdapterLinear)}
-    for idx, name in enumerate(dec.adapter_names):
-        a_exp, b_exp = factors[name]
-        m = by_id[idx]
-        c_mat = compiled.c_cores[0, idx].detach().float()
-        delta_expected = m.B.detach().float() @ c_mat @ m.A.detach().float()
-        delta_collapsed = b_exp @ a_exp
-        assert torch.allclose(delta_collapsed, delta_expected, atol=1e-5, rtol=1e-5)
-
-    mem_bundle = collapse_mode_p_memory(compiled.mem_kv, compiled.mem_valid, compiled.mem_gate)
-    assert mem_bundle.memory_mode == "positioned"
-    assert mem_bundle.slot_count == 4
-    assert mem_bundle.pre_rope_k.shape == (4, hkb_cfg.attention_layers, hkb_cfg.kv_heads, hkb_cfg.head_dim)
+    # Served compiled sites (Mode P: header native state + xs cores) are compiled_site's; their release is tested in
+    # test_compiler_compiled_site.py against the native executor.
     k1 = provenance_key(site_id="s", header_sha="h1", compiler_sha="c1", policy_sha="p1")
     k2 = provenance_key(site_id="s", header_sha="h2", compiler_sha="c1", policy_sha="p1")
     assert k1 != k2
@@ -195,7 +172,7 @@ def test_compiler_train_objectives_maml_and_ablations():
         c = head(z_in, k_in, w_in, gate_floor=0.1)
         out = dec(
             tokens, blocks, controls=c.c_cores, memory_kv=c.mem_kv, memory_valid=c.mem_valid,
-            memory_gate=c.mem_gate, memory_mode="positioned",
+            memory_gate=c.mem_gate, memory_mode="window_exempt",
         )
         return context_distillation_loss(out.logits, teacher_logits, labels, topk=16)
 
@@ -293,61 +270,6 @@ def test_decision_compile_calibration_and_margin_loss():
         [0.72, 0.28], ["allow", "block"], fast_threshold=0.70, risk_thresholds={"block": 0.25}
     )
     assert settled is False and label == "allow"
-
-
-def test_call_level_engine_extraction_and_held_exclusion(tmp_path: Path):
-    episodes = [
-        {
-            "task_id": "held-1",
-            "family": "triage",
-            "calls": [{"site_id": "route.nl", "header": "Pick label", "inputs": {"t": "a"}, "target_output": "spam"}],
-        },
-        {
-            "task_id": "train-1",
-            "family": "triage",
-            "calls": [
-                {
-                    "site_id": "route.nl",
-                    "readout": "decision",
-                    "header": "Pick label",
-                    "inputs": {"t": "invoice error"},
-                    "teacher_samples": ["billing", "billing", "technical"],
-                    "teacher_reasoning": "Let me think...",
-                    "decision_labels": ["billing", "technical", "spam"],
-                },
-                # Duplicate of same (site_id, header, input) must be dropped
-                {
-                    "site_id": "route.nl",
-                    "readout": "decision",
-                    "header": "Pick label",
-                    "inputs": {"t": "invoice error"},
-                    "teacher_samples": ["billing", "billing", "billing"],
-                },
-                # Low agreement must be dropped
-                {
-                    "site_id": "judge:holds",
-                    "combinator_role": "holds",
-                    "header": "Check summary",
-                    "inputs": {"s": "x"},
-                    "teacher_samples": [True, False, None],
-                },
-            ],
-        },
-    ]
-    rows, stats = call_level_engine.extract_call_sites(episodes, excluded_task_ids={"held-1"}, min_agreement=0.66)
-    assert stats["held_excluded"] == 1
-    assert stats["dropped_duplicate"] == 1
-    assert stats["dropped_low_agreement"] == 1
-    assert stats["admitted"] == 1
-    assert stats["admitted_judges"] == 1
-    assert rows[0].site_kind == "decision"
-    assert rows[0].target_output == "billing"
-
-    out_file = tmp_path / "call_sites.jsonl"
-    n = call_level_engine.write_call_sites_jsonl(rows, out_file)
-    assert n == 1
-    parsed = json.loads(out_file.read_text(encoding="utf-8").strip())
-    assert parsed["teacher_reasoning_weight"] == 0.0
 
 
 def test_warmstart_extractor_and_prep_bundle(tmp_path: Path):
