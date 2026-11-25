@@ -325,6 +325,9 @@ DECISIONS.md entries are authoritative.
   disposable `NATLANG_HASH_CACHE` and `OMP_NUM_THREADS=1 MKL_NUM_THREADS=1` (`check-main.sh` sets both).
 - **Processes.** Any agent may stop, kill, restart, relaunch or remove any process, unit, ledger job or container
   without asking; record why. Stop them by systemd unit name or explicit PID, never by pattern.
+- **Never search the whole filesystem** (`find /`, `bfs /`, `du /mnt/external`): on the 3.4 TB HDD one crawl runs
+  for hours and saturates the disk the collections and driver use (2026-11-24: three such scans stalled aei1). Search
+  known paths, the registry or `git grep`.
 - Do not add or remove hardlinks to source, manifest or index files while live readers stream them (ctime changes
   invalidate strict reader checks).
 
