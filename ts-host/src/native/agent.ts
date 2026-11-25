@@ -791,10 +791,18 @@ export class NativeToolAgent {
     // The operator's prompt: its own soft state (`view@<operator>`) or view's where the bank has one, else the text.
     const request: ModelTurnRequest = { invocation_id: `${callId}#operator-${index}`,
       messages: this.softened(viewSiteMessages(site.value, site.instructions), site.operator), tools: [],
+      // The run's sampling law, as the call's own turns: without it a server sampled the operator greedily (a missing
+      // temperature is 0 on the native engines), so collection never explored what an operator writes. A greedy host
+      // (the product runtime's default) samples the operator at temperature 1, the law it is trained under: its reply
+      // is captured from exact ids, which an engine reports only for a sampled reply (`native-rl-sampling-law`).
+      temperature: this.options.temperature !== undefined && this.options.temperature > 0 ? this.options.temperature : 1,
       seed: session.runtime.seedPolicy.mode === 'backend' ? null :
         deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, `operator-${index}`, 0),
       // Reasoning and reply share the actual request allowance; the shared graph reservation below may lower it.
-      max_tokens: OPERATOR_REASONING_TOKENS + OPERATOR_SPAN_CAPS[site.operator] };
+      max_tokens: OPERATOR_REASONING_TOKENS + OPERATOR_SPAN_CAPS[site.operator],
+      // Its reply is captured from the exact ids it was sampled as: a host outside collection asks for them too (before,
+      // every product-runtime operator write failed with "native.capture needs the call's exact prompt and sampled reply ids").
+      exact_ids: true };
     // Only this sampled operator call consumes a graph generation reservation. Capturing its existing reply is
     // deterministic materialization, not another sampled decision or a fabricated native turn.
     const reservation = await this.options.modelBudget?.reserve(request.max_tokens ?? null, session.runtime.signal);
@@ -2538,6 +2546,9 @@ export class NativeToolAgent {
           ...(currentRendering === 'program-header' ? { response_tools: offered } : {}),
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools && currentRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),
+          // The compaction turn's note is captured in place from its exact ids under learned compaction (noteRef).
+          ...(nearLimit && !lastTurn && this.options.neuralese?.capture && (currentTemperature ?? 0) > 0 &&
+            pluggableMode(this.compactionSetting(), 'crisp') !== 'crisp' ? { exact_ids: true as const } : {}),
           ...(currentTemperature === undefined ? {} : { temperature: currentTemperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts,

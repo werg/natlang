@@ -360,6 +360,11 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         wireRequest.x_natlang_adapters = request.adapters;
       }
       if (request.guidance) wireRequest.guidance = request.guidance;
+      // A call whose reply is captured from its exact ids (a learned operator's) asks a native server for them.
+      // Engines report them only for a sampled reply (a capture at temperature 0 is refused: native-rl-sampling-law).
+      if (request.exact_ids && options.adapters && wireRequest.x_natlang_rl_capture === undefined &&
+          typeof wireRequest.temperature === 'number' && wireRequest.temperature > 0)
+        wireRequest.x_natlang_rl_capture = true;
       // Training guidance and its policy turns are rendered and recorded by the native engine only.
       if (request.privileged_context || request.guidance_policy) {
         if (!options.adapters) throw Object.assign(new Error('training-guidance-unavailable: training guidance runs on a ' +

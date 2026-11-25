@@ -13464,6 +13464,8 @@ another case's state. Differences are paired (sign-flip p).
    write failed ("native.capture needs the call's exact prompt and sampled reply ids", found by the live smoke on
    8e634a0f) and silently kept the cut. Operator calls and the compaction turn now carry `exact_ids`, which a native
    transport sends as `x_natlang_rl_capture` (contracts.ts, chat-completion.ts, agent.ts).
+   Second bug: the operator call carried no temperature, and the engines read a missing temperature as 0, so operator
+   replies were greedy, also in collection. It now samples under the call's temperature (the run's law).
 4. Leaf judges (separate strand, 7ecfac2d8): a decision readout sees its values whole up to half the context, and under
    `nl` a value past that gets its compact-params state.
 
