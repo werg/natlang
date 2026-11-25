@@ -19,6 +19,8 @@ export class StdSpan {
   constructor(readonly name: string) {
     this.parentFrame = currentFrame() ?? resolveFrame();
     this.callId = `${this.parentFrame.task.id}/std-${this.name}-${++sequence}`;
+    // This span owns a trace lifetime, but does not claim a durable call record.
+    this.parentFrame.task.beginInvocation(this.callId);
     this.frame = { ...this.parentFrame, parentCallId: this.callId };
     this.mark = this.parentFrame.task.traces.length;
   }
@@ -42,9 +44,9 @@ export class StdSpan {
 
   end(outcome: 'done' | 'error', detail: string): void {
     const task = this.parentFrame.task;
-    task.record({ callId: this.callId, parentCallId: this.parentFrame.parentCallId ?? null, taskId: task.id,
+    try { task.record({ callId: this.callId, parentCallId: this.parentFrame.parentCallId ?? null, taskId: task.id,
       definitionId: `std:${this.name}`, name: `std ${this.name}`, outcome, detail,
-      events: [{ kind: 'std', call_id: this.callId, combinator: this.name, wall_ms: Date.now() - this.started }, ...this.events] });
+      events: [{ kind: 'std', call_id: this.callId, combinator: this.name, wall_ms: Date.now() - this.started }, ...this.events] }); } finally { task.endInvocation(this.callId); }
   }
 
   /** Run `body` as the combinator, recording the trace whether it returns or throws. */

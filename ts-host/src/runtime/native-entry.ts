@@ -3,10 +3,13 @@ import {CallCapture,definitionKey,interfaceHash,reportStoreFailure} from '../cal
 import type {DefinitionIdentity} from '../calls/types.js';
 import {recordingServices} from '../native/effects.js';
 import {currentFrame,runInFrame} from './context.js';
+import {resolveFrame} from './runtime.js';
+import {traceFor} from '../native/graph.js';
 import type {ModuleRecord} from './loader.js';
 
 export function invokeNativeEntry<T>(record:ModuleRecord, exportName:string, args:unknown[], invoke:()=>T):T {
-  const frame=currentFrame();
+  const current=currentFrame();
+  const frame=current?resolveFrame():undefined;
   // Inside an existing invocation TS remains its native implementation. This
   // boundary is the authored host entry, not a new model call for each helper.
   if(!frame)return invoke();
@@ -14,7 +17,7 @@ export function invokeNativeEntry<T>(record:ModuleRecord, exportName:string, arg
   // recursion and model-depth accounting continue to use frame.chain only.
   const scopedFrame={...frame,serviceChain:[...(frame.serviceChain??frame.chain),record.id]};
   const scopedInvoke=()=>runInFrame(scopedFrame,invoke);
-  if(frame.parentCallId || frame.task.runtime.options.recording?.nativeRoots===false)return scopedInvoke();
+  if(frame.parentCallId&&frame.task.isInvocationActive(frame.parentCallId) || frame.task.runtime.options.recording?.nativeRoots===false)return scopedInvoke();
   const task=frame.task,store=task.runtime.callStore();
   if(!store)return scopedInvoke();
   const declared=record.exports[exportName];
@@ -28,7 +31,8 @@ export function invokeNativeEntry<T>(record:ModuleRecord, exportName:string, arg
     instructions:{complete:false,reason:'excluded'}};
   let capture:CallCapture;
   try {
-    capture=new CallCapture(store,store.settings(),{callId,parentCallId:null,parentActionIndex:null,taskId:task.id,
+    capture=new CallCapture(store,store.settings(),{callId,parentCallId:frame.parentCallId??null,
+      parentActionIndex:traceFor(frame.parentCallId)?.events.filter(event=>event.kind==='action').length??null,taskId:task.id,
       programId:task.programView.program?.id??null,buildHash:task.programView.program?.buildHash??null,
       programRoot:task.runtime.options.programRoot??null,definition:identity,model:{id:null,revision:null},
       checkpoints:task.runtime.options.recording?.checkpoints,exclude:task.runtime.options.recording?.exclude});
@@ -37,12 +41,14 @@ export function invokeNativeEntry<T>(record:ModuleRecord, exportName:string, arg
     capture.setInputs(Object.fromEntries(params.map((param,index)=>[param.name,param.rest?args.slice(index):args[index]]).filter(([,value])=>value!==undefined)));
     capture.announce();
   }catch(error){reportStoreFailure(store,error);return scopedInvoke();}
-  task.registerGraphCall(callId,null);
+  task.beginInvocation(callId,true);
+  task.registerGraphCall(callId,frame.parentCallId);
   const services=recordingServices(task.services,event=>capture.effect({...event,
     ...(event.phase==='requested'?{graph_order:task.nextGraphEffectOrder()}:{})},'crisp'));
   const finish=(outcome:string,value:unknown,error?:unknown)=>{
-    capture.finish({outcome,detail:error instanceof Error?error.message:error===undefined?'':String(error),
-      output:value,hasOutput:outcome==='done',events:[],graphChildren:task.graphChildren(callId)});
+    try { capture.finish({outcome,detail:error instanceof Error?error.message:error===undefined?'':String(error),
+      output:value,hasOutput:outcome==='done',events:[],graphChildren:task.graphChildren(callId)}); }
+    finally { task.endInvocation(callId); }
   };
   try {
     const value=runInFrame({...scopedFrame,parentCallId:callId,services},invoke);
