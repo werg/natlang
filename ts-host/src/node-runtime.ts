@@ -1,3 +1,4 @@
+import {recordingEffectObserver} from './native/effects.js';
 import {registerTrace,releaseTrace,producerScopeForTrace} from './native/graph.js';
 import { TypeScriptEnvironment } from './environment.js';
 import { NativeRuntime as PlatformRuntime, runIdentity, type NativeOutcome, type NativeRuntimeOptions } from './native/runtime.js';
@@ -51,7 +52,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
     const recording: { capture?: CallCapture } = {};
     super({ ...options, environment: options.environment ?? new TypeScriptEnvironment({ mode: 'fresh' }),
       frame, hooks: options.hooks ?? kernelHooks, services: options.services ?? frame.task.services,
-      observeEffect: event => { options.observeEffect?.(event); return recording.capture?.effect(event, 'agent'); } });
+      observeEffect: event => { const observed={...event,...(event.phase==='requested'?{graph_order:frame.task.nextGraphEffectOrder()}:{})};options.observeEffect?.(observed); return recording.capture?.effect(observed, 'agent'); } });
     this.recording = recording;
     this.rootOptions = options;
     // A runtime given a frame runs inside a task that records its own calls.
@@ -62,6 +63,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
     const capture = this.store ? this.openRootCapture(this.store, node) : undefined;
     if(!this.rootOptions.frame){this.frame!.task.beginInvocation(this.options.runId,!!capture);registerTrace(this.options.runId,this.trace,producerScopeForTrace(this.trace));}
     this.recording.capture = capture;
+    if(!this.rootOptions.frame){const observe=recordingEffectObserver(this.services);if(observe)this.frame!.task.setInvocationEffectObserver(this.options.runId,observe);}
     capture?.watch(() => this.trace.events as Record<string, unknown>[]);
     let outcome = 'failed', detail = '', output: unknown, hasOutput = false;
     try {

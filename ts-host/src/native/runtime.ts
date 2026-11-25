@@ -1139,7 +1139,7 @@ export class NativeRuntime {
       if(event.phase === 'requested') this.trace.emit('effect', {call_id:this.currentCallId??null,capability:`${event.service}.${event.method}`,...event});
       else graphNode(this.trace,'effect',{call_id:this.currentCallId??null,capability:`${event.service}.${event.method}`,...event},[{node:invocationNodeId(this.options.runId),port:'caller'}]);
       return persisted;
-    });
+    }, undefined, options.frame ? {task:options.frame.task,callId:options.frame.parentCallId} : undefined);
     // TS native imports and eval share this invocation's checked, journaled ports.
     // Copy the frame: callers and concurrent siblings may share the supplied one.
     this.frame = options.frame ? { ...options.frame, services: this.services } : undefined;

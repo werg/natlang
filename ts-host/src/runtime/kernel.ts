@@ -18,7 +18,7 @@ import { containsUntrusted, scopedUntrusted } from '../native/untrusted.js';
 import { RefinementError, canonicalValue, checkServiceResults, failureError, refinementCodeOf, type RefinementCode, type RefinementFailure } from '../native/refinement.js';
 import { MISSING, dump, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, descend, noSmallerArgument, runInFrame, type ActiveCall, type DecisionReadout, type Descent, type Frame } from './context.js';
-import { recordingServices, type LiveEvent, type LiveSink } from './runtime.js';
+import { recordingServices, resolveBoundFrame, type LiveEvent, type LiveSink } from './runtime.js';
 import { kernelHooks } from './hooks.js';
 import { protectedSources } from './loader.js';
 import { checkItems } from './ensures.js';
@@ -332,14 +332,19 @@ function checkedServices(task: Frame['task'], frame: Frame, services: Readonly<R
   for (const [name, text] of Object.entries(declared)) {
     try { types[name] = parseTypeCached(text); } catch (error) { throw new TypeError(`refinements.services.${name}: ${(error as Error).message}`); }
   }
-  const checker = task.refinementChecker(), judges = task.refinementJudges(model, frame);
+  const checker = task.refinementChecker();
   const registry = scopedUntrusted(task);
   return checkServiceResults(services as Record<string, unknown>, types, async (value, type, label) => {
     // Outside text enters here: its source is the service method, and the renderer shows it as data from then on.
     if (containsUntrusted(type, env)) registry.markTyped(value, type, env, label);
     if (!containsRefinement(type, env)) return;
-    const failures = await checker.checkValue(value, type, env, { phase: 'service', ...judges, callId, signal, emit,
-      trace: traceFor(callId) }, label);
+    const context = resolveBoundFrame(frame);
+    const currentId = context.parentCallId ?? callId;
+    const trace = traceFor(currentId);
+    const judges = task.refinementJudges(model, context);
+    const failures = await checker.checkValue(value, type, env, { phase: 'service', ...judges, callId: currentId,
+      signal: context.signal ?? signal, emit: trace ? (kind, data) => trace.emit(kind, data) : emit,
+      trace }, label);
     if (failures.length) throw failureError(failures[0]!);
   }) as Readonly<Record<string, object>>;
 }
@@ -782,12 +787,14 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
   const lexicalServices = unrecordedServices(frame.services ?? task.services);
-  const services = recordingServices(checkedServices(task, frame, lexicalServices, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, ({ exact, ...event }) => {
+  const observeEffect = ({ exact, ...event }: import('../native/effects.js').EffectEvent) => {
     const captured = { ...event, exact, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) };
     if(event.phase === 'requested') runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event });
     else graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },[{ node: invocationNodeId(callId), port: 'caller' }]);
     return capture?.effect(captured,'agent');
-  }, lexicalServices);
+  };
+  task.setInvocationEffectObserver(callId, observeEffect);
+  const services = recordingServices(checkedServices(task, childFrame, lexicalServices, model, callId, (kind, data) => { runtime?.trace.emit(kind, data); }, frame.signal ?? task.signal) as Record<string, object>, observeEffect, lexicalServices, {task,callId});
   // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
   const addendum = [frame.systemAddendum, attempt?.guidance].filter(Boolean).join('\n\n') || undefined;
   const nativeReader = !!(task.runtime.options.neuralese?.nativeStateConsumer ||
@@ -1070,7 +1077,9 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
   const { task, frame, childFrame, callId, definition, options, inputs, folder, capture, store, item } = input;
   const args = caseArguments(capture, folder);
   const original = { ...args };
-  const services = recordingServices(frame.services ?? task.services, event => capture.effect({ ...event, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) }, 'crisp'));
+  const observeEffect = (event: import('../native/effects.js').EffectEvent) => capture.effect({ ...event, ...(event.phase === 'requested' ? { graph_order: task.nextGraphEffectOrder() } : {}) }, 'crisp');
+  task.setInvocationEffectObserver(callId, observeEffect);
+  const services = recordingServices(frame.services ?? task.services, observeEffect, undefined, {task,callId});
   let error: unknown;
   let nativeTrace:ReturnType<typeof openCrispTrace>|undefined;
   try {

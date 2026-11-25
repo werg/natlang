@@ -47,8 +47,10 @@ export function invokeNativeEntry<T>(record:ModuleRecord, exportName:string, arg
   const nativeTrace=openCrispTrace({frame,callId,definition:{id:identity.id,name,revision:record.revision,source:record.source},
     signature:`(${params.map(param=>`${param.name}${param.optional?'?':''}: ${param.type}`).join(', ')}) => ${spec.returns}`,arguments:capturedArgumentBindings(capture)});
   capture.watch(()=>nativeTrace.trace.events);
-  const services=recordingServices(frame.services ?? task.services,event=>capture.effect({...event,
-    ...(event.phase==='requested'?{graph_order:task.nextGraphEffectOrder()}:{})},'crisp'));
+  const observeEffect=(event:import('../native/effects.js').EffectEvent)=>capture.effect({...event,
+    ...(event.phase==='requested'?{graph_order:task.nextGraphEffectOrder()}:{})},'crisp');
+  task.setInvocationEffectObserver(callId,observeEffect);
+  const services=recordingServices(frame.services ?? task.services,observeEffect,undefined,{task,callId});
   const finish=(outcome:string,value:unknown,error?:unknown)=>{
     try { nativeTrace.finish(outcome);capture.finish({outcome,detail:error instanceof Error?error.message:error===undefined?'':String(error),
       output:value,hasOutput:outcome==='done',events:nativeTrace.trace.events,graphChildren:task.graphChildren(callId)}); }

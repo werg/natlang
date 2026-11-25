@@ -1,3 +1,4 @@
+import type { EffectEvent } from '../native/effects.js';
 import type { WeightBinding } from '../adaptation/weights/binding.js';
 import { setLexicalNativeAdapterSource, setLexicalSoftStateSource, type NativeAdapterBinding } from '../native/model-recording.js';
 import { ProgramView } from '../adaptation/program-view.js';
@@ -324,12 +325,24 @@ export class NatlangTask {
   private effectSequence = 0;
   private readonly graphChildrenByParent = new Map<string, string[]>();
   private readonly liveInvocations = new Map<string, boolean>();
+  private readonly effectObservers = new Map<string, (event: EffectEvent) => unknown>();
   /** Invocation liveness is shorter than task lifetime; recorded spans additionally own durable call custody. */
   beginInvocation(callId: string, recorded = false): void { this.liveInvocations.set(callId, recorded); }
   markInvocationRecorded(callId: string): void { if(this.liveInvocations.has(callId))this.liveInvocations.set(callId,true); }
-  endInvocation(callId: string): void { this.liveInvocations.delete(callId); }
+  endInvocation(callId: string): void { this.liveInvocations.delete(callId); this.effectObservers.delete(callId); }
   isInvocationActive(callId: string): boolean { return !this.closed&&this.liveInvocations.has(callId); }
   isInvocationRecorded(callId: string): boolean { return this.liveInvocations.get(callId)===true; }
+  /** Observation belongs to the current invocation, independently of lexical service authority. */
+  setInvocationEffectObserver(callId: string, observe: (event: EffectEvent) => unknown): void {
+    if (!this.isInvocationActive(callId)) throw new NatlangContextError('Effect observer needs a live invocation.');
+    this.effectObservers.set(callId, observe);
+  }
+  invocationEffectObserver(callId: string): ((event: EffectEvent) => unknown) | undefined {
+    if (this.isInvocationActive(callId)) return this.effectObservers.get(callId);
+    const parent = this.activeTraceParent(callId);
+    return parent?.task.invocationEffectObserver(callId);
+  }
+
   private readonly closureTraceParents = new Map<string, Frame>();
   /** Associations are keyed by actual parent identity, never a mutable ambient parent slot. */
   retainClosureTraceParent(parent: Frame): void {
@@ -551,6 +564,7 @@ export class NatlangTask {
     if (this.closed) return;
     this.closed = true;
     this.liveInvocations.clear();
+    this.effectObservers.clear();
     this.closureTraceParents.clear();
     this.traceParent=undefined;
     if (this.timer) clearTimeout(this.timer);
