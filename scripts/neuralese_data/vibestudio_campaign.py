@@ -47,9 +47,8 @@ def read(path):
 
 
 def publish(path, value):
-    temporary = path.with_suffix('.tmp')
-    temporary.write_text(json.dumps(value, indent=2) + '\n')
-    temporary.replace(path)
+    from natlang_neuralese.common.jsonio import write_bytes_durable
+    write_bytes_durable(path, (json.dumps(value, indent=2) + '\n').encode('utf-8'))
 
 
 def publish_immutable(path, value):
@@ -829,10 +828,16 @@ def _drive(args, checkpoint):
         if episode['trajectory_ir']['outcome'].get('task_completed') is not True:
             raise ValueError('partial training evidence cannot complete a campaign goal')
         seeds[by_id[episode['task_id']]] = str(path.resolve())
+    # The archive's exporter and ingester consume this catalog too. Publishing
+    # only status/reused.json leaves their metadata at the previous release.
+    # Held identity is already checked by campaign_scope; ingestion separately
+    # retains and verifies its immutable held registry snapshot.
+    if os.environ.get('NATLANG_CAMPAIGN_SYNC_CATALOG', '1') != '0':
+        sync_index(args, [root / 'catalog.jsonl'], checkpoint=checkpoint)
     publish(saved_seeds, seeds)
     waves = root / 'waves'
     jobs = waves / 'jobs'
-    jobs.mkdir(exist_ok=True)
+    jobs.mkdir(parents=True, exist_ok=True)
     initial = root / 'initial-wave.txt'
     starter = jobs / '0000.json'
     if initial.is_file() and not starter.exists():
