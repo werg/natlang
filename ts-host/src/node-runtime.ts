@@ -1,3 +1,4 @@
+import {registerTrace,releaseTrace,producerScopeForTrace} from './native/graph.js';
 import { TypeScriptEnvironment } from './environment.js';
 import { NativeRuntime as PlatformRuntime, runIdentity, type NativeOutcome, type NativeRuntimeOptions } from './native/runtime.js';
 import { CallCapture, definitionKey, interfaceHash, type CallStoreLike } from './calls/recorder.js';
@@ -58,7 +59,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
 
   override async run(node: LambdaNode): Promise<{ outcome: NativeOutcome; value: Value }> {
     const capture = this.store ? this.openRootCapture(this.store, node) : undefined;
-    if(!this.rootOptions.frame)this.frame!.task.beginInvocation(this.options.runId,!!capture);
+    if(!this.rootOptions.frame){this.frame!.task.beginInvocation(this.options.runId,!!capture);registerTrace(this.options.runId,this.trace,producerScopeForTrace(this.trace));}
     this.recording.capture = capture;
     capture?.watch(() => this.trace.events as Record<string, unknown>[]);
     let outcome = 'failed', detail = '', output: unknown, hasOutput = false;
@@ -71,7 +72,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
       detail = error instanceof Error ? error.message : String(error);
       throw error;
     } finally {
-      if(!this.rootOptions.frame)this.frame!.task.endInvocation(this.options.runId);
+      if(!this.rootOptions.frame){releaseTrace(this.options.runId);this.frame!.task.endInvocation(this.options.runId);}
       this.recording.capture = undefined;
       capture?.finish({ outcome, detail, output, hasOutput, events: this.trace.events as Record<string, unknown>[] });
     }

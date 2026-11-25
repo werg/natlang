@@ -13179,6 +13179,27 @@ it does not fit.
 least half the programs with a `holds` answered false, ungrounded open answers <= 0.1, folder reducers and structural
 recursion each in at least a quarter of programs, open share >= 0.35 in most programs. Failure: planted defects or
 ungrounded writers again dominate the drawn sample's bad answers; then the brief changes again.
+
+## 2026-11-25 13:20 Memory ledger measures claims outside the allocator lock; waiters poll every 5 s (ops strand)
+
+**Observation.** ~13:00: eight 2 GB `pauth-aw2-*-check-*` jobs (reserve 3 GB) waited 6-8 min with 22 GB headroom and
+an empty `cannot_fit`; a builder reported ~40 min of ledger queueing in a 1 h 50 min build.
+
+**Cause.** Neither the reserve, learned peaks (every `pauth-*-check-N` is its own family, peaks <= 1 GB) nor backfill
+explains it: the jobs fit. Every ledger transaction measured all claims under the exclusive flock (`live_claims`:
+per unit `systemctl show` twice, `docker inspect` up to twice, `smaps_rollup` per process: 225 reads at 22 ms). One
+pass took 6.6-9.5 s for 15 claims; the guard repeated it every 1 s (`--interval 1`, 12 h CPU in 25 h), and each
+waiting `run` every 30 s. A fresh flock waited 62 s; admissions ran ~1 per 8-10 s machine-wide (243 in 103 min), so a
+waiter got one try per minute and only the queue head (or a spare backfill) could start on it.
+
+**Fix (default, opt-out `NATLANG_LEDGER_SHARED_USAGE=0`).** `shared_usage` measures outside the allocator lock into a
+cache (`memory-ledger.json.usage.json`) reused for 15 s by `run`, `status` and `admissible`; the guard measures afresh
+each cycle and refreshes it. Under the lock only claims admitted after the measurement are measured; a finished claim is
+released only when measured >30 s after its admission. Waiters poll every 5 s (`RUN_POLL_SECONDS`); a waiter does not
+wait more than 15 s on another's measurement; `status` never waits. `family_peaks` (36k one-off families, 1.6 of the
+1.9 MB file) keeps the 4000 most recently updated. Admitted events record `waited_s`. GB10 accounting, the 15 GB
+default reserve, ramp reservations and priorities are unchanged. After the guard restart a flock waits 0 s.
+
 ### 2026-11-25: recorded nested TypeScript entries and invocation lifetimes
 
 Independent review of e52 found that the inherited causal ID suppressed fresh loaded pure-TS entry capture, and that task liveness alone allowed stale callback ancestry. The shared task-owned invocation registry now distinguishes active own entries from external causal parents, expires all kernel/crisp/native-root paths, revalidates deferred task entry, records fresh TS entries as crisp children and preserves same-task helper suppression. Expired callbacks cannot retain invocation service scopes; task-level bindings remain valid. Parent frame references clear at task.close. Standalone native sessions and StdSpan receive their own real lifetime hooks; synthetic spans do not claim recorder-backed custody. Existing optouts remain. Official Node/Core/browser build passed,54 targeted actual tests passed(10.88s,1.4GiB),quick passed18.2s/1.1GiB; no model calls. Historical0064 capture bytes are preserved, not retrospectively reparented. The older StdSpan durable-record gap remains a separate owned follow-up.
@@ -13212,3 +13233,69 @@ attempts contaminated by an unrecovered provider fault (without claiming it was
 the only cause). Existing opt-out retained. Inventory updated in
 `VIBESTUDIO_TRANSPORT_ACCOUNTING_20261124.md`;100 actual campaign tests passed
 (0.56s/53.4MiB), no inference probe or current campaign interruption.
+
+## 2026-11-25 13:40 Round data step made fast: exact token memo, parallel renders and extraction, unparsed repeats skipped (data-step agent)
+
+**Observation.** aei1 r0011's data step (`data.sh`: extract, replay, `filled_reasoning build`, `neuralese-graph`) ran
+07:33-10:01 (OOM at its 12 GB cap in `neuralese-graph`) and again from 10:02; from the registry journal: extract 12 and
+60 min, replay 44 and 28 min, filled build 86 min (r0010: 65, r0009: 58), neuralese-graph 9 min (r0010). Rounds are
+meant to take 2-2.5 h, so preparation was the round's bottleneck.
+**Profiles** (cProfile on reproductions under the ledger, pin 30d164222 vs main, scratch registry copy,
+`/home/werg/data/dataprof-20261125/`): the filled build spent 90% in `tokenizers.encode_batch`: every call of an episode
+renders its whole history again and `Engine._template_tokens` tokenized it whole, twice per call (prompt and closed
+template), on one core. Extract waited on reads of 12k group and task files (half on `/mnt/external`) with 6 min of CPU
+on one core. Replay's start parsed every line of the WORK's 45 episode files (~1 GB zstd; each round's extraction repeats
+all earlier episodes) only to skip the replayed keys: 376 s for 0 new episodes. Every registry write resolved the
+canonical checkout with one `git worktree list` per path: 6,446 subprocesses, 40-55 s per command.
+**Changes (each default on, outputs identical by construction and checked):**
+- `natlang_neuralese/serve/segment_tokens.py` `SegmentTokenCache` behind the engine's existing `_token_cache` hook, set
+  by `sft_sources.TemplateRenderer` (filled build, mix build, grpo SD teacher, subagent lowering, prompt_cache_map): a
+  fast tokenizer cuts its input at added tokens and encodes the pieces independently, so with no lstrip/rstrip/
+  single_word/normalized added token and no normalizer (checked; else no cache) the ids are the concatenation of
+  remembered pieces' ids. Exact, no code salt needed. `NATLANG_SEGMENT_TOKEN_CACHE=0` opts out. The serving Engine keeps
+  the hook unset (one request per call; not a protocol feature).
+- `filled_reasoning.py build --workers N` (default min(8, cpus-4); 1 = serial): episodes re-rendered by spawned
+  processes in order, rows without their prompt arrays (`calls_of` cuts prompts from the chain ids).
+- `sft_sources.py extract --workers N` (default min(8, cpus-4)): each RL group and teacher record is a unit converted by
+  a process, lines written in order, census and group rates merged in order.
+- `sft_sources.all_episodes`/`unique_lines`: a line whose leading `"key"` was already seen (or is in `skip`, replay's
+  verdict keys) is not parsed. `NATLANG_EPISODE_LINE_DEDUPE=0` opts out.
+- `data_registry._primary_worktree`: the primary worktree of a checkout once per process.
+- `neuralese-graph`: an episode on an unseen surface is dropped before its calls are lowered and held.
+- `expert_iteration.py async-drive --replay-workers` default 12 (was 8; replays are CPU-bound node runs, median 14 s).
+**Before/after** (same inputs, the DGX at load 36-45):
+- filled build, 17,235 fills: serial pin ~86 min in production (r0011 first run; 1500-fill subset 8.9 min serial),
+  parallel only 23.0 min (8,385 CPU s), parallel + token memo 4.3 min (26 CPU min). 1500 subset: 8.9 min serial ->
+  2.0 serial with memo -> 0.8 parallel with memo. chains.pkl sha identical across serial/parallel/memo and the pin
+  (subset c180c80c..., full ae0f1bc7...).
+- extract (warm page cache, teacher-r0011 left out as it was still growing): pin 12.0 min, workers 8 3.7 min, serial
+  main 8.8 min; episodes, extract.json and rl-group-rates.json identical.
+- replay's scan of the WORK: 376 s -> 47 s.
+- neuralese-graph (r0011's arguments): pin 11.8 min -> 4.5 min; chains.pkl, rows and cases identical (peak RSS
+  11.6 -> 11.3 GB: the lowered calls of the admitted episodes, untouched).
+- for scale: the production r0011 rerun (pin 30d16) took extract 60 min, replay 28 min, filled build 104 min,
+  neuralese-graph 11 min (10:02-13:26; unit peak 23.4 GB).
+Tests: `test_segment_tokens.py`, `test_filled_reasoning.py::test_build_renders_episodes_in_worker_processes_...`,
+`test_sft_sources.py::test_repeated_lines_are_skipped_unparsed...`, `::test_extract_by_worker_processes_...`.
+**Pickup:** the aei1 driver takes it at its next round boundary on a new pin (no driver change needed beyond the pin;
+the replay-workers default applies when async-drive restarts).
+
+## 2026-11-25 13:58 Judges never decide on a cut argument (leaf-judge strand)
+
+**Decision (first principles, owner principle; no A/B).** A call that cannot read its eval scope (every decision
+readout: the std judgments, `improveShouldRevise`, `decisionReadout: 'finite-returns'`, `decide(...)`) is shown its
+values whole within half the context budget (water-filled across arguments, captures and locals); past that a value is
+cut with a note naming no variable, and under `compaction: nl` it gets its compact-params state plus the text that fits.
+The old opening cut at 4,096 characters and promised "NAME holds the complete value" to a call with no tools. Crisp
+pre-cuts of judge inputs removed: `calls/judge.ts` (compareBehaviors: 8,000/6,000/2,000/600-char caps) and
+`improvement/run-evidence.ts` (1,200-char strings). Opt-out `NATLANG_READOUT_WHOLE_VALUES=0`.
+**Inventory.** Covered: `agent.ts decisionReadout` (scored, reasoned, instant, generated-JSON fallback and the batched
+`scoreMany` path all reuse one opening). Already whole: refinement `decisionJudge` (`refinement.ts` renders value and
+context whole), operator write sites (`viewSiteMessages` takes the whole JSON). Tool-loop judges (progressJudge,
+stoppingCondition predicates, `holds` callJudge, compareBehaviors, improveDiagnose) read their scope with eval and keep
+the scope listing. Mirrors: `operator-site.ts` (`sealed` request field), `view.py view_note(None)`.
+**Left out.** The readout opening keeps the host-generated `eval` turn and its "Declared … for the rest of this call"
+line (the trained readout format; changing it is a separate model-facing change). A live (non-data) value in a readout
+still previews as "live value, use it in eval" (no std judgment takes one). Python `operator_rows.py` does not yet pass
+`sealed` (no sealed rows are generated; readouts with cut values were not compacted before).
+Tests: `ts-host/test/sealed-readout-values.test.mjs` (8). MODEL_FACING_CHANGES 2026-11-25.

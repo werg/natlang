@@ -13,9 +13,11 @@ import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def no_real_machine_effects(monkeypatch):
+def no_real_machine_effects(monkeypatch, tmp_path):
     """Tests never touch real memory state: the balloon and systemd/docker calls fail loudly unless a test stubs them."""
     from types import SimpleNamespace
+    # Never the real ledger or its shared usage cache (tests that need a ledger file set their own STATE).
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'default-ledger' / 'memory-ledger.json'))
     # Mocking ledger.time.sleep/time must not change the process-wide time
     # module used by unrelated test threads and subprocess timeout polling.
     monkeypatch.setattr(ledger, 'time', SimpleNamespace(**vars(ledger.time)))
@@ -426,7 +428,7 @@ def test_the_guard_signals_one_victim_then_watches_it_without_stopping_another(m
     monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
     live = {'big.service': {'class': 'experiment', 'budget': 8 * GIB, 'used': 4 * GIB, 'admitted': 1},
             'other.service': {'class': 'experiment', 'budget': 8 * GIB, 'used': 4 * GIB, 'admitted': 2}}
-    monkeypatch.setattr(ledger, 'live_claims', lambda state, gpu: dict(live))
+    monkeypatch.setattr(ledger, 'live_claims', lambda state, gpu, usage=None: dict(live))
     available = [5 * GIB]
     monkeypatch.setattr(ledger, 'mem_available', lambda: available[0])
     monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('active', ''))
@@ -1222,7 +1224,7 @@ def test_cancel_prevents_foreground_waiter_resurrection(monkeypatch, tmp_path, e
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
     monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
-    monkeypatch.setattr(ledger, 'headroom', lambda state, gpu: (0, {}))
+    monkeypatch.setattr(ledger, 'headroom', lambda state, gpu, usage=None: (0, {}))
     monkeypatch.setattr(ledger, 'learned_budget', lambda state, unit, budget: budget)
     monkeypatch.setattr(ledger.subprocess, 'run', lambda *a, **kw:
                         SimpleNamespace(returncode=0, stdout='not-found\n'))
@@ -1235,7 +1237,7 @@ def test_cancel_prevents_foreground_waiter_resurrection(monkeypatch, tmp_path, e
 
     def cancel_while_waiting(seconds):
         sleeps.append(seconds)
-        assert sleeps == [30]
+        assert sleeps == [ledger.RUN_POLL_SECONDS]
         with ledger.ledger() as state:
             assert 'cancel-me.service' in state['waiting']
             if entry_expired:
@@ -1260,7 +1262,7 @@ def test_fresh_same_unit_retry_survives_old_waiter_cancellation(monkeypatch, tmp
     monkeypatch.setattr(ledger.subprocess, 'run', lambda *a, **kw:
                         SimpleNamespace(returncode=0, stdout='not-found\n'))
     free = [0]
-    monkeypatch.setattr(ledger, 'headroom', lambda state, gpu: (free[0], {}))
+    monkeypatch.setattr(ledger, 'headroom', lambda state, gpu, usage=None: (free[0], {}))
     launches = []
     monkeypatch.setattr(ledger, 'launch', lambda spec: launches.append(spec) or 0)
     args = SimpleNamespace(unit='retry', budget_gb=1, cuda_budget_gb=None,
@@ -1269,7 +1271,7 @@ def test_fresh_same_unit_retry_survives_old_waiter_cancellation(monkeypatch, tmp
                            env=[], stop_seconds=None, command=['new-job'], hold_budget=False, container=[])
 
     def cancel_and_retry(seconds):
-        assert seconds == 30
+        assert seconds == ledger.RUN_POLL_SECONDS
         assert ledger.cancel(SimpleNamespace(unit='retry')) == 0
         # A second cancellation with no entry must also be durable.
         assert ledger.cancel(SimpleNamespace(unit='retry')) == 1
@@ -1800,3 +1802,107 @@ def test_wait_exit_refuses_a_resumable_unit():
     args = type('A', (), {'wait_exit': True, 'resumable': None, 'detach': False})()
     with pytest.raises(SystemExit, match='--no-resumable'):
         ledger.run(args)
+
+
+def test_live_claims_reuse_a_shared_measurement_taken_after_admission_and_measure_newer_claims(monkeypatch):
+    now = ledger.time.time()
+    measured = []
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None, containers=(), cuda_separate=False:
+                        measured.append(unit) or 3 * GIB)
+    state = {'claims': {'old.service': claim('experiment', 4, 0, now - 600),
+                        'new.service': claim('experiment', 4, 0, now - 1),
+                        'done.service': claim('experiment', 4, 0, now - 600)}, 'events': []}
+    usage = {'time': now - 5, 'gpu': {}, 'units': {'old.service': {'used': 2 * GIB, 'cuda': True},
+                                                   'new.service': {'used': None, 'cuda': False},
+                                                   'done.service': {'used': None, 'cuda': False}}}
+    live = ledger.live_claims(state, {}, usage)
+    assert measured == ['new.service']  # admitted after the shared measurement: measured now
+    assert live['old.service']['used'] == 2 * GIB and state['claims']['old.service']['gpu'] is True
+    assert live['new.service']['used'] == 3 * GIB
+    assert 'done.service' not in state['claims'] and state['events'][-1] == {
+        'time': state['events'][-1]['time'], 'event': 'released', 'unit': 'done.service'}
+
+
+def test_shared_usage_measures_once_per_ttl_outside_the_allocator_lock(monkeypatch, tmp_path):
+    import fcntl
+    import json
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    (tmp_path / 'ledger.json').write_text(json.dumps({'claims': {'a.service': claim('experiment', 4, 0, 1)},
+                                                      'events': []}))
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {7: GIB})
+    monkeypatch.setattr(ledger, 'unit_cuda', lambda *a, **k: 0)
+    calls = []
+
+    def usage(unit, gpu, command=None, containers=(), cuda_separate=False):
+        with open(ledger.STATE + '.lock', 'w') as lock:  # the allocator lock is free while measuring
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        calls.append(unit)
+        return GIB
+    monkeypatch.setattr(ledger, 'unit_usage', usage)
+    gpu, first = ledger.shared_usage()
+    assert gpu == {7: GIB} and first['units'] == {'a.service': {'used': GIB, 'cuda': False}}
+    gpu, second = ledger.shared_usage()
+    assert calls == ['a.service'] and gpu == {7: GIB} and second['time'] == first['time']  # reused from the cache
+    ledger.shared_usage(force=True)  # the guard measures afresh
+    assert calls == ['a.service'] * 2
+    monkeypatch.setattr(ledger.time, 'time', lambda: first['time'] + ledger.USAGE_TTL + 1)
+    ledger.shared_usage()
+    assert len(calls) == 3  # stale cache: measured again
+    monkeypatch.setenv('NATLANG_LEDGER_SHARED_USAGE', '0')
+    assert ledger.shared_usage() == ({7: GIB}, None)  # opt-out: live_claims measures under the lock
+
+
+def test_shared_usage_does_not_wait_forever_on_a_stuck_measurement(monkeypatch, tmp_path):
+    import fcntl
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'USAGE_LOCK_WAIT', 0.3)
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    with open(ledger.STATE + '.usage.lock', 'w') as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        assert ledger.shared_usage()[1]['units'] == {}
+        assert ledger.shared_usage(force=True, observer=True)[1]['units'] == {}
+
+
+def test_run_measures_outside_the_lock_polls_quickly_and_records_its_wait(monkeypatch, tmp_path):
+    import fcntl
+    from types import SimpleNamespace
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    now = ledger.time.time()
+    with ledger.ledger() as state:
+        state['claims']['busy.service'] = dict(claim('experiment', 10, 0, now - 7200), command=['x'])
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'unit_cuda', lambda *a, **k: 0)
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 100 * GIB)
+    monkeypatch.setattr(ledger, 'learned_budget', lambda state, unit, budget: budget)
+    available = [4 * GIB]  # 3.5 GiB free after busy's reservation: 2 + 3 GiB does not fit yet
+    monkeypatch.setattr(ledger, 'mem_available', lambda: available[0])
+
+    def usage(unit, gpu, command=None, containers=(), cuda_separate=False):
+        with open(ledger.STATE + '.lock', 'w') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)  # raises if measured under the allocator lock
+        return 8 * GIB
+    monkeypatch.setattr(ledger, 'unit_usage', usage)
+    launches = []
+    monkeypatch.setattr(ledger, 'launch', lambda spec: launches.append(spec['unit']) or 0)
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        available[0] = 40 * GIB  # room returns
+    monkeypatch.setattr(ledger.time, 'sleep', sleep)
+    args = SimpleNamespace(unit='check', budget_gb=2, cuda_budget_gb=None, reserve_gb=3, priority='medium',
+                           cls='experiment', wait=600, resumable=False, host_max_gb=None, oom_policy='stop',
+                           workdir='.', env=[], stop_seconds=None, command=['true'], hold_budget=False, container=[])
+    ledger.run(args)
+    assert sleeps == [ledger.RUN_POLL_SECONDS] and launches == ['check.service']
+    with ledger.ledger() as state:
+        admitted = [e for e in state['events'] if e['event'] == 'admitted']
+    assert admitted[-1]['waited_s'] >= 0
+
+
+def test_family_peaks_keep_the_most_recently_updated(monkeypatch):
+    monkeypatch.setattr(ledger, 'FAMILY_PEAKS_MAX', 2)
+    state = {}
+    for unit, peak in (('a.service', GIB), ('b.service', GIB), ('a.service', 2 * GIB), ('c.service', GIB)):
+        ledger.record_family_peak(state, unit, peak)
+    assert state['family_peaks'] == {'a': 2 * GIB, 'c': GIB}

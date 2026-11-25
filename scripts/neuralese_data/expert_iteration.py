@@ -5488,7 +5488,8 @@ def main():
     ad.add_argument('--own-share', type=float, default=0.35)
     ad.add_argument('--aux', action='append', default=[])
     ad.add_argument('--own-neuralese-graph-share', type=float, default=0.05)
-    ad.add_argument('--replay-workers', type=int, default=8)
+    ad.add_argument('--replay-workers', type=int, default=12,
+                    help='replay processes of the round data step (CPU-bound node runs, ~14 s each; was 8)')
     ad.add_argument('--k', type=int, default=4)
     ad.add_argument('--slots', type=int, default=DGX_COLLECT_SLOTS)
     ad.add_argument('--kv-gb', type=int, default=12)

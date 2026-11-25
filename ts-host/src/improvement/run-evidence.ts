@@ -47,15 +47,12 @@ export type FunctionEvidence = {
   feedback: RunFeedback[];
 };
 
-const MAX_SHOWN_TEXT = 1200;
-
-/** A value as the improver sees it: exact when small, long strings cut with a marker (the evidence is read, not replayed). */
-function shown(value: unknown): unknown {
-  if (typeof value === 'string') return value.length > MAX_SHOWN_TEXT ? `${value.slice(0, MAX_SHOWN_TEXT)}<<cut off: ${value.length - MAX_SHOWN_TEXT} more characters>>` : value;
-  if (Array.isArray(value)) return value.map(shown);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, shown(item)]));
-  return value;
-}
+/**
+ * A value as the improver's stages receive it: whole. The stages (improveDiagnose, the `readout: decision`
+ * improveShouldRevise) are natlang calls whose own listing shows a long value: cut with its variable named where the
+ * call can read its scope, whole within the context budget where it cannot. A cut here left the rest nowhere.
+ */
+const shown = (value: unknown): unknown => value;
 
 function inputsOf(store: RunEvidenceStore, record: RecordLike): Record<string, unknown> | undefined {
   const inputs: Record<string, unknown> = {};

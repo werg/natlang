@@ -486,3 +486,49 @@ def test_unattested_steps_are_relabelled_from_the_serving_record_or_left_out():
     fixed = fr.attest_record(rec('c', None, 'x'), {'c': 'x'})
     assert [f['policy'] for f in fixed['chains'][0]['calls']] == ['x', 'x']
     assert fr.build_parser().parse_args(['build', '--out', 'o', '--corpus', 'c']).admit_unattested is False
+
+
+class FakeTokenizer:
+    def convert_tokens_to_ids(self, token):
+        return CLOSE
+
+
+class FakeRenderer:
+    """A picklable ``Renderer`` stand-in: an episode's chains from its key (worker processes build their own)."""
+
+    def __init__(self, tokenizer_dir):
+        if 'broken' in tokenizer_dir:
+            raise OSError(f'no tokenizer at {tokenizer_dir}')
+        self.tokenizer = FakeTokenizer()
+
+    def chains(self, item):
+        n = int(item['key'][1:])
+        if n % 7 == 3:
+            raise ValueError(f'cannot render {item["key"]}')
+        rows, prompt = [], np.arange(5, dtype=np.int32)
+        for i in range(1 + n % 3):         # each call's prompt extends the previous call's text: one chain
+            sample = np.array([7, CLOSE, n, i], np.int32)
+            rows.append({'id': f'{item["key"]}#{i}', 'invocation': 'root', 'index': i, 'prompt': prompt,
+                         'sample': sample, 'weight': np.ones(4, np.float32)})
+            prompt = np.concatenate([prompt, sample, np.full(3, 2, np.int32)])
+        return exp0_sft.chains_of([{'task_id': item['task_id'], 'round': item['key'], 'rows': rows}]), self
+
+
+def test_build_renders_episodes_in_worker_processes_as_it_does_serially():
+    records = [{'key': f'e{n}', 'task_id': f't{n % 4}', 'work': '/w', 'name': f'e{n}',
+                'render_tokenizer': '/tok-broken' if n == 11 else '/tok'} for n in range(30)]
+    serial = list(fr.rendered_sources(records, 1, FakeRenderer))
+    parallel = list(fr.rendered_sources(records, 3, FakeRenderer))
+    assert len(serial) == len(parallel) == 30
+    for n, (a, b) in enumerate(zip(serial, parallel)):
+        if n == 11 or n % 7 == 3:
+            assert a[0] is b[0] is None and a[2] == b[2] and ('cannot render' in a[2] or 'no tokenizer' in a[2])
+            continue
+        assert a[1] == b[1] == CLOSE and a[2] is b[2] is None and len(a[0]) == len(b[0]) == 1
+        for x, y in zip(a[0], b[0]):
+            assert np.array_equal(x['ids'], y['ids']) and len(x['segs']) == len(y['segs'])
+            for (s1, l1, r1), (s2, l2, r2) in zip(x['segs'], y['segs']):
+                assert (s1, l1) == (s2, l2) and 'prompt' not in r1 and 'prompt' not in r2
+                assert r1.keys() == r2.keys() and all(np.array_equal(r1[k], r2[k]) for k in r1)
+        calls = fr.calls_of(a[0][0], CLOSE)          # prompts are cut from the chain ids
+        assert [len(c['prompt']) for c in calls] == [5 + 7 * i for i in range(1 + n % 3)]

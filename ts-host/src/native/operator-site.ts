@@ -6,7 +6,7 @@
  * without it, and whether the runtime would compact the value at all.
  */
 import { listingLine, renderValue } from './agent.js';
-import { SCOPE_VALUE_CHARS } from './cutoff.js';
+import { SCOPE_VALUE_CHARS, sealedValuesChars } from './cutoff.js';
 import { compactionPageChars, framedState, OPERATOR_COMPACT_CHARS, OPERATOR_MIN_CHARS, argumentInstructions, operatorPurpose, valueInstructions, viewSiteMessages,
   type ValueOperator } from './operator-frames.js';
 import { PageStore } from './pages.js';
@@ -29,6 +29,10 @@ export type OperatorSiteRequest = {
   compaction_chars?: number;
   /** compact-value: the result's index in the call's transcript (names where all of it is). */
   entry?: number;
+  /** compact-params: the receiving call cannot read its scope (a decision readout, agent.ts `sealedValues`): the value is
+   * cut only past the context's share for values (`sealedValuesChars`, one argument), its note names no variable, and
+   * the state is followed by the cut text. */
+  sealed?: boolean;
 };
 
 const STATE_ID = 'nzs1_' + 'a'.repeat(52);
@@ -54,10 +58,10 @@ export function operatorSite(request: OperatorSiteRequest) {
   }
   if (request.operator !== 'compact-params') throw new TypeError(`no runtime site for operator ${String(request.operator)}`);
   const { name, type } = request.argument ?? { name: 'value', type: 'string' };
-  const scope = Math.max(SCOPE_VALUE_CHARS, budget);
-  const shown = renderValue(request.value, { holder: name, budget: scope });
+  const scope = request.sealed ? sealedValuesChars(request.context_tokens) : Math.max(SCOPE_VALUE_CHARS, budget);
+  const shown = renderValue(request.value, request.sealed ? { budget: scope, whole: true } : { holder: name, budget: scope });
   const value = JSON.stringify(request.value);
   return { operator: request.operator, messages: viewSiteMessages(value, argumentInstructions(name, type, purpose)), tools: [],
     compacted: shown.includes('<<cut off:') && value.length >= OPERATOR_MIN_CHARS, text: listingLine(name, type, shown),
-    state: split(listingLine(name, type, sentinel + viewNote(name))) };
+    state: split(listingLine(name, type, sentinel + (request.sealed ? viewNote() + '\n' + shown : viewNote(name)))) };
 }

@@ -243,7 +243,7 @@ test('an action that keeps failing the same way ends the call as model-incomplet
   const agent = new NativeToolAgent(() => { turns++; return { calls: [['eval', { code: 'console.log(q);' }]], completion_tokens: 5 }; });
   const result = await run({ type: '() => string', instructions: 'Answer.' }, { agent: session => agent.run(session) });
   assert.equal(result.outcome.kind, 'quiesced');
-  assert.match(result.outcome.detail, /^model_incomplete: repeated_failed_action .*q is not defined/);
+  assert.match(result.outcome.detail, /^model_incomplete: repeated_failed_action .*q (?:is not defined|is not bound in this call's eval scope)/);
   assert.ok(turns >= 4 && turns <= 6, `stopped after ${turns} turns`);
 });
 
@@ -1590,7 +1590,7 @@ test('a service scoped to a function is usable in its calls only, and named else
     codebase: { expert: nl('expert', { args: { question: 'string' }, returns: 'string[]', instructions: 'Answer question from tables.page(n).' }) } },
   { services: { tables }, serviceScopes: { tables: ['expert.nl'] }, agent });
   await agent(session);
-  assert.match(seen.root, /tables is not defined|Cannot find name 'tables'/, 'the root call cannot use it');
+  assert.match(seen.root, /tables is not defined|Cannot find name 'tables'|tables is a host service unavailable in this call's authored scope/, 'the root call cannot use it');
   assert.match(seen.expert, /Gigabut threw 60\.4/, 'the expert call can');
   assert.match(seen.asked, /60\.4/);
 });

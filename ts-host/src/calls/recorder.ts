@@ -160,7 +160,10 @@ export class CallCapture {
   }
   /** While the call runs, write its trace events so far every `intervalMs`, so a long call can be inspected live. */
   watch(events: () => readonly Record<string, unknown>[], intervalMs = 30_000): void {
+    if(this.watcher)clearInterval(this.watcher);
+    this.watcher=undefined;
     this.eventSource = events;
+    this.backgroundCheckpoint();
     if (!this.store.progress) return;
     let written = 0;
     this.watcher = setInterval(() => {

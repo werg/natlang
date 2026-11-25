@@ -17,7 +17,7 @@ import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileTo
 import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
-import { SHOWN_CHARS, SCOPE_VALUE_CHARS, SMALL_VALUE_CHARS, literalFits, note as cutNote } from './cutoff.js';
+import { SHOWN_CHARS, SCOPE_VALUE_CHARS, SMALL_VALUE_CHARS, literalFits, note as cutNote, sealedValuesChars, sealedValuesEnabled } from './cutoff.js';
 import type { TrainingGuidance } from './training-guidance.js';
 
 /** Scope and input values show at least SCOPE_VALUE_CHARS, and never less than a tool output of the call may. */
@@ -194,8 +194,10 @@ const tool = (name: string, description: string, properties: Record<string, unkn
 /**
  * The call's arguments as its caller gave them, as the opening eval's result shows them (read_inputs() returns
  * the same values in eval). A long value is cut off, and its name holds all of it; an argument the caller left out is undefined.
+ * For a call that cannot read its scope (`sealed`, a decision readout) each value is shown whole within its share of
+ * the context budget, and a cut's note names no variable.
  */
-export function inputsListing(session: NativeSession, views: Readonly<Record<string, string>> = {}): string {
+export function inputsListing(session: NativeSession, views: Readonly<Record<string, string>> = {}, sealed?: SealedValues): string {
   const lam = session.lam;
   if (lam.type.kind !== 'lambda') return '{}';
   session.markUntrusted();
@@ -203,9 +205,10 @@ export function inputsListing(session: NativeSession, views: Readonly<Record<str
   return lam.type.params.fields.map(field => {
     const value = Object.hasOwn(lam.args, field.name) ? lam.args[field.name]! : undefined;
     // A large value written as a view (the builtin view's Neuralese instance) shows the view; the variable holds the value itself.
-    const shown = views[field.name] ? neuraleseSentinel(views[field.name]!) + viewNote(field.name) :
-      renderValue(value, { root, holder: field.name, budget: scopeValueChars(session),
-        liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted });
+    const text = () => renderValue(value, { root, ...valueDisplay(session, sealed, 'arg', field.name),
+      liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted });
+    // A sealed call sees the view's state and then the text as far as its budget allows (no variable to read the rest from).
+    const shown = views[field.name] ? neuraleseSentinel(views[field.name]!) + (sealed ? viewNote() + '\n' + text() : viewNote(field.name)) : text();
     const opening = value instanceof FileHandle && value.folder === root ? (() => {
       const stat = root!.listFiles().find(entry => entry.path === value.path);
       if (!stat || stat.bytes > 4000) return '  // Read this file with read_file or file.readText() before answering.';
@@ -214,6 +217,39 @@ export function inputsListing(session: NativeSession, views: Readonly<Record<str
     })() : '';
     return listingLine(field.name, formatType(field.type) + (field.optional ? ' | undefined' : ''), shown) + opening;
   }).join('\n');
+}
+
+/**
+ * The character budgets of the values a call that cannot read its eval scope is shown (a decision readout offers no
+ * tools), keyed `arg:NAME`, `capture:NAME` and `let:NAME`. Such a call decides on its opening alone, so its values are
+ * shown whole as far as the context budget allows: the values share `sealedValuesChars` by water-filling (a value that
+ * fits an even share is whole, and what it leaves goes to the longer ones), and none gets less than the scope listing's
+ * SCOPE_VALUE_CHARS. Undefined for a call that reads its scope.
+ */
+export type SealedValues = ReadonlyMap<string, number>;
+
+export function sealedBudgets(items: readonly [string, unknown][], total: number, render: (value: unknown, budget: number) => string): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!Number.isFinite(total)) { for (const [key] of items) out.set(key, Infinity); return out; }
+  const needs = items.map(([, value]) => { const text = render(value, total); return /<<(?:cut off:|inspection limit)/.test(text) ? Infinity : text.length; });
+  let left = total, open = items.map((_, index) => index);
+  while (open.length) {
+    const share = Math.floor(left / open.length);
+    const fit = open.filter(index => needs[index]! <= share);
+    if (!fit.length) { for (const index of open) out.set(items[index]![0], Math.max(SCOPE_VALUE_CHARS, share)); break; }
+    // A value that fits is shown as it rendered within the whole budget, i.e. whole.
+    for (const index of fit) { out.set(items[index]![0], total); left -= needs[index]!; }
+    open = open.filter(index => needs[index]! > share);
+  }
+  return out;
+}
+
+/** How one value of the opening is rendered: the scope listing's budget and the variable that holds it, or for a sealed
+ * call its share of the context and no holder (the call cannot reach the variable). */
+function valueDisplay(session: NativeSession, sealed: SealedValues | undefined, kind: 'arg' | 'capture' | 'let', name: string):
+    { holder?: string; budget: number; whole?: boolean } {
+  return sealed ? { budget: sealed.get(`${kind}:${name}`) ?? scopeValueChars(session), whole: true } :
+    { holder: name, budget: scopeValueChars(session) };
 }
 
 /** One argument's line of the opening listing: its name, type and value as shown. */
@@ -367,13 +403,15 @@ function largeCallableScope(codebase: Readonly<Record<string, unknown>>): boolea
  * (scopeExpression), or a preview when it has no literal form (live values). `holder` is where all of it is.
  */
 export function renderValue(value: Value | unknown, options: { holder?: string; budget?: number; root?: Folder; liveIdentity?: (value: object) => number;
-  /** Where untrusted text came from; a string it knows is shown as a quoted data block. */ untrusted?: UntrustedRegistry } = {}): string {
+  /** Where untrusted text came from; a string it knows is shown as a quoted data block. */ untrusted?: UntrustedRegistry;
+  /** Only the budget cuts (a call that cannot read its scope): a record shows every field the budget holds, not the
+   * listing's first 24. */ whole?: boolean } = {}): string {
   if (value === undefined) return 'undefined';
   const requested=options.budget??SHOWN_CHARS;
   const budget=Number.isFinite(requested)?Math.max(0,requested):Infinity;
   // Render once at the requested budget. Building the complete literal first made even a
   // 2,000-character scope preview allocate the entire value (including combinatorial arrays).
-  return scopeExpression(value, options.root, options.holder, budget, { nodes: 0, depth: 0, untrusted: options.untrusted }) ?? previewValue(value as Value, options.holder, options.liveIdentity);
+  return scopeExpression(value, options.root, options.holder, budget, { nodes: 0, depth: 0, untrusted: options.untrusted, whole: options.whole }) ?? previewValue(value as Value, options.holder, options.liveIdentity);
 }
 
 /** Native coefficient artifacts act on model weights and stay out of the text-space scope. */
@@ -443,7 +481,7 @@ const isPlainRecord = (value: object) => Object.prototype.toString.call(value) =
  * Undefined when no expression produces the value (an opaque host object).
  */
 function scopeExpression(value: unknown, root: Folder | undefined, holder?: string, budget = SHOWN_CHARS,
-  state: { nodes: number; depth: number; untrusted?: UntrustedRegistry } = { nodes: 0, depth: 0 }): string | undefined {
+  state: { nodes: number; depth: number; untrusted?: UntrustedRegistry; whole?: boolean } = { nodes: 0, depth: 0 }): string | undefined {
   if (++state.nodes > 8192 || state.depth >= 64)
     return cutNote('inspection limit reached', { holder });
   // A small value is shown whole, whatever share of the budget is left for it.
@@ -507,7 +545,7 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
   const entries: [string, unknown][] = [];
   let fieldCount = 0;
   for (const key in value) if (Object.hasOwn(value, key)) {
-    if (entries.length < (Number.isFinite(budget) ? 24 : 8192)) entries.push([key, (value as Record<string, unknown>)[key]]);
+    if (entries.length < (Number.isFinite(budget) && !state.whole ? 24 : 8192)) entries.push([key, (value as Record<string, unknown>)[key]]);
     fieldCount++;
   }
   // Give ordinary argument records an overview, rather than allowing a large first field
@@ -526,7 +564,7 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
   // goes to the longer fields, so a record that fits is shown whole and a long field cannot hide the short ones.
   const budgets = fields.map(()=>budget);
   if (Number.isFinite(budget)) {
-    const probe = { nodes: state.nodes, depth: state.depth, untrusted: state.untrusted };
+    const probe = { nodes: state.nodes, depth: state.depth, untrusted: state.untrusted, whole: state.whole };
     const needs = fields.map(field=>{
       const text=scopeExpression(field.item,root,field.holder,Math.max(0,available),probe);
       return text===undefined?0:text.length;
@@ -778,9 +816,12 @@ export class NativeToolAgent {
     return operatorPurpose(typeof session.lam.body === 'string' ? session.lam.body : '');
   }
 
-  private async views(session: NativeSession): Promise<Record<string, string>> {
+  private async views(session: NativeSession, sealed?: SealedValues): Promise<Record<string, string>> {
     const view = this.options.neuralese?.view;
     const lam = session.lam;
+    // Whether the opening would cut an argument: at the scope listing's budget, or a sealed call's share of the context.
+    const cut = (name: string, value: unknown) => renderValue(value, { root: lam.projectTransaction?.folder, ...valueDisplay(session, sealed, 'arg', name),
+      liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted }).includes('<<cut off:');
     if (this.options.neuralese?.capture && supportsNeuralese(this.driver) && lam.type.kind === 'lambda') {
       // The learned compact-params operator, when selected, writes the listing's state of each argument it would cut.
       const root = lam.projectTransaction?.folder;
@@ -788,8 +829,7 @@ export class NativeToolAgent {
       for (const field of lam.type.params.fields) {
         if (!Object.hasOwn(lam.args, field.name)) continue;
         const value = lam.args[field.name]!;
-        if (value instanceof FileHandle || !renderValue(value, { root, holder: field.name, budget: scopeValueChars(session),
-          liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted }).includes('<<cut off:')) continue;
+        if (value instanceof FileHandle || !cut(field.name, value)) continue;
         let text: string | undefined;
         try { text = JSON.stringify(value); } catch { text = undefined; }
         if (text === undefined) continue;
@@ -805,8 +845,7 @@ export class NativeToolAgent {
     for (const field of lam.type.params.fields) {
       if (!Object.hasOwn(lam.args, field.name)) continue;
       const value = lam.args[field.name]!;
-      if (!renderValue(value, { root, holder: field.name, budget: scopeValueChars(session),
-        liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted }).includes('<<cut off:')) continue;
+      if (!cut(field.name, value)) continue;
       let text: string | undefined;
       try { text = JSON.stringify(value); } catch { text = undefined; }
       if (text === undefined || value instanceof FileHandle) continue;
@@ -1566,18 +1605,19 @@ export class NativeToolAgent {
    * The opening eval: declarations of everything already in scope, as if the model had written them.
    * Values appear as literals (cut off when large); live objects, services and the folder as comments.
    */
-  private scopeReading(session: NativeSession, views: Readonly<Record<string, string>> = {}): { code: string; text: string } | undefined {
+  private scopeReading(session: NativeSession, views: Readonly<Record<string, string>> = {}, sealed?: SealedValues): { code: string; text: string } | undefined {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return;
     session.markUntrusted();
     const lines: string[] = [], names: string[] = [];
     const root = lam.projectTransaction?.folder;
     const section = (heading: string, body: string[]) => { if (body.length) lines.push(...(lines.length ? [''] : []), heading, ...body); };
-    const declared = (keyword: string, name: string, type: string, value: Value, note = ''): string => {
+    const declared = (keyword: string, name: string, type: string, value: Value, note = '', kind: 'capture' | 'let' = 'capture'): string => {
       // Host types print as their tag; only a class-like tag (FileHandle, Map) is a usable TypeScript type.
       const shown = /^[a-z]+$/.test(type) && !['string', 'number', 'boolean', 'null'].includes(type) ? 'unknown' : type;
-      const expression = scopeExpression(value, root, name, scopeValueChars(session),
-        { nodes: 0, depth: 0, untrusted: session.runtime.untrusted });
+      const display = valueDisplay(session, sealed, kind, name);
+      const expression = scopeExpression(value, root, display.holder, display.budget,
+        { nodes: 0, depth: 0, untrusted: session.runtime.untrusted, whole: display.whole });
       names.push(name);
       return expression === undefined ?
         `declare ${keyword === 'let' ? 'let' : 'const'} ${name}: ${shown};  // live value ${previewValue(value, name, session.runtime.displayLiveId)}${note}` :
@@ -1608,12 +1648,12 @@ export class NativeToolAgent {
       return [declared('const', cell.name, cell.type, value, `  // from skill ${cell.skill}`)];
     }));
     section('// Your variables from earlier in this call:', Object.entries(lam.let).map(([name, value]) =>
-      declared(session.localMutable(name) ? 'let' : 'const', name, formatType(lam.letTypes[name]!), value)));
+      declared(session.localMutable(name) ? 'let' : 'const', name, formatType(lam.letTypes[name]!), value, '', 'let')));
     if (lam.return !== MISSING)
       section('// Your staged result:', [`// ${renderValue(lam.return, { root, liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted })}`]);
     if (!lines.length) return;
     // The arguments appear in the eval's result, not as literals in its code: they come from the caller.
-    return { code: lines.join('\n'), text: (params.length ? inputsListing(session, views) + '\n' : '') +
+    return { code: lines.join('\n'), text: (params.length ? inputsListing(session, views, sealed) + '\n' : '') +
       (names.length ? `Declared ${names.join(', ')} for the rest of this call.` : 'ok') };
   }
 
@@ -1659,6 +1699,42 @@ export class NativeToolAgent {
     return failures.length ? failures : undefined;
   }
 
+  /** The driver's scorer for this agent's readouts: none when a bounded graph budget routes them through generation. */
+  private readoutScorer() {
+    const bounded = this.options.modelBudget?.maxRequests !== undefined || this.options.modelBudget?.maxTokens !== undefined;
+    return bounded ? undefined : decisionScorer(this.driver);
+  }
+
+  /** Whether `decisionReadout` answers this call (no tools: it cannot read its eval scope). Mirrors its conditions. */
+  private answeredByReadout(session: NativeSession): boolean {
+    const lam = session.lam;
+    const wanted = lam.readout === 'decision' || lam.readout === 'instant' || this.options.decisionReadout === 'finite-returns';
+    if (!wanted || this.options.fallbacks?.length || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
+    let domain: DecisionDomain | null;
+    try { domain = decisionDomain(lam.type.returns, session.env); } catch { return false; }
+    return !!domain && domain.size >= 2 && (!!this.readoutScorer() || this.options.decisionGeneration !== 'tool-loop');
+  }
+
+  /**
+   * The value budgets of a call that cannot read its scope (`SealedValues`), or undefined when it can (a tool loop with
+   * eval) or `NATLANG_READOUT_WHOLE_VALUES=0`. Every value its opening shows shares `sealedValuesChars(contextTokens)`.
+   */
+  private sealedValues(session: NativeSession, contextTokens: number | null): SealedValues | undefined {
+    if (!sealedValuesEnabled() || !this.answeredByReadout(session)) return undefined;
+    const lam = session.lam;
+    if (lam.type.kind !== 'lambda') return undefined;
+    const items: [string, unknown][] = [];
+    for (const field of lam.type.params.fields) if (Object.hasOwn(lam.args, field.name)) items.push([`arg:${field.name}`, lam.args[field.name]]);
+    for (const cell of Object.values(lam.captures ?? {})) {
+      const value = capturedValue(cell);
+      if (!isAdapterValue(value)) items.push([`capture:${cell.name}`, value]);
+    }
+    for (const [name, value] of Object.entries(lam.let)) items.push([`let:${name}`, value]);
+    const root = lam.projectTransaction?.folder;
+    return sealedBudgets(items, sealedValuesChars(contextTokens), (value, budget) => renderValue(value, { root, budget, whole: true,
+      liveIdentity: session.runtime.displayLiveId, untrusted: session.runtime.untrusted }));
+  }
+
   /**
    * Answer a finite-typed call by scoring each allowed value as the reply to its opening (native/decision.ts).
    * Up to DECISION_JOINT_OPTIONS values are scored together, each the whole reply; a larger record type is scored field
@@ -1672,8 +1748,7 @@ export class NativeToolAgent {
     const domain = decisionDomain(lam.type.returns, session.env);
     if (domain?.size === 0) return 'decision-empty-domain: the result type has no possible value.';
     const callId = session.runtime.currentCallId ?? null;
-    const bounded = this.options.modelBudget?.maxRequests !== undefined || this.options.modelBudget?.maxTokens !== undefined;
-    const decide = bounded ? undefined : decisionScorer(this.driver);
+    const decide = this.readoutScorer();
     if (!domain || domain.size < 2 || (!decide && this.options.decisionGeneration === 'tool-loop')) {
       if (lam.readout === 'decision' || lam.readout === 'instant') session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable',
         reason: decide ? 'result type is not finite' : 'model driver cannot score replies' });
@@ -2145,9 +2220,11 @@ export class NativeToolAgent {
       folder: session.lam.projectTransaction ? { fileTools: this.options.fileTools,
         writable: session.lam.projectTransaction.folder.access !== 'read', withheld: session.lam.withheldTools } : undefined,
       allowAdHoc: canGenerateNl(session.runtime.frame), rendering: this.options.promptRendering });
-    const views = await this.views(session);
+    // A call answered by a decision readout offers no tools, so it cannot read its scope: its values are shown whole.
+    const sealed = this.sealedValues(session, budget);
+    const views = await this.views(session, sealed);
     const openingMessages = (): Record<string, unknown>[] => {
-      const reading = this.scopeReading(session, views);
+      const reading = this.scopeReading(session, views, sealed);
       const scopeOpening = withCallNotes(this.scopeOpening(session), notes);
       if (session.lam.skills?.listing) for (const skill of session.lam.skills.inventory ?? [])
         session.runtime.trace.emit('skill_use', { phase: 'offered', skill_name: skill.name,

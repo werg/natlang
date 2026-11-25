@@ -191,8 +191,10 @@ export const LAST_TURN_NOTICE = '\n\n[This is your last turn in this call: call 
   'status "blocked" with what is missing, or status "failed" with why.]';
 /** The compact_history tool's result. */
 export const COMPACTED_RESULT = 'Compacted: older outputs and code are in transcript, and your note is kept after the instructions.';
-/** The listing's note after a view of a cut-off value: the variable holds the value itself. */
-export const viewNote = (holder: string) => `  // view of the value; ${holder} holds all of it`;
+/** The listing's note after a view of a cut-off value: the variable holds the value itself. Without a holder (a call
+ * that cannot read its scope, a decision readout) the view is followed by as much of the value's text as fits. */
+export const viewNote = (holder?: string) => holder ? `  // view of the value; ${holder} holds all of it` :
+  '  // view of the whole value; its text follows as far as it fits';
 /**
  * The instructions of the view a call's opening listing shows for a value it would cut off: the purpose is the
  * receiving call, which reads the variable itself for exact details (training/neuralese view.py
