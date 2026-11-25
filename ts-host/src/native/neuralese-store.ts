@@ -46,8 +46,10 @@ export type NativeStateMetadata = { text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[];
   adapter_binding?: NativeAdapterBinding; derivation?: NativeStateDerivation;
   /** 'text': a text write; 'span': a produce span in its producer's call. Such a state (exact, no adapter binding or
-   * derivation) is read as its token ids inline in the reader's context on every engine (`in-context-text`). */
-  producer_kind?: 'text' | 'span' } &
+   * derivation) is read as its token ids inline in the reader's context on every engine (`in-context-text`).
+   * 'capture': a reply captured in its own context (a compaction operator's reply, a `compact_history` note), spliced
+   * as stored on every engine unless `NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1` (`serve/engine.py` `reads_in_context`). */
+  producer_kind?: 'text' | 'span' | 'capture' } &
   { schema: 'neuralese.native-state/1' };
 export type NativeStateArtifact = { id: string; metadata: NativeStateMetadata; tensors: Record<string, NativeStateTensor> };
 export type NativeTensorDtype = 'F16' | 'BF16' | 'F32' | 'F64';
@@ -406,8 +408,8 @@ function validateNativeState(metadata: NativeStateMetadata, tensors: Record<stri
     throw new RangeError('invalid native-state metadata');
   if (metadata.adapter_binding !== undefined) validateNativeAdapterBinding(metadata.adapter_binding, metadata);
   validateNativeStateDerivation(metadata.derivation);
-  if (metadata.producer_kind !== undefined && (!['text', 'span'].includes(metadata.producer_kind) || metadata.derivation !== undefined))
-    throw new RangeError('native state producer_kind is text or span, and a derived state has none');
+  if (metadata.producer_kind !== undefined && (!['text', 'span', 'capture'].includes(metadata.producer_kind) || metadata.derivation !== undefined))
+    throw new RangeError('native state producer_kind is text, span or capture, and a derived state has none');
   const expected = new Set(['token_ids', 'positions', 'embeddings']);
   const count = (name: string, rank: number): number[] => {
     const tensor = tensors[name];
@@ -830,4 +832,6 @@ export interface NeuralesePort {
  * ids. The state is the span written after that reply; the consumer receives only the span's rows.
  */
 export type NativeWriteContext = { messages: unknown[]; tools: unknown[]; prompt?: number[];
-  promptSegments?: ({ kind: 'tokens'; token_ids: number[] } | { kind: 'native_state'; id: string })[]; reply?: number[] };
+  promptSegments?: ({ kind: 'tokens'; token_ids: number[] } | { kind: 'native_state'; id: string })[]; reply?: number[];
+  /** The chat-template switches the call was rendered with (an operator's `{enable_thinking: false}`). */
+  chat_template_kwargs?: Record<string, unknown> };

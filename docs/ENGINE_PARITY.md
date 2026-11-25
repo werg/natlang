@@ -106,6 +106,7 @@ bandwidth; `--sglang-kv-cache-dtype auto` is the opt-in.
 | b704a8b2f | native-state files: `--native-state` and the page's `native_states` load natlang's store files (a release's `states/<id>.nzs`) through the PUT path (verified once, stored as read); PUT `{"path"}`; non-finite values refused; GGUF state-span format removed | every engine: section "Native state: one format, handed over as files" |
 | 1a7f5015f | a text write or produce span is read in the reader's context (`in-context-text`): `producer_kind` ("text"/"span") is validated native-state metadata (refused with another value or with a `derivation`); a state of the server's identity carrying it, with no `adapter_binding` or `derivation`, is consumed as its own token ids inline with no consume markers, receipt `in-context-text`, recorded by the RL capture as tokens; every produced span carries `producer_kind: "span"` (its content id is the Python engines' for the same span); opt-outs `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0`, `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0`; `/v1/neuralese/info` lists the mode; an in-page reply carries its import receipts (`native_state.imports`) as an HTTP reply does | every engine: Python native and SGLang (`engine.py` `reads_in_context`, `_native_consume_text_in_context`; `sglang_actor.py` `_sglang_import`); the page compiles the same fork sources (werg/wllama builds `server-native-state.cpp`, `server-common.cpp`, `server-context.cpp`) |
 | 89026ef24 | `/v1/natlang/score` `reasoning_ids`: a reasoned item's sampled reasoning ids replace the reasoning text's re-encoding, kept up to the first token the template writes after the reasoning (LFM3 `</think>`); ids need `reasoning` and must lie in the vocabulary (per-item error otherwise); results echo `reasoning_ids: true`, the capture records `reasoning_ids_kept`; split forms use the same ids | every engine: the Python engines splice the same ids (`serve/native_learning.decision_items`, SGLang through `_score_item`); the client sends them from the reasoning generation's RL capture (`native/agent.ts`), opt-out `NATLANG_DECISION_REASONING_IDS=rendered` |
+| b536c7379 | `producer_kind` "capture" (a reply captured in its own context) is valid native-state metadata and splices as stored unless `NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1`; a chat completion's `x_natlang_producer_kind: "capture"` stamps the spans it produces (any value but "capture"/"span" refused); `/v1/neuralese/info` lists `native.producer-kind.capture` | every engine: Python native and SGLang (`engine.py` `reads_in_context`, `_native_capture_impl`; `sglang_actor.py` `_sglang_native_capture`) the same day; the client (`model/native-operator.ts` `grammarCapture`) sends the field for a reply capture when the server lists the capability; the page compiles the same sources (it has no capture yet, row "In-page wllama" in the text-write table) |
 
 ## Record decisions: joint and field by field
 
@@ -166,7 +167,16 @@ known from its store's `text-writes/<id>` mark. The managed fork and the page fr
 `native_state_registry::resolve`, every produced span carries `producer_kind: "span"`, the page compiles the same
 sources). Opt-outs on the serving engine: `NATLANG_NEURALESE_TEXT_IN_CONTEXT=0` (text writes) and
 `NATLANG_NEURALESE_SPAN_IN_CONTEXT=0` (spans) splice as stored. Contextual bodies, optimized, derived and soft states
-still splice exactly on every engine. ts-host accepts the receipt for write-source imports, scoped states, implicit
+still splice exactly on every engine. A third kind, 'capture' (2026-11-25, DECISIONS "Learned compaction on by
+default"), marks a reply captured in its own context (`native.capture` without a text, the grammar capture of a
+compaction operator's reply or a `compact_history` note): its rows carry what the value they attended to gave them,
+which the reply's tokens alone lose (the spliced state beats the same tokens read inline by up to 0.6 nats/token on
+consumer targets), so every engine splices it as stored (`exact-native-state`) unless
+`NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1` reads it inline like a span. Python native and SGLang store it from
+`_native_capture_impl` / `_sglang_native_capture`; the fork (b536c7379, natlang-b12094; the page from the same release) accepts the kind, applies the rule and stamps it on
+the spans of a request with `x_natlang_producer_kind: "capture"` (capability `native.producer-kind.capture`), which
+`grammarCapture` sends for a reply capture (never for a write) when the server lists the capability; the ts-host stores
+accept it. ts-host accepts the receipt for write-source imports, scoped states, implicit
 read occurrences and native-gradient bindings (an in-context read binds no native input).
 `scripts/neuralese_data/neuralese_readback_probe.py` is the acceptance probe (a text-written state, a captured span,
 the same text inline, a shuffled state) against any front.
