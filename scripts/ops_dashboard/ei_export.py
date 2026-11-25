@@ -987,14 +987,15 @@ def open_items_section(st):
 
 
 def free_teacher_candidates():
-    """Free models first seen by the daily check (scripts/teacher_free_models.py) and not yet qualified: open items."""
+    """Free teacher candidates that need a decision (scripts/teacher_free_models.py daily probes, qualifies and admits
+    the rest itself): qualified models whose provider quota group is full (swap one in by hand, or leave it)."""
     rows = []
     try:
         for line in open(OPS + '/teacher-free-models/candidates.jsonl'):
             c = json.loads(line) if line.strip() else {}
-            if c.get('status') == 'new':
-                rows.append({'item': clip(f"Free teacher candidate {c['model']} on {c['provider']} (first seen "
-                                          f"{str(c.get('first_seen', ''))[:10]}): qualify on the teacher set", 260),
+            if c.get('status') == 'qualified':
+                rows.append({'item': clip(f"Free teacher {c['model']} on {c['provider']} qualified "
+                                          f"({c.get('note', '')}): swap it into ops/ei/teachers.json or mark it", 260),
                              'owner': 'teacher-providers (scripts/teacher_free_models.py mark)'})
     except (OSError, ValueError, KeyError):
         pass
