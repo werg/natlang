@@ -12383,3 +12383,8 @@ which the per-part shape quota now holds to 2% each (the part underfills its sha
 threshold was read on the largest merges, not calibrated against audited counts; the subagent->Neuralese rebuild,
 operator and fallow22 builders unchanged (the mix enforces on their output); no unit test of `Collector._pick`'s cycle
 (it reuses tested `cap_shapes`); held effect of any of this: enters with the next held measurement.
+
+
+### 2026-11-25 — Bind Android teacher launch to its owned emulator route
+
+Full-tail readiness inspection found the canonical controller launched console port 5580 while its current fixture module declared emulator-5582. Launch now derives and validates the even emulator console port from that owned serial; physical devices and invalid console ports are refused, and the frozen recipe records both values. Explicit owner hold exits cleanly before any device work. This changes no goals, teacher models or trajectory admission. Inventory: the sole emulator launch in vibestudio_android_tail.py, its subsequent ADB/lease/fixture consumers, and native-support SERIAL agree through the existing fixture authority. Eight actual tail tests passed under LOW0.5GiB (no models/emulators). Live tail remains pending normal full-bulk completion.

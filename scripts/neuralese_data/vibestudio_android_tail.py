@@ -50,6 +50,17 @@ def wait_unit(unit, checkpoint=None):
     return True
 
 
+def owned_emulator_port(serial):
+    """Launch exactly the emulator addressed by the owned fixture lease."""
+    match = re.fullmatch(r'emulator-([0-9]+)', serial)
+    if match is None:
+        raise ValueError('Android teacher requires an owned emulator serial')
+    port = int(match[1])
+    if port < 5554 or port > 5682 or port % 2:
+        raise ValueError('Owned emulator requires an even console port in 5554..5682')
+    return str(port)
+
+
 def selected_goals(cases, fixtures):
     selected = [item for item in fixtures if item['case']['scenario'] in cases]
     assert len(selected) == 8, 'The V21 training scope has eight Android goals, not all thirteen native goals'
@@ -162,6 +173,7 @@ def run_tail(checkpoint):
     driver = Path(pins['driver_checkout'])
     sys.path[:0] = [str(support), str(driver / 'scripts/neuralese_data'), str(driver / 'training/neuralese'), str(driver)]
     fixture_module = importlib.import_module('android_fixtures')
+    emulator_port = owned_emulator_port(fixture_module.SERIAL)
     from vibestudio_campaign import campaign_scope, attempt_context, unfinished_wave
     held = args.held
     _, _, cases = campaign_scope(root / 'catalog.jsonl', held)
@@ -178,7 +190,8 @@ def run_tail(checkpoint):
              'sourceHost': config['host']['commit'], 'releaseSha256': sha(Path(config['releaseRoot']) / 'userland-builds/release.json'),
              'nativeSupportSha256': sha(support / 'android_fixtures.py'), 'scriptSha256': sha(__file__),
              'fixtureApk': str(apk), 'fixtureApkSha256': sha(apk), 'fixtureApkBytes': apk.stat().st_size,
-             'nativeReferencesUsedAsTeacher': False, 'bulkUnit': args.bulk_unit}
+             'nativeReferencesUsedAsTeacher': False, 'bulkUnit': args.bulk_unit,
+             'ownedSerial': fixture_module.SERIAL, 'emulatorConsolePort': emulator_port}
     state = candidate / 'android-tail-v21'
     state.mkdir(exist_ok=True)
     save(state / 'recipe.json', proof)
@@ -188,7 +201,8 @@ def run_tail(checkpoint):
     if not wait_unit(args.bulk_unit, checkpoint):
         return
     if (root / 'stop-after-wave').exists():
-        raise SystemExit('Campaign owner hold retained; no Android teacher started')
+        print('Campaign owner hold retained; no Android teacher started')
+        return
     assert read(candidate / 'pins.json') == pins, 'Release changed while waiting; prepare a successor recipe'
     status = read(root / 'status.json')['cases']
     assert not any(row['status'] == 'pending' and not cases[name].get('requiresAndroidEmulator') for name, row in status.items())
@@ -206,7 +220,7 @@ def run_tail(checkpoint):
     subprocess.run([*ledger, 'run', '--unit', emulator_unit.removesuffix('.service'), '--budget-gb', '4', '--reserve-gb', '7.5',
                     '--priority', 'low', '--no-resumable', '--hold-budget', '--wait', '604800', '--detach', '--workdir', str(driver),
                     '--env', 'ANDROID_HOME=' + str(fixture_module.SDK), '--env', 'ANDROID_AVD_HOME=' + str(fixture_module.AVD_HOME), '--',
-                    str(fixture_module.SDK / 'emulator/emulator'), '-avd', fixture_module.AVD, '-port', '5580', '-no-window', '-no-audio',
+                    str(fixture_module.SDK / 'emulator/emulator'), '-avd', fixture_module.AVD, '-port', emulator_port, '-no-window', '-no-audio',
                     '-no-boot-anim', '-no-snapshot', '-gpu', 'swiftshader_indirect'], check=True)
     device = None
     active_wave = None

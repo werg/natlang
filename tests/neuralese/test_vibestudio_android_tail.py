@@ -13,6 +13,18 @@ tail = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tail)
 
 
+class DeviceRouteTests(unittest.TestCase):
+    def test_launch_port_matches_owned_serial_instead_of_a_different_emulator(self):
+        self.assertEqual(tail.owned_emulator_port('emulator-5582'), '5582')
+        self.assertEqual(tail.owned_emulator_port('emulator-5580'), '5580')
+        self.assertEqual(tail.owned_emulator_port('emulator-5554'), '5554')
+
+    def test_physical_devices_and_invalid_console_ports_are_refused(self):
+        for serial in ['physical-device', 'emulator-5581', 'emulator-0', 'emulator-65534', 'emulator-5582-extra']:
+            with self.subTest(serial=serial), self.assertRaises(ValueError):
+                tail.owned_emulator_port(serial)
+
+
 class ApprovalTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
