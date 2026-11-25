@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-rl-invented-20261125-020600",
+  "owner": "dgx",
+  "path": "data_nvme:natlang-novel-programs/pool/20261125-020600",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 9195608,
+      "sha256": "a61180c1810e1f2daaa97c357a18d6ae9879d8dc4b8261a22a0cfb16cc99f803",
+      "lines": 271
+    },
+    {
+      "path": "repetition.json",
+      "bytes": 2365,
+      "sha256": "0c697eb130a2511f010b7747e67dba4453c19e136ecc25f0adf20d902d12c282"
+    }
+  ],
+  "bytes": 9197973
+}
