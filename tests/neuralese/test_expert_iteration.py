@@ -997,4 +997,3 @@ def test_a_stand_in_unit_and_the_episode_it_replaces_share_one_exposure():
     assert exposure(('filled', 'task-b', 'filled:teacher:pool:t000002:0')) == 1
     assert exposure(('teacher', 'task-c', 'teacher:pool:t000003:0')) == 0
     assert exposure(('operators', 'task-a', '0:abc')) == 0       # a round whose rest is no episode key
-
