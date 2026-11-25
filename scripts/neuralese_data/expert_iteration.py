@@ -1085,10 +1085,11 @@ def live_holdout_registry(live_works):
 
 def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None,
                       live_registry=None, max_target_tokens=0, registry_repo=None, registry_ref=None,
-                      max_forward_tokens=0, unfilled_live_teacher=None):
+                      max_forward_tokens=0, unfilled_live_teacher=None, extra=()):
     """The mix build (``sft_sources build``) of a cycle or an async round: Ambient frontier build from WORK's replayed
     successes (own first, then teacher; observed-live teacher episodes against ``live_registry``), the teacher pools,
-    aux parts and the lineage's prefer-unseen builds."""
+    aux parts and the lineage's prefer-unseen builds; ``extra``: more build flags (``--build-args``, e.g. the diversity
+    opt-outs ``--max-shape-share 0 --aux-teacher-selection ignore --mix-near-duplicates keep``)."""
     return [PY, Path(repo) / 'scripts' / 'neuralese_data' / 'sft_sources.py', 'build', '--work', work,
             '--out', out, '--tokenizer', Path(work) / 'tokenizer', '--frontier', frontier,
             '--allow-stale-teacher', '--october-share', '0', '--exclude-run', 'grpo-v2/',
@@ -1103,7 +1104,7 @@ def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_
             *(['--registry-ref', registry_ref] if registry_ref is not None else []),
             *(['--max-target-tokens', max_target_tokens] if max_target_tokens else []),
             *(['--max-forward-tokens', max_forward_tokens] if max_forward_tokens else []),
-            *(['--unfilled-live-teacher', unfilled_live_teacher] if unfilled_live_teacher else [])]
+            *(['--unfilled-live-teacher', unfilled_live_teacher] if unfilled_live_teacher else []), *extra]
 
 
 def chain_tokens_per_s(train_jsonl, first_step=0):
@@ -2123,7 +2124,8 @@ class Cycle:
                                     prefer_unseen=self.train_policy()[2], teacher_budget=self.a.teacher_budget,
                                     own_share=self.a.own_share,
                                     live_registry=live_holdout_registry(getattr(self.a, 'live_work', None) or ()),
-                                    registry_repo=self.live_data_owner(), registry_ref=self.live_data_ref())
+                                    registry_repo=self.live_data_owner(), registry_ref=self.live_data_ref(),
+                                    extra=(getattr(self.a, 'build_args', '') or '').split())
         return repo, list(map(str, command))
 
     def build_stage(self):
@@ -3197,7 +3199,8 @@ class AsyncRoundDriver:
             held_pin=a.held_pin, held_series_host=getattr(a, 'held_profile', 'pop'), held_samples=a.held_samples,
             held_slots=a.held_slots,
             no_held_reuse=False, strict_held_reuse=a.strict_held_reuse, colab_hosts=a.colab_hosts, fallback_wait_minutes=a.fallback_wait_minutes,
-            collect_profile='dgx', sft_profile='dgx', select_args=a.select_args, prefer_unseen=[],
+            collect_profile='dgx', sft_profile='dgx', select_args=a.select_args,
+            build_args=getattr(a, 'build_args', ''), prefer_unseen=[],
             # The controller's immutable source supplies data tooling; the actor/learner
             # keep --commit/--pin. Explicit old-pin paths opt out at a normal resume.
             fill_repo=getattr(a, 'fill_repo', None) or getattr(a, 'data_repo', None) or str(REPO),
@@ -3895,7 +3898,8 @@ class AsyncRoundDriver:
                                   registry_ref=self.c.live_data_ref(),
                                   max_target_tokens=size['max_target_tokens'],
                                   max_forward_tokens=size['max_forward_tokens'],
-                                  unfilled_live_teacher=getattr(self.a, 'unfilled_live_teacher', None))
+                                  unfilled_live_teacher=getattr(self.a, 'unfilled_live_teacher', None),
+                                  extra=(getattr(self.a, 'build_args', '') or '').split())
         return list(map(str, frontier)), [list(map(str, x)) for x in lines], list(map(str, build))
 
     def failed_policies(self):
@@ -5137,6 +5141,7 @@ def main():
     y.add_argument('--live-work', action='append', default=[], metavar='WORK',
                    help='a growing WORK of observed-live teacher episodes (live_campaign_ingest.py; async-drive\'s flag)')
     y.add_argument('--select-args', default='', help='more select flags (e.g. "--limit 3000")')
+    y.add_argument('--build-args', default='', help='more mix build flags (sft_sources build; e.g. "--max-shape-share 0")')
     y.add_argument('--k', type=int, default=4)
     y.add_argument('--neuralese-variants', default=str(REPO / 'runs/natlang-rl-neuralese-variants-20261113/cases.jsonl'),
                    help='Neuralese-declaring variants of pool tasks (registry natlang-rl-neuralese-variants-20261113, '
@@ -5355,6 +5360,8 @@ def main():
     ad.add_argument('--snapshot-min-hours', type=float, default=1.0,
                     help="a round's snapshot waits until the newest policy's collection ran this long")
     ad.add_argument('--select-args', default='')
+    ad.add_argument('--build-args', default='',
+                    help='more mix build flags (sft_sources build), e.g. the diversity opt-outs "--max-shape-share 0"')
     ad.add_argument('--neuralese-variants', default=str(REPO / 'runs/natlang-rl-neuralese-variants-20261113/cases.jsonl'))
     ad.add_argument('--neuralese-variant-share', type=float, default=0.5)
     ad.add_argument('--no-neuralese-variants', action='store_true')

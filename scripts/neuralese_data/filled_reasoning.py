@@ -235,7 +235,9 @@ def teacher_episodes(works, held_manifest, funnel, drifted=True, skip_mismatched
                                         if live else {})}
     excluded = held_excluded_ids(held_manifest, tasks, held_closure(held_manifest))
     funnel['teacher']['held_excluded_filled'] = sum(e['task_id'] in excluded for e in found.values())
-    return [e for e in found.values() if e['task_id'] not in excluded]
+    from natlang_neuralese.common.diversity import task_shapes
+    shapes = task_shapes(tasks.values())     # each episode's program shape (``ordered``'s shape cap)
+    return [{**e, 'shape': shapes.get(e['task_id'])} for e in found.values() if e['task_id'] not in excluded]
 
 
 ITEM_KEYS = ('key', 'work', 'name', 'task_id', 'verification_mode', 'live_source')
@@ -646,15 +648,27 @@ def prefer(episodes, rates):
     return sorted(episodes, key=rank)
 
 
-def ordered(episodes, prefer_works, rates, seed):
+def ordered(episodes, prefer_works, rates, seed, shape_cap=None):
     """The generation order: shuffled (``seed``), tasks the student fails first (``prefer``, with ``rates``), and
-    episodes of the ``prefer_works`` WORKs before every other (stable: each group keeps that order)."""
+    episodes of the ``prefer_works`` WORKs before every other (stable: each group keeps that order). Within each of the
+    two groups every task's first episode comes before any task's second (``diversity.round_robin_by``) and no program
+    shape (an episode's ``shape``, ``teacher_episodes``) takes more than ``shape_cap`` of any prefix
+    (``diversity.cap_shapes``; default ``diversity.SHAPE_CAP``, 0: neither): the fill's actor time spreads over distinct
+    programs instead of one template's items or one task's several teacher episodes."""
+    from natlang_neuralese.common.diversity import SHAPE_CAP, cap_shapes, round_robin_by
+    shape_cap = SHAPE_CAP if shape_cap is None else shape_cap
     episodes = list(episodes)
     random.Random(seed).shuffle(episodes)
     if rates is not None:
         episodes = prefer(episodes, rates)
     first = set(prefer_works)
-    return sorted(episodes, key=lambda e: e['work'] not in first)
+    out = []
+    for group in ([e for e in episodes if e['work'] in first], [e for e in episodes if e['work'] not in first]):
+        if shape_cap > 0:
+            group = cap_shapes(round_robin_by(group, lambda e: e['task_id']),
+                               lambda e: e.get('shape') or e['task_id'], shape_cap)
+        out += group
+    return out
 
 
 class EpisodeQueue:
@@ -804,7 +818,8 @@ def generate(args):
                                 skip_mismatched_live=args.live_mismatch == 'skip')
     done = done_keys(out)
     rates = load_rates(args.prefer_rates) if args.prefer_rates else None
-    todo = ordered([e for e in episodes if e['key'] not in done], prefer_works, rates, args.seed)
+    todo = ordered([e for e in episodes if e['key'] not in done], prefer_works, rates, args.seed,
+                   getattr(args, 'shape_cap', None))
     if args.limit:
         todo = todo[:args.limit]
     queue = EpisodeQueue(todo, seen=done | {e['key'] for e in episodes}, standing=bool(args.rescan_minutes))
@@ -880,7 +895,7 @@ def generate(args):
                 record_fills(out, works, held,
                              **registry_options(registry_repo, ref=selected_ref, writer=True))
                 registry_ref = selected_ref
-                added = queue.add_first(ordered(found, prefer_works, rates, args.seed))
+                added = queue.add_first(ordered(found, prefer_works, rates, args.seed, getattr(args, 'shape_cap', None)))
                 event = {'event': 'rescan', 'works': prefer_works, 'registry_ref': selected_ref,
                          'episodes': len(found), 'added': added}
             except Exception as error:      # a WORK caught mid-extraction: the next rescan reads it again
@@ -1388,6 +1403,9 @@ def build_parser():
     g.add_argument('--score-horizon', type=int, default=1, help='later teacher actions in the score')
     g.add_argument('--max-tokens', type=int, default=4096, help='reasoning cap per candidate')
     g.add_argument('--max-len', type=int, default=32000)
+    g.add_argument('--shape-cap', type=float, default=None,
+                   help='the generation order: breadth-first over tasks, and no program shape above this share of any '
+                        'prefix (default diversity.SHAPE_CAP; 0: the shuffled, rate-preferred order alone)')
     g.add_argument('--band', type=float, nargs=2, default=(0.67, 1.5))
     g.add_argument('--admit-drifted', choices=('on', 'off'), default='on',
                    help='also fill verified successes whose replay display drifted from the recording '

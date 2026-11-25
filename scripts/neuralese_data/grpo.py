@@ -112,6 +112,8 @@ from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 from natlang_neuralese.common.sampling import RL_TOP_P, check_top_p, sampling_law_of  # noqa: E402
 from natlang_neuralese.rl.held_eval import EPISODE_MODEL_CALLS, LEGACY_SAMPLING  # noqa: E402
 from natlang_neuralese.common.decision_objective import option_sequence_scores  # noqa: E402
+# the program-shape cap of collection orders: one implementation
+from natlang_neuralese.common.diversity import SHAPE_CAP, SHAPE_CAP_FLOOR, cap_shapes  # noqa: E402,F401
 
 BASE = str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
 
@@ -783,12 +785,16 @@ class Collector:
                               'own_measured': len(self.own), 'own_in_band': len(ids & set(self.own))}), flush=True)
 
     def _pick(self):
-        """A learnable task (``1 - explore`` of groups, cycling a reshuffled list), else the next unmeasured pool task."""
+        """A learnable task (``1 - explore`` of groups, cycling a reshuffled list that no program shape takes more than
+        ``--explore-shape-cap`` of any prefix of), else the next unmeasured pool task."""
         self._learnable()
         if self.learnable_ids and self.rng.random() >= self.args.explore:
             if not self.learnable_order:
-                self.learnable_order = list(self.learnable_ids)
-                self.rng.shuffle(self.learnable_order)
+                order = list(self.learnable_ids)
+                self.rng.shuffle(order)
+                if self.walk.shapes:    # the cycle spreads over shapes as the walk does (``--explore-shape-cap``)
+                    order = cap_shapes(order, lambda k: self.walk.shapes.get(k, k), self.walk.shape_cap)[::-1]
+                self.learnable_order = order
             return self.by_id[self.learnable_order.pop()]
         row, self.cursor = self.walk.next(self.cursor, self.measured, self.rng)
         return row
@@ -3979,9 +3985,9 @@ class ExploreWalk:
     COMMON = frozenset({'multi_function'})
 
     def __init__(self, tasks, wrapper_share=1., held_weight=1., shape_cap=0.):
-        if 0 < shape_cap < 1 and tasks:
-            shapes = task_shapes(tasks)
-            tasks = cap_shapes(tasks, lambda row: shapes[row['id']], shape_cap)
+        self.shapes = task_shapes(tasks) if 0 < shape_cap < 1 and tasks else {}
+        if self.shapes:
+            tasks = cap_shapes(tasks, lambda row: self.shapes[row['id']], shape_cap)
         self.tasks, self.wrapper_share, self.held_weight, self.shape_cap = tasks, wrapper_share, held_weight, shape_cap
         self.weighted = wrapper_share < 1 or held_weight != 1
         self.features = task_features(tasks) if self.weighted and tasks else {}
@@ -4041,58 +4047,11 @@ def family_round_robin(rows, rng):
     return out
 
 
-SHAPE_CAP = 0.01        # the share of any prefix of a collection order one program shape may take (0: no cap)
-SHAPE_CAP_FLOOR = 4     # rows of each shape always admitted before the share applies (a short prefix stays mixed)
-
-
 def task_shapes(rows):
-    """id -> program shape (``measure_repetition.program_shape``, the one implementation)."""
-    sys.path.insert(0, str(REPO / 'scripts/rl_tasks'))
-    from measure_repetition import program_shape
-    return {row['id']: program_shape(row) for row in rows}
-
-
-def cap_shapes(rows, shape_of, share=SHAPE_CAP, floor=SHAPE_CAP_FLOOR):
-    """``rows`` (an order) reordered so that no program shape (``shape_of(row)``) takes more than ``share`` of any
-    prefix, beyond its first ``floor`` rows: a row whose shape is at its cap waits, in order, and enters as soon as the
-    prefix has grown enough. Every row is kept: once only capped shapes are left they follow least-placed first
-    (round-robin over the shapes). Spreads collection effort over distinct programs instead of items of one template
-    (DECISIONS 2026-11-25 "program-shape cap")."""
-    if share <= 0 or share >= 1:
-        return list(rows)
-    counts, waiting, out = collections.Counter(), {}, []
-
-    def allowed(key):
-        return counts[key] + 1 <= max(floor, share * (len(out) + 1))   # placed, the shape stays within its share
-
-    def place(key):
-        out.append(waiting[key].popleft())
-        counts[key] += 1
-        if not waiting[key]:
-            del waiting[key]
-
-    def drain():
-        progressed = True
-        while progressed and waiting:
-            progressed = False
-            for key in list(waiting):
-                if allowed(key):
-                    place(key)
-                    progressed = True
-
-    for row in rows:
-        key = shape_of(row)
-        if key not in waiting and allowed(key):
-            out.append(row)
-            counts[key] += 1
-            drain()
-        else:
-            waiting.setdefault(key, collections.deque()).append(row)
-    while waiting:
-        drain()
-        if waiting:
-            place(min(waiting, key=lambda k: counts[k]))
-    return out
+    """id -> program shape (``diversity.task_shapes``: the program with item data abstracted, one template's lowercase
+    item words merged; the one implementation)."""
+    from natlang_neuralese.common.diversity import task_shapes as shapes
+    return shapes(rows)
 
 
 def load_tasks(args, work=None):

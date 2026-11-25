@@ -16,20 +16,20 @@ from __future__ import annotations
 import argparse
 import collections
 import json
-import math
 import os
 import re
 import sys
 from pathlib import Path
 
-DIGITS = re.compile(r'\d+(?:\.\d+)?')
-# Quoted literals: double-quoted and backtick spans, and single-quoted spans only when the quote is not inside a word.
-# A prose apostrophe ("the lane's limit") is not a string opener; quotes never span lines.
-QUOTED = re.compile(r'"(?:[^"\\\n]|\\.)*"|(?<!\w)\'(?:[^\'\\\n]|\\.)*\'(?!\w)|`[^`]*`')
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+# the shape key and its text normalization: one implementation (natlang_neuralese.common.diversity)
+from natlang_neuralese.common.diversity import (DIGITS, ITEM_TOKEN, LITERAL_UNION, QUOTED, QUOTED_JSON, SPACE,  # noqa: E402,F401
+                                                _unquote, effective, normalize, program_shape, program_text_shape,
+                                                split_file, task_shapes, type_shape)
+
 CODE_SPAN = re.compile(r'`([^`]+)`')
 CALL = re.compile(r'\b([A-Za-z_]\w*)\s*\(')
 CODE_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|\d+(?:\.\d+)?')
-SPACE = re.compile(r'\s+')
 # Broad-builder source modules that are separate program generators (scripts/rl_tasks/sources/*.py).
 OWN_GENERATOR_SOURCES = frozenset({'composed', 'decisions', 'codebase-ops', 'bgkit'})
 # Semantics that verify effects or state (files, services, function checks, repaired codebases), not only an answer.
@@ -55,18 +55,6 @@ def write_text_atomic(path, text):
         raise OSError(f'{path} does not hold what was written')
 
 
-def normalize(text):
-    return SPACE.sub(' ', DIGITS.sub('#', QUOTED.sub('"…"', text))).strip()
-
-
-def split_file(text):
-    if text.startswith('---'):
-        parts = text.split('---', 2)
-        if len(parts) == 3:
-            return parts[1], parts[2]
-    return '', text
-
-
 def frontmatter_field(header, name):
     """The raw text of one top-level frontmatter field, including its indented lines."""
     lines, out, inside = header.splitlines(), [], False
@@ -90,21 +78,6 @@ def code_skeleton(code):
     return re.sub(r'\s+', '', CODE_LITERAL.sub('L', code))
 
 
-QUOTED_JSON = re.compile(r'"(?:[^"\\]|\\.)*"')
-
-
-def _unquote(match):
-    try:
-        return json.loads(match.group(0))
-    except ValueError:
-        return match.group(0)
-
-
-def type_shape(text):
-    """A frontmatter type with its YAML quoting removed and string-literal members abstracted: `"{ a: number }[]"`
-    keeps its field names and shape, `"\\"x\\" | \\"y\\""` becomes `L|L`. (`normalize` blanks every quoted span, and
-    frontmatter types are quoted, so using it on types erased all argument and return types.)"""
-    return re.sub(r'\s+', '', re.sub(r'"[^"]*"', 'L', QUOTED_JSON.sub(_unquote, text)))
 
 
 def functional_signature(row):
@@ -197,47 +170,6 @@ def semantic_fp_shape(semantics):
     return {key: value for key, value in shape.items() if value}
 
 
-# Item data a template program spells into its prose: names and places (a capitalized word inside a sentence), code
-# identifiers (snake_case, camelCase, dotted or slashed paths, repo/owner names) and long hex ids. Sentence-initial
-# words, digits and quoted spans are handled by `normalize` or kept: they are the template's own words.
-ITEM_TOKEN = re.compile(r'(?<![.!?:;] )(?<!^)\b[A-Z][\w-]*|'                      # a capitalized word mid-sentence
-                        r'\b\w*[a-z][A-Z]\w*\b|'                                 # camelCase
-                        r'[\w@~-]*(?:[./\\:]\w[\w@~-]*)+|'                       # paths, dotted names, URLs, repo/owner
-                        r'\b\w+_\w+\b|\b[0-9a-f]{7,}\b')                          # snake_case, hex ids
-
-
-LITERAL_UNION = re.compile(r'L(?:\|L)+')
-
-
-def program_text_shape(text):
-    """Program text with literal item data abstracted (``normalize`` plus ITEM_TOKEN -> I): what a template keeps
-    when it wraps another item."""
-    return SPACE.sub(' ', ITEM_TOKEN.sub('I', normalize(text))).strip()
-
-
-def program_shape(row):
-    """A task's program shape: its callable folder with literal item data abstracted. Every file (the root's own stem
-    abstracted from the paths), its frontmatter types (``type_shape``) and its text (``program_text_shape``), the
-    services it binds and its curriculum mode; a sha256 prefix. ``semantics.inputs`` is item data and not part of it.
-    Thousands of tasks of one template (one wrapper over many items) share a shape, which their family count does not
-    show (DECISIONS 2026-11-25 "program-shape cap"). A row without semantics is its own shape."""
-    import hashlib
-    semantics = row.get('semantics') or {}
-    files = semantics.get('files') or {}
-    if not files:
-        return 'id:' + str(row.get('id'))
-    stem = str(semantics.get('root') or '').removesuffix('.nl').removesuffix('.ts')
-    parts = []
-    for path, text in sorted(files.items()):
-        header, body = split_file(text) if path.endswith('.nl') else ('', text)
-        name = 'ROOT' + path[len(stem):] if stem and path.startswith(stem) else path
-        # a union of literals (a label set) is item data: its size too
-        parts.append([program_text_shape(name), LITERAL_UNION.sub('L|L', type_shape(header)), program_text_shape(body)])
-    key = json.dumps({'files': parts, 'services': sorted(semantics.get('services') or {}),
-                      'mode': curriculum_of(row).get('mode')}, sort_keys=True)
-    return hashlib.sha256(key.encode()).hexdigest()[:16]
-
-
 def program_features(row):
     semantics = row['semantics']
     files = {path: text for path, text in semantics['files'].items() if path.endswith('.nl')}
@@ -308,13 +240,6 @@ def program_features(row):
     }
 
 
-def effective(counter):
-    total = sum(counter.values())
-    if not total:
-        return 0.
-    return math.exp(-sum((n / total) * math.log(n / total) for n in counter.values()))
-
-
 CONSTRUCTS = ('multi_function', 'call_depth_ge_3', 'neuralese_result', 'typed_neuralese_result',
               'neuralese_argument', 'neuralese_fan_in', 'iterate', 'neuralese_iterate', 'folder_reducer',
               'readout_decision', 'decide_call', 'skills', 'services', 'effect_state_oracle', 'returned_state_oracle',
@@ -325,7 +250,7 @@ CONSTRUCTS = ('multi_function', 'call_depth_ge_3', 'neuralese_result', 'typed_ne
 def report(paths, label=None):
     rows = 0
     instructions, programs, structures = collections.Counter(), collections.Counter(), collections.Counter()
-    shapes = collections.Counter()
+    shape_rows, base_shapes = [], collections.Counter()
     family_instructions = collections.defaultdict(set)
     family_rows = collections.Counter()
     family_programs = collections.defaultdict(set)
@@ -344,7 +269,9 @@ def report(paths, label=None):
                 instructions[features['instruction']] += 1
                 programs[features['program']] += 1
                 structures[features['structure']] += 1
-                shapes[program_shape(row)] += 1
+                base_shapes[program_shape(row)] += 1
+                shape_rows.append({'id': f'{len(shape_rows)}', 'semantics': row.get('semantics'),
+                                   'curriculum': {'mode': curriculum_of(row).get('mode')}})
                 family_instructions[features['family']].add(features['instruction'])
                 family_rows[features['family']] += 1
                 generators[features['generator']] += 1
@@ -352,6 +279,8 @@ def report(paths, label=None):
                 for key in CONSTRUCTS:
                     constructs[key] += bool(features[key])
                 family_programs[features['family']].add(features['program'])
+    # shapes: one template's base shapes merged (``diversity.task_shapes``)
+    shapes = collections.Counter(task_shapes(shape_rows).values())
     narrow = [family for family, texts in family_instructions.items() if len(texts) <= 3]
     broad = [family for family, texts in family_programs.items() if len(texts) >= 20]
     top = sum(n for _, n in instructions.most_common(10))
@@ -368,6 +297,8 @@ def report(paths, label=None):
         'distinct_structures': len(structures), 'effective_structures': round(effective(structures), 1),
         'top_structure_share': round(structures.most_common(1)[0][1] / rows, 4) if rows else None,
         'distinct_shapes': len(shapes), 'effective_shapes': round(effective(shapes), 1),
+        'top_shape_share': round(shapes.most_common(1)[0][1] / rows, 4) if rows else None,
+        'distinct_base_shapes': len(base_shapes), 'effective_base_shapes': round(effective(base_shapes), 1),
         'top10_shape_share': round(sum(n for _, n in shapes.most_common(10)) / rows, 4) if rows else None,
         'constructs': {key: {'rows': value, 'share': round(value / rows, 4) if rows else None}
                        for key, value in sorted(constructs.items())},

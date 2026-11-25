@@ -865,8 +865,14 @@ def main():
                         'takes that family\'s tasks')
     p.add_argument('--route-min-scored', type=int, default=30)
     p.add_argument('--seed', type=int, default=20261115)
+    p.add_argument('--shape-cap', type=float, default=None,
+                   help='the share of any prefix of the campaign order one program shape (diversity.task_shapes) may '
+                        'take, after the tiers and the family round-robin (default diversity.SHAPE_CAP; 0: no cap)')
     p.add_argument('--seed-base', type=int, default=50_000_000)
     args = p.parse_args()
+    if args.shape_cap is None:
+        from natlang_neuralese.common.diversity import SHAPE_CAP
+        args.shape_cap = SHAPE_CAP
     from natlang_neuralese.rl.held_eval import EPISODE_MODEL_CALLS
     args.max_model_requests = args.max_model_requests or EPISODE_MODEL_CALLS
     work = Path(args.work)
@@ -902,6 +908,9 @@ def main():
             coverage, rank, tiers = {}, base_rank(rates, args.pass_band), BASE_TIERS
         ordered = order_tasks(rows, rank, args.seed,
                               sub=lambda row: len((coverage.get(row['id']) or {}).get('failed_by') or ()))
+        if args.shape_cap > 0:   # no program shape above --shape-cap of any prefix of the campaign order
+            shapes = grpo.task_shapes(ordered)
+            ordered = grpo.cap_shapes(ordered, lambda row: shapes[row['id']], args.shape_cap)
         counts = {}
         with (work / 'tasks.jsonl.tmp').open('w') as handle:
             for row in ordered:
@@ -913,6 +922,7 @@ def main():
         (work / 'inputs.json').write_text(json.dumps({'schema': 'natlang.teacher-pool-inputs/1',
             'root_mode': args.root_mode, 'tasks_sha256': sha256_file_hex(work / 'tasks.jsonl'),
             'pool_sha256': sha256_file_hex(work / 'pool.json'), 'eligible': len(rows), 'tiers': counts,
+            'shape_cap': args.shape_cap,
             **({'selection': selection} if selection else {})}, indent=2) + '\n')
     validate_pool_resume(work, args)
     specs = args.teacher or [{'model_id': args.model_id, 'endpoint': args.endpoint, 'api_key_env': args.api_key_env,
