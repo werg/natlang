@@ -228,7 +228,7 @@ def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, 
     monkeypatch.setattr(vibestudio_campaign, 'campaign_scope', lambda *_: (None, {}, cases))
     monkeypatch.setattr(vibestudio_campaign, 'attempt_context', lambda *_: ('new-release', provenance, {'PINNED': 'yes'}))
     monkeypatch.setattr(vibestudio_campaign, 'prerequisite_holds', lambda *_: {})
-    monkeypatch.setattr(vibestudio_campaign, 'sync_index', lambda *_: None)
+    monkeypatch.setattr(vibestudio_campaign, 'sync_index', lambda *_, **__: None)
     monkeypatch.setattr(vibestudio_campaign.shutil, 'disk_usage', lambda _: SimpleNamespace(free=100 * 1024**3))
     archived = []
     monkeypatch.setattr(vibestudio_campaign, 'remote_archive', lambda *args, **kwargs: archived.append(kwargs['wave']))
@@ -532,7 +532,7 @@ def test_cohort_exports_are_resumable_for_ledger_backfill(monkeypatch, tmp_path)
     (tmp_path / 'waves').mkdir()
     args = SimpleNamespace(root=tmp_path, archive_host='dgx', archive_repo=Path('/repo'),
         archive=Path('/archive'), archive_held=Path('/held.json'), defer_export=False)
-    monkeypatch.setattr(vibestudio_campaign, 'transfer', lambda *_: None)
+    monkeypatch.setattr(vibestudio_campaign, 'transfer', lambda *_, **__: None)
     commands, probes = [], []
     def run(command, **_):
         commands.append(command)
@@ -795,3 +795,94 @@ def test_tail_fallback_only_fills_workers_without_padding_with_retries():
     result = vibestudio_campaign.next_wave(cases,rows,64,concurrency=8)
     assert len(result)==9
     assert all(rows[name]['cumulative_teacher_attempts']==0 for name in result)
+
+
+@pytest.mark.parametrize('command,code', [(['ssh', 'archive-host'], 255), (['rsync', 'owned-source'], 12)])
+def test_standing_archive_outage_retries_past_bounded_window_without_teacher(monkeypatch, tmp_path, command, code):
+    from types import SimpleNamespace
+    calls = []
+    def owned_run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, code if len(calls) <= 6 else 0, stdout='verified')
+    owner = SimpleNamespace(requested=False, run=owned_run)
+    monkeypatch.setattr(vibestudio_campaign.time, 'sleep', lambda _: None)
+    original = tmp_path/'retained-capture.json'; original.write_bytes(b'actual completed capture')
+    health = tmp_path/'archive-health.json'
+    result = vibestudio_campaign.archive_transport(command, checkpoint=owner, health_path=health,
+                                                   capture_output=True, input='bound inventory')
+    assert result.stdout == 'verified' and len(calls) == 7
+    assert all(kwargs['input'] == 'bound inventory' for _, kwargs in calls)
+    assert vibestudio_campaign.read(health)['phase'] == 'archive-connected'
+    assert original.read_bytes() == b'actual completed capture'
+
+
+def test_owned_archive_checkpoint_preserves_capture_without_failed_verdict(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    owner = SimpleNamespace(requested=False)
+    calls = []
+    def owned_run(argv, **kwargs):
+        calls.append(argv)
+        if len(calls) == 4:
+            owner.requested = True
+        return subprocess.CompletedProcess(argv, 255)
+    owner.run = owned_run
+    monkeypatch.setattr(vibestudio_campaign.time, 'sleep', lambda _: None)
+    retained = tmp_path/'raw.json'; retained.write_bytes(b'original')
+    with pytest.raises(vibestudio_campaign.CheckpointRequested):
+        vibestudio_campaign.archive_transport(['ssh'], checkpoint=owner)
+    assert len(calls) == 4 and retained.read_bytes() == b'original'
+    assert not (tmp_path/'result.json').exists()
+
+
+@pytest.mark.parametrize('code', [11, 23, 24])
+def test_owned_durable_archive_does_not_retry_integrity_failure(monkeypatch, code):
+    from types import SimpleNamespace
+    calls = []
+    def owned_run(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, code)
+    with pytest.raises(subprocess.CalledProcessError):
+        vibestudio_campaign.archive_transport(['rsync'], checkpoint=SimpleNamespace(requested=False, run=owned_run))
+    assert len(calls) == 1
+
+
+def test_standing_durable_archive_optout_is_bounded(monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setenv('NATLANG_CAMPAIGN_DURABLE_ARCHIVE', '0')
+    monkeypatch.setattr(vibestudio_campaign.time, 'sleep', lambda _: None)
+    calls = []
+    def owned_run(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 255)
+    with pytest.raises(subprocess.CalledProcessError):
+        vibestudio_campaign.archive_transport(['ssh'], checkpoint=SimpleNamespace(requested=False, run=owned_run))
+    assert len(calls) == 4
+
+
+def test_ambiguous_remote_job_submission_is_never_retried(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    (tmp_path/'waves').mkdir()
+    args = SimpleNamespace(root=tmp_path, archive_host='dgx', archive_repo=Path('/repo'),
+        archive=Path('/archive'), archive_held=Path('/held'), defer_export=False)
+    monkeypatch.setattr(vibestudio_campaign, 'transfer', lambda *_, **__: None)
+    launched = []
+    def submit(argv, **kwargs):
+        if 'memory_ledger.py' in argv[-1]:
+            launched.append(argv)
+            raise subprocess.CalledProcessError(255, argv)
+        return subprocess.CompletedProcess(argv, 1)
+    monkeypatch.setattr(vibestudio_campaign.subprocess, 'run', submit)
+    owner = SimpleNamespace(requested=False, run=lambda argv, **_: subprocess.CompletedProcess(argv, 0))
+    with pytest.raises(subprocess.CalledProcessError):
+        vibestudio_campaign.remote_archive(args, Path('/archive/0001'), {'goal': {'status': 'verified'}},
+                                           tmp_path/'capture', checkpoint=owner)
+    assert len(launched) == 1
+
+
+def test_archive_reconnect_clears_previous_owner_network_wait(tmp_path):
+    from types import SimpleNamespace
+    health = tmp_path/'archive-health.json'
+    vibestudio_campaign.publish(health, {'phase': 'archive-network-wait', 'transport_failures': 9})
+    owner = SimpleNamespace(requested=False, run=lambda argv, **_: subprocess.CompletedProcess(argv, 0))
+    vibestudio_campaign.archive_transport(['ssh'], checkpoint=owner, health_path=health)
+    assert vibestudio_campaign.read(health)['phase'] == 'archive-connected'

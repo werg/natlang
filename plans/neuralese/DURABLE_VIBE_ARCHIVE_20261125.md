@@ -1,0 +1,7 @@
+# Durable campaign archive ownership
+
+Before-edit inventory: the only SSH send implementation is `vibestudio_campaign.archive_transport`; transfer uses it for mkdir, rsync and checksum comparison; remote_archive additionally uses it for immutable receipt/wave metadata and admitted seed reuse; sync_index uses it for status/reused/finished indexes. Drive owns all standing seed/wave/index operations. Android tail invokes that canonical drive. Standalone recovery senders have no persistent collection owner and retain bounded attempts. Remote export job submission is deliberately a direct subprocess and is not an idempotent transport retry. DGX exporter/ingester have no SSH send operation; model engines/learner/held are not archive senders.
+
+`CollectorCheckpoint.run` currently owns the local model collector, while archival subprocesses escape that owner. Generalize its existing subprocess ownership to optional request files plus communicate/input/captured output; managed collectors retain their existing request-file behavior. Owned archive calls use that same cancellation and join path.
+
+Default standing campaigns retry only proven idempotent transport failures while retaining local captures; they publish archive-health state and never repeat a teacher. Checkpoints stop waiting cleanly without inventing an outcome. Missing-source/checksum/file errors and ambiguous remote job submission remain errors. `NATLANG_CAMPAIGN_DURABLE_ARCHIVE=0` restores bounded owned behavior; direct one-shot operations stay bounded. Existing attempt-count setting remains valid.

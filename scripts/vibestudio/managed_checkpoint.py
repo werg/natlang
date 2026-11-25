@@ -47,16 +47,27 @@ class CollectorCheckpoint:
         self.signal = signal.Signals(signum).name
         self._notify()
 
-    def run(self, argv, *, request_file, **kwargs):
+    def run(self, argv, *, request_file=None, **kwargs):
         if self.requested:
             return subprocess.CompletedProcess(argv, 130)
-        self.request_file = Path(request_file)
+        self.request_file = Path(request_file) if request_file is not None else None
         self.signalled = False
         try:
+            capture = kwargs.pop('capture_output', False)
+            data = kwargs.pop('input', None)
+            if capture:
+                if 'stdout' in kwargs or 'stderr' in kwargs:
+                    raise ValueError('capture_output cannot be combined with stdout/stderr')
+                kwargs.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if data is not None:
+                if 'stdin' in kwargs:
+                    raise ValueError('input cannot be combined with stdin')
+                kwargs['stdin'] = subprocess.PIPE
             self.child = subprocess.Popen(argv, **kwargs)
             if self.requested:
                 self._notify()
-            return subprocess.CompletedProcess(argv, self.child.wait())
+            stdout, stderr = self.child.communicate(input=data)
+            return subprocess.CompletedProcess(argv, self.child.returncode, stdout, stderr)
         finally:
             self.child = None
             self.request_file = None
