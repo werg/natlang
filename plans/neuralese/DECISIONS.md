@@ -13194,3 +13194,21 @@ uses the selected resource class's real capacity. `--mixed-deployment-waves`
 restores prior mixed grouping. Inventory: `VIBE_RESOURCE_WAVES_20261125.md`.
 Actual89 campaign tests passed (0.70s/51.8MiB); no paid probe. Existing useful
 collection continues; the new driver enters at a safe checkpoint.
+
+### 2026-11-25 — Account for native provider faults behind a quiesced caller
+
+V34 notification refresh preserved the changed notice correctly but omitted the
+explicitly requested explanation after two captured model exchanges failed with
+`fetch failed`. The goal remains failed; it is not recovered by dropping a
+report requirement. The outer caller rendered this as a quiesced description,
+which legacy operational-text matching misses. Failed/partial receipt producers
+now record authoritative terminal generation/score transport errors under the
+actual errored root, with call IDs and canonical error hashes. Successful
+exchanges/retries, unrelated roots, application/model text and invalid captures
+cannot supply this evidence. An explicitly checked empty evidence list disables
+legacy text fallback; old receipts retain their conservative text classifier.
+Actual exposure and raw data remain unchanged, while retry accounting excludes
+attempts contaminated by an unrecovered provider fault (without claiming it was
+the only cause). Existing opt-out retained. Inventory updated in
+`VIBESTUDIO_TRANSPORT_ACCOUNTING_20261124.md`;100 actual campaign tests passed
+(0.56s/53.4MiB), no inference probe or current campaign interruption.

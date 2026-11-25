@@ -58,3 +58,28 @@ structural; cancelled cases neither trigger holds nor dilute the denominator.
 This is a bounded circuit-breaker policy change, not a diagnosis of the network
 failure. Original captures, exposure, goal retries, and semantic checks remain
 unchanged; the underlying transport cause remains open.
+
+## 2026-11-25: recorded provider errors behind a quiesced caller
+
+Actual V34 notification case: the requested explanation is missing, so the goal
+correctly fails. Two descendant model exchanges contain native `error: fetch
+failed` with no reply. The caller quiesces with a description of that failure;
+the legacy failed-call text matcher cannot identify its operational origin.
+
+Inventory before editing: `outcomes` already reads the original native calls;
+the shared retry/hold consumers remain `publish_status` and
+`wave_infrastructure_hold`. The authoritative evidence producer is
+`packages/natlang/src/modelTurnCapture.ts` (`generation | score`, `reply | error`),
+through the same runtime driver boundary for all model backends. No serving
+retry or model policy changes apply. Archive/recovery preserve receipt fields;
+ingest and training admission still require their original native goal proofs.
+
+Emit narrow source-referenced receipt evidence only when the authored root
+errored and an actual failed descendant's final generation/score exchange has
+an operational transport error and no reply. Exclude calls with successful
+recorded retries and errors outside the actual root lineage. Never parse an
+application return, model prose, tool output or quoted error as this evidence.
+Keep the failed goal, actual sampled exposure and immutable raw packet. A real
+unrecovered provider outage contaminates retry accounting even if the model
+also made earlier mistakes; this is not a claim that it alone caused failure.
+The existing transport-as-goal-failure opt-out remains.

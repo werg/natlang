@@ -102,11 +102,13 @@ def outcomes(capture, names, held, training, cases):
         if raw is None:
             raw = next(directory.glob(f'st_*/failure-evidence/trajectory-{name}-full.json.gz'), None)
         packet = None
+        teacher = {}
         capture_errors = None
         if raw:
             with gzip.open(raw, 'rt') as stream:
                 packet = json.load(stream)
-            capture_errors = (((packet.get('execution') or {}).get('diagnostics') or {}).get('natlangTeacher') or {}).get('captureErrors')
+            teacher = (((packet.get('execution') or {}).get('diagnostics') or {}).get('natlangTeacher') or {})
+            capture_errors = teacher.get('captureErrors')
         if manifest.is_file():
             episode = verified_episode(manifest, held, training)
             if episode['task_id'] != cases[name]['taskId']:
@@ -140,6 +142,8 @@ def outcomes(capture, names, held, training, cases):
                 results[name]['status'] = 'interrupted'
         if capture_errors:
             results[name]['capture_errors'] = capture_errors
+        if results[name]['status'] in ('test-failed', 'partial'):
+            results[name]['captured_provider_transport_errors'] = captured_provider_transport_errors(teacher)
     return results
 
 
@@ -151,19 +155,9 @@ def workerd_failure(outcome):
     )
 
 
-def provider_transport_failure(outcome):
-    """Operational call failures, never a model's returned description of a network problem.
-
-    Older immutable receipts retain only the rendered NatlangCallError. Require its
-    failed-call envelope and a transport error at the start of the operational cause.
-    """
-    if outcome['status'] != 'test-failed':
+def provider_transport_cause(cause):
+    if not isinstance(cause, str):
         return False
-    reason = outcome.get('reason') or ''
-    match = re.match(r'^natlang [^\n]+?: (?:failed|error): (.*)', reason, re.DOTALL)
-    if not match:
-        return False
-    cause = match.group(1)
     if cause.startswith('Circuit breaker is open; last failure: '):
         cause = cause.removeprefix('Circuit breaker is open; last failure: ')
     cause = re.sub(r'^(?:GET|POST|PUT|PATCH|DELETE) https?://\S+: ', '', cause)
@@ -173,6 +167,82 @@ def provider_transport_failure(outcome):
         r'|getaddrinfo (?:EAI_AGAIN|ETIMEDOUT)\b|upstream HTTP (?:408|429|5[0-9]{2})\b'
         r'|socket hang up(?: \(record |$))',
         cause))
+
+
+def captured_provider_transport_errors(teacher):
+    """Unrecovered native driver failures in an errored authored call tree, never model prose."""
+    roots = teacher.get('rootCallIds') or []
+    if (len(roots) != 1 or teacher.get('captureErrors') or not teacher.get('executionError')
+            or teacher.get('rootOutcome') not in ('error', 'failed', 'quiesced')):
+        return []
+    calls = {call['record']['call_id']: call for call in teacher.get('calls') or []
+             if call.get('record', {}).get('call_id')}
+    root = calls.get(roots[0], {}).get('record', {})
+    if root.get('outcome') != teacher['rootOutcome']:
+        return []
+    def under_root(call_id):
+        seen = set()
+        while call_id in calls and call_id not in seen:
+            if call_id == roots[0]:
+                return True
+            seen.add(call_id)
+            call_id = calls[call_id]['record'].get('parent_call_id')
+        return False
+    def recovered(call_id):
+        record = calls[call_id]['record']
+        definition = record.get('definition', {}).get('key')
+        todo, seen = [call_id], set()
+        while todo:
+            current = todo.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            for annotation in calls[current].get('annotations') or []:
+                if annotation.get('kind') != 'retried' or annotation.get('source') != 'runtime':
+                    continue
+                target = (annotation.get('value') or {}).get('by')
+                retry = calls.get(target, {}).get('record', {})
+                if (not definition or retry.get('definition', {}).get('key') != definition
+                        or retry.get('parent_call_id') != record.get('parent_call_id')):
+                    continue
+                if retry.get('outcome') == 'done':
+                    return True
+                todo.append(target)
+        return False
+    failures = []
+    for call_id, call in calls.items():
+        record = call['record']
+        if record.get('outcome') not in ('error', 'failed') or not under_root(call_id) or recovered(call_id):
+            continue
+        exchanges = [turn for turn in record.get('model_turns') or [] if turn.get('kind') in ('generation', 'score')]
+        if not exchanges:
+            continue
+        last = exchanges[-1]
+        message = (last.get('error') or {}).get('message')
+        if last.get('reply') is None and provider_transport_cause(message):
+            failures.append({'call_id': call_id, 'kind': last['kind'],
+                             'error_sha256': hashlib.sha256(json.dumps(last['error'], sort_keys=True,
+                                 separators=(',', ':'), ensure_ascii=True).encode('ascii')).hexdigest()})
+    return failures
+
+
+def provider_transport_failure(outcome):
+    """Operational call failures, never a model's returned description of a network problem.
+
+    Older immutable receipts retain only the rendered NatlangCallError. Require its
+    failed-call envelope and a transport error at the start of the operational cause.
+    """
+    if outcome['status'] not in ('test-failed', 'partial'):
+        return False
+    if 'captured_provider_transport_errors' in outcome:
+        return bool(outcome['captured_provider_transport_errors'])
+    if outcome['status'] != 'test-failed':
+        return False
+    reason = outcome.get('reason') or ''
+    match = re.match(r'^natlang [^\n]+?: (?:failed|error): (.*)', reason, re.DOTALL)
+    if not match:
+        return False
+    return provider_transport_cause(match.group(1))
 
 
 def infrastructure_failure(outcome, case, *, include_provider_transport=True):

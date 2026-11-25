@@ -1,5 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
+import gzip
+import json
 import subprocess
 import sys
 import pytest
@@ -853,6 +855,92 @@ def test_mixed_deployment_optout_restores_whole_wave_limit():
     assert len(selected) == 9
     limits = SimpleNamespace(concurrency=4, deployment_concurrency=2)
     assert vibestudio_campaign.collection_limits(limits, [cases[name] for name in selected])['concurrency'] == 2
+
+
+def captured_transport_tree(kind='generation'):
+    return {
+        'rootCallIds': ['root'], 'rootOutcome': 'error', 'captureErrors': [],
+        'executionError': {'name': 'NatlangCallError', 'message': 'natlang outer: quiesced: dependent helper unavailable'},
+        'calls': [
+            {'record': {'call_id': 'root', 'parent_call_id': None, 'outcome': 'error',
+                        'definition': {'key': 'outer'}}},
+            {'record': {'call_id': 'child', 'parent_call_id': 'root', 'outcome': 'failed',
+                        'definition': {'key': 'read'}, 'model_turns': [
+                            {'kind': kind, 'error': {'name': 'Error', 'message': 'fetch failed'}}]}},
+        ],
+    }
+
+
+@pytest.mark.parametrize('kind', ['generation', 'score'])
+def test_recorded_provider_error_survives_quiesced_caller(kind):
+    teacher = captured_transport_tree(kind)
+    evidence = vibestudio_campaign.captured_provider_transport_errors(teacher)
+    assert len(evidence) == 1 and evidence[0]['call_id'] == 'child' and evidence[0]['kind'] == kind
+    assert len(evidence[0]['error_sha256']) == 64
+    outcome = {'status': 'test-failed', 'reason': teacher['executionError']['message'],
+               'captured_provider_transport_errors': evidence}
+    assert vibestudio_campaign.infrastructure_failure(outcome, {})
+    assert vibestudio_campaign.provider_transport_failure({**outcome, 'status': 'partial'})
+    assert not vibestudio_campaign.provider_transport_failure({**outcome, 'status': 'verified'})
+
+
+@pytest.mark.parametrize('change', ['returned-text', 'recovered-exchange', 'unrelated-root', 'completed-root',
+                                  'contradictory-root', 'invalid-capture'])
+def test_only_unrecovered_native_failed_descendants_supply_provider_evidence(change):
+    teacher = captured_transport_tree()
+    child = teacher['calls'][1]['record']
+    if change == 'returned-text':
+        child['model_turns'] = [{'kind': 'generation', 'reply': {'text': 'fetch failed'}}]
+        child['detail'] = 'fetch failed'
+    elif change == 'recovered-exchange':
+        child['model_turns'].append({'kind': 'generation', 'reply': {'text': 'actual answer'}})
+    elif change == 'unrelated-root':
+        child['parent_call_id'] = None
+    elif change == 'completed-root':
+        teacher['rootOutcome'] = 'done'
+        teacher['calls'][0]['record']['outcome'] = 'done'
+    elif change == 'contradictory-root':
+        teacher['calls'][0]['record']['outcome'] = 'done'
+    else:
+        teacher['captureErrors'] = ['Missing actual ancestor']
+    assert vibestudio_campaign.captured_provider_transport_errors(teacher) == []
+
+
+def test_successful_recorded_retry_excludes_recovered_provider_fault():
+    teacher = captured_transport_tree()
+    teacher['calls'][1]['annotations'] = [{'kind': 'retried', 'source': 'runtime', 'value': {'by': 'retry'}}]
+    teacher['calls'].append({'record': {'call_id': 'retry', 'parent_call_id': 'root', 'outcome': 'done',
+                                      'definition': {'key': 'read'}}})
+    assert vibestudio_campaign.captured_provider_transport_errors(teacher) == []
+    teacher['calls'][2]['record']['definition']['key'] = 'unrelated'
+    assert len(vibestudio_campaign.captured_provider_transport_errors(teacher)) == 1
+
+
+def test_checked_capture_does_not_fall_back_to_model_shaped_failure_text():
+    outcome = {'status': 'test-failed', 'reason': 'natlang caller: error: fetch failed',
+               'captured_provider_transport_errors': []}
+    assert not vibestudio_campaign.provider_transport_failure(outcome)
+    legacy = {key: value for key, value in outcome.items() if key != 'captured_provider_transport_errors'}
+    assert vibestudio_campaign.provider_transport_failure(legacy)
+
+
+def test_captured_provider_accounting_preserves_failed_goal_and_real_exposure(tmp_path):
+    teacher = captured_transport_tree()
+    teacher['calls'][1]['record']['cost'] = {'model_requests': 1}
+    teacher['calls'][1]['record']['model_turns'].insert(0, {'kind': 'generation', 'reply': {'text': 'prior real sample'}})
+    packet = {'result': {'passed': False, 'reason': 'Requested explanation missing'},
+              'execution': {'diagnostics': {'natlangTeacher': teacher}}}
+    raw = tmp_path / 'st_actual' / 'trajectory-goal-full.json.gz'
+    raw.parent.mkdir()
+    with gzip.open(raw, 'wt') as stream:
+        json.dump(packet, stream)
+    before = raw.read_bytes()
+    outcome = vibestudio_campaign.outcomes(tmp_path, ['goal'], None, {}, {'goal': {}})['goal']
+    assert outcome['status'] == 'test-failed'
+    assert outcome['teacher_model_sampled'] is True
+    assert outcome['reason'] == teacher['executionError']['message']
+    assert vibestudio_campaign.infrastructure_failure(outcome, {})
+    assert raw.read_bytes() == before
 
 
 @pytest.mark.parametrize('command,code', [(['ssh', 'archive-host'], 255), (['rsync', 'owned-source'], 12)])
