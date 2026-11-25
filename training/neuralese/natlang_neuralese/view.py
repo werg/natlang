@@ -119,7 +119,11 @@ def listing_instructions(name: str, type: str, instructions: str) -> str:
             f"instructions:\n{instructions}")
 
 
-def view_note(holder: str) -> str:
+def view_note(holder: str | None = None) -> str:
+    """ts-host native/prompt.ts `viewNote`: without a holder (a call that cannot read its scope, a decision readout) the
+    view is followed by as much of the value's text as fits."""
+    if holder is None:
+        return "  // view of the whole value; its text follows as far as it fits"
     return f"  // view of the value; {holder} holds all of it"
 
 

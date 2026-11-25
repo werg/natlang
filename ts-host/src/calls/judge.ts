@@ -47,15 +47,16 @@ export function compareBehaviors(reference: Behavior, candidate: Behavior): { eq
 // model-call-kind: runtime-authored-call (the specializer's behaviour-comparison judge) -- training/model-call-kinds.json
 const judgeDefinition = () => builtinDefinition('compareBehaviors');
 
+// The judge's arguments are whole: a long one is shown by the call's own listing (cut with its variable named in a tool
+// loop, shown whole within the context budget in a decision readout), never cut here where nothing holds the rest.
 const describe = (behavior: Behavior): string => {
-  const cap = (text: string, limit = 6000) => text.length > limit ? `${text.slice(0, limit)} …(${text.length} characters)` : text;
   const json = (value: unknown) => { try { return JSON.stringify(value, null, 1) ?? 'undefined'; } catch { return String(value); } };
-  return [behavior.error ? `It failed: ${behavior.error}` : `Result: ${cap(json(behavior.value))}`,
+  return [behavior.error ? `It failed: ${behavior.error}` : `Result: ${json(behavior.value)}`,
     behavior.effects.length ? `Service calls, in order:\n${behavior.effects.map(effect =>
-      `- ${effect.service}.${effect.method}(${cap(JSON.stringify(effect.args ?? []).slice(1, -1), 600)})`).join('\n')}` : 'No service calls.',
-    ...(behavior.captureWrites && Object.keys(behavior.captureWrites).length ? [`Variables written: ${cap(json(behavior.captureWrites), 2000)}`] : []),
+      `- ${effect.service}.${effect.method}(${JSON.stringify(effect.args ?? []).slice(1, -1)})`).join('\n')}` : 'No service calls.',
+    ...(behavior.captureWrites && Object.keys(behavior.captureWrites).length ? [`Variables written: ${json(behavior.captureWrites)}`] : []),
     ...(behavior.files?.length ? [`Files changed:\n${behavior.files.map(file => `- ${file.kind} ${file.path}${file.text !== undefined ?
-      `:\n${cap(file.text, 2000)}` : ''}`).join('\n')}`] : [])].join('\n');
+      `:\n${file.text}` : ''}`).join('\n')}`] : [])].join('\n');
 };
 
 /**
@@ -68,8 +69,8 @@ export async function judge(runtime: NatlangRuntime, input: { instructions: stri
   if (equal) return { verdict: 'equal', differences };
   const candidateFirst = parseInt(hexDigest(input.seed).slice(0, 2), 16) % 2 === 0;
   const task = [`Instructions:\n${input.instructions}`, `Signature: ${input.signature}`,
-    `Inputs: ${JSON.stringify(input.inputs, null, 1)?.slice(0, 8000)}`,
-    ...(input.annotations?.length ? [`Feedback recorded about this call: ${JSON.stringify(input.annotations).slice(0, 3000)}`] : [])].join('\n\n');
+    `Inputs: ${JSON.stringify(input.inputs, null, 1)}`,
+    ...(input.annotations?.length ? [`Feedback recorded about this call: ${JSON.stringify(input.annotations)}`] : [])].join('\n\n');
   const [first, second] = candidateFirst ? [input.candidate, input.reference] : [input.reference, input.candidate];
   const answer = await runtime.run(() => invokeDefinition(currentFrame()!, judgeDefinition(), [task, describe(first), describe(second)],
     { manifest: { internal: true } }), { specialization: 'off', name: 'judge' }) as 'first' | 'second' | 'equal';

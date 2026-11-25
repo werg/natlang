@@ -13249,3 +13249,23 @@ Tests: `test_segment_tokens.py`, `test_filled_reasoning.py::test_build_renders_e
 `test_sft_sources.py::test_repeated_lines_are_skipped_unparsed...`, `::test_extract_by_worker_processes_...`.
 **Pickup:** the aei1 driver takes it at its next round boundary on a new pin (no driver change needed beyond the pin;
 the replay-workers default applies when async-drive restarts).
+
+## 2026-11-25 13:58 Judges never decide on a cut argument (leaf-judge strand)
+
+**Decision (first principles, owner principle; no A/B).** A call that cannot read its eval scope (every decision
+readout: the std judgments, `improveShouldRevise`, `decisionReadout: 'finite-returns'`, `decide(...)`) is shown its
+values whole within half the context budget (water-filled across arguments, captures and locals); past that a value is
+cut with a note naming no variable, and under `compaction: nl` it gets its compact-params state plus the text that fits.
+The old opening cut at 4,096 characters and promised "NAME holds the complete value" to a call with no tools. Crisp
+pre-cuts of judge inputs removed: `calls/judge.ts` (compareBehaviors: 8,000/6,000/2,000/600-char caps) and
+`improvement/run-evidence.ts` (1,200-char strings). Opt-out `NATLANG_READOUT_WHOLE_VALUES=0`.
+**Inventory.** Covered: `agent.ts decisionReadout` (scored, reasoned, instant, generated-JSON fallback and the batched
+`scoreMany` path all reuse one opening). Already whole: refinement `decisionJudge` (`refinement.ts` renders value and
+context whole), operator write sites (`viewSiteMessages` takes the whole JSON). Tool-loop judges (progressJudge,
+stoppingCondition predicates, `holds` callJudge, compareBehaviors, improveDiagnose) read their scope with eval and keep
+the scope listing. Mirrors: `operator-site.ts` (`sealed` request field), `view.py view_note(None)`.
+**Left out.** The readout opening keeps the host-generated `eval` turn and its "Declared … for the rest of this call"
+line (the trained readout format; changing it is a separate model-facing change). A live (non-data) value in a readout
+still previews as "live value, use it in eval" (no std judgment takes one). Python `operator_rows.py` does not yet pass
+`sealed` (no sealed rows are generated; readouts with cut values were not compacted before).
+Tests: `ts-host/test/sealed-readout-values.test.mjs` (8). MODEL_FACING_CHANGES 2026-11-25.

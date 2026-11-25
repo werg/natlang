@@ -66,6 +66,26 @@ export function shownCharsFor(contextTokens: number | null | undefined): number 
   return Math.max(SHOWN_CHARS, Math.floor(contextTokens * OUTPUT_CONTEXT_SHARE * PAGE_CHARS_PER_TOKEN));
 }
 
+/**
+ * The share of the context budget that the values of a call which cannot read its eval scope (a decision readout: no
+ * tools) may fill together. Such a call decides on what its opening shows, so a value is shown whole as far as the
+ * context allows; a note there never points at a scope the call cannot reach (agent.ts `sealedValues`). Half leaves a
+ * quarter for the reasoning a readout samples (its reply allowance) and a quarter for the instructions and notes.
+ */
+export const SEALED_VALUES_CONTEXT_SHARE = 1 / 2;
+
+/** The characters the values of a call that cannot read its scope may fill together; Infinity with no context budget. */
+export function sealedValuesChars(contextTokens: number | null | undefined): number {
+  if (contextTokens === null || contextTokens === undefined || !Number.isFinite(contextTokens)) return Infinity;
+  return Math.max(SCOPE_VALUE_CHARS, Math.floor(contextTokens * SEALED_VALUES_CONTEXT_SHARE * PAGE_CHARS_PER_TOKEN));
+}
+
+/** Whether calls that cannot read their scope are shown whole values (default); `NATLANG_READOUT_WHOLE_VALUES=0` restores
+ * the scope listing's cut and its note naming the variable. */
+export function sealedValuesEnabled(): boolean {
+  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NATLANG_READOUT_WHOLE_VALUES !== '0';
+}
+
 /** Parts of a note: `holder` is the scope expression that holds the complete value; `next` a call that shows the next part. */
 export type Where = { holder?: string; next?: string };
 

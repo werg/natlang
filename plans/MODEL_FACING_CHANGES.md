@@ -3,6 +3,26 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-25 — a call that cannot read its scope sees its values whole
+
+- **What changed.** A call answered by a decision readout (`readout: decision` / `instant`, `decisionReadout:
+  'finite-returns'`; every std judgment `settled`, `beats`, `meets`, `relates`, `compatible`, `shouldEscalate`,
+  `stepKind`, and the builtin `improveShouldRevise`) offers no tools, but its opening cut long values at the scope
+  listing's 4,096 characters with a note saying "only this display is shortened, NAME holds the complete value": the
+  judge decided on text it could not see, and the note promised a scope it could not reach. Now such a call's values
+  (arguments, captures, locals) share half the context budget by water-filling (`cutoff.ts sealedValuesChars`,
+  `agent.ts sealedValues/sealedBudgets`): each is shown whole as far as that allows, records past the listing's 24
+  fields included; a value past it is cut with a note that names no variable, and under `compaction: nl` it gets the
+  compact-params state, a view note without a holder, and then the text that fits. Crisp pre-cuts of judge inputs
+  were removed too: the specializer's `compareBehaviors` judge (`calls/judge.ts`: inputs at 8,000, results at 6,000,
+  files at 2,000, effect args at 600 characters, with no pointer to the rest) and run evidence for `improve`
+  (`improvement/run-evidence.ts`, strings at 1,200): those values now reach the call whole and its own listing shows
+  them. `operatorSite({ sealed: true })` and `view.py view_note(None)` mirror the sealed site for training rows.
+  Opt-out: `NATLANG_READOUT_WHOLE_VALUES=0`. DECISIONS 2026-11-25 "Judges never decide on a cut argument".
+- **What the model sees.** In a readout's opening, the `read_inputs()` listing shows long values whole (up to about
+  half the context), and any remaining `<<cut off: …>>` note has no "NAME holds the complete value" clause. Tool-loop
+  calls are unchanged.
+
 ### 2026-11-25 — an `nl` literal's captured variable inferred from literals is declared with its base type
 
 - **What changed.** A local inferred from literals (`const aim = kind === 'a' ? '<text a>' : '<text b>'`) was
