@@ -6,12 +6,15 @@
  */
 /**
  * `learned-compaction`: the runtime's compaction sites use the learned operators (`compaction: nl`;
- * plans/neuralese/OPERATORS_RESTORE_20261117.md). Off until held task success with it is not below without it.
+ * plans/neuralese/OPERATORS_RESTORE_20261117.md): a value over 8,000 characters is cut and its operator state shown
+ * beside the cut. Adopted 2026-11-25 (owner: long values are summarized and encoded as Neuralese); the next held eval
+ * shows any regression. Opt-outs: NATLANG_NEURALESE_COMPACTION=crisp, or NATLANG_MODEL_FACING without it.
  */
 export const MODEL_FACING_VARIANTS = ['effect-receipt', 'learned-compaction', 'compact-callable-scope'] as const;
 export type ModelFacingVariant = typeof MODEL_FACING_VARIANTS[number];
-/** Measured 2026-11-10 (plans/MODEL_FACING_CHANGES.md): neutral task success, target behaviour moved. */
-const ADOPTED: readonly ModelFacingVariant[] = ['effect-receipt', 'compact-callable-scope'];
+/** effect-receipt, compact-callable-scope: measured 2026-11-10 (plans/MODEL_FACING_CHANGES.md), neutral task success,
+ * target behaviour moved. learned-compaction: adopted 2026-11-25 on first principles. */
+const ADOPTED: readonly ModelFacingVariant[] = ['effect-receipt', 'compact-callable-scope', 'learned-compaction'];
 
 function enabled(): ReadonlySet<string> {
   // The browser bundle has no process.

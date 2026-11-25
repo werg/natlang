@@ -6,6 +6,12 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
   response_tools?: unknown[];
   seed: number | null; max_tokens: number | null;
   /**
+   * The reply must report the exact prompt and sampled token ids (an RL capture, `x_natlang_rl_capture`): a learned
+   * operator's call, whose reply is then captured in its own context from those ids (native/agent.ts operatorWrite).
+   * Only Neuralese transports send it; collection asks for every call anyway.
+   */
+  exact_ids?: true;
+  /**
    * The assistant reply so far, cut off at the previous request's `max_tokens` before it called a tool: the server
    * continues this message (its reasoning, then its text) instead of starting a new one, and the turn it returns is the
    * whole message. Only drivers marked `continuesReplies` receive it.

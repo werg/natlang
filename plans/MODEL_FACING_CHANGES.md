@@ -3,6 +3,34 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-25 — learned compaction is on by default (`learned-compaction` adopted)
+
+- **What changed.** `learned-compaction` joins the adopted model-facing variants (`ts-host/src/runtime/model-facing.ts`
+  ADOPTED), so the `compaction` part resolves to `nl` in collection, held eval and the product runtime whenever the
+  model server reads Neuralese and serves a capture (`native.capture`, or the grammar capture on the fork and the
+  page). Owner 2026-11-25: "Are long values not summarized and encoded using neuralese? That is such an important
+  opportunity." Opt-outs: `NATLANG_NEURALESE_COMPACTION=crisp`, or `NATLANG_MODEL_FACING` without the variant. It
+  enters the held series key (`held_eval.series` reads ADOPTED), so the first held eval on a pin with it re-measures
+  the base.
+- **What the model sees.** A tool output or argument longer than 8,000 characters is cut at 8,000 (before: at the
+  budget's page, ~57k characters at 131k tokens), and every cut-off tool output or argument listing of at least 800
+  characters gets one extra model call at view's site (`<call>#operator-<n>`), whose reply is captured in its own
+  context and shown beside the cut (`Compacted value: <state>`; an argument as `name: type = <state>  // view of the
+  value; name holds all of it`). A `compact_history` note carries its own state captured in place. The full value
+  stays in scope, `read_page` and `transcript`.
+- **How the consumer reads the state.** A capture is a new `producer_kind` (`capture`) that splices as stored instead
+  of being read as its tokens inline (opt-out `NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1`). Use ablation on aei1's policy
+  8e634a0f (DECISIONS 2026-11-25 "Learned compaction on by default"): the spliced state beats the same reply read
+  inline on 10 of 11 sources (7 at p < 0.05; up to 0.61 nats per consumer target token), and the inline reply beats
+  the text cut alone on 10 of 11 (6 at p < 0.05; one source significantly the other way).
+- **Product fix found on the way.** Outside collection the operator call's reply carried no exact ids, so every
+  product-runtime operator write failed ("native.capture needs the call's exact prompt and sampled reply ids") and
+  silently kept the cut. Operator calls and the compaction turn now ask a native server for them (`exact_ids` ->
+  `x_natlang_rl_capture`).
+- **Sampling law fix.** The operator call carried no temperature, and the native engines read a missing temperature as
+  0, so every operator reply was greedy, also in collection (the collector passes its temperature to the agent's own
+  turns only). The operator call now samples under the call's temperature (temperature 1, top-p 0.95 in collection).
+
 ### 2026-11-25 — a call that cannot read its scope sees its values whole
 
 - **What changed.** A call answered by a decision readout (`readout: decision` / `instant`, `decisionReadout:

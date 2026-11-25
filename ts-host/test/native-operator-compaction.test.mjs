@@ -8,7 +8,7 @@ import { loadVirtualNatlang } from '../dist/runtime/virtual-project.js';
 
 const ID = 'nzs1_' + 'a'.repeat(52);
 
-async function run(compaction) {
+async function run(compaction, temperature) {
   const captures = [], calls = [], operatorCalls = [];
   const capture = async (call, options) => {
     captures.push({ tokens: { prompt: call.prompt, reply: call.reply }, text: call.text, options });
@@ -25,7 +25,7 @@ async function run(compaction) {
     calls.push(request);
     return { calls: [['return_result', { status: 'success', value: 7 }]], completion_tokens: 1 };
   }, { neuralese: true });
-  const runtime = createNatlangRuntime({ calls: false, model: driver,
+  const runtime = createNatlangRuntime({ calls: false, model: temperature === undefined ? driver : { driver, temperature },
     neuralese: { store: new MemoryNeuraleseStore(), dialect: 'native-state/test', capture, ...(compaction ? { compaction } : {}) } });
   const fn = loadVirtualNatlang({ 'run.nl': '---\nargs: {value: string}\nreturns: number\n---\nCount the lines of value.\n' }, 'run.nl');
   let error;
@@ -39,6 +39,8 @@ test('compact-params is an operator call at view\'s site plus the in-context cap
   const [call] = operatorCalls;
   assert.match(call.invocation_id, /#operator-1$/);
   assert.equal(call.max_tokens, 2048 + 384);
+  // Its reply is captured from its exact ids, so it asks for them (a host outside collection gets them too).
+  assert.equal(call.exact_ids, true);
   assert.deepEqual(call.tools, []);
   assert.equal(call.messages[0].content, VIEW_PROMPT);
   assert.match(call.messages[1].content, /^instructions:\nThe call that receives this argument as value \(string\) answers: Count the lines of value\.\n\nvalue:\n"line of data/);
@@ -48,8 +50,19 @@ test('compact-params is an operator call at view\'s site plus the in-context cap
   assert.match(String(error?.message), new RegExp(`${ID} is unavailable for provenance`));
 });
 
-test('the crisp default keeps the text cut and never calls the operator', async () => {
-  const { operatorCalls, captures, request, error } = await run(undefined);
+test('the operator call samples under the run\'s temperature, as the call\'s own turns do', async () => {
+  const { operatorCalls } = await run('nl', 1);
+  assert.equal(operatorCalls.length, 1);
+  assert.equal(operatorCalls[0].temperature, 1);
+});
+
+test('a greedy host samples the operator at temperature 1, the law it is trained under', async () => {
+  const { operatorCalls } = await run('nl');
+  assert.equal(operatorCalls[0].temperature, 1);
+});
+
+test('crisp (the opt-out) keeps the text cut and never calls the operator', async () => {
+  const { operatorCalls, captures, request, error } = await run('crisp');
   assert.equal(error, undefined);
   assert.equal(operatorCalls.length + captures.length, 0);
   assert.ok(!request.includes(ID));
