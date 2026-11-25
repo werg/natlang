@@ -45,6 +45,18 @@ export function registerShippedModule(specifiers: readonly string[], factory: ()
 export function hasBuiltinModule(platform: Platform, specifier: string): boolean {
   return (!!platform.builtinModules && Object.hasOwn(platform.builtinModules, specifier)) || shippedModules.has(specifier);
 }
+/**
+ * The standard library this platform serves (its own `@natlang/<platform>/std`, else the shipped one), or undefined when
+ * no entry loaded it. Eval's std built-ins (native/runtime.ts) are its exports, the same instance callable folders import.
+ */
+export function stdModule(platform?: Platform): Record<string, unknown> | undefined {
+  for (const specifier of STD_SPECIFIERS) {
+    const factory = platform?.builtinModules && Object.hasOwn(platform.builtinModules, specifier) ?
+      platform.builtinModules[specifier] : shippedModules.get(specifier);
+    if (factory) return factory() as Record<string, unknown>;
+  }
+  return undefined;
+}
 export function builtinModule(platform: Platform, specifier: string): unknown {
   const factory = platform.builtinModules && Object.hasOwn(platform.builtinModules, specifier) ? platform.builtinModules[specifier] :
     shippedModules.get(specifier);

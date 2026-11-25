@@ -12889,3 +12889,89 @@ and collections to the HDD, and kept the last two lineage rounds and the protect
 - **Left out:** `expert_iteration.py cycle` (being replaced by async-drive; its data stage extracts no teacher pools).
 - Tests: `tests/neuralese/test_authored_trajectories.py`; the `onTurn` case in
   `ts-host/test/scripted-decision-reply.test.mjs`.
+
+## 2026-11-25 10:40 The std combinators are eval built-ins (semantic-FP strand)
+
+- **Why.** Semantic functional programming (plans/semantic-fp/) needs the model executing a `.nl` function to compose
+  its judgments with map/filter/reduce/rank/repair combinators in its own eval. Measured under
+  `curriculum.replayReference`: a bare `semanticMap(...)` was `unbound-name`, and an eval `import ... from
+  '@natlang/node/std'` loaded the package through the workspace loader, which is a second copy of the runtime with no
+  task. The call then failed with "No natlang task is active here".
+- **What.** Every eval has `semanticMap`, `semanticFilter`, `semanticPartition`, `semanticReduce`, `semanticMatch`,
+  `semanticRank`, `semanticRepair`, `fixedPoint`, `semanticMerge`, `escalate`, `withContext` and `compileRule`, plus
+  `proposeAndVerify` and `branchAndSelect` where the call has a folder.
+  - They are the platform's own std instance (`runtime/modules.ts stdModule`). Eval reaches it through the shipped
+    module registry, so no `native -> std` import edge is added.
+  - Each one runs in `currentFrame() ?? call frame`, so `std:<name>` spans and their child calls nest under the call.
+  - The eval checker types them as `typeof import('/__natlang__/std').<name>`.
+  - An eval import of a combinator lowers to the built-in (`scope-compiler.ts lowerStdImports`). Any other std import
+    fails with one sentence naming the built-ins.
+  - Discovery is through the scope guide, `read_code(name)` docs and the tool-call redirect. The system prompt, tool
+    list and opening line are unchanged.
+- **Two fixes found on the way.** Each ships as the default.
+  - Eval's functions and inline `nl` are bound to the call's frame, so their calls skipped a combinator's span and
+    nested under the call. A decide readout around them was lost too. A span frame now records the call that opened it
+    (`Frame.spanOf`), and a bound call started in that span nests under it (`callable.ts startCall`).
+  - Combinators pass callbacks JavaScript's `(item, index)`, and a `.nl` function refuses arguments it does not
+    declare ("summarize expects 1 arguments, got 2"). `std/collections.ts callback` passes a natlang function only
+    the arguments it declares.
+  - Not changed: `notes.map(summarize)` in eval still fails the same way (the kernel's arity check,
+    `kernel.ts` ~701).
+- **Opt-out.** `NATLANG_EVAL_STD=0`.
+- **Left out.**
+  - The Python folder host (`native/python-sources.ts` PYTHON_NATLANG binds only `nl` and `iterate_on`; Python
+    callbacks need per-run proxy lifetimes, as `_Iteration` shows).
+  - The workerd core when its consumer does not load `@natlang/core/std` (`core/index.ts` does not import
+    `std/index.ts`; `stdModule` then returns nothing and eval offers no combinators).
+
+## 2026-11-25 Program generation redesigned: authored trajectories of semantic functional programs; statistics, not checks (program-inventor strand)
+
+**Owner (2026-11-25):** "why don't we just author entire trajectories directly for the IR without having to run it
+through a model? Just have the author write the entire execution trajectory to train on and then all we need to do is
+collect the reasoning in between the actions." "We very, very strongly need to limit the amount of crisp TypeScript
+code ... a deep code base of purely natural language functions able to call each other ... use a lot of the NatLang
+specific functionality ... we need statistics not checks ... feeding analysis back into top of funnel prompting."
+"Remember we want to do semantic functional programming." Runtime function synthesis: "It's just built in our ability
+to make these nl literals."
+
+**Why.** The exact-checker bar (requirements D1/D5: 100 lines of TypeScript with an algorithm; S4 "one defensible
+answer"; ablations, wrong answers, keyword baselines) drove the 13 admitted programs to TypeScript algorithms around
+narrow classification leaves (statute-amendment-consolidator: 8 `.ts` files, 6 leaf readers). That is the opposite of
+the target shape.
+
+**What changed.**
+- `natlang.authored-program/1` (`scripts/rl_tasks/sources/authored_programs.py`, `scripts/rl_tasks/authored_replay.mjs`):
+  a builder writes the program, 1-3 literal instances and each instance's whole trajectory (`trajectory.root`: the
+  root's turns; `trajectory.calls`: one entry per call below the root, `fn` + `match` fragments, `value` or `turns`).
+  The only check: `natlang check`, then the trajectory replays through `curriculum.replayReference` with no model to a
+  finished root call, every call answered, no failed action (unless `expected_failures`), types satisfied. An instance
+  with an `rl` oracle also becomes an RL task (optional by-product; `invented.py publish` skips admissions without one).
+- **Trajectory format for the exporter.** `admit` writes `ROOT/admitted/<slug>/trajectories.jsonl`: one
+  `natlang.program/2` case per instance whose `curriculum.reference` is the authored trajectory (children ordered most
+  specific first, `fn` as the `You are inside this call: fn(` anchor) and whose `semantics.expected` is the value the
+  replay returns. This is the input `scripts/rl_tasks/reference_episodes.mjs` reads (the authored-trajectory exporter
+  strand). Only `split: train` rows may be trained: dev/confirmation ideas are the held-inv slice (`admission.json`
+  `split`, each case's `split`). Reasoning is left empty for `filled_reasoning.py`.
+- **Statistics** (per program in `check`/`stats`, per wave in `wave-report WAVE`): calls by construct, NL composition
+  depth (root included), interior functions, TS logic lines vs `.nl` instruction lines, NL calls vs helper calls,
+  higher-order uses, combinator uses, recursion and iteration (measure vs NL predicate), decisions, ensures, NL
+  literals (created, built from data, calls through them, share of the call tree through them), answer lengths,
+  open/structured/closed outputs. Targets (`TARGETS`) are statistics, never gates. The wave report writes
+  `REPORT.md`, `report.json` and `EMPHASIS.draft.md`; the coordinator edits the draft into the next wave's
+  `EMPHASIS.md`, which `BUILD_BRIEF.md` has every builder read first (the top-of-funnel feedback).
+- `applications/program-inventor/BUILD_BRIEF.md` rewritten (program shape, construct inventory with each construct's
+  trajectory form, trajectory format, tools, statistics); `requirements.json` is three checks plus nine statistics;
+  `REVIEW_BRIEF.md` is a drawn-sample pass grading semantic-FP shape, depth, synthesis and trajectory realism, listing
+  bad authored answers and funnel findings. Skill: SKILL.md step 2 (short exact steps in the calling function's eval),
+  composition.md "Functions built from data" (NL literals from derived values; a `.nl` function with a function
+  result). Worked mechanics example: `/home/werg/data/natlang-novel-programs/authored-examples/thread-digest/`.
+- Wave 2's 12 claims released as `abandoned` (the cards are free again).
+
+**Found on the way.** The std combinators are not reachable from a `.nl` call's eval (OPEN_ITEMS "std combinators are
+not in eval's scope"); a std-in-eval agent is adding them as eval built-ins. Until it lands, trajectories map with
+`Promise.all`, reduce with `for...of` and loop with `iterateOn`.
+
+**Success / failure.** Success: wave statistics move toward the targets wave over wave (crisp share <= 0.15, NL depth
+>= 4, >= 6 construct kinds, >= 1 data-built NL literal per instance) at well under the exact-checker bar's inference
+per admitted program, and the exporter renders the admitted trajectories into rows. Failure: drawn-sample reviews find
+bad authored answers in more than one call in ten, or statistics flat across two waves; then the brief changes.

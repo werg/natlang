@@ -104,10 +104,14 @@ function startCall(meta: CallableMeta, args: unknown[], at?: Instantiation): Pro
     // Called from an eval of the invocation it is bound to: the call stops with that eval (spec: Eval), and reports
     // its decision readout to a decide(...) around it.
     const current = currentFrame();
-    const same = current && current.task === bound.task && current.parentCallId === bound.parentCallId;
+    // Started in a std combinator's span that the bound call opened: the call nests under the span (std/trace.ts).
+    const span = !!current && current.task === bound.task && current.spanOf !== undefined && current.spanOf === bound.parentCallId &&
+      current.parentCallId !== bound.parentCallId;
+    const same = current && current.task === bound.task && (span || current.parentCallId === bound.parentCallId);
     const signal = same && current.signal && current.signal !== bound.signal ? current.signal : undefined;
     const readout = same && current.readout !== bound.readout ? current.readout : undefined;
-    const frame = signal || readout ? { ...bound, ...(signal ? { signal } : {}), ...(readout ? { readout } : {}) } : bound;
+    const frame = signal || readout || span ? { ...bound, ...(span ? { parentCallId: current!.parentCallId } : {}),
+      ...(signal ? { signal } : {}), ...(readout ? { readout } : {}) } : bound;
     return started = meta.invoke(args, frame, at);
   })());
   if (started && typeof started === 'object') startedCalls.set(call, started);

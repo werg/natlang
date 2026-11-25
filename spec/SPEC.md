@@ -405,7 +405,7 @@ A natural-language invocation offers the model these tools:
   (its callable items); `read_code` also reads the declaration of a service or an
   importable package, which cannot be edited, and the documentation of eval's
   built-ins (`nl`, `iterateOn`, `transcript`, `decide`, `NatlangContext`, the package's
-  `Context` under a name no program type takes). `read_code` is offered on every call;
+  `Context` under a name no program type takes, and the std combinators; see Eval). `read_code` is offered on every call;
   `edit_code` and `diff_code` where the call has code of its own and edits are not denied.
   An edit is a revision of the run's program view, never of the files: a call that
   succeeds records its revisions in its call record (`code_revisions`), and
@@ -518,6 +518,20 @@ lines of reasoning, code, and output as `{ entry, turn, tool, in, line }` (optio
 turn that made the call (on its first call), `status` is the outcome (`ok`, `rejected`, `error`, …),
 `value` an eval's returned value as data when it is portable and of modest size,
 `console` what it printed, and `output` the full text the model was shown. It has no array access or iteration, and printing it shows a summary.
+
+Every eval also has the standard library's combinators by name, where the platform
+serves the library (Node and browsers do): `semanticMap`, `semanticFilter`,
+`semanticPartition`, `semanticReduce`, `semanticMatch`, `semanticRank`,
+`semanticRepair`, `fixedPoint`, `semanticMerge`, `escalate`, `withContext` and
+`compileRule`, and in a call with a folder `proposeAndVerify` and
+`branchAndSelect`. They are the same functions callable-folder TypeScript imports
+from `@natlang/node/std`, typed by its declarations, and run in the call's frame:
+their `std:<name>` spans and the calls they make nest under the call. An input,
+local, function, service, capture or declaration of the same name takes the name
+instead. An eval `import { name } from '@natlang/node/std'` (or the browser or core
+specifier) of one of them reads as the built-in; any other import from the library
+fails with one sentence naming the built-ins. `read_code(name)` documents each.
+The setting `NATLANG_EVAL_STD=0` leaves them out.
 
 ## Cut-offs
 

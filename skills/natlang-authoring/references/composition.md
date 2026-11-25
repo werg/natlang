@@ -203,6 +203,24 @@ fine wherever a function is expected (a factory's `return nl`...``, a field type
 parameter is a function); a factory without a declared result takes its signature from how the functions it makes are
 called.
 
+## Functions built from data
+
+An NL literal is a function value, and its instructions can be composed from values the program has derived, so a
+program makes new typed functions at run time from its data and then uses them like any other function. A digest of
+a planning thread writes one test per topic it found and maps it over the messages:
+
+```ts
+const topics = [...new Set(gists.map(gist => gist.topic))];
+const testFor = (topic: string) => nl<(gist: Gist) => boolean>`gist states a constraint that any decision on ${topic} has to respect.`;
+const constraints = await semanticMap(topics, async topic =>
+  ({ topic, constraints: await semanticFilter(gists, testFor(topic)) }));
+```
+
+A `.nl` function can do the same for its caller: with `returns: "(gist: Gist) => boolean"` its call finishes with
+``return nl<(gist: Gist) => boolean>`...${topic}...`;`` and the caller maps, passes or binds what it returns. A rubric
+an earlier call wrote, a category a partition found or a style read from examples is a fine source of instructions.
+Outside text reaches the new function as an argument (``test(message)``), never in its instructions.
+
 ## A rule and a judgment behind one setting: `pluggable`
 
 Where an exact rule and a judgment both answer one question, give them one interface and let a setting choose.
@@ -271,6 +289,12 @@ trace and specialise. Every combinator nests its child calls under a `std:<name>
   store; `history`/`cost` override them, `false` leaves them out; each run leaves an `escalation` note on its local call), `withContext(fn, entries)` (`fn.in(Context.ofCallable(fn).with(entries))`, keeping
   companion helpers intact), and `compileRule(rule, { examples?, check?, attempts? })` (synthesizes and example-verifies
   a reusable judgment function).
+
+In a call's eval the combinators are built-ins: the model running a `.nl` function writes
+`const summaries = await semanticMap(notes, summarize)` or `await semanticReduce(rows, '', fold)` without an import, and
+their spans nest under that call. `proposeAndVerify` and `branchAndSelect` are there when the call has a folder;
+`read_code("semanticMap")` shows each. An eval import of a combinator works the same; importing anything else from the
+library fails and names the built-ins. `NATLANG_EVAL_STD=0` turns them off.
 
 `examples/pr-review` composes `withContext`, `semanticMap`, `semanticRank`, and asymmetric `escalate` over untrusted PR
 diffs with `ensures:` verbatim quote checks:

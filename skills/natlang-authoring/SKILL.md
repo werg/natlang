@@ -110,8 +110,10 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
    (messages, notes, and names, titles and labels too) and `Is<T, "...">` on every property you would otherwise ask for in a sentence
    ([refinements](references/refinements.md)). Doc comments on fields reach the model: describe formats, units and
    what `null` means there.
-2. **Exact steps are TypeScript.** Arithmetic, parsing, sorting, joining, counting, record assembly, I/O: functions in
-   the callable folder or the host. A `.nl` function calls them. A store, API or verifier is a service the host
+2. **Exact steps are TypeScript.** Arithmetic, parsing, sorting, joining, counting, record assembly, I/O. A few lines
+   of it (a filter by a field, a grouping, assembling the result) belong in the eval code of the function that needs
+   them; exact work that is long or reused is a function in the callable folder or the host, which a `.nl` function
+   calls. A store, API or verifier is a service the host
    passes to the runtime, not a helper the model can read and edit ([language](references/language.md)).
 3. **Each judgment is one typed function.** Inline `nl<T>` in the code that needs it, or a `.nl` file when it is
    reused or tested on its own. When the instructions are several steps of judgment, number them and name the data
@@ -132,7 +134,8 @@ projects with `natlang build` (or `natlang run`) so `nl` is lowered. Inline call
    `semanticRank`), convergence (`semanticRepair`, `fixedPoint`, `semanticMerge`), policy (`escalate`, `withContext`,
    `compileRule`), and verified workspaces (`proposeAndVerify`, `branchAndSelect`). Pass semantic functions as
    arguments, bind leading args with `.partial(...)`, and use `pluggable({ crisp, nl })` where a rule and a judgment
-   compete ([composition](references/composition.md)).
+   compete ([composition](references/composition.md)). The model running a `.nl` function has the same combinators
+   in its eval by name, without an import, so instructions can ask it to map, filter, reduce or rank with them.
 6. **Iterate structurally.** `iterateOn(step, state).until(check)`, where the check can be code or `nl`; recursion
    only on a smaller argument; `for...of`, `for...in` over a record's keys, counted `for` loops whose bound is read
    once (`p <= store.pages()`) and array methods. There are no while loops. A TypeScript check needs
@@ -201,6 +204,7 @@ captured `let` is written back only after a successful eval. Every call is recor
 | `model_incomplete: no_action` | The model replied four times in a row without calling a tool or returning a result: say in the instructions exactly what to return, or use a stronger model. |
 | `iteration-unbounded` from `semanticRepair` or `fixedPoint` | Give `semanticRepair` its `attempts`; give `fixedPoint` a `maxSteps` with an exact `settled` test, or leave `settled` out so the shipped judgment decides. |
 | `std-check-result` | Return the list of problems as strings from `check` or `verify`, and an empty list when the value passes. |
+| `X from @natlang/node/std is not available in eval` | In eval, call the combinators by name without an import; only they are eval built-ins (the shipped judgments such as `meets` are reached through the combinators' options). |
 | Correct type, wrong answer | Improve the instructions, the evidence the call can reach, or the decomposition. Every run failing the same way points at the program, not the model. |
 
 More diagnoses, and how to tell wiring evidence from model quality: [verification](references/verification.md).
