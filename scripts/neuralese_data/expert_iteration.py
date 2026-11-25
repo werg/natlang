@@ -93,7 +93,7 @@ FORWARD_PER_TARGET = 10.7
 # ~10% of a round's forward); --no-fallow22-aux opts out.
 FALLOW22_AUX = (f'fallow22={DATA.parent / "sft-fallow22-broad-graphs-20261124-v1" / "chains.pkl"},'
                 'share=0.01,task_tokens=2000')     # forward tokens per weighted target token of a round mix (r0001 10.87, r0002 10.57)
-FILL_GB = 4.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB on the seed WORKs; the loop's sources WORK, every campaign, adds the largest listing from 2026-11-25); 6 kept the Pop fill out beside the SFT
+FILL_GB = 8         # 2026-11-25 22:22: the DGX fill was OOM-killed at its 4.5 GB cap (it now also lists every campaign and the raw-trained fills); before: filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB on the seed WORKs; the loop's sources WORK, every campaign, adds the largest listing from 2026-11-25); 6 kept the Pop fill out beside the SFT
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
 COLLECTOR_SLOT_GB = 0.3
@@ -886,18 +886,31 @@ def compact_leftovers(work, groups, quiet_seconds=300):
 
 
 def collect_actor_blocks(collector, store, grace):
-    """The collection actor's native-state cache: block files untouched since before the oldest live group (less
-    ``grace`` s) go (``grpo.collect_blocks``). Run every 5 minutes by ``collect`` for its own (local) actor. Each episode imports only states its own calls stored, the actor touches
-    a block file whenever it stores or reads it, and nothing reads the store after the episode (the build trains imports
-    as pass-through from the recorded write); aei1-collect-v0001 held 6-10 GB of them, one of 3.4 GB. ``--block-gc-grace``
-    < 0 opts out."""
+    """The collection actor's native-state cache: block files untouched since before the oldest running episode (less
+    ``grace`` s) go (``grpo.collect_blocks``). Run every 5 minutes by ``collect`` for its own (local) actor. Each episode
+    imports only states its own calls stored, the actor touches a block file whenever it stores or reads it, and nothing
+    reads the store after the episode (the build trains imports as pass-through from the recorded write; a resumed
+    partial never continues past a Neuralese write, ``episode_files.partial_continuable``). A live memetic group (its
+    preparation writes guidance states its later episodes import) still holds back to its creation.
+
+    The cutoff was the oldest live group's creation: a group resumed by a restarted collector keeps its first creation
+    time (``grpo.Collector.resume_unfinished``), and one slow group held every block since (aei1 v9 2026-11-25: 16 GB,
+    ~5 GB/hour, the oldest live group 7 h old). ``NATLANG_BLOCK_GC_BY_GROUP=1`` restores that rule; ``--block-gc-grace``
+    < 0 opts out of the collection."""
     import grpo
     if grace < 0:
         return
     try:
+        by_group = os.environ.get('NATLANG_BLOCK_GC_BY_GROUP') == '1' or not hasattr(collector, 'oldest_running_start')
         with collector.lock:     # scored groups stay in ``groups`` here (no learner prunes them): only running ones
-            oldest = min([info['created'] for info in collector.groups.values()
-                          if not info.get('abandoned') and info.get('done', 0) < info.get('size', 0)], default=time.time())
+            live = [info for info in collector.groups.values()
+                    if not info.get('abandoned') and info.get('done', 0) < info.get('size', 0)]
+        if not by_group:
+            live = [info for info in live if info.get('dir') is not None
+                    and (Path(info['dir']) / 'memetic-spec.json').exists()]
+        oldest = min([info['created'] for info in live], default=time.time())
+        if not by_group:
+            oldest = min(oldest, collector.oldest_running_start())
         files, freed = grpo.collect_blocks(store, oldest - grace)
         if files:
             log({'event': 'native states collected', 'files': files, 'freed_gb': round(freed / 1e9, 2)})
@@ -1343,6 +1356,7 @@ FIXED_VAL_DIR = 'val-fixed'
 # the standing Colab fill (``colab_fill_check``): ledger GB of its DGX client (the hand-launched backlog fill peaked at
 # 3.6 GB with 192 workers and was OOM-killed) and the Colab actor's running cap its polite draws fill up to
 COLAB_FILL_GB = 8
+FILL_KEEPER_SECONDS = 300
 COLAB_FILL_RUNNING = 128
 
 
@@ -3666,9 +3680,23 @@ class AsyncRoundDriver:
         if actor['checkpoint_sha256'] != policy['sha256']:
             return
         self.c.work_tokenizer()
-        self.c.ledger(f'{unit}-fill', FILL_GB, 'medium', self.c.fill_command(actor, skip_trained=self.trained_builds()),
-                      work / 'fill.log', detach=True, repo=self.c.fill_repo())
-        self.note(fill_started=f'{unit}-fill', policy=policy['sha256'])
+        # standing: relaunched whenever it is gone while its collection runs (2026-11-25 22:22: the DGX fill was
+        # OOM-killed and nothing restarted it; only the Colab fill had a keeper). NATLANG_EI_FILL_KEEPER=0 opts out.
+        keep = os.environ.get('NATLANG_EI_FILL_KEEPER', '1') != '0'
+        launches = 0
+        while True:
+            if not self.c.present(f'{unit}-fill'):
+                subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}-fill.service'], capture_output=True)
+                self.c.ledger(f'{unit}-fill', FILL_GB, 'medium',
+                              self.c.fill_command(actor, skip_trained=self.trained_builds()),
+                              work / 'fill.log', detach=True, repo=self.c.fill_repo())
+                launches += 1
+                self.note(fill_started=f'{unit}-fill', policy=policy['sha256'], launch=launches)
+            if not keep:
+                return
+            time.sleep(FILL_KEEPER_SECONDS)
+            if not self.c.active(unit):
+                return
 
     def remote_targets(self):
         """The ``--rebind-actor HOST@FRONT_URL[=SLOTS]`` targets: {index, host, front, slots, pop, suffix}. A target on
@@ -4423,6 +4451,8 @@ class AsyncRoundDriver:
         and the marker): its own exit record (``stages/<step>.exit``, written by the unit: status 0 for this argv), or
         for a unit launched before those records its journal (the last start ended without a failure) together with
         its output. None when it did not (it runs again)."""
+        if (round_dir / 'stages' / f'{name}.rerun').exists():
+            return None             # asked to run again (supply_wait): earlier outputs do not count
         exit_path = round_dir / 'stages' / f'{name}.exit'
         if exit_path.exists():
             try:
@@ -4506,6 +4536,7 @@ class AsyncRoundDriver:
                     done.write_text(json.dumps({'time': time.time(), 'recovered': how}) + '\n')
                     return
                 (round_dir / 'stages' / f'{name}.exit').unlink(missing_ok=True)
+                (round_dir / 'stages' / f'{name}.rerun').unlink(missing_ok=True)
             self.c.ledger(unit, budget, STAGE_PRIORITY, step_command(argv, round_dir / 'stages' / f'{name}.exit'),
                           round_dir / f'{name}.log', repo=repo, room=True)
             done.write_text(json.dumps({'time': time.time()}) + '\n')
@@ -4577,6 +4608,10 @@ class AsyncRoundDriver:
         for name in ('data', 'build'):
             for suffix in ('.done', '.exit'):
                 (round_dir / 'stages' / f'{name}{suffix}').unlink(missing_ok=True)
+            # 2026-11-25 r0012: without this the next step() found the previous outputs and a successful last run in
+            # the journal (step_finished 'journal'), marked the step done and rebuilt nothing; six rechecks read the
+            # same 4,939,072 tokens while new fills waited
+            (round_dir / 'stages' / f'{name}.rerun').write_text(json.dumps({'at': time.time(), 'why': 'supply'}) + '\n')
         return True
 
     def round_validation(self, round_dir):

@@ -14140,3 +14140,55 @@ Targeted evidence: 116 campaign controls passed, including immutable raw, pre/po
 The actual0072 Regency query returns correct0→0 repair progress and a non-reopened crossing from its captured native accounts, but its old checker requires a private claim source label, exact finding token and two-element reference array. Future SST aacd1ef fixes the native stage/verifier mechanism. Added an offline reassessor for completed original read-only queries: it verifies clean source/entry/root-output custody, exact distinct native read/forecast effects and unchanged installed numeric-oracle decisions/citations, then requires one genuine independent bound Terra meaning review before any completion overlay. Old false reference-conformance observations stay false in source-bound incidental roles; no missing array element, actor read or positive check is invented. Only exact native-grounded original values can lose their old false masks. Originals remain immutable.
 
 Sixteen targeted custody/negative controls passed in ledger vibe-regency-recovery-check-20261125b. Actual-packet preparation, Terra admission and canonical reader/materializer handoff are still pending; no old success or seed is claimed. The genuine GAD missing-roster and contradictory Workspace answers remain failed. This work does not gate active collection or frozen Source41.
+## 2026-11-25 23:40 aei1: supply rechecks actually rerun data and build; the DGX fill is standing (coordinator)
+
+- **Bug.** `supply_wait` deleted `stages/{data,build}.{done,exit}` so a short round would rerun them, but the next
+  `step()` asked `step_finished`, which found the previous outputs and a successful last run in the journal and marked
+  the step done (`how: journal`). r0012 rechecked six times (18:56-23:02) on the same mix: 4,939,072 new tokens each
+  time, 61k short of 5M, while new fills arrived. Fix: `supply_wait` writes `stages/<step>.rerun`; `step_finished`
+  returns None while it exists; `step()` removes it when it launches the step. Test in
+  `test_a_round_short_of_new_supervision_waits_and_rebuilds_until_the_wait_expires`.
+- **DGX fill.** `aei1-collect-v0009-fill` was OOM-killed at its 4.5 GB cap (22:22; 4.5 GB peak) and nothing relaunched
+  it (only the Colab fill had a keeper). `FILL_GB` 4.5 -> 8; `_fill_beside` relaunches the fill every
+  `FILL_KEEPER_SECONDS` (300) while its collection runs (`NATLANG_EI_FILL_KEEPER=0` opts out). Test in
+  `test_async_reader_routing.py`.
+
+## 2026-11-26 00:10 aei1: open collections compacted; actor native-state GC cuts at the oldest running episode (storage)
+
+- **Symptom.** DGX root 52 GB free and falling 10-11 GB/h (floor 40): the v9 collections (head 34 GB, `-pop` 16,
+  `-remote0` 29) stay open for the supply wait (5M new tokens, up to 12 h), and retention only tiers closed ones.
+- **Measured (23:30).** Head: `actor/blocks` 16 GB (native-state cache, ~5 GB/h: 10 GB written since the collector
+  restarted at 21:33), `groups` 15 GB. Groups of all three: `rollouts.jsonl` 28 GB, each sample's `results.jsonl` 16.5
+  GB (zstd -3: ~8x), teacher samples 1 GB, raw partials/evidence ~1 GB (already compacted at the group's scoring),
+  worker logs and journals < 0.1 GB. Nothing else redundant: `results.jsonl` is the scorer's input, not a copy of
+  `rollouts.jsonl` (that is the scored, lowered form).
+- **Cause 1 (blocks).** `collect_actor_blocks` cut at the oldest live group's creation. A group resumed by a restarted
+  collector keeps its first `created` (`cases.jsonl` mtime), so groups resumed at 21:33 held every block since
+  15:46. Fix: the collector records each slot's episode start (and a memetic preparation's), and the GC cuts at the
+  oldest running one less the grace; a live memetic group still holds back to its creation (its preparation writes
+  guidance states its later episodes import). `NATLANG_BLOCK_GC_BY_GROUP=1` restores the group rule. An owner-scoped
+  release through the actor (`/v1/neuralese/collect` per stale owner) was tried and stopped: each call loads every
+  foreign-held block to compute closures under the store lock (> 60 s per owner) and would stall the actor.
+- **Cause 2 (groups).** A scored group is reused as scored, never scored again (`reuse_scored`), yet its samples'
+  `results.jsonl` stayed raw until the collection closed. Fix: `episode_files.compact_results` (verified `.zst`, mtime
+  kept) and `ei_round_tier.compact_groups`: every collection's scored groups, running ones included, compact each quiet
+  (30 min), unheld top-level sample (raw jobs and `results.jsonl`); a done group gets `.episodes-compacted`. NVMe
+  collections first, 5 min per collection per pass; also in the driver's `retain`. Readers resolve the compacted file
+  (`episode_files.present`): `task_rollouts.entry_outcome`/`score`, `collection_health`, `recorded_policies` (already
+  `read_bytes`), `sglang_bench`. Memetic nested evals stay raw (`memetic_workspace` reads them). Not applicable: held
+  measurements, program-tune arms and the dashboard read their own directories, which this does not compact. The
+  registry's collection globs name `rollouts.jsonl`, not `results.jsonl`. Opt-outs `--no-group-compaction`,
+  `NATLANG_RESULTS_COMPACT=0`.
+- **Remote pulls.** `remote_collect.pull` excludes each sample whose results the DGX holds compacted
+  (`COMPACTED_RESULTS_EXCLUDED`). The tier refuses a pulled collection while a live or failed puller's
+  `remote_collect.py` lacks that constant: today's `-remote0` puller (pin d0f9f06e5bf5) would re-pull 7 GB raw over the
+  4.8 MB/s link.
+- **Applied now.** Native-state files untouched since before the head collector's start less 600 s deleted (423
+  files, 5.8 GB, list first); scored groups compacted: head 4.8 GB, `-pop` 4.9, v0008 1.7. Root 48 -> 62 GB.
+  `-remote0` (29 GB) waits for a driver on a pin with this commit; so does the new block GC of the head collector.
+- **Not done.** `rollouts.jsonl` (28 GB, ~10x) stays raw: it is the registered training input, and about 20 readers
+  use its existence as the group's scored marker (`reuse_scored`, `sft_sources`, remote pull markers, registry
+  manifests). Compacting it is the next storage lever.
+- Tests: `test_episode_files.py` (compaction and readers, retention pass on an open collection, remote pull, block GC
+  cutoff); the stale expectation in `test_grpo_sampling_supply.py` (the token after an empty think block is context
+  since c1abc6a47) fixed.

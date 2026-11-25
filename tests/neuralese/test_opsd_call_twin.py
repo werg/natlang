@@ -101,3 +101,47 @@ def test_chunked_twin_loss_equals_one_pass():
         torch.testing.assert_close(emb.weight.grad, g_one, rtol=1e-4, atol=1e-6)
     finally:
         O._positions_hidden, O._head = O_hidden, O_head
+
+
+def test_synthesize_contrast_feedback_is_structural_and_withholds_answers():
+    from natlang_neuralese.rl.opsd_privileged import synthesize_contrast_feedback
+    failed = {
+        'task_id': 'w1',
+        'outcome': 'semantic_mismatch',
+        'turns': [
+            {'target': {'role': 'assistant', 'tool_calls': [{'function': {'name': 'eval', 'arguments': '{}'}}]}},
+            {'target': {'role': 'assistant', 'tool_calls': [{'function': {'name': 'return_result', 'arguments': '{"value":"wrong"}'}}]}},
+        ],
+    }
+    passing = {
+        'task_id': 'w1',
+        'outcome': 'task_success',
+        'turns': [
+            {'target': {'role': 'assistant', 'tool_calls': [{'function': {'name': 'read_file', 'arguments': '{"path":"ledger.csv"}'}}]}},
+            {'target': {'role': 'assistant', 'tool_calls': [{'function': {'name': 'eval', 'arguments': '{}'}}]}},
+            {'target': {'role': 'assistant', 'tool_calls': [{'function': {'name': 'return_result', 'arguments': '{"value":"secret_answer_42"}'}}]}},
+        ],
+    }
+    items = synthesize_contrast_feedback(failed, passing)
+    assert len(items) == 1
+    note = items[0]['feedback']
+    assert 'read_file' in note and 'secret_answer_42' not in note and 'ledger.csv' not in note
+    _, facts = opsd_facts(case(), custody=custody(), attempt_feedback=items)
+    assert any('read_file' in f.text for f in facts)
+    assert all('secret_answer_42' not in f.text for f in facts)
+
+
+def test_head_is_differentiable_and_scores_trainable_rows():
+    from types import SimpleNamespace
+    from natlang_neuralese.rl.opsd_privileged import _head
+    torch.manual_seed(1)
+    weight = torch.randn(12, 4, dtype=torch.bfloat16)
+    rows_param = torch.randn(2, 4, requires_grad=True)
+    learner = SimpleNamespace(model=SimpleNamespace(lm_head=SimpleNamespace(weight=weight)),
+                              trainable_rows=SimpleNamespace(token_ids=torch.tensor([3, 7]), rows=rows_param))
+    h = torch.randn(5, 4, requires_grad=True)
+    logits = _head(learner, h)
+    torch.testing.assert_close(logits[:, 3], h @ rows_param[0])
+    torch.testing.assert_close(logits[:, 0], h @ weight[0].float())
+    logits.sum().backward()
+    assert h.grad.abs().sum() > 0 and rows_param.grad.abs().sum() > 0

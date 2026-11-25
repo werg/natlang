@@ -28,6 +28,7 @@ from .rollout_math import (DEFAULT_EXECUTION_EFFICIENCY_WEIGHT, group_advantages
                            execution_efficiency_cost, execution_efficiency_counters, grounded_failure_report_credit, reporting_spread)
 from ..common.code_provenance import code_provenance
 from ..common.jsonio import json_line
+from .episode_files import present
 from ..common.task_roots import student_root_row, authored_root_row
 
 UNSCORED_OUTCOMES = {"infrastructure_error", "unresolved"}
@@ -183,8 +184,8 @@ def pass_rate_counts(rows) -> tuple[int, int]:
 def entry_outcome(entry: dict[str, Any], task: dict[str, Any], finish: dict[str, Any] | None) -> tuple[str, float | None, float | None]:
     """(outcome class, binary reward, graded reward) of one finished queue entry, classified as ``score`` classifies it
     (memetic improvement tasks aside): read before its group is complete (grpo.py dynamic sampling)."""
-    output = Path(entry["output"])
-    results = read_jsonl(output) if output.is_file() else []
+    output = present(entry["output"])     # raw or compacted once scored (episode_files.compact_results)
+    results = read_jsonl(output) if output else []
     result = results[0] if results else None
     outcome = classify_case(result, finish)
     reward = reward_of(outcome, finish)
@@ -952,8 +953,8 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
     finishes = {row["key"]: row for row in journal if row.get("event") == "finish"}
     rollouts = []
     for entry in entries:
-        output = Path(entry["output"])
-        results = read_jsonl(output) if output.is_file() else []
+        output = present(entry["output"])     # raw or compacted once scored (episode_files.compact_results)
+        results = read_jsonl(output) if output else []
         result = results[0] if results else None
         if root_mode == "student" and result:
             for turn in result.get("trajectory") or []:

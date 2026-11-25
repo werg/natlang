@@ -162,8 +162,49 @@ def lfm3_rendering(tokenizer, *, consume_open=0, consume_close=0, fingerprint='0
                                lambda text: tokenizer(text, add_special_tokens=False)['input_ids'])
 
 
+def _turn_tool_names(rollout: dict) -> list[str]:
+    names = []
+    for turn in rollout.get('turns') or ():
+        target = turn.get('target') or {}
+        for tc in target.get('tool_calls') or ():
+            fn = (tc.get('function') or {}).get('name') if isinstance(tc, dict) else None
+            if isinstance(fn, str) and fn:
+                names.append(fn)
+    return names
+
+
+def synthesize_contrast_feedback(failed_rollout: dict, passing_rollout: dict) -> list[dict]:
+    """Derive strictly structural, non-answer-leaking contrast diagnostics comparing a failed rollout against
+    a verified passing rollout of the same task (never names return values or expected answers)."""
+    task_id = failed_rollout.get('task_id')
+    if not task_id or task_id != passing_rollout.get('task_id'):
+        return []
+    fail_tools = _turn_tool_names(failed_rollout)
+    pass_tools = _turn_tool_names(passing_rollout)
+    notes: list[str] = []
+    omitted = sorted(set(pass_tools) - set(fail_tools) - {'return_result'})
+    if omitted:
+        notes.append(f"a verified run used tool(s) {', '.join(omitted)} that this attempt omitted")
+    extra = sorted(set(fail_tools) - set(pass_tools) - {'return_result'})
+    if extra:
+        notes.append(f"this attempt invoked tool(s) {', '.join(extra)} not needed by a verified run")
+    for idx, (ft, pt) in enumerate(zip(fail_tools, pass_tools)):
+        if ft != pt:
+            notes.append(f"tool sequence diverged at action {idx}: attempt called {ft}, whereas a verified run called {pt}")
+            break
+    if not notes and len(fail_tools) != len(pass_tools):
+        notes.append(f"attempt took {len(fail_tools)} tool action(s) versus {len(pass_tools)} in a verified run")
+    if not notes:
+        return []
+    return [{
+        'case_id': task_id,
+        'attempt': int(failed_rollout.get('sample') or 0),
+        'feedback': 'Structural process diagnosis: ' + '; '.join(notes),
+    }]
+
+
 def build_t1_twins(collections, out, *, policy_sha256, tokenizer, max_tokens=16384, max_calls_per_episode=6,
-                   max_episodes=None, held_manifest=None):
+                   max_episodes=None, held_manifest=None, use_contrast_feedback=True):
     import glob
     import json
     from pathlib import Path
@@ -175,7 +216,8 @@ def build_t1_twins(collections, out, *, policy_sha256, tokenizer, max_tokens=163
     custody = ProtectedWorlds.load()
     rendering = lfm3_rendering(tokenizer)
     funnel = {'rollouts': 0, 'other_policy': 0, 'success_or_unscored': 0, 'held_excluded': 0, 'no_case': 0,
-              'custody_refused': 0, 'no_facts': 0, 'episodes': 0, 'twins': 0, 'too_long': 0, 'validation_twins': 0}
+              'custody_refused': 0, 'no_facts': 0, 'contrast_feedback': 0,
+              'episodes': 0, 'twins': 0, 'too_long': 0, 'validation_twins': 0}
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     partial = out.with_suffix(out.suffix + '.partial')
@@ -192,73 +234,76 @@ def build_t1_twins(collections, out, *, policy_sha256, tokenizer, max_tokens=163
                 rewards = Path(group) / 'rewards.jsonl'
                 for row in (read_jsonl(rewards) if rewards.exists() else ()):
                     details[(row.get('task_id'), row.get('group'), row.get('sample'))] = row.get('detail')
-                with rollouts_path.open(encoding='utf-8') as handle:
-                    for line in handle:
-                        if not line.strip():
+                group_rollouts = [json.loads(line) for line in rollouts_path.open(encoding='utf-8') if line.strip()]
+                passing_by_task = {}
+                if use_contrast_feedback:
+                    for r in group_rollouts:
+                        if not r.get('unscored') and r.get('outcome') in SUCCESS_OUTCOMES and r.get('task_id'):
+                            passing_by_task.setdefault(r['task_id'], r)
+                for rollout in group_rollouts:
+                    funnel['rollouts'] += 1
+                    if (rollout.get('policy') or {}).get('checkpoint_sha256') != policy_sha256:
+                        funnel['other_policy'] += 1
+                        continue
+                    if rollout.get('unscored') or rollout.get('outcome') in SUCCESS_OUTCOMES or not rollout.get('outcome'):
+                        funnel['success_or_unscored'] += 1
+                        continue
+                    task_id = rollout['task_id']
+                    if task_id in excluded:
+                        funnel['held_excluded'] += 1
+                        continue
+                    case = by_id.get(task_id)
+                    if case is None:
+                        funnel['no_case'] += 1
+                        continue
+                    detail = details.get((task_id, rollout.get('group'), rollout.get('sample')))
+                    feedback = [] if rollout['outcome'] in ANSWER_VERDICT_OUTCOMES else [
+                        {'case_id': task_id, 'attempt': int(rollout.get('sample') or 0),
+                         'feedback': f"the run ended with outcome {rollout['outcome']}"
+                                     + (f'; verifier detail: {detail}' if detail else '')}]
+                    if feedback:
+                        funnel['structural_feedback'] = funnel.get('structural_feedback', 0) + 1
+                    if use_contrast_feedback and task_id in passing_by_task:
+                        contrast = synthesize_contrast_feedback(rollout, passing_by_task[task_id])
+                        if contrast:
+                            feedback.extend(contrast)
+                            funnel['contrast_feedback'] += 1
+                    try:
+                        receipt, facts = opsd_facts(case, custody=custody, attempt_feedback=feedback)
+                    except Exception:
+                        funnel['custody_refused'] += 1
+                        continue
+                    if not facts:
+                        funnel['no_facts'] += 1
+                        continue
+                    texts = [fact.text for fact in facts]
+                    roots = [index for index, turn in enumerate(rollout['turns'])
+                             if turn.get('invocation_role') == 'root' and _prompt_ids(turn) is not None
+                             and _completion_ids(turn)]
+                    if len(roots) > max_calls_per_episode:   # evenly spread over the episode
+                        step = len(roots) / max_calls_per_episode
+                        roots = [roots[int(i * step)] for i in range(max_calls_per_episode)]
+                    validation = is_validation(rollout)
+                    kept = 0
+                    for index in roots:
+                        turn = rollout['turns'][index]
+                        twin = twin_sequences(rendering, _prompt_ids(turn), _completion_ids(turn), texts,
+                                              receipt={'custody': receipt, 'facts': [f.id for f in facts]})
+                        if len(twin.twin_ids) > max_tokens:
+                            funnel['too_long'] += 1
                             continue
-                        rollout = json.loads(line)
-                        funnel['rollouts'] += 1
-                        if (rollout.get('policy') or {}).get('checkpoint_sha256') != policy_sha256:
-                            funnel['other_policy'] += 1
-                            continue
-                        if rollout.get('unscored') or rollout.get('outcome') in SUCCESS_OUTCOMES or not rollout.get('outcome'):
-                            funnel['success_or_unscored'] += 1
-                            continue
-                        task_id = rollout['task_id']
-                        if task_id in excluded:
-                            funnel['held_excluded'] += 1
-                            continue
-                        case = by_id.get(task_id)
-                        if case is None:
-                            funnel['no_case'] += 1
-                            continue
-                        detail = details.get((task_id, rollout.get('group'), rollout.get('sample')))
-                        # A wrong-answer verdict is not a diagnosis: "your value X was wrong" names the answer outright
-                        # on a two-way decision (pass/fail) and narrows it elsewhere. Only structural outcomes
-                        # (repetition, invalid actions, budget) become attempt feedback; a semantic mismatch's twin
-                        # carries only the world's own diagnostic facts.
-                        feedback = [] if rollout['outcome'] in ANSWER_VERDICT_OUTCOMES else [
-                            {'case_id': task_id, 'attempt': int(rollout.get('sample') or 0),
-                             'feedback': f"the run ended with outcome {rollout['outcome']}"
-                                         + (f'; verifier detail: {detail}' if detail else '')}]
-                        if feedback:
-                            funnel['structural_feedback'] = funnel.get('structural_feedback', 0) + 1
-                        try:
-                            receipt, facts = opsd_facts(case, custody=custody, attempt_feedback=feedback)
-                        except Exception:
-                            funnel['custody_refused'] += 1
-                            continue
-                        if not facts:
-                            funnel['no_facts'] += 1
-                            continue
-                        texts = [fact.text for fact in facts]
-                        roots = [index for index, turn in enumerate(rollout['turns'])
-                                 if turn.get('invocation_role') == 'root' and _prompt_ids(turn) is not None
-                                 and _completion_ids(turn)]
-                        if len(roots) > max_calls_per_episode:   # evenly spread over the episode
-                            step = len(roots) / max_calls_per_episode
-                            roots = [roots[int(i * step)] for i in range(max_calls_per_episode)]
-                        validation = is_validation(rollout)
-                        kept = 0
-                        for index in roots:
-                            turn = rollout['turns'][index]
-                            twin = twin_sequences(rendering, _prompt_ids(turn), _completion_ids(turn), texts,
-                                                  receipt={'custody': receipt, 'facts': [f.id for f in facts]})
-                            if len(twin.twin_ids) > max_tokens:
-                                funnel['too_long'] += 1
-                                continue
-                            kept += 1
-                            funnel['twins'] += 1
-                            funnel['validation_twins'] += int(validation)
-                            writer.write(json_line({'task_id': task_id, 'family': rollout.get('family'),
-                                                    'split_group': _split_group(rollout), 'validation': validation,
-                                                    'episode': f"{Path(group).name}/{rollout['group']}/{rollout['sample']}",
-                                                    'turn': index, 'outcome': rollout['outcome'], 'facts': texts,
-                                                    'prompt_ids': list(twin.student_ids[:len(twin.student_ids) - len(twin.targets)]),
-                                                    'completion_ids': list(twin.targets)}).encode('utf-8') + b'\n')
-                        funnel['episodes'] += int(kept > 0)
-                        if max_episodes and funnel['episodes'] >= max_episodes:
-                            break
+                        kept += 1
+                        funnel['twins'] += 1
+                        funnel['validation_twins'] += int(validation)
+                        writer.write(json_line({'task_id': task_id, 'family': rollout.get('family'),
+                                                'split_group': _split_group(rollout), 'validation': validation,
+                                                'episode': f"{Path(group).name}/{rollout['group']}/{rollout['sample']}",
+                                                'turn': index, 'outcome': rollout['outcome'], 'facts': texts,
+                                                'prompt_ids': list(twin.student_ids[:len(twin.student_ids) - len(twin.targets)]),
+                                                'completion_ids': list(twin.targets)}).encode('utf-8') + b'\n')
+                    funnel['episodes'] += int(kept > 0)
+                    if max_episodes and funnel['episodes'] >= max_episodes:
+                        break
                 if max_episodes and funnel['episodes'] >= max_episodes:
                     break
             if max_episodes and funnel['episodes'] >= max_episodes:
@@ -292,13 +337,21 @@ def _positions_hidden(learner, ids, positions, *, grad):
 
 
 def _head(learner, rows):
-    from ..train import lfm3_fast
+    """FP32 logits of ``rows`` under the policy's head, the trainable Neuralese rows scoring their ids (the rule of
+    ``lfm3_fast._head_logits_chunk``). Differentiable: lfm3_fast's FP32-output ``torch.mm(out_dtype=...)`` has no
+    autograd formula (``derivative for aten::mm is not implemented`` in the first T1 backward), so the head runs as an
+    FP32 matmul against a cached FP32 copy of the frozen BF16 head weight."""
     weight = learner.model.lm_head.weight
+    cached = getattr(learner, '_opsd_head_fp32', None)
+    if cached is None or cached.device != weight.device:
+        cached = weight.detach().float()
+        learner._opsd_head_fp32 = cached
+    logits = rows.float() @ cached.t()
     special = learner.trainable_rows
-    # the learner's own head rule: the trainable Neuralese rows score their ids (lfm3_fast._head_logits_chunk)
-    return lfm3_fast._head_logits_chunk(rows.to(weight.dtype), weight,
-                                        special.token_ids if special is not None else None,
-                                        special.rows if special is not None else None).float()
+    if special is not None and special.token_ids.numel():
+        logits = logits.clone()
+        logits[:, special.token_ids] = rows.float() @ special.rows.float().t()
+    return logits
 
 
 def twin_loss(learner, twin, *, grad, scale=1.0, chunk=256, **loss_options):
@@ -424,6 +477,8 @@ def main(argv=None):
     b.add_argument('--out', required=True)
     b.add_argument('--max-episodes', type=int)
     b.add_argument('--held-manifest')
+    b.add_argument('--contrast-feedback', action=argparse.BooleanOptionalAction, default=True,
+                   help='Synthesize structural tool-sequence contrast feedback for failed episodes without verifier notes (default: true).')
     t = sub.add_parser('train')
     t.add_argument('--twins', required=True)
     t.add_argument('--checkpoint', required=True)
@@ -438,7 +493,8 @@ def main(argv=None):
     if args.command == 'build':
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
         result = build_t1_twins(args.collection, args.out, policy_sha256=args.policy_sha256, tokenizer=tokenizer,
-                                max_episodes=args.max_episodes, held_manifest=args.held_manifest)
+                                max_episodes=args.max_episodes, held_manifest=args.held_manifest,
+                                use_contrast_feedback=args.contrast_feedback)
         from ..common.code_provenance import code_provenance
         Path(args.out + '.json').write_text(json.dumps({'schema': T1_SCHEMA, 'stage': 'build', 'funnel': result,
                                                         'collections': args.collection,

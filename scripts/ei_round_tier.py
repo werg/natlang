@@ -25,7 +25,10 @@ Retention (``drop_plan``, default; ``--no-drop`` opts out; DECISIONS 2026-11-25 
 what no consumer reads: closed collections' actor exports and native-state blocks (every policy but the lineage head),
 trained rounds' learner states, chains pickles (mix with trained-units.json, filled, own Neuralese graph) and
 superseded exports, and the checkpoint of a policy that left the lineage unprotected; teacher campaigns' quiet episodes
-are compacted. The async driver runs the same deletions itself at each publication (``retain``).
+are compacted, and so are the scored groups of every collection, running ones included (``compact_groups``: a quiet,
+unheld sample's raw job files and its ``results.jsonl``, ``episode_files.compact_sample`` and ``compact_results``;
+``--no-group-compaction`` or ``NATLANG_RESULTS_COMPACT=0`` / ``NATLANG_EPISODE_COMPACT=0`` opt out; DECISIONS
+2026-11-25 "open collections compacted"). The async driver runs the same deletions itself at each publication (``retain``).
 
 Each item is skipped while any process (cwd, exe, fds, maps, command line, environment) or an active, failed or
 timer-triggered unit names it, or a ``.keep-on-nvme`` marker covers it. A deletion is also skipped while a configured
@@ -221,11 +224,19 @@ def _under_dest(link: Path) -> bool:
     return str(target).startswith(str(DEST) + '/') or str(target).startswith(str(link.parent.resolve()) + '/')
 
 
-def plan(driver: Path, state: dict, current_policy: dict | None, drop: bool = True) -> list[dict]:
+def plan(driver: Path, state: dict, current_policy: dict | None, drop: bool = True,
+         group_compaction: bool = True) -> list[dict]:
     """The actions for one driver directory, oldest first: {'op': 'delete'|'move'|'trim'|'compact', 'path', 'why'}.
     ``drop`` (default; ``--no-drop`` opts out) puts the retention deletions (``drop_plan``) and the teacher campaigns'
     episode compaction first; the moves then tier what is left."""
     actions = drop_plan(driver, state, current_policy) if drop else []
+    if drop and group_compaction and (driver / 'collect').is_dir():
+        # the NVMe's collections first (newest first: the running ones grow); moved ones (on the HDD) after
+        newest = sorted((driver / 'collect').iterdir(), key=lambda p: p.name, reverse=True)
+        for d in sorted(newest, key=lambda p: p.is_symlink()):
+            if COLLECTION.match(d.name) and d.is_dir() and (d / 'groups').is_dir():
+                actions.append({'op': 'compact-groups', 'path': str(d),
+                                'why': 'scored groups: quiet episodes compacted (episode_files.compact_results)'})
     if drop:
         for t in sorted(driver.glob('teacher-r*')):
             if t.is_dir() and not t.is_symlink() and (t / 'episodes').is_dir() and not (t / COMPACTED).exists():
@@ -474,6 +485,67 @@ def compact_campaign(campaign: Path, quiet_seconds: int = 3600) -> dict:
     return {**dict(total), 'freed': episode_files.freed(total), 'skipped': skipped}
 
 
+# ---------- scored groups of any collection ----------
+GROUP_COMPACTED = '.episodes-compacted'
+GROUP_QUIET_SECONDS = 1800
+
+
+def remote_puller_blocks(collection: Path, procs, units) -> str | None:
+    """Why a collection pulled from a remote VM (``remote_collect.py run --work COLLECTION``) is not compacted: a live
+    or failed (restartable) puller whose ``remote_collect.py`` predates ``COMPACTED_RESULTS_EXCLUDED`` would pull every
+    compacted results.jsonl raw again. None when no such puller exists."""
+    needle = f'--work {collection} '
+    texts = [t for _, kind, t in procs if kind == 'cmdline'] + [t for _, t in units]
+    for text in texts:
+        if 'remote_collect.py' not in text or needle not in text + ' ':
+            continue
+        script = next((w for w in text.split() if w.endswith('remote_collect.py')), None)
+        try:
+            if script and 'COMPACTED_RESULTS_EXCLUDED' in Path(script).read_text():
+                continue
+        except OSError:
+            pass
+        return f'remote puller without compacted-results excludes: {script}'
+    return None
+
+
+GROUP_PASS_SECONDS = 300      # one collection's share of a pass: the moves after it keep their time
+
+
+def compact_groups(collection: Path, quiet_seconds: int = GROUP_QUIET_SECONDS, deadline: float | None = None,
+                   max_seconds: float = GROUP_PASS_SECONDS) -> dict:
+    """The scored groups (``score.json``) of one collection, open or closed: each top-level sample (``row-*/*``) that
+    is quiet ``quiet_seconds`` and that no process holds open loses its raw job files and its ``results.jsonl`` to
+    ``.zst`` (``episode_files.compact_sample``, ``compact_results``). A scored group is reused as scored and never scored
+    again (``grpo.Collector.reuse_scored``); its readers resolve the compacted file (``episode_files.present``). A group
+    whose samples were all compacted gets ``GROUP_COMPACTED`` (later passes skip it). Returns counters with 'freed',
+    'groups' and 'skipped' (samples still live)."""
+    total, groups, skipped = collections.Counter(), 0, 0
+    if not episode_files.enabled():
+        return {'freed': 0, 'groups': 0, 'skipped': 0}
+    held = episode_files.open_paths(collection / 'groups')
+    stop = time.time() + max_seconds if deadline is None else min(deadline, time.time() + max_seconds)
+    for group in sorted((collection / 'groups').glob('g*')):
+        if time.time() > stop:
+            break
+        if group.is_symlink() or not group.is_dir() or (group / GROUP_COMPACTED).exists() \
+                or not (group / 'score.json').is_file():
+            continue
+        now, live, stats = time.time(), 0, collections.Counter()
+        for sample in sorted(p for p in group.glob('row-*/*') if p.is_dir() and not p.is_symlink()):
+            if not episode_files.quiet_sample(sample, now, quiet_seconds, held):
+                live += 1
+                continue
+            stats.update(episode_files.compact_sample(sample))
+            stats.update(episode_files.compact_results(sample))
+        total.update(stats)
+        skipped += live
+        if not live and not stats.get('errors') and episode_files.results_enabled():
+            (group / GROUP_COMPACTED).write_text(json.dumps({'at': time.time(), **dict(stats)}) + '\n')
+        groups += 1
+    return {**dict(total), 'freed': episode_files.freed(total), 'groups': groups, 'skipped': skipped}
+
+
 # ---------- collection trim ----------
 # What a closed collection keeps: the episodes (results.jsonl, rollouts.jsonl, rewards, journals, partial episodes and
 # their evidence, compacted to .zst by natlang_neuralese.rl.episode_files, error records), memetic evaluations, task and
@@ -597,7 +669,8 @@ def run(args) -> dict:
         except (OSError, ValueError) as error:
             log(event='state unreadable: driver skipped', driver=str(driver), error=repr(error)[:200])
             continue
-        actions = plan(driver, state, current, drop=getattr(args, 'drop', True))
+        actions = plan(driver, state, current, drop=getattr(args, 'drop', True),
+                       group_compaction=getattr(args, 'group_compaction', True))
         if not apply_plan(driver, actions, args, procs, units, summary, deadline, configured):
             break
     return summary
@@ -614,11 +687,12 @@ def new_summary(apply: bool) -> dict:
     return {'deleted_bytes': 0, 'moved_bytes': 0, 'actions': 0, 'skipped': 0, 'errors': 0, 'applied': apply}
 
 
-def retain(driver: Path, *, apply: bool = True, ops=('delete', 'compact'), max_minutes: float = 30.,
+def retain(driver: Path, *, apply: bool = True, ops=('delete', 'compact', 'compact-groups'), max_minutes: float = 30.,
            consumer_configs: bool = True) -> dict:
     """The retention of one driver directory, run by the driver itself (``expert_iteration.py async-drive`` at each
     publication and when a collection closes; ``--no-retention`` opts out): ``plan``'s ``ops`` actions (deletions and
-    the teacher compaction by default; the HDD moves stay with the sweep) under the same reference checks."""
+    the teacher and scored-group compaction by default; the HDD moves stay with the sweep) under the same reference
+    checks."""
     state = json.loads((Path(driver) / 'phase-state.json').read_text())
     summary = new_summary(apply)
     actions = [a for a in plan(Path(driver), state, current_policy()) if a['op'] in ops]
@@ -645,6 +719,27 @@ def apply_plan(driver, actions, args, procs, units, summary, deadline, configure
         if why or keep_marker(path, driver):
             summary['skipped'] += 1
             log(event='kept', path=str(path), reason=(why or ['marker .keep-on-nvme'])[:3])
+            continue
+        if action['op'] == 'compact-groups':
+            # a running collector names and holds its collection: each sample is checked itself (quiet, none open)
+            blocked = remote_puller_blocks(path, procs, units)
+            if blocked or keep_marker(path, driver):
+                summary['skipped'] += 1
+                log(event='kept', path=str(path), reason=[blocked or 'marker .keep-on-nvme'])
+                continue
+            if not args.apply:
+                continue
+            try:
+                stats = compact_groups(path, deadline=deadline)
+            except Exception as error:
+                summary['errors'] += 1
+                log(event='error: kept', path=str(path), error=repr(error)[:300])
+                continue
+            if stats['freed']:
+                summary['compacted_bytes'] = summary.get('compacted_bytes', 0) + stats['freed']
+                summary['actions'] += 1
+                log(event='compacted', path=str(path), gb=round(stats['freed'] / GIB, 2), groups=stats['groups'],
+                    skipped=stats['skipped'], why=action['why'])
             continue
         if action['op'] == 'compact':
             if not args.apply:
@@ -736,6 +831,8 @@ def main(argv=None):
     parser.add_argument('--hdd-floor-gb', type=float, default=100.0)
     parser.add_argument('--no-drop', dest='drop', action='store_false',
                         help='opt out of the retention deletions and teacher compaction (drop_plan): moves only')
+    parser.add_argument('--no-group-compaction', dest='group_compaction', action='store_false',
+                        help='opt out of compacting the scored groups of every collection (compact_groups)')
     parser.add_argument('--no-consumer-configs', dest='consumer_configs', action='store_false',
                         help='opt out of the configured consumers (ops/consumers.d registrations, data registry, '
                              'current policy, watchdog, unit config files) as references of a deletion')

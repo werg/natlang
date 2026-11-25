@@ -35,8 +35,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-if str(REPO) not in sys.path:
-    sys.path.insert(0, str(REPO))
+for _path in (REPO, REPO / 'training' / 'neuralese'):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 SCHEMA = 'natlang.ei-collection-health/1'
 CACHE_SCHEMA = 'natlang.ei-collection-health-group/1'
@@ -76,14 +77,21 @@ def _jsonl(path):
 
 
 def _last_jsonl(path):
-    """The last complete JSON line of ``path`` (a retried sample appends)."""
+    """The last complete JSON line of ``path``, raw or compacted (``episode_files.compact_results``; a retried sample
+    appends)."""
     last = None
+    packed = Path(str(path) + '.zst')
     try:
-        with open(path) as handle:
-            for line in handle:
-                if line.strip():
-                    last = line
-    except OSError:
+        if not Path(path).is_file() and packed.is_file():
+            from natlang_neuralese.rl.episode_files import read_bytes
+            lines = read_bytes(packed).decode('utf-8', 'replace').splitlines()
+        else:
+            with open(path) as handle:
+                lines = list(handle)
+        for line in lines:
+            if line.strip():
+                last = line
+    except (OSError, RuntimeError):
         return None
     try:
         return json.loads(last) if last else None

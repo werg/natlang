@@ -199,3 +199,130 @@ def test_the_collection_trim_compacts_episode_files(tmp_path, monkeypatch):
     assert planned.get('episode-raw (compacts ~30x)', 0) > 0
     removed = tier.trim(tmp_path, apply=True)
     assert removed['episode-compaction'] > 0 and (s / 'jobs' / '000000-abc.partial.json.zst').exists()
+
+
+BIG_RESULT = (json.dumps({'trajectory': [{'ids': list(range(800))}] * 8, 'outcome': {'status': 'done'}}) + '\n').encode()
+
+
+def scored_group(root, age=7200):
+    s = sample(root, BIG_RESULT)
+    group = s.parent.parent
+    (group / 'score.json').write_text('{}\n')
+    old = time.time() - age
+    for path in [group, *group.rglob('*')]:
+        os.utime(path, (old, old), follow_symlinks=False)
+    return group, s
+
+
+def test_compact_results_keeps_every_byte_and_readers_resolve_it(tmp_path, monkeypatch):
+    from natlang_neuralese.common.jsonio import read_jsonl
+    _, s = scored_group(tmp_path)
+    mtime = (s / 'results.jsonl').stat().st_mtime
+    assert ef.compact_sample(s)['duplicate_result_files'] == 1
+    stats = ef.compact_results(s)
+    assert stats['results_files'] == 1 and stats['compressed_bytes'] < len(BIG_RESULT)
+    packed = s / 'results.jsonl.zst'
+    assert not (s / 'results.jsonl').exists() and packed.stat().st_mtime == mtime
+    assert ef.read_bytes(s / 'results.jsonl') == BIG_RESULT
+    assert ef.present(s / 'results.jsonl') == packed and read_jsonl(packed)[0]['outcome'] == {'status': 'done'}
+    # the duplicate check compares with the compacted results too
+    (s / 'jobs' / '000000-abc.result.json').write_bytes(BIG_RESULT)
+    assert ef.compact_sample(s)['duplicate_result_files'] == 1
+    import collection_health
+    assert collection_health._last_jsonl(s / 'results.jsonl')['outcome'] == {'status': 'done'}
+    from natlang_neuralese.rl import task_rollouts
+    seen = []
+    monkeypatch.setattr(task_rollouts, 'classify_case', lambda result, finish: seen.append(result) or 'task_success')
+    monkeypatch.setattr(task_rollouts, 'reward_of', lambda outcome, finish: 1.0)
+    monkeypatch.setattr(task_rollouts, 'graded_reward', lambda *a: 1.0)
+    task_rollouts.entry_outcome({'output': str(s / 'results.jsonl')}, {}, None)
+    assert seen[0]['outcome'] == {'status': 'done'}
+    other = tmp_path / 'other'
+    _, t = scored_group(other)
+    monkeypatch.setenv('NATLANG_RESULTS_COMPACT', '0')                  # opt-out
+    assert not ef.compact_results(t) and (t / 'results.jsonl').exists()
+
+
+def test_the_retention_pass_compacts_scored_groups_of_open_collections(tmp_path, monkeypatch):
+    import ei_round_tier as tier
+    collection = tmp_path / 'collect' / 'v0009-cde55352685b'
+    group, s = scored_group(collection)
+    live_group, live = scored_group(collection / 'live')               # a group still running: no score.json
+    live_group.rename(collection / 'groups' / 'g000002')
+    (collection / 'groups' / 'g000002' / 'score.json').unlink()
+    fresh = collection / 'groups' / 'g000003'
+    fresh.mkdir()
+    (fresh / 'score.json').write_text('{}\n')
+    (fresh / 'row-000' / 'sample-00').mkdir(parents=True)
+    (fresh / 'row-000' / 'sample-00' / 'results.jsonl').write_bytes(BIG_RESULT)   # scored, not yet quiet
+    actions = tier.plan(tmp_path, {'lineage': []}, None)
+    assert {'op': 'compact-groups', 'path': str(collection)} in [{k: a[k] for k in ('op', 'path')} for a in actions]
+    assert not any(a['op'] == 'compact-groups' for a in tier.plan(tmp_path, {'lineage': []}, None,
+                                                                  group_compaction=False))
+    stats = tier.compact_groups(collection)
+    assert stats['freed'] > 0 and stats['skipped'] == 1
+    assert (s / 'results.jsonl.zst').exists() and (group / tier.GROUP_COMPACTED).exists()
+    assert (collection / 'groups' / 'g000002' / 'row-000' / 'sample-00' / 'results.jsonl').exists()
+    assert (fresh / 'row-000' / 'sample-00' / 'results.jsonl').exists() and not (fresh / tier.GROUP_COMPACTED).exists()
+    # a puller whose remote_collect.py lacks the compacted-results excludes blocks the collection; a current one not
+    old = tmp_path / 'old' / 'remote_collect.py'
+    old.parent.mkdir()
+    old.write_text('# no excludes\n')
+    procs = [('1', 'cmdline', f'python {old} run --host colab-g4 --work {collection} -- python collect')]
+    assert tier.remote_puller_blocks(collection, procs, [])
+    current = REPO / 'scripts' / 'neuralese_data' / 'remote_collect.py'
+    assert tier.remote_puller_blocks(collection, [('1', 'cmdline', f'python {current} run --work {collection} ')],
+                                     [('u', f'python {current} run --work {collection} -- x')]) is None
+    assert tier.remote_puller_blocks(collection, [('1', 'cmdline', f'python {old} run --work {collection}-remote0 ')],
+                                     []) is None
+
+
+def test_the_remote_pull_never_pulls_a_compacted_result_again(tmp_path, monkeypatch):
+    import remote_collect as rc
+    vm, work = tmp_path / 'vm', tmp_path / 'W'
+
+    def fake(*args, timeout=3600, check=True):
+        argv = [str(vm) + str(a)[len('vm:'):] if str(a).startswith('vm:') else str(a) for a in args]
+        return subprocess.run(['rsync', '-a', *argv], check=check, capture_output=True, text=True)
+    monkeypatch.setattr(rc, 'rsync', fake)
+    remote = Path(str(vm) + str(work))
+    s = sample(remote, BIG_RESULT)
+    work.mkdir(parents=True)
+    rc.pull('vm', work)
+    local = work / s.relative_to(remote)
+    assert (local / 'results.jsonl').exists()
+    ef.compact_results(local)
+    rc.pull('vm', work)
+    assert not (local / 'results.jsonl').exists() and ef.read_bytes(local / 'results.jsonl') == BIG_RESULT
+
+
+def test_actor_block_gc_cuts_at_the_oldest_running_episode(tmp_path, monkeypatch):
+    import threading
+    import expert_iteration as ei
+    monkeypatch.setattr(ei, 'log', lambda record: None)
+    store = tmp_path / 'actor'
+    (store / 'blocks' / 'ab').mkdir(parents=True)
+    now = time.time()
+    before, during = store / 'blocks' / 'ab' / 'nzs1_abbefore.safetensors', store / 'blocks' / 'ab' / 'nzs1_abduring.safetensors'
+    before.write_bytes(b'x')
+    during.write_bytes(b'y')
+    os.utime(before, (now - 5000, now - 5000))
+    os.utime(during, (now - 1500, now - 1500))
+    memetic = tmp_path / 'g000009'
+    memetic.mkdir()
+    collector = SimpleNamespace(lock=threading.Lock(), slot_starts={0: now - 2000, 1: now - 1000}, groups={
+        1: {'created': now - 30000, 'done': 1, 'size': 4, 'dir': tmp_path / 'g000001'},   # resumed, still running
+        2: {'created': now - 30000, 'done': 4, 'size': 4, 'dir': tmp_path / 'g000002'}})
+    import grpo
+    collector.oldest_running_start = lambda: grpo.Collector.oldest_running_start(collector)
+    monkeypatch.setenv('NATLANG_BLOCK_GC_BY_GROUP', '1')               # opt-out: the old group rule keeps both
+    ei.collect_actor_blocks(collector, store, 600)
+    assert before.exists() and during.exists()
+    monkeypatch.delenv('NATLANG_BLOCK_GC_BY_GROUP')
+    collector.groups[3] = {'created': now - 6000, 'done': 0, 'size': 4, 'dir': memetic}
+    (memetic / 'memetic-spec.json').write_text('{}')                   # a live memetic group holds to its creation
+    ei.collect_actor_blocks(collector, store, 600)
+    assert before.exists() and during.exists()
+    del collector.groups[3]
+    ei.collect_actor_blocks(collector, store, 600)                     # cutoff: oldest running episode - grace
+    assert not before.exists() and during.exists()
