@@ -44,7 +44,8 @@ def wave(root, name, cases, exported=True):
 def campaign(tmp_path, monkeypatch):
     root = tmp_path / 'campaign'
     root.mkdir()
-    (root / 'catalog.jsonl').write_text('{"catalog": 1}\n')
+    (root / 'catalog.jsonl').write_text(json.dumps({'taskId': 'vibestudio:fixture', 'interaction': 'open-user-goal',
+        'split': 'train', 'sourceGroups': ['fixture'], 'goalSha256': 'a' * 64}) + '\n')
     wave(root, '0000', {'a': 'verified', 'b': 'test-failed', 'held': 'verified'})
     wave(root, '0001', {'c': 'verified', 'again': 'verified', 'unregistered': 'verified'})
     wave(root, '0002', {'d': 'verified'}, exported=False)        # still being written
@@ -198,3 +199,104 @@ def test_retirement_runs_after_durable_ingest_and_retries_without_reextracting(c
     assert len(new) == 3 and len(calls) == 3
     assert ing.ingest_once(root, work, 'held.json', extract=lambda args: pytest.fail('no reextraction')) == []
     assert len(calls) == 6
+
+
+def identity_catalog(tmp_path):
+    from live_teacher_sources import open_goal_fingerprint
+    goal = 'Explain the café change.\nKeep "approved" exact.'
+    rows = [{'taskId': f'vibestudio:{split}', 'interaction': 'open-user-goal', 'split': split,
+             'sourceGroups': [f'{split}-world', f'{split}-source'], 'scenario': f'case-{split}',
+             'goalSha256': open_goal_fingerprint(goal + split)[1], 'requiresReview': False,
+             'entry': {'program': 'old.nl', 'callable': 'old', 'resultType': 'OldReport', 'skill': 'research',
+                       'arguments': {'goal': goal + split, 'scope': 'owned'},
+                       'argumentJson': {'goal': json.dumps(goal + split), 'scope': '"owned"'},
+                       'parameterNames': ['scope', 'goal'], 'inputValues': ['owned', goal + split]}}
+            for split in ('train', 'validation', 'test')]
+    root, work = tmp_path / 'catalog-campaign', tmp_path / 'catalog-work'
+    root.mkdir(); work.mkdir()
+    source = root / 'catalog.jsonl'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    snapshot = ing.holdout_registry(root, work)
+    return rows, root, work, source, snapshot
+
+
+def test_catalog_metadata_updates_preserve_immutable_held_snapshot_and_registration(tmp_path):
+    import copy
+    import hashlib
+    from live_catalog_identity import compatible_catalogs
+    rows, root, work, source, snapshot = identity_catalog(tmp_path)
+    original = snapshot.read_bytes()
+    before_held = (set(), set(), set())
+    training = sft_sources.live_holdout_registry(snapshot, before_held)
+    updated = copy.deepcopy(rows)
+    for row in updated:
+        row['requiresReview'] = True
+        row['entry'].update(program='semantic-entry.nl', callable='semanticEntry', resultType='Findings')
+        row['devices'] = ['desktop']
+        row['sourceGroups'].reverse()  # group membership is a set, not an execution ordering
+    source.write_text(''.join(json.dumps(row, sort_keys=True) + '\n' for row in reversed(updated)))
+    assert ing.holdout_registry(root, work) == snapshot
+    assert snapshot.read_bytes() == original
+    after_held = (set(), set(), set())
+    assert sft_sources.live_holdout_registry(source, after_held) == training
+    assert after_held == before_held
+    sft_sources.require_registered_open_goal({'task_id': rows[0]['taskId'], 'source_groups': rows[0]['sourceGroups'],
+        'open_goal': rows[0]['entry']['arguments']['goal']}, training)
+    receipt = json.loads((work / 'catalog-compatibility.json').read_text())
+    assert receipt == compatible_catalogs(snapshot, source)
+    assert receipt['snapshot_sha256'] == hashlib.sha256(original).hexdigest()
+    assert receipt['current_sha256'] == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert receipt['snapshot_sha256'] != receipt['current_sha256']
+    assert len(receipt['execution_metadata_changes']) == 3
+    assert 'entry.resultType' in receipt['execution_metadata_changes'][0]['fields']
+    assert receipt['validator_sha256'] == hashlib.sha256((REPO/'scripts/neuralese_data/live_catalog_identity.py').read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize('mutation', ['add', 'drop', 'id', 'split', 'groups', 'interaction', 'digest',
+    'actual-goal', 'encoded-goal', 'bound-goal', 'non-goal-input', 'unknown', 'unknown-entry', 'duplicate', 'metadata-type'])
+def test_catalog_identity_changes_fail_even_with_unchanged_digest_or_review_flags(tmp_path, mutation):
+    rows, root, work, source, snapshot = identity_catalog(tmp_path)
+    original, receipt = snapshot.read_bytes(), (work/'catalog-compatibility.json').read_bytes()
+    row = rows[-1]  # exercise actual held rows, not only training registration
+    if mutation == 'add': rows.append({**row, 'taskId': 'vibestudio:added'})
+    elif mutation == 'drop': rows.pop()
+    elif mutation == 'id': row['taskId'] = 'vibestudio:renamed'
+    elif mutation == 'split': row['split'] = 'train'
+    elif mutation == 'groups': row['sourceGroups'] = ['different-world']
+    elif mutation == 'interaction': row['interaction'] = 'assigned-workflow'
+    elif mutation == 'digest': row['goalSha256'] = 'b' * 64
+    elif mutation == 'actual-goal': row['entry']['arguments']['goal'] += ' changed'
+    elif mutation == 'encoded-goal': row['entry']['argumentJson']['goal'] = '"Other goal"'
+    elif mutation == 'bound-goal': row['entry']['inputValues'][1] = 'Other goal'
+    elif mutation == 'non-goal-input': row['entry']['arguments']['scope'] = 'foreign'
+    elif mutation == 'unknown': row['futureAuthority'] = 'foreign'
+    elif mutation == 'unknown-entry': row['entry']['futureInput'] = 'foreign'
+    elif mutation == 'duplicate': rows.append(row)
+    elif mutation == 'metadata-type': row['requiresReview'] = 'false'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    with pytest.raises(SystemExit, match='changed'):
+        ing.holdout_registry(root, work)
+    assert snapshot.read_bytes() == original
+    assert (work/'catalog-compatibility.json').read_bytes() == receipt
+
+
+def test_registry_validates_actual_goal_even_without_comparison(tmp_path):
+    rows, _, _, source, _ = identity_catalog(tmp_path)
+    rows[0]['entry']['arguments']['goal'] = 'Forged goal with retained hash'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    with pytest.raises(ValueError, match='actual goal differs'):
+        sft_sources.live_holdout_registry(source, (set(), set(), set()))
+
+
+def test_round_driver_accepts_metadata_only_registry_differences(tmp_path):
+    import expert_iteration as ei
+    rows, _, work, source, snapshot = identity_catalog(tmp_path)
+    other = tmp_path/'other-work'; other.mkdir()
+    rows[0]['requiresReview'] = True
+    rows[0]['entry']['resultType'] = 'Findings'
+    (other/ing.REGISTRY).write_text(''.join(json.dumps(row) + '\n' for row in reversed(rows)))
+    assert ei.live_holdout_registry([work, other]) == snapshot
+    rows[-1]['sourceGroups'] = ['unregistered-held-group']
+    (other/ing.REGISTRY).write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    with pytest.raises(SystemExit, match='different holdout registries'):
+        ei.live_holdout_registry([work, other])
