@@ -208,7 +208,10 @@ export type NatlangRuntimeOptions = {
   refinements?: RefinementSettings & { cache?: VerdictCache; crisp?: Record<string, (value: unknown) => boolean | undefined> };
 };
 
-export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null;
+export type TaskOptions = {
+  /** Set false for an intentionally independent trace. A nested run otherwise links only its causal caller, never its authority or task lifetime. */
+  traceParent?: boolean;
+  program?: ProgramDescriptor; adaptation?: AdaptationBinding | null;
   /** Pin these weight releases instead of the runtime's current ones. */
   weights?: readonly WeightBinding[];
   services?: Services; serviceDeclarations?: Record<string, string>;
@@ -322,11 +325,13 @@ export class NatlangTask {
     if (!parentId) return;
     const children = this.graphChildrenByParent.get(parentId) ?? [];
     children.push(callId); this.graphChildrenByParent.set(parentId, children);
+    if(parentId===this.traceParent?.parentCallId)this.traceParent.task.registerGraphCall(callId,parentId);
   }
   discardGraphCall(callId: string, parentId: string | null | undefined): void {
     if (!parentId) return;
     const children = this.graphChildrenByParent.get(parentId);
     if (children) this.graphChildrenByParent.set(parentId, children.filter(id => id !== callId));
+    if(parentId===this.traceParent?.parentCallId)this.traceParent.task.discardGraphCall(callId,parentId);
   }
   graphChildren(callId: string): string[] { return [...this.graphChildrenByParent.get(callId) ?? []]; }
   private readonly definitionCalls = new Map<string, number>();
@@ -336,7 +341,7 @@ export class NatlangTask {
   private timer?: ReturnType<typeof setTimeout>;
   private appPromptSnapshot?: string;
 
-  constructor(readonly runtime: NatlangRuntime, options: TaskOptions = {}) {
+  constructor(readonly runtime: NatlangRuntime, options: TaskOptions = {}, private readonly traceParent?: Frame) {
     let binding = options.adaptation === undefined ? runtime.options.adaptation : options.adaptation;
     const program = options.program ?? runtime.options.program ?? binding?.program;
     const guidanceBinding = options.nativeProgramGuidance ?? runtime.options.nativeProgramGuidance;
@@ -422,9 +427,11 @@ export class NatlangTask {
     return mode;
   }
 
-  get frame(): Frame { return { task: this, chain: [], signal: this.signal }; }
+  get frame(): Frame { return { task: this, chain: [], signal: this.signal,
+    ...(this.traceParent&&!this.traceParent.task.isClosed?{parentCallId:this.traceParent.parentCallId}:{}) }; }
   nextCallId(): string { return `${this.id}/${++this.callSequence}`; }
   reserveExecutionSiblingOrdinal(parentCallId: string | undefined, definitionId: string): number {
+    if(parentCallId&&parentCallId===this.traceParent?.parentCallId)return this.traceParent.task.reserveExecutionSiblingOrdinal(parentCallId,definitionId);
     const key = `${parentCallId ?? ''}\u0000${definitionId}`;
     const ordinal = this.executionOccurrenceCounts.get(key) ?? 0;
     this.executionOccurrenceCounts.set(key, ordinal + 1);
@@ -583,9 +590,14 @@ export class NatlangRuntime {
   /** Run `fn` as a natlang task. Natlang functions called anywhere inside it use this runtime. */
   async run<T>(fn: () => T | Promise<T>, options: TaskOptions = {}): Promise<T> {
     if (this.closed) throw new Error('natlang runtime is closed');
-    const task = new NatlangTask(this, options);
-    activeTasks.add(task);
     const caller = currentFrame(), store = this.platform.contextStore;
+    // The live local frame is causal evidence. Recorder identity prevents an edge
+    // into another owner's store; no service, model, signal or budget is inherited.
+    const recorder=this.callStore();
+    const traceParent=options.traceParent!==false&&caller?.parentCallId&&!caller.task.isClosed&&
+      (caller.task.runtime===this||(recorder&&recorder===caller.task.runtime.callStore()))?caller:undefined;
+    const task = new NatlangTask(this, options, traceParent);
+    activeTasks.add(task);
     try { return await runInFrame(task.frame, fn); }
     finally {
       await task.drain(); task.close();
