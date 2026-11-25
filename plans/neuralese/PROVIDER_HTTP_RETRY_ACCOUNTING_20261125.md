@@ -1,0 +1,7 @@
+# Provider HTTP failure accounting
+
+Observed original0062 capture: a failed model invocation's operational cause was `Circuit breaker is open; last failure: POST https://chatgpt.com/backend-api/codex/responses: upstream HTTP 502`. A provider outage is not a failed user-goal decision.
+
+Inventory: `scripts/neuralese_data/vibestudio_campaign.py::outcomes` preserves the authoritative failed-call executionError; `provider_transport_failure` is the one classifier; `infrastructure_failure` feeds both `publish_status` retry accounting and `wave_infrastructure_hold`; `next_wave` consumes the resulting attempt/exposure ranks. Historical immutable receipts are reinterpreted by the same classifier, never rewritten. `tests/test_vibestudio_campaign.py` covers retries, exposure accounting, wave holds, and quoted/schema/model error negatives. Runtime engines, gateway serving, learner and held evaluator do not consume this campaign retry classifier; no serving/schema change is involved. The existing `NATLANG_CAMPAIGN_TRANSPORT_FAILURES_AS_GOAL_FAILURES=1` opt-out remains.
+
+Extend only anchored operational upstream HTTP408/429/5xx causes, including the existing circuit-breaker envelope. Arbitrary mentions, schema-validation messages, and HTTP400 stay ordinary failures. Keep model exposure recorded even when a transport failure does not consume a genuine goal retry. Current0063 actual generation recovered (first8=4passed/4failed, no provider execution errors), so a historical outage alone does not justify killing useful in-flight work.
