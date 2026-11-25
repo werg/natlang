@@ -1064,7 +1064,7 @@ def test_round_preparation_runs_beside_a_yielding_collection_instead_of_preempti
     monkeypatch.setattr(d.c, 'ledger', stage)
     d.prepare(rd, d.lineage_policies())
     assert launched == [(f'aei-r0001-{s}', b, ei.STAGE_PRIORITY, [ei.PREP_YIELD_SHARE])
-                        for s, b in (('frontier', 4), ('data', 12), ('build', 24))]
+                        for s, b in (('frontier', 4), ('data', ei.DATA_STAGE_GB), ('build', 24))]
     assert rooms == [(u, b) for u, b, _, _ in launched]
     assert not ei.held_priority_claims(tmp_path / 'prio')            # released after the build
 

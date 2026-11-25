@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Invented programs (`natlang.invented-program/1`) -> crisp requirement checks, `natlang.program/2` cases, qualification.
 
+Since 2026-11-25 new builds are authored programs (`natlang.authored-program/1`, scripts/rl_tasks/sources/
+authored_programs.py: authored trajectories, one consistency check, statistics). This module's qualification remains
+for the programs admitted under the exact-checker bar; `digest`, `sample-reviews` and `publish` serve both.
+
 The program inventor (`applications/program-inventor/`, plans/NOVEL_PROGRAMS_20261124.md) builds one complete natlang
 program per new idea, with two or three literal input instances, exact checkers and controls
 (`applications/program-inventor/BUILD_BRIEF.md`). This module is the crisp mechanism around it:
@@ -1243,8 +1247,9 @@ def publish(root: Path, *, dry_run: bool = False, no_check: bool = False, author
         admission['withheld'] = reasons
     admitted = [(a, d) for a, d in admitted if not a['withheld']]
     fresh = [(a, d) for a, d in admitted if not a.get('published')]
-    train = [(a, d) for a, d in fresh if a['split'] == 'train']
-    held = [(a, d) for a, d in admitted if a['split'] != 'train']
+    # An authored program whose instances declare no oracle has no task to publish (its trajectories go to SFT)
+    train = [(a, d) for a, d in fresh if a['split'] == 'train' and a.get('cases', 1)]
+    held = [(a, d) for a, d in admitted if a['split'] != 'train' and a.get('cases', 1)]
     summary = {'stamp': stamp, 'fresh': [a['slug'] for a, _ in fresh], 'train_ideas': len(train),
                'held_ideas': len(held), 'new_held_ideas': sum(1 for a, _ in fresh if a['split'] != 'train')}
     if dry_run or not fresh:

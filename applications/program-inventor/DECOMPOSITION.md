@@ -2,8 +2,12 @@
 
 Design: `plans/NOVEL_PROGRAMS_20261124.md`. The process that replaces procedural task generation: a frontier model
 reads an atlas of every program idea natlang already has, invents a completely new one, and the idea becomes one
-complete idiomatic program with two or three literal input instances and an exact checker. Every requirement it must
-meet is in `requirements.json`, crisp or judged.
+complete semantic functional program with two or three literal input instances and the authored execution trajectory
+of each (owner 2026-11-25; `BUILD_BRIEF.md`). One consistency check admits (`requirements.json` `check`); everything
+else is a statistic the wave report compares with its target (`requirements.json` `statistics`,
+`scripts/rl_tasks/sources/authored_programs.py`). Rows 7-10 below describe the earlier exact-checker bar
+(`invented.py`), kept for the 13 programs admitted under it; the campaign's builds now run `authored_programs.py check`
+and `admit`, and statistics replace the judged requirements.
 
 The process is a natlang program. Its judgments (what to invent, whether it is new, whether a program meets a judged
 requirement, who is right in a disagreement) are `.nl` functions on frontier models. Its exact parts (the atlas,

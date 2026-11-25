@@ -1,299 +1,222 @@
-# Build brief: turn one new idea into a program, its instances and an exact checker
+# Build brief: a semantic functional program and its authored execution trajectories
 
-The program inventor's `build` service hands this brief, the idea card (`idea.json`) and the requirements
-(`requirements.json`) to a frontier coding agent working in an empty submission directory. The agent writes a
-complete idiomatic natlang program for the idea, two or three input instances with exact checkers, and the controls
-that qualify them. It never writes model trajectories, and it never writes a generator: every instance is literal data
-written for this program.
+You build one natlang program from an idea card, two or three literal input instances, and for each instance the
+whole execution trajectory: every model call the program makes, with what it receives and what it answers. The
+trajectories are training data: each model call becomes one training row for a small model (LFM3-1.7B) learning to
+run natlang programs. Nothing runs your program with a model. A replay plays your trajectory through the real runtime,
+and the only check is that it is consistent with the program. The reasoning between actions is filled in later by
+another stage. Never write it yourself.
 
-Automated qualification admits a submission. There is no per-program review loop: a reviewer reads a random sample
-of admitted programs afterwards, and what it finds changes this brief, not your program. So the quality of the
-program is decided while you build it: the "One answer per item" section and the self-check are where that happens.
+The owner's direction (2026-11-25):
+
+> "Just have the author write the entire execution trajectory to train on and then all we need to do is collect the
+> reasoning in between the actions."
+
+> "It absolutely has to be a deep code base of purely natural language functions able to call each other. It should
+> very much, in the then generated trajectory, use a lot of the NatLang specific functionality."
+
+> "Remember we want to do semantic functional programming."
+
+> "we actually have the true ability to do function synthesis at runtime, because all this is semantic. And based on
+> the data, we can create new functions." ... "It's just built in our ability to make these nl literals."
+
+> "it's fine if individual samples are not perfect"
+
+Statistics over every wave's trajectories steer the next wave (`EMPHASIS.md`). No review loop follows admission. A
+reviewer reads a drawn sample afterwards, and what it finds changes this brief, not your program.
 
 ## Read first
 
-1. `skills/natlang-authoring/SKILL.md`, then `references/composition.md` and `references/language.md` (the paradigm:
-   types first, exact steps in TypeScript, each judgment one narrow typed function, `decide`, `@natlang/node/std`,
-   higher-order judgments, `iterateOn(...).until(...)`, recursion with `measure:`, `ensures:`, `Is`/`Untrusted`,
-   `Neuralese<T>`, folder transactions).
-2. Two idiomatic programs: `examples/review/` and `applications/sem-merge/` (`merge.ts`, `intentsCompatible.nl`). They
-   show the idioms; they are small on purpose. For the size and depth a submission has, read one pilot submission:
-   `/home/werg/data/natlang-novel-programs/pilot-20261124/sub/nonvisual-interaction-parity-auditor/` (instances of
-   1,700-2,000 words in 27-31 items, about 220 lines of exact TypeScript). Its idea is taken; its scale is the target.
-3. `requirements.json` (the crisp requirements are checked by code; the judged ones are what a sampled reviewer
-   grades).
-4. If the checker is a verifier: the header comment of each `training/semantic_fp_tasks/verifiers/*.mjs` is its
-   oracle schema.
+1. The wave's `EMPHASIS.md`: what the previous wave's statistics say to do more of.
+2. `skills/natlang-authoring/SKILL.md`, then `references/composition.md` (the paradigm) and `references/language.md`
+   (front matter, callable folders, eval).
+3. `spec/SPEC.md`: "Natural-language functions" (inline `nl` literals), "Captures", "Iteration and termination",
+   "Postconditions", "Model surface" (decision readout), "Eval", "Types" (function types, `.partial`).
+4. Examples that show the constructs: `examples/screening/` (a `.nl` function that returns a judgment, `.partial`),
+   `examples/outline/` (structural recursion with `ensures:`), `examples/release/` (`semanticRepair`, `fixedPoint`,
+   folder transactions), `examples/refunds/` (`.in(context)`, `decide`, a folder transaction).
+5. The worked mechanics example, small on purpose:
+   `/home/werg/data/natlang-novel-programs/authored-examples/thread-digest/` (`program/` and `submission.json`). It
+   shows every trajectory form below (a reduce over messages, an interior function's own turns, a decision with
+   `decide`, a `.nl` function that synthesizes a judgment, NL literals built from data, `iterateOn` with an NL stopping
+   predicate, an `ensures:` predicate). Your program is several times its size and depth.
 
-## What to write
+## The program: semantic functional programming
 
-```
-SUBMISSION/
-  program/                      the natlang package the task runs
-    natlang.json                {"schema": "natlang.package/v2", "name": "@invented/<slug>", "version": "0.1.0"}
-    package.json                {"name": "@invented/<slug>", "private": true, "type": "module"}
-    types.ts                    every record and union; doc comments on fields say formats, units, what null means
-    <root>.nl                   the root: the operation a user calls, returning a named type from types.ts
-    <root>/                     the root's callable folder
-      <judgment>.nl             one narrow judgment each (`readout: decision` for finite answers)
-      <helper>.ts               exact TypeScript: parsing, ordering, aggregation, state, graph walks; it may import
-                                the judgments in its own folder `<helper>/` and `@natlang/node/std`
-      <helper>/...              a helper's own callable folder when it calls deeper judgments
-  submission.json               the instances and controls (below)
-  NOTES.md                      one paragraph per judgment: its trap and the evidence in the text that settles each
-                                item; then `## Hardest items`: at least three items and why a careful reader could
-                                get each wrong. NOTES explains; every rule an answer rests on is in the program.
-  idea.json                     the idea card you built
-```
+A program is a **deep tree of typed natural-language functions calling each other**: pure functions from typed
+arguments to a typed result, composed like functions in a functional language, over immutable data, with effects only
+at the edges.
 
-SUBMISSION holds exactly these (qualification adds `qualification/`). Logs, the self-check, friction notes and
-scratch scripts go beside it, in `SUBMISSION/..`.
+- **Deep.** About 10-20 `.nl` functions. The root calls functions that have their own callable folders, and those call
+  functions with folders of their own: four or more levels from the root to the deepest leaf. An interior function
+  receives a whole item (a letter, a scene, a chapter), decides which of its helpers the item needs, calls them, and
+  composes what they return. Leaves answer one question about one thing.
+- **Composed as values.** Functions are passed, bound, returned and mapped: an `.nl` argument typed as a function,
+  `fn.partial(value)`, `fn.in(NatlangContext.empty().with({ policy }))`, a `.nl` function whose result type is a
+  function.
+- **Functions synthesized at run time.** An NL literal is a function value made in eval code. When its instructions
+  are composed from data the program has derived, the program creates a new function from its data: a criterion
+  for each category it found, a rubric an earlier call wrote, the house style it read from examples, a test written
+  for this one case. It is then called, passed, mapped and composed like any other function. Every program does this.
+- **Combinators over semantic values.** Map, filter, reduce, match and rank over items; `iterateOn` until a check
+  holds; recursion on a smaller argument; repair and fixed point; folder reducers and transactions for programs that
+  read and write documents.
+- **Open-ended outputs.** Most functions write something: a summary, a reply, a rewritten passage, a plan, an
+  explanation, an extracted record with text fields. A decision (`readout: decision`) is right where the honest
+  answer is one of a few values. The root returns what the user actually needs, which is usually a document with
+  structure, not a single label.
+- **Crisp TypeScript only where exactness or the outside world requires it.** By default a program has no `.ts` file
+  besides `types.ts`. The few lines of exact work a function needs (filtering by a field, grouping, counting,
+  assembling the result record) go in that function's own eval code, in its trajectory. A callable-folder `.ts`
+  helper is for exact work that is long or reused (a date calculation, a parser of a fixed format, a graph walk over
+  ids); list each in `submission.json` `crisp` with the reason. Never write an algorithm out in prose: a step that is
+  exact is code, in eval or in a helper.
+- **Types first.** `types.ts` holds the records and unions with doc comments on fields (formats, units, what `null`
+  means). Text people wrote is `Untrusted<string>`. A property you would otherwise ask for in a sentence is
+  `Is<T, "...">`.
 
-The root `.nl` is what the student model executes in training: it receives the instance's inputs as its arguments,
-works in a TypeScript eval scope where its callable folder's functions are bindings, and returns the typed answer.
-Its instructions name the helpers it calls and the judgments of meaning it makes itself; exact work lives in the
-TypeScript helpers. A root whose order of steps is fixed says it in one or two sentences naming each helper and what
-it passes on.
+### The idea card
 
-## Depth
+Take the card's user, world and input size. Its `judgments` and `program_sketch` are a starting point. Its
+`crispWork`, `output ... compared exactly`, `whyKeywordsFail` and `constructs` fields were written for an earlier bar
+that made programs into TypeScript algorithms with narrow judgments. Redesign the program to the shape above: the
+exact search or walk the card describes becomes a composition of natural-language functions with a few lines of eval
+code, and the output becomes what the user would want to read.
 
-A submission is a program an expert would recognise as their own work, run on a real working session:
+## The construct inventory: each construct in source and in the trajectory
 
-- **Instances at full size: one real working session.** Each instance is what the card's `inputs` describes: the
-  day's calls, the whole rehearsal thread, the week's letters. Every item is there because the user would meet it and a
-  judgment has to read it: a caller's directions run on for 100-150 words with a false start and a correction; a
-  rehearsal thread has 20-30 messages, several about other songs. The card's prose size is binding (C2); its row and
-  function counts are sketches, so reach the size with items that each need reading, never with rows that change
-  nothing.
-- **A judgment reads a passage.** At least one judgment reads two or more sentences and weighs them together (a whole
-  transcript turn, a paragraph of a letter), and at least one reads the results of two earlier judgments, or state
-  carried across items (the place a caller has reached, the key in force).
-- **Words to referents; code counts.** A judgment reads what the words say, and TypeScript works out which item they
-  pick. "Take the second right after the church" becomes `{ side: 'right', ordinal: 2, after: 'church' }` from the
-  judgment, and code walks the map to the road. A choice among items known only at run time works the same way: code
-  numbers or describes the candidates, and the judgment returns the description (or `decide`s one boolean per
-  candidate, and code takes the most probable). Code also settles exact identity before it asks.
-- **Text people wrote is `Untrusted`.** Messages, notes and descriptions, and also names, titles, nicknames and labels,
-  including the fields of records a judgment receives. Identifiers, codes and dates say what they are in their name or
-  doc comment (`roadId`, `/** ISO date */`); a closed set of values is a literal union.
-- **An algorithm at the core.** About 100 lines of exact TypeScript, including one real algorithm the answer depends
-  on: a walk over a graph, a fixed point, a search, an enumeration.
+The replay records every call. Your trajectory answers each call below the root with an entry in `trajectory.calls`
+(next section). The table shows what each construct looks like in the source and what you author for it.
 
-A worked judgment at this depth, from a tenancy-dispute program (the types in `types.ts`, the judgment in the folder,
-the resolution in code):
+| Construct | Source | In the trajectory |
+|---|---|---|
+| Named function | `assess.nl` in the caller's folder | a call of `assess`: an entry `{fn: "assess", match: [item fragment], value}` |
+| Interior function | `summarize.nl` with folder `summarize/` | `{fn: "summarize", match: [...], turns: [["eval", {code}], ["return_result", {...}]]}`: its eval calls its own items |
+| Decision | `readout: decision` on a finite result | `value` is the chosen option; in a caller, `decide(fn, ...args)` returns `{ value, probabilities, confidence }` |
+| NL literal | ``nl<(x: T) => R>`instructions`(arg)`` in eval | a call named `nl@eval:N`, matched by a fragment of its instructions |
+| NL literal built from data | ``nl<(g: Gist) => boolean>`g bears on ${topic}` `` in eval, `topic` derived by the program | its creation in the eval code, then its calls, matched by the interpolated text |
+| Function synthesized by a function | `returns: "(item: Item) => boolean"` in front matter | that call's turn is `["eval", {"code": "return nl<(item: Item) => boolean>`...${...}...`;", "finish": true}]`; the returned function's calls nest under it |
+| Function as argument | `args: { judge: "(item: Item) => boolean" }` | the receiving call's eval calls `judge(item)`; the calls of `judge` appear under it |
+| Partial application | `meets.partial(rule)` in eval | the bound function is passed or mapped; its calls carry the bound argument |
+| Rebinding | `verdict.in(NatlangContext.empty().with({ policy }))` | calls of the rebound function see `policy` in their opening |
+| Map | `await Promise.all(items.map(item => assess(item)))` | one call per item, in any order |
+| Filter | `const keep = await Promise.all(items.map(test)); items.filter((_, i) => keep[i])` | one call per item |
+| Reduce, carrying state | ``for (const m of thread) gists.push(await readMessage(m, [...gists]))`` | one call per item, each seeing the state so far |
+| `iterateOn` with an NL check | ``await iterateOn(draft => revise(draft, notes), first).until(nl<(d: Draft) => boolean>`...`)`` | the check is called on the first state and after every step (`false`, step, ..., `true`); each step's calls |
+| `iterateOn` with a measure | `.withMeasure(state => state.pending.length).until(state => state.pending.length === 0)` | each step's calls until the code check holds |
+| Structural recursion | `recursive: structural` (or `measure:`), the function calls itself on a part | one call per level, each with its own entry |
+| Postcondition | `ensures:` with `check:` (code, no call) or `predicate:` | a `predicate` is judged by a call named `holds`: answer `{match: ["<predicate text>"], value: true}` |
+| Refinement | `refine(value, 'predicate', { context })` in eval, or a result typed `Is<T, "...">` | a judge call, like `holds` |
+| Folder reducer | root `kind: directory-reducer` with `writes:`; the instance gives `folder_files` | the root's turns use `list_files`, `read_file`, `write_file`, `edit_file`; `folder.apply(reducer, ...)` runs a nested reducer |
+| `pluggable` | `pluggable({ crisp, nl }, setting)` in a helper | a `pluggable` span and the side it ran |
+| std combinators | `semanticMap`, `semanticFilter`, `semanticReduce`, `semanticMatch`, `semanticRank`, `semanticRepair`, `fixedPoint` | a `[semanticMap]` span with the calls it made (combinators in eval: see "Tools" for whether this runtime has them) |
 
-```ts
-/** One letter in the file, as received. */
-export type Letter = { letterId: string; /** ISO date */ sent: string; from: Untrusted<string>; body: Untrusted<string> };
-/** What a later letter does to one earlier complaint; `unrelated` when the letter does not take it up. */
-export type Response = 'withdraws' | 'narrows' | 'restates' | 'disputes-repair' | 'unrelated';
-```
+Eval code follows the iteration rules: `for...of`, counted loops, array methods, `iterateOn`; no `while`. Outside text
+is never interpolated into an NL literal's instructions: pass it as an argument (`untrusted-instruction`), and build
+instructions from values the program derived (a category name, a rubric a call wrote, a field's id).
 
-```yaml
----
-description: "What a tenant's later letter does to a complaint they made earlier."
-args:
-  complaint: Untrusted<string>
-  repairsSince: Untrusted<string>[]
-  letter: Letter
-returns: Response
-readout: decision
----
-complaint is a complaint the tenant made, as worded then; repairsSince are the landlord's reports of work done since.
-Read letter as a whole and decide what it does to complaint: withdraws it, narrows it to part of what was complained
-of, restates it, disputes one of repairsSince, or leaves it unrelated. A letter that both narrows the complaint and
-disputes a repair disputes the repair.
-```
+## The instances
 
-The code passes the complaint that an earlier judgment found open and the repair reports a second judgment matched to
-it, so this call reads the results of two judgments; it then updates which complaints stand, in letter order.
+Two or three instances, each one real working session of the card's user at the card's size: the whole thread, the
+day's calls, the week's letters, as people write them. Every input is literal data written for this program: no
+generator, no template, no variants.
 
-## One answer per item
+## The trajectory
 
-Every scripted answer must be the one a careful reader gives who sees only what the call sees: the instruction, the
-doc comments of its argument types, and the item. These seven habits get you there.
-
-1. **The item describes; the judgment names.** Write each item in its writer's own words about what happened, and
-   leave the naming to the judgment. "We can do the 18th instead of the 12th now, if that still suits" is the text;
-   `replaces` is the judgment's answer. A log line says what was measured ("p95 latency 6.2 s at 22:40"); a code
-   comment says what the function is for ("Charge an invoice in full with a stored payment method"); a cleaning note
-   says what the operator saw ("a glossy film that a cloth only spread around"). The answer comes from weighing that
-   evidence. A value's own domain term is fine in the text (a step that adds DMSO, a judgment that names `dmso`).
-2. **Judgments read values; code computes.** Every number, unit, date, duration and comparison is TypeScript. The
-   judgment reads "about fifteen files" as `{ value: 15, approx: true }`, "6 lb per gallon of glucose" as
-   `{ amount: 6, unit: 'lb/gal', substance: 'glucose' }`, "active from 37 °C to 50 °C" as
-   `{ min: 37, max: 50, inclusive: true }`, "the march itself in three minutes" as `{ minutes: 3 }`; code holds the
-   conversion table, adds the durations, applies the tolerance and decides whether the values agree. This holds inside
-   pair judgments too: a judgment comparing two statements receives the code's comparison of their amounts and dates
-   as an argument (`timing: 'different-days'`).
-3. **One written rule, applied to every item.** When an answer needs a precedence or a resolution ("the surface the
-   operator describes decides, ingredients only when the note describes none"), write it once in the instruction or a
-   doc comment, or put it in code, and then derive each scripted answer by applying that rule to the item. Examples in
-   an instruction are instances of its rule, item for item.
-4. **Every definition has a direction and every overlap a winner.** A relation between two things says which side is
-   which ("weaker: the earlier statement says less than the testimony"; "the base card's front defines the
-   question"). When two written rules can both apply to one item, the instruction says which wins (the last sentence
-   of the worked judgment above). An order rule is the order a reader of the items would follow (notes in the order
-   they were sent).
-5. **Types hold what the text can say.** An amount can be approximate (`approx: true`), a time can be a bound
-   (`{ earliest: '2026-04-12' }` for "after the April 12 meeting", which can be the same afternoon), a statement can carry several
-   facts (`facts: Fact[]`), a reading can be absent (`null`, with its doc comment saying when). Each value of a result
-   type names one meaning: a section that occurs once in a song is the `only` one, or the doc comment says which value
-   it takes.
-6. **Expected answers come from the code.** The order in which code applies items, directives and conditions decides
-   the result. Script the children, run `invented.py dry-run`, read every call it lists against its item, and take
-   `expected` from the value it returns; when that value surprises you, read the code path that produced it before
-   changing anything. A field you write beside the text (`celsius: 50`) is data you typed, once; a field a script
-   computes from other fields is not (N2). A scratch script that lays out what you wrote (line numbers of a
-   transcript, ISO dates from a calendar you typed) or validates it (applies your hand-written diffs) is fine.
-7. **An ambiguous item is fixed by a rule or a type, and kept.** When an item has two defensible readings, add the
-   rule that settles it (habit 3 or 4) or the type that represents it (habit 5). The hard item stays: it is the
-   training signal.
-
-## Self-check before you qualify
-
-Write `SUBMISSION/../<slug>.SELFCHECK.md` with three short lists, one line per entry, and fix what they find. Run
-`invented.py dry-run` first: its per-judgment listing is the list of items you check.
-
-1. **Re-answer every scripted item from the program alone.** For each judgment, read its instruction and the doc
-   comments of its argument types, close NOTES.md, and answer each item it is called on. Write: item, your answer,
-   the script's answer. Every disagreement, and every item where you could defend two answers, is fixed with habits
-   3-5.
-2. **Every text a judgment sees, against that judgment's answer.** List each note, comment, title, label and doc
-   comment that reaches a judgment call (the item's fields, the doc comments of its types, the source text a judgment
-   reads), and whether it states or implies that judgment's answer. Reword each one that does (habit 1).
-3. **Every number, date, unit and comparison.** List each one the answer depends on and the TypeScript line that
-   computes or compares it. One a judgment computes moves to code (habit 2).
-
-## `submission.json` (`natlang.invented-program/1`)
+For each instance you write the whole execution: what the root does, turn by turn, and what every call below it
+answers, including the open text a function writes (the summary, the reply, the rewritten passage). Write what a
+careful, competent model running the program would do and write. Answers need not be perfect. They must be
+consistent with the program: each value has the declared type, each eval runs, each call your code makes has an
+entry.
 
 ```json
 {
-  "schema": "natlang.invented-program/1",
+  "schema": "natlang.authored-program/1",
   "slug": "<idea slug>",
-  "author": {"inventor": "<model id>", "builder": "<model id>"},
+  "author": {"builder": "<model id>"},
   "root": "<root>.nl",
-  "constructs": ["decide", "std-collection", "higher-order", "..."],
-  "judgments": [{"name": "<function or inline name>", "file": "<root>/<judgment>.nl or the .ts holding the inline nl", "trap": "<the wrong reading>"}],
+  "crisp": [{"file": "<root>/<helper>.ts", "why": "<the exactness or outside-world reason>"}],
   "instances": [{
     "name": "a",
-    "level": 3,
     "inputs": {"<root arg>": "<value>"},
-    "oracle": "exact",
-    "expected": "<the one correct answer>",
-    "alias_answers": [],
-    "verifier": null,
-    "reference": {
-      "root": [["eval", {"code": "const r = await <helper>(...); return r;", "finish": true}]],
-      "children": [{"match": ["<fragment of the judgment's instruction>", "<fragment unique to this item>"], "value": "<correct answer>"}]
-    },
-    "ablations": [{"judgment": "<name>", "children": [{"match": ["..."], "value": "<the trap reading>"}]}],
-    "wrong_answers": [{"mistake": "<the real mistake>", "children": [{"match": ["..."], "value": "<the misreading>"}]},
-                      {"mistake": "<an exact step done the wrong way>", "code": "<the root script with that step wrong>"}],
-    "keyword_baseline": "<root eval script with no nl call that answers from surface cues; ends with return>"
+    "trajectory": {
+      "root": [["eval", {"code": "..."}], ["eval", {"code": "...; return result;", "finish": true}]],
+      "calls": [
+        {"fn": "readMessage", "match": ["message: Message = { messageId: \"m3\""], "value": {"...": "..."}},
+        {"fn": "summarizeTopic", "match": ["topic: string = \"venue\""],
+         "turns": [["eval", {"code": "const verdict = await decide(isSettled, topic, gists);\nverdict.value"}],
+                   ["return_result", {"status": "success", "value": {"...": "..."}}]]},
+        {"match": ["states a constraint that any decision on venue", "messageId: \"m6\""], "value": true}
+      ]
+    }
   }]
 }
 ```
 
-- **reference** runs the program for real: the root eval calls the program's own helpers, the TypeScript runs, and
-  each judgment call is answered by the first `children` entry whose `match` fragments all appear in the call's
-  opening (its instruction text, its arguments and the doc comments of the types it uses). Give each item its own
-  entry, with one fragment from the judgment's instruction (within one line) and one unique to the item. An entry with
-  the instruction fragment alone is a default for that judgment's remaining calls. After rewording an instruction,
-  take its fragments again from the new text. A decision's value is the plain option (a record for a finite record
-  result, `null` for a nullable one); a `Neuralese<string>` result is text. The value the eval returns must be accepted
-  by the checker.
-
-  The opening shows each argument as `name: Type = value`: a string as `hunkId: string = "r5019.1"`, an `Untrusted`
-  string as a fenced data block holding the text verbatim (its header names the argument it came from), a record on
-  one line up to its first text field, `event: Event = { eventId: "E15", ... }`. The safest item fragment is that
-  line's start, `event: Event = { eventId: "E15"`: an id alone also matches calls that receive a list of the same
-  records, and the name tells the two arguments of a pair judgment apart (`candidate: CardText = { cardId: "A01"`). A
-  fragment may span lines (`"\nF\n```"` for a one-letter value). Keep instance ids out of `types.ts` doc comments, and
-  make no id a substring of another.
-- **ablations**: one per judgment. Its children are placed before the reference's, so they answer that judgment's
-  calls with the trap reading; the ablated replay must return an answer the checker rejects (S2). A trap reading can
-  make calls the reference never makes; answer those in the ablation's own children (a default entry is fine).
-- **wrong_answers**: at least three per instance, each a named real mistake that qualify runs (F4): `children` for a
-  misreading (placed before the reference's), `code` for an exact step done the wrong way (the root script with that
-  step done otherwise), or both together (a reordering that makes new judgment calls). The replay computes the wrong
-  answer; the checker must reject it. Add `value` only to check it against the replay. Take mistakes that pass the
-  program's own checks: one the root's `ensures:` refuses never reaches the checker.
-- **keyword_baseline**: the best rule over surface cues you can write without any `nl` call; it must run to an answer
-  and be rejected (S3). It runs in the root's eval scope, where every callable-folder item is bound (a file's default
-  export under the file's base name, a file of named exports as an object of them): give its locals other names, and
-  name no folder file like a root argument. If your best keyword rule is accepted, the instance tests wording, not
-  meaning: change it.
-- **oracle**: `exact` (deep equality, record key order ignored) or `normalized` (also case, spacing and number format),
-  or `verifier` with `"verifier": {"path": "training/semantic_fp_tasks/verifiers/<name>.mjs", "oracle": {...}}` when
-  several answers are right.
-- `semanticMap` and `semanticFilter` call their function with `(item, index)`: wrap a `.partial`-bound judgment in a
-  lambda that passes only the item.
+- **`root`**: the root call's turns in order. An eval's local `const`s persist to the next eval. The last turn is
+  `["eval", {..., "finish": true}]` returning the result, or `["return_result", {"status": "success", "value": ...}]`.
+  Look at a result before using it the way a model would (end an eval with the value to inspect), and split work into
+  several evals where a model would want to see an intermediate result.
+- **`calls`**: one entry per call below the root. `fn` names the function. `match` fragments must all appear in the
+  call's opening: its instructions and its arguments as shown, `name: Type = value` (`topic: string = "venue"`), a
+  record on one line starting `message: Message = { messageId: "m3"`. Take the start of the argument's line as the
+  item fragment: an id alone also matches every call whose arguments include that record (the `earlier` list of a
+  reduce, for one). The entry with the most fragments that match answers the call. An entry with only `fn` answers
+  every remaining call of that function, which is right for an interior function whose turns are the same code
+  (eval code reads the call's own parameters).
+- **`value`** answers in one turn (a decision's option, or the result). **`turns`** plays several turns:
+  `[["eval", {"code": ...}], ["return_result", {"status": "success", "value": ...}]]`, or a final eval with
+  `"finish": true`.
+- **`expected_failures`** (optional, per instance): when the trajectory deliberately includes actions that fail and are
+  then corrected (a type refused and fixed), their number.
+- **`rl`** (optional, per instance): `{"oracle": "exact" | "normalized" | "verifier", "expected": ...}` when the final
+  answer has one checkable value; the instance then also becomes an RL task. Most instances leave it out.
+- **`folder_files`** (optional, per instance): the folder a directory-reducer root works on, `{"path": "text"}`.
 
 ## Tools
 
-Every command runs through the memory ledger on the DGX, at medium priority, not resumable, and waits for the job to
-end (`--wait-exit`); start it as a background command and read the log when it completes. `LOGS` is an absolute
-directory beside SUBMISSION; every run needs a new unit name (append -2, -3, ...):
+Every command runs through the memory ledger on the DGX, at medium priority, not resumable, waiting for the job to end.
+Start it as a background command and read the log when it completes. `LOGS` is an absolute directory beside
+SUBMISSION; each run needs a new unit name (append -2, -3, ...):
 
 ```
-python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-<agent>-<what>-<n> --budget-gb 1.5 --reserve-gb 3 \
+python3 /home/werg/natlang/scripts/memory_ledger.py run --unit <unit>-<what>-<n> --budget-gb 2 --reserve-gb 3 \
   --priority medium --no-resumable --wait-exit --wait 3600 --workdir /home/werg/natlang \
-  -- /bin/bash -c '/home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/sources/invented.py <command> SUBMISSION > LOGS/<what>-<n>.log 2>&1'
+  -- /bin/bash -c 'PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python scripts/rl_tasks/sources/authored_programs.py <command> SUBMISSION > LOGS/<what>-<n>.log 2>&1'
 ```
 
-- **`dry-run SUBMISSION [--controls]`** (seconds; `--controls` about half a minute): runs the program's TypeScript
-  with your scripted answers and no model, and prints what the reference returns against `expected`, which children
-  entry answered which call per judgment, the static checks, and with `--controls` what every wrong answer, ablation
-  and keyword baseline returns. Iterate on this; it writes nothing into SUBMISSION.
-- **`qualify SUBMISSION [--print-reference]`** (5-40 minutes): everything dry-run does, plus `natlang check` (F1), the
-  dependence probes (C2), the stage cut and `SUBMISSION/qualification/report.json`. A run that is stopped leaves no
-  report.json. Run it once dry-run is clean and the self-check is done; fix every problem it lists, never the checks.
-- **`admit SUBMISSION --skip-qualify`**: admits the qualified submission (a stored report of this version under the
-  current bar is used; anything else is qualified again).
-- **`natlang check --json`** alone: the same ledger line with `--workdir SUBMISSION/program` and
-  `/home/werg/.local/bin/natlang check --json > LOGS/check-<n>.json 2>&1`.
+- **`check SUBMISSION`** (well under a minute): `natlang check` on the program, then the replay of every instance's
+  trajectory. It prints each instance's call tree (each call, its nesting and what it returned), every call with no
+  entry (`NO ENTRY ...` with the start of its arguments: add an entry), every failed action, warnings for entries that
+  answered nothing or one value that answered several different calls, and the program's statistics against the
+  campaign targets. `ok: true` means the trajectory is consistent. Iterate on this. `--no-natlang-check` skips the
+  compile step for a quicker replay.
+- **`admit SUBMISSION`**: checks again and admits: the trajectories go to the training pipeline, the idea to the
+  campaign's ledger.
+- **`stats SUBMISSION`**: the statistics alone (JSON).
 
-The bar is versioned: `report.json` records `bar` (its version and the digest of `requirements.json`) and the
-submission's digest; the checks change only between waves.
+`semanticMap` and the other std combinators: if `check` reports `semanticMap is not bound in this call's eval scope`,
+this runtime does not have them in eval yet. Use `Promise.all` maps, `for...of` reductions and `iterateOn` there.
 
-What the crisp checks read:
-- C2: the inputs hold at least the card's size in prose (the first "N words" of the card's `inputs`, over the whole
-  instance; alphabetic words of texts of three words or more; ids, codes, timecodes and numbers do not count), and at
-  least 800 words are in calls answered by an entry of their own that the result depends on: qualify gives each such
-  entry the first different answer its judgment gives elsewhere in call order (or the other boolean), replays, and
-  counts the entry when the returned value changes. "No answer depends on children entry N" is a warning, expected
-  for readings that only route to another judgment; their text just does not count.
-- Quotes: a fragment NOTES.md or a wrong answer's `mistake` quotes (three words or more, in double quotes) occurs in
-  the instance or the program as they stand, compared as one string (a quote that wraps across a transcript's numbered
-  lines does not match: quote within a line, or name the item by id).
-- S6: a plain `string` a `.nl` function reads, as an argument or a record field, passes when its name says it is an
-  identifier (`id`, `...Id`, `key`, `code`, `ref`, `url`, `path`, `date`, `time`, `...At`, `language`, `unit`) or its doc
-  comment says so (`identifier`, `id`, `ISO`, `code`, `date`, `timestamp`, `timecode`, `URL`, `path`, `digits`,
-  `computed`, in any case).
-- S7: a relation word of an answer (`replaces`, `cancels`, `knows`) that every call holding it in its own text answers.
-  Domain terms and words in a text several calls share are not flagged; prefer singular names for unit values.
-- S8: a judgment asked about two identical values.
-- C4: each `## Hardest items` entry names an item a judgment is called on, by an id that appears in that call (`m-a14`,
-  `s22.2`) or by quoting a phrase of the call's text in double quotes.
-- F3: the reference runs to an answer the checker accepts and takes at least half its children entries; an entry
-  with an item fragment that answers several different calls is a warning (its fragment matches more than its item).
+## Statistics, not checks
 
-The model-backed idiom review (`natlang check --idiom --provider openrouter --model deepseek/deepseek-v4-flash`, after
-`set -a; . /home/werg/.config/natlang/openrouter.env; set +a`) is optional; its findings are warnings.
+`check` prints the statistics the wave report aggregates. They steer the campaign and are never a gate:
 
-Language facts builders met: callable-folder `.ts` is checked for loops like any program code (`for...of`, counted
-loops, array methods, `iterateOn`); `Date`, `Intl`, `Map`, `Set` and `Math` are available there; text a helper builds
-for an `Untrusted<string>` parameter that TypeScript checks (through `decide`, `.partial` or a function-typed slot)
-goes through `untrusted(text, 'source')` from `@natlang/node`; types in an exported helper's signature are natlang
-grammar types from `types.ts` (records, arrays, `Record<string, T>`, unions; no `Map`, no inline `Array<{...}>`).
+- the share of calls by construct, and the construct kinds the trajectories use;
+- the depth of the NL call tree and the number of interior functions;
+- NL instruction lines against TypeScript logic lines, and NL calls against helper calls;
+- higher-order uses: functions passed, bound, returned, iterated;
+- NL literals: how many are created, how many are built from data, the calls made through them, and the share of the
+  call tree that runs through them;
+- answer lengths, and the mix of open, structured and closed outputs.
+
+Aim at the targets the output names. Where your program falls short of one, consider the design again rather than
+padding: a construct used because it fits the work is the training signal; one bolted on is noise.
 
 ## In a campaign
 
-1. Take a card (one builder per card; exit 1 when the bank is exhausted), with the ledger line above running
-   `PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python scripts/rl_tasks/program_atlas.py take BANK_DIR --by
-   <agent> > LOGS/take-<agent>.json 2>&1`.
-2. Build, dry-run, self-check, qualify until `report.json` is ok.
-3. `invented.py admit SUBMISSION --skip-qualify` admits it: train ideas to the pool batch, dev and confirmation ideas to
-   the held slice. A card you cannot build: `program_atlas.py release SLUG --status failed --reason "..."`.
+1. Take a card: the wave brief gives the `program_atlas.py take` line. One builder per card.
+2. Design the types and the function tree, then write the program. Then write instance a and its trajectory, run
+   `check` until `ok: true`, then the other instances.
+3. `admit` admits it. A card you cannot build: `program_atlas.py release SLUG --status failed --reason "..."`.
 4. Report. Admission ends your work on the program.

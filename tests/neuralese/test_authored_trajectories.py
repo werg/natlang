@@ -121,10 +121,35 @@ def test_async_driver_extracts_authored_pools_from_the_registry_owner(tmp_path, 
 
     def role_paths(name, **kw):
         seen.update(name=name, **kw)
-        return [str(good), str(tmp_path / 'gone')]
+        return [str(good / 'manifest.jsonl'), str(tmp_path / 'gone')]
     monkeypatch.setattr(data_registry, 'role_paths', role_paths)
     monkeypatch.setattr(data_registry, 'registry_owner_repo', lambda: Path('/owner'))
     assert ei.authored_teacher_pools() == [good]
     assert seen == {'name': ei.AUTHORED_TEACHER_ROLE, 'repo': Path('/owner')}
     monkeypatch.setattr(data_registry, 'role_paths', lambda *a, **k: (_ for _ in ()).throw(ValueError('no git')))
     assert ei.authored_teacher_pools() == []
+
+
+def test_an_authored_program_feeds_its_trajectories_not_only_its_oracle_cases(tmp_path, monkeypatch):
+    """authored_programs.py admit writes every instance to trajectories.jsonl and only the RL instances to cases.jsonl."""
+    home = tmp_path / 'p'
+    home.mkdir()
+    (home / 'trajectories.jsonl').write_text(json.dumps({'id': 't1'}) + '\n' + json.dumps({'id': 't2'}) + '\n')
+    (home / 'cases.jsonl').write_text(json.dumps({'id': 't1'}) + '\n')
+    seen = []
+    monkeypatch.setattr(at, 'render', lambda cases, **kw: seen.extend(c['id'] for c in cases) or [({'id': c['id']}, None) for c in cases])
+    rows, refused = at.program_rows({'slug': 'p'}, home, tmp_path)
+    assert seen == ['t1', 't2'] and len(rows) == 2 and refused == {}
+
+
+def test_promotion_runs_in_the_registry_owner_checkout(monkeypatch, tmp_path):
+    """A feed run from a pin promotes through the main checkout (promotion commits training/corpora/ where it runs),
+    the pool role reading its manifest."""
+    from natlang_neuralese.common import data_registry
+    calls = []
+    monkeypatch.setattr(data_registry, 'registry_owner_repo', lambda: tmp_path / 'main')
+    monkeypatch.setattr(at.subprocess, 'run', lambda argv, **kw: calls.append((argv, kw)))
+    at.promote('ds', at.POOL_ROLE, 'manifest.jsonl', False)
+    argv, kw = calls[0]
+    assert argv[1] == str(tmp_path / 'main' / 'scripts/data_registry.py') and kw['cwd'] == tmp_path / 'main'
+    assert argv[2:] == ['promote', 'ds', '--role', at.POOL_ROLE, '--role-file', 'manifest.jsonl']
