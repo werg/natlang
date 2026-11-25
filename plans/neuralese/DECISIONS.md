@@ -13199,3 +13199,7 @@ released only when measured >30 s after its admission. Waiters poll every 5 s (`
 wait more than 15 s on another's measurement; `status` never waits. `family_peaks` (36k one-off families, 1.6 of the
 1.9 MB file) keeps the 4000 most recently updated. Admitted events record `waited_s`. GB10 accounting, the 15 GB
 default reserve, ramp reservations and priorities are unchanged. After the guard restart a flock waits 0 s.
+
+### 2026-11-25: recorded nested TypeScript entries and invocation lifetimes
+
+Independent review of e52 found that the inherited causal ID suppressed fresh loaded pure-TS entry capture, and that task liveness alone allowed stale callback ancestry. The shared task-owned invocation registry now distinguishes active own entries from external causal parents, expires all kernel/crisp/native-root paths, revalidates deferred task entry, records fresh TS entries as crisp children and preserves same-task helper suppression. Expired callbacks cannot retain invocation service scopes; task-level bindings remain valid. Parent frame references clear at task.close. Standalone native sessions and StdSpan receive their own real lifetime hooks; synthetic spans do not claim recorder-backed custody. Existing optouts remain. Official Node/Core/browser build passed,54 targeted actual tests passed(10.88s,1.4GiB),quick passed18.2s/1.1GiB; no model calls. Historical0064 capture bytes are preserved, not retrospectively reparented. The older StdSpan durable-record gap remains a separate owned follow-up.

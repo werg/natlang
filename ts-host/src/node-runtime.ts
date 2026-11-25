@@ -58,6 +58,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
 
   override async run(node: LambdaNode): Promise<{ outcome: NativeOutcome; value: Value }> {
     const capture = this.store ? this.openRootCapture(this.store, node) : undefined;
+    if(!this.rootOptions.frame)this.frame!.task.beginInvocation(this.options.runId,!!capture);
     this.recording.capture = capture;
     capture?.watch(() => this.trace.events as Record<string, unknown>[]);
     let outcome = 'failed', detail = '', output: unknown, hasOutput = false;
@@ -70,9 +71,20 @@ export class NodeNativeRuntime extends PlatformRuntime {
       detail = error instanceof Error ? error.message : String(error);
       throw error;
     } finally {
+      if(!this.rootOptions.frame)this.frame!.task.endInvocation(this.options.runId);
       this.recording.capture = undefined;
       capture?.finish({ outcome, detail, output, hasOutput, events: this.trace.events as Record<string, unknown>[] });
     }
+  }
+
+  /** A manually driven NativeSession also owns its actual evaluation scope,
+   * without pretending that the standalone root was durably captured by run(). */
+  override async evaluate(...args: Parameters<PlatformRuntime['evaluate']>) {
+    const task=this.frame!.task,id=this.options.runId;
+    const own=!this.rootOptions.frame&&!task.isInvocationActive(id);
+    if(own)task.beginInvocation(id);
+    try { return await super.evaluate(...args); }
+    finally { if(own)task.endInvocation(id); }
   }
 
   /** Open the root's call record; recording never fails the run. */
