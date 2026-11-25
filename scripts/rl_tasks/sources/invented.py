@@ -1231,7 +1231,7 @@ def registry(*args: str) -> None:
     subprocess.run([str(PYTHON), str(REPO / 'scripts/data_registry.py'), *args], check=True, cwd=REPO)
 
 
-def publish(root: Path, *, dry_run: bool = False, no_check: bool = False) -> dict:
+def publish(root: Path, *, dry_run: bool = False, no_check: bool = False, authored: bool = True) -> dict:
     stamp = time.strftime('%Y%m%d-%H%M%S')
     admitted = [(json.loads((d / 'admission.json').read_text()), d) for d in sorted((root / 'admitted').glob('*'))
                 if (d / 'admission.json').exists()]
@@ -1309,7 +1309,25 @@ def publish(root: Path, *, dry_run: bool = False, no_check: bool = False) -> dic
         (d / 'admission.json').write_text(json.dumps(admission, indent=1) + '\n')
     with open(root / 'publications.jsonl', 'a') as handle:
         handle.write(json.dumps(summary) + '\n')
+    if authored:
+        summary['authored'] = authored_feed(root, no_check=no_check)
     return summary
+
+
+def authored_feed(root: Path, *, no_check: bool = False) -> dict:
+    """The admitted train programs' reference runs as authored trajectories (scripts/neuralese_data/
+    authored_trajectories.py feed: teacher pool, registry role ei-authored-teacher, the fill WORK). A failure is
+    reported, never undoes the publication."""
+    run = subprocess.run([str(PYTHON), str(REPO / 'scripts/neuralese_data/authored_trajectories.py'), 'feed',
+                          '--root', str(root), *(['--no-check'] if no_check else [])],
+                         capture_output=True, text=True, cwd=REPO,
+                         env={**os.environ, 'PYTHONPATH': f'{REPO}/training/neuralese:{REPO}'})
+    if run.returncode:
+        return {'error': (run.stderr or run.stdout)[-1200:]}
+    try:
+        return json.loads(run.stdout)
+    except ValueError:
+        return {'output': run.stdout[-1200:]}
 
 
 def main(argv=None) -> int:
@@ -1340,6 +1358,9 @@ def main(argv=None) -> int:
     pb = sub.add_parser('publish')
     pb.add_argument('--root', type=Path, default=INVENTOR_ROOT)
     pb.add_argument('--dry-run', action='store_true')
+    pb.add_argument('--no-authored', action='store_true',
+                    help='no authored-trajectory export after the batch (authored_trajectories.py feed: the admitted '
+                         'train programs\' reference runs as an expert-iteration teacher tier)')
     pb.add_argument('--no-check', action='store_true',
                     help="promote without the registry's check-main --quick (when another strand's uncommitted change "
                          'turns it red; the promotion commits only registry files)')
@@ -1359,7 +1380,8 @@ def main(argv=None) -> int:
     st.add_argument('--runtime', type=Path, default=REPO / 'ts-host')
     args = parser.parse_args(argv)
     if args.command == 'publish':
-        print(json.dumps(publish(args.root, dry_run=args.dry_run, no_check=args.no_check), indent=1))
+        print(json.dumps(publish(args.root, dry_run=args.dry_run, no_check=args.no_check,
+                                 authored=not args.no_authored), indent=1))
         return 0
     if args.command == 'sample-reviews':
         print(json.dumps(sample_reviews(args.root, args.count, seed=args.seed, reviewed=args.reviewed), indent=1))

@@ -1127,6 +1127,25 @@ def live_holdout_registry(live_works):
     return next(iter(found.values()), None)
 
 
+AUTHORED_TEACHER_ROLE = 'ei-authored-teacher'
+
+
+def authored_teacher_pools():
+    """The authored-trajectory teacher pools (registry role ``ei-authored-teacher``, written by
+    ``authored_trajectories.py feed``: admitted invented programs' reference runs, every judgment call with its rendered
+    input and the authored answer, no reasoning), read from the registry owner's git layer (a pin's own layer predates
+    later pools). A round extracts them with its teacher campaigns, so they enter the mix as teacher episodes (own
+    successes first by the frontier; filled reasoning stands in where the fill reached them).
+    ``--no-authored-teacher`` opts out."""
+    from natlang_neuralese.common import data_registry
+    try:
+        paths = data_registry.role_paths(AUTHORED_TEACHER_ROLE, repo=data_registry.registry_owner_repo())
+    except (OSError, ValueError) as error:
+        log({'event': 'authored_teacher_pools_unavailable', 'error': repr(error)[:300]})
+        return []
+    return [Path(p) for p in paths if (Path(p) / 'manifest.jsonl').exists()]
+
+
 def mix_build_command(repo, *, work, out, frontier, aux, prefer_unseen, teacher_budget, own_share, previous_policy=None,
                       live_registry=None, max_target_tokens=0, registry_repo=None, registry_ref=None,
                       max_forward_tokens=0, unfilled_live_teacher=None, extra=()):
@@ -3968,6 +3987,8 @@ class AsyncRoundDriver:
         lines = []
         rl = [*collections_, *[d for d in sorted(self.root.glob('r*/grpo')) if (d / 'groups').exists()]]
         teachers = [d for d in sorted(self.root.glob('teacher-*')) if (d / 'manifest.jsonl').exists()]
+        if not getattr(self.a, 'no_authored_teacher', False):
+            teachers += authored_teacher_pools()
         lines.append(self.c.data_py('sft_sources.py', 'extract', '--work', w,
                                *[x for d in rl for x in ('--rl', f'{d}:{d}')], *[x for d in teachers for x in ('--teacher', d)],
                                '--out-name', f'episodes-{self.a.name}-{round_dir.name}'))
@@ -5424,6 +5445,9 @@ def main():
                     help='a round prepared while a Colab session fit for SFT answers is sized to this many hours of '
                          'its learner (forward tokens at its measured throughput, round-speed.json; the target cap and '
                          'teacher budget scaled alike, never below the DGX round); 0: every round is the DGX size')
+    ad.add_argument('--no-authored-teacher', action='store_true',
+                    help='no authored-trajectory teacher pools (registry role ei-authored-teacher, '
+                         'authored_trajectories.py feed) in the round extraction')
     ad.add_argument('--no-fallow22-aux', action='store_true',
                     help='leave the fallow-22 reference-program fan-in part (FALLOW22_AUX, share 0.01) out of the mix')
     ad.add_argument('--no-dgx-recap', action='store_true',

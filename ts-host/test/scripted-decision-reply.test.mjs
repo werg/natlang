@@ -33,3 +33,15 @@ test('a decision-readout root replays its scripted return_result value as the de
   assert.equal(run.outcome.accepted, true, JSON.stringify(run.outcome.detail ?? run.outcome.status).slice(0, 600));
   assert.equal(run.outcome.value, 'keep');
 });
+
+test('onTurn sees every request with the scripted reply, a readout child answered by its JSON text', async () => {
+  const turns = [];
+  const { run } = await replayReference(record, TOOLS_PROMPT, () => '',
+    { onTurn: (request, response) => turns.push({ request, response }) });
+  assert.equal(run.outcome.accepted, true);
+  assert.ok(turns.length >= 2);
+  assert.ok(turns.every(({ request }) => Array.isArray(request.messages) && request.messages.length > 0));
+  const readouts = turns.filter(({ request }) => Array.isArray(request.tools) && request.tools.length === 0);
+  assert.ok(readouts.length > 0 && readouts.every(({ response }) => typeof response.text === 'string' && !response.calls?.length));
+  assert.ok(turns.some(({ response }) => response.calls?.length));
+});

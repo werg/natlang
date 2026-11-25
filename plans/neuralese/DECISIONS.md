@@ -12841,3 +12841,51 @@ and collections to the HDD, and kept the last two lineage rounds and the protect
     teacher pools (recalled to NVMe 2026-11-23), about +3 GB per round.
   - Not addressed: episodes of collections tiered to the HDD (~6-10 GB per policy after compaction) grow the HDD,
     and the Drive tier drains it.
+
+## 2026-11-25 10:20 Authored trajectories enter expert iteration as a teacher tier (authored-trajectory agent)
+
+- **Why.** The owner (2026-11-25) asked why authored trajectories are not trained directly: "Just have the author write
+  the entire execution trajectory to train on and then all we need to do is collect the reasoning in between the
+  actions". An admitted invented program's reference run is such a trajectory. Its root actions and the scripted answer
+  of every judgment call are authored, and the runtime renders each call's input exactly as the model sees it.
+- **Format.** `natlang.authored-trajectory/1` (`scripts/neuralese_data/authored_trajectories.py`): a task row
+  (natlang.program/2 with its oracle) plus optional `turns` ({invocation_id, function, messages, tools, target}).
+  - Without turns, the task's `curriculum.reference` is the trajectory. `scripts/rl_tasks/reference_episodes.mjs`
+    renders it through the collector's own path (`replayReference`, new `onTurn` hook), so iteration, folder
+    reducers and decision readouts come out as the runtime issues them.
+  - Producer-neutral. The campaign redesign's authored trajectories (deep natlang codebases, natlang-specific calls)
+    enter through the same format: either a task row whose reference holds the authored actions, or pre-rendered
+    turns.
+  - Targets carry no reasoning, and a row with `reasoning_content` is refused.
+- **How it enters training.** No parallel mechanism; this extends the existing teacher path.
+  - `pool` writes a teacher_gen-layout pool (`manifest.jsonl`, `episodes/<e>/{cases,rollouts}.jsonl`), which
+    `sft_sources extract --teacher` reads unchanged.
+  - The async driver's round extraction (`prepare_plan`) adds every pool of registry role `ei-authored-teacher` to its
+    `teacher-*` campaigns. Opt-out: `async-drive --no-authored-teacher`.
+  - The replay re-runs each task under the pin's runtime and oracle. The build then takes the replays as teacher
+    episodes, own successes first per the frontier. An empty think block is zero-weight context and the actions are
+    the targets.
+  - The reasoning between actions comes from the existing fill. `feed` also extracts and replays the pools into the
+    WORK `data_nvme:sft-invented-authored`, which is promoted to role `grpo-sd-teacher`, so `filled_reasoning.py
+    generate` draws them. Their `filled` units replace the teacher rows (`replaces=teacher`) under the filled build's
+    existing weighting.
+  - Decision readouts: the authored answer is marked as a reasoned group (`decision_reasoning`, 16 repeats), so the
+    replay serves the collector's reasoning samples and the answer request.
+- **Continuous.** `invented.py publish` runs `authored_trajectories.py feed` after each batch (opt-out `--no-authored`).
+  - The feed takes every admitted program of the train split that no review withheld and that has no export at its
+    admitted digest (`ROOT/authored/exported.jsonl`).
+  - Each feed writes `ROOT/authored/<stamp>/` and records registry dataset `natlang-sft-invented-authored-<stamp>`
+    (role `ei-authored-teacher`).
+- **Held separation.** The feed reads only train-split admissions. `pool` refuses any row whose task split is not
+  train, and every task `held_eval.training_exclusion_ids` names: held-v3/v2, held-inv (`held-eval-invented`) and every
+  `held-eval*` role, with siblings.
+- **Fix found on the way (`sft_sources.drifted_success`).** A drifted success whose replay served a reasoned readout's
+  repeats (`group-repeat`) was refused, although `exact` already treats those repeats as answered by the matched
+  entry. The turn count now compares with `replay_calls`.
+  - Effect: drifted teacher episodes with reasoned readouts were silently dropped from every build. That covers
+    authored whole programs, whose reference render uses a 16k display budget and so drifts on long arguments.
+- **Reaches aei1 at its next driver restart** (the pin must include this commit). The fill takes the WORK at its next
+  launch, since a fill unit reads the role at launch.
+- **Left out:** `expert_iteration.py cycle` (being replaced by async-drive; its data stage extracts no teacher pools).
+- Tests: `tests/neuralese/test_authored_trajectories.py`; the `onTurn` case in
+  `ts-host/test/scripted-decision-reply.test.mjs`.
