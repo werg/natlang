@@ -247,15 +247,8 @@ class PplxWarmstartWriter(nn.Module):
 
 def _warmstart_manifest(root, writer_path, query_path) -> dict:
     """What the warm start loaded: the extractor's manifest (when present) and the loaded files' SHA-256."""
-    import hashlib
     import json
-
-    def sha(path):
-        digest = hashlib.sha256()
-        with open(path, 'rb') as handle:
-            for chunk in iter(lambda: handle.read(1 << 20), b''):
-                digest.update(chunk)
-        return digest.hexdigest()
+    from ..common.hashing import sha256_file_hex as sha
 
     manifest_path = root / 'warmstart-manifest.json'
     manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else None
