@@ -93,7 +93,7 @@ FORWARD_PER_TARGET = 10.7
 # ~10% of a round's forward); --no-fallow22-aux opts out.
 FALLOW22_AUX = (f'fallow22={DATA.parent / "sft-fallow22-broad-graphs-20261124-v1" / "chains.pkl"},'
                 'share=0.01,task_tokens=2000')     # forward tokens per weighted target token of a round mix (r0001 10.87, r0002 10.57)
-FILL_GB = 3.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB); 6 kept the Pop fill out beside the SFT
+FILL_GB = 4.5       # filled_reasoning.py generate client (sft-v8 fill/popfill peaks 2.0-2.7 GB on the seed WORKs; the loop's sources WORK, every campaign, adds the largest listing from 2026-11-25); 6 kept the Pop fill out beside the SFT
 # ledger GB per collector slot (an episode's node processes, shared 8 per process; AGENTS.md ~250 MB measured): the DGX
 # collection's budget has used 0.3 since sft-v7, and remote-actor (Colab) collections and DGX held clients use the same
 COLLECTOR_SLOT_GB = 0.3
@@ -1219,6 +1219,55 @@ def placement_round_size(*, round_target_tokens, teacher_budget, hours, gpu_name
             'forward_per_target': round(forward_per_target, 3)}
 
 
+# ---- round supply and validation (pure, tested) ----------------------------------------------------------------------
+# a round trains when its mix holds this many new weighted target tokens outside the policy's own successes, or once it
+# waited MAX_SUPPLY_WAIT_HOURS for them (DECISIONS 2026-11-25 aei1 supply); rechecked (data and build again) this often
+MIN_NEW_TOKENS = 5_000_000
+MAX_SUPPLY_WAIT_HOURS = 12.0
+SUPPLY_RECHECK_MINUTES = 45.0
+# the mix parts that are the policy's own successes (self-imitation), not new supervision
+OWN_PARTS = ('rl-own', 'own-neuralese-graph')
+# a new teacher campaign episode younger than this waits for its fill instead of training raw (sft_sources FillPending)
+DEFER_UNFILLED_HOURS = 12.0
+# the lineage's fixed held-like validation set (sft_sources FixedVal), under the driver's root
+FIXED_VAL_DIR = 'val-fixed'
+
+
+def mix_supply(report):
+    """Weighted target tokens of a built mix (build.json): new supervision (every part but the own successes, OWN_PARTS;
+    under the no-repetition rule every unit is one no earlier build trained), own, total, and per part."""
+    parts = (report.get('mix') or {}).get('parts') or {}
+    own = sum(v.get('weighted_target_tokens', 0) for k, v in parts.items() if k in OWN_PARTS)
+    total = sum(v.get('weighted_target_tokens', 0) for v in parts.values())
+    return {'new_weighted_target_tokens': int(total - own), 'own_weighted_target_tokens': int(own),
+            'weighted_target_tokens': int(total),
+            'parts': {k: int(v.get('weighted_target_tokens', 0)) for k, v in sorted(parts.items())}}
+
+
+def round_validation(train_jsonl):
+    """{set: {before, after, change, before_step, after_step}} of a learner log's ``val_loss:<set>`` records (the first
+    record of a set and its last), or {} without any."""
+    path = Path(train_jsonl)
+    if not path.exists():
+        return {}
+    first, last = {}, {}
+    for line in path.read_text(errors='replace').splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(r, dict):
+            continue
+        for key, value in r.items():
+            if key.startswith('val_loss:') and isinstance(value, (int, float)):
+                name = key.split(':', 1)[1]
+                first.setdefault(name, (r.get('step'), value))
+                last[name] = (r.get('step'), value)
+    return {name: {'before': round(first[name][1], 5), 'after': round(last[name][1], 5),
+                   'change': round(last[name][1] - first[name][1], 5),
+                   'before_step': first[name][0], 'after_step': last[name][0]} for name in sorted(first)}
+
+
 NEUTRAL_ADOPT = os.environ.get('NATLANG_EI_NEUTRAL_ADOPT', '1') != '0'
 # Two consecutive neutral rounds switch SFT <-> GRPO only when this is set: the phase is a deliberate choice recorded in
 # DECISIONS, not an automatic consequence of underpowered held results (owner 2026-11-25).
@@ -2048,17 +2097,25 @@ class Cycle:
                     repo=self.fill_repo())
         self.note(stage='fill', started=f'{self.a.name}-fill', actor=actor['url'])
 
-    def fill_command(self, actor, window=False, pop=False):
+    def fill_command(self, actor, window=False, pop=False, skip_trained=()):
         """filled_reasoning.py generate: the seed WORKs then the grpo-sd-teacher role's (first WORK wins a key),
         teacher episodes of the tasks the student fails first (the select stage's rates: failed, then unmeasured, then
         by rate; the frontier mix trains teacher trajectories there). On the collect actor a fixed share: the actor runs
         ``--fill-inflight`` more requests than the collection has slots and fill keeps that many draws in flight (twice
         that when the engine has spare slots), with twice as many episode workers so the cap is reached (each worker
         draws at most 4 candidates at a time and scores between them). In the fill window the dedicated actor's every
-        slot (``--fill-window-inflight`` draws, ``--fill-window-workers`` episodes)."""
+        slot (``--fill-window-inflight`` draws, ``--fill-window-workers`` episodes).
+
+        The loop's own sources WORK (``--work``: every teacher campaign's extracted successes) is filled too, right
+        after the live WORKs and before the seed WORKs, and rescanned as each round extracts the campaigns' new
+        successes (``--no-fill-campaigns`` opts out; until 2026-11-25 the fill listed only the seed and live WORKs, so
+        none of aei1's ~5,000 campaign successes was ever filled). ``skip_trained``: the lineage's trained builds,
+        whose episodes are not filled (``filled_reasoning --skip-trained``: such a fill never trains)."""
         self.require_data_readers()
         from natlang_neuralese.common import data_registry
         live = [str(w) for w in getattr(self.a, 'live_work', None) or ()]
+        if not getattr(self.a, 'no_fill_campaigns', False):
+            live = list(dict.fromkeys([*live, str(self.work)]))
         owner = self.live_data_owner()
         ref = self.live_data_ref(owner)
         works = list(dict.fromkeys([*live, *map(str, self.a.seed_work),
@@ -2084,6 +2141,7 @@ class Cycle:
                            *[x for w in live for x in ('--prefer-work', w)],
                            *(('--rescan-minutes', 30) if live else ()),
                            *(('--registry-repo', owner) if owner is not None else ()),
+                           *[x for b in skip_trained for x in ('--skip-trained', b)],
                            # Standing fills resolve publication again at each rescan.
                            *(('--prefer-rates', rates) if rates.exists() else ())])]
 
@@ -3428,8 +3486,8 @@ class AsyncRoundDriver:
         if actor['checkpoint_sha256'] != policy['sha256']:
             return
         self.c.work_tokenizer()
-        self.c.ledger(f'{unit}-fill', FILL_GB, 'medium', self.c.fill_command(actor), work / 'fill.log', detach=True,
-                      repo=self.c.fill_repo())
+        self.c.ledger(f'{unit}-fill', FILL_GB, 'medium', self.c.fill_command(actor, skip_trained=self.trained_builds()),
+                      work / 'fill.log', detach=True, repo=self.c.fill_repo())
         self.note(fill_started=f'{unit}-fill', policy=policy['sha256'])
 
     def remote_targets(self):
@@ -3981,6 +4039,16 @@ class AsyncRoundDriver:
                 return Path(mix)
         return Path(round_dir) / 'mix'
 
+    def trained_builds(self):
+        """Every mix whose episodes train or trained in this lineage: the lineage's trained builds and each round's
+        prepared mix not discarded (a fill of their episodes never trains: ``filled_reasoning --skip-trained``)."""
+        builds = list(self.controller.state['prefer_unseen'])
+        for mix in sorted(self.root.glob('r[0-9]*/mix')):
+            if (mix / 'rows.jsonl.zst').exists() and not (mix.parent / 'discarded.json').exists() \
+                    and str(mix) not in builds:
+                builds.append(str(mix))
+        return builds
+
     def prefer_unseen_for(self, round_dir):
         """The builds a round's mix prefers unseen over: the lineage's trained rounds (``prefer_unseen``) and the round
         training now, when this one is prepared ahead of it (its mix is not published yet; without it the next round
@@ -4027,6 +4095,15 @@ class AsyncRoundDriver:
         aux.append(f'filled={round_dir / "filled" / "chains.pkl"},share=all,task_tokens=40000,replaces=teacher')
         aux.append(f'own-neuralese-graph={round_dir / "neuralese-graph-own" / "chains.pkl"},'
                    f'share={self.a.own_neuralese_graph_share},task_tokens=40000')
+        build_extra = []
+        if not getattr(self.a, 'no_fixed_val', False):
+            build_extra += ['--fixed-val', self.root / FIXED_VAL_DIR]
+        build_extra += ['--anchor-per-task', getattr(self.a, 'own_solved_anchor', 0)]
+        hours = getattr(self.a, 'defer_unfilled_hours', DEFER_UNFILLED_HOURS)
+        if hours and self.a.fill:
+            build_extra += ['--defer-unfilled-hours', hours, '--fill-out', self.a.fill,
+                            *[x for d in sorted(self.root.glob('teacher-*')) if (d / 'manifest.jsonl').exists()
+                              for x in ('--campaign-work', d)]]
         build = mix_build_command(self.c.data_repo(), work=w, out=round_dir / 'mix', frontier=round_dir / 'frontier.json',
                                   aux=aux, prefer_unseen=(self.prefer_unseen_for(round_dir) if prefer_unseen is None
                                                           else prefer_unseen),
@@ -4038,7 +4115,7 @@ class AsyncRoundDriver:
                                   max_target_tokens=size['max_target_tokens'],
                                   max_forward_tokens=size['max_forward_tokens'],
                                   unfilled_live_teacher=getattr(self.a, 'unfilled_live_teacher', None),
-                                  extra=(getattr(self.a, 'build_args', '') or '').split())
+                                  extra=[*build_extra, *(getattr(self.a, 'build_args', '') or '').split()])
         return list(map(str, frontier)), [list(map(str, x)) for x in lines], list(map(str, build))
 
     def failed_policies(self):
@@ -4154,7 +4231,6 @@ class AsyncRoundDriver:
             size = {**self.round_size(), 'decided_at': round(time.time(), 1)}
             write_json_durable(size_path, size)
         self.note(round=round_dir.name, round_size=size)
-        frontier, lines, build = self.prepare_plan(round_dir, policies, size)
 
         # Each step records stages/<step>.done, so a driver restart resumes after the last finished step instead of
         # rerunning frontier and data (hours) beneath a build that may still be reading their outputs.
@@ -4175,33 +4251,82 @@ class AsyncRoundDriver:
             done.write_text(json.dumps({'time': time.time()}) + '\n')
         # the standing DGX collection yields slots (and its claim) from the frontier to the end of the build, instead
         # of being preempted for the data and build steps (Cycle.prep_yield, PREP_YIELD_SHARE)
-        with self.c.prep_yield(f'{self.a.name}-{round_dir.name}'):
-            step('frontier', 4, frontier)
-            self.c.work_tokenizer()
-            script = round_dir / 'data.sh'
-            # Preserve an admitted/requeued plan and atomically replace inactive plans.
-            if not (round_dir / 'stages' / 'data.done').exists() and \
-                    not self.c.present(f'{self.a.name}-{round_dir.name}-data'):
-                tmp = script.with_name(script.name + '.tmp')
-                tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
-                os.replace(tmp, script)
-            step('data', DATA_STAGE_GB, ['/bin/sh', str(script)], repo=self.c.data_repo())
-            # 24 GB: r0004-r0007 peaked at 17.0-17.5 GiB (18.7 GB) with the aux parts loaded before the teacher
-            # admission and --prefer-unseen reading older mixes (the 32 GB of 2026-11-24 morning anticipated them);
-            # r0001's 21.2 GB was before. The guard raises an over-budget unit while memory is plentiful.
-            step('build', 24, build, repo=self.c.data_repo())
-        report = json.loads((round_dir / 'mix' / 'build.json').read_text())
+        while True:
+            # the plan again on every pass: a supply wait (below) rebuilds with the campaigns and fills that grew since
+            frontier, lines, build = self.prepare_plan(round_dir, policies, size)
+            with self.c.prep_yield(f'{self.a.name}-{round_dir.name}'):
+                step('frontier', 4, frontier)
+                self.c.work_tokenizer()
+                script = round_dir / 'data.sh'
+                # Preserve an admitted/requeued plan and atomically replace inactive plans.
+                if not (round_dir / 'stages' / 'data.done').exists() and \
+                        not self.c.present(f'{self.a.name}-{round_dir.name}-data'):
+                    tmp = script.with_name(script.name + '.tmp')
+                    tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
+                    os.replace(tmp, script)
+                step('data', DATA_STAGE_GB, ['/bin/sh', str(script)], repo=self.c.data_repo())
+                # 24 GB: r0004-r0007 peaked at 17.0-17.5 GiB (18.7 GB) with the aux parts loaded before the teacher
+                # admission and --prefer-unseen reading older mixes (the 32 GB of 2026-11-24 morning anticipated them);
+                # r0001's 21.2 GB was before. The guard raises an over-budget unit while memory is plentiful.
+                step('build', 24, build, repo=self.c.data_repo())
+            report = json.loads((round_dir / 'mix' / 'build.json').read_text())
+            if not self.supply_wait(round_dir, report):
+                break
         manifest = write_round_manifest(
             round_dir, round_id=round_dir.name, base_policy_sha=cur['sha256'],
             previous_policy_sha=policies[-2]['sha256'] if len(policies) > 1 else None,
             chains_path=round_dir / 'mix' / 'chains.pkl', episode_ids=report.get('admitted_episode_keys') or [],
             prefer_unseen=self.prefer_unseen_for(round_dir), profile=self.a.sft_profile,
             extra={'frontier_policy': cur['sha256'], 'collections': [str(d) for d in self.collections_of(policies)],
-                   'size': size, 'mix_dir': str(round_dir / 'mix'),
+                   'size': size, 'mix_dir': str(round_dir / 'mix'), 'supply': mix_supply(report),
                    'expected_hours': self.expected_hours(report)})
         (round_dir / 'stages' / 'prepared.done').write_text(json.dumps({'time': time.time()}) + '\n')
         self.ensure_teacher(round_dir)
         return manifest
+
+    def supply_wait(self, round_dir, report):
+        """Whether a round waits for more new supervision before it trains (the data and build steps then run again):
+        its mix holds fewer than ``--min-new-tokens`` weighted target tokens outside the policy's own successes
+        (``mix_supply``; every unit is unseen under the no-repetition rule) and ``--max-supply-wait-hours`` have not
+        passed since its first short build (``stages/supply.json``). Rounds get larger and fewer instead of training
+        mostly on self-imitation: aei1 r9-r11 trained 1.2-2.5M new teacher-derived tokens a round, r1 (the only round
+        with a held gain) 19.6M. While it waits, the standing collection, teacher campaign and fills keep running.
+        ``--min-new-tokens 0`` opts out."""
+        from natlang_neuralese.common.jsonio import write_json_durable
+        supply = mix_supply(report)
+        path = round_dir / 'stages' / 'supply.json'
+        record = json.loads(path.read_text()) if path.exists() else {'builds': []}
+        record['builds'].append({'at': round(time.time(), 1), **supply})
+        minimum = getattr(self.a, 'min_new_tokens', MIN_NEW_TOKENS)
+        first = record.setdefault('first_short_at', None)
+        short = bool(minimum) and supply['new_weighted_target_tokens'] < minimum
+        if short and first is None:
+            record['first_short_at'] = first = time.time()
+        waited = time.time() - first if first else 0.
+        wait = short and waited < 3600 * getattr(self.a, 'max_supply_wait_hours', MAX_SUPPLY_WAIT_HOURS)
+        record.update(minimum=minimum, decision='wait' if wait else ('train: wait expired' if short else 'train'))
+        write_json_durable(path, record)
+        self.note(round=round_dir.name, supply=supply, minimum=minimum, waited_hours=round(waited / 3600, 2),
+                  decision=record['decision'])
+        if not wait:
+            return False
+        deadline = time.time() + 60 * getattr(self.a, 'supply_recheck_minutes', SUPPLY_RECHECK_MINUTES)
+        while time.time() < deadline:
+            self.standing_teacher()
+            time.sleep(60)
+        for name in ('data', 'build'):
+            for suffix in ('.done', '.exit'):
+                (round_dir / 'stages' / f'{name}{suffix}').unlink(missing_ok=True)
+        return True
+
+    def round_validation(self, round_dir):
+        """The round's validation losses (``exp0_sft`` ``val_loss:<set>``: the fixed held-like sets and the round's own)
+        before its first step and after its last, from the learner log; recorded in round.json and the drive log."""
+        out = round_validation(round_dir / 'sft' / 'train.jsonl')
+        if out:
+            update_round_manifest(round_dir, validation=out)
+            self.note(round=round_dir.name, validation=out)
+        return out
 
     def prepare_ahead(self, round_dir, policies):
         """The next round's preparation while this round trains (its frontier is the current policy, adjacent to the
@@ -4222,9 +4347,12 @@ class AsyncRoundDriver:
         self.c.require_data_readers()
         run = round_dir / 'sft'
         extra = ['--round-id', round_dir.name, '--export-factors-dir', str(run / 'factors'), '--factors-only', '--resume']
-        vals = [v for v in ('val-own.pkl', 'val-teacher.pkl') if (round_dir / 'mix' / v).exists()]
+        # the lineage's fixed held-like sets first (the same rows every round), then the round's own left-over sets
+        vals = [*(str(p) for p in (self.root / FIXED_VAL_DIR / f'val-fixed-{k}.pkl' for k in ('own', 'teacher'))
+                  if p.exists() and not getattr(self.a, 'no_fixed_val', False)),
+                *(str(round_dir / 'mix' / v) for v in ('val-own.pkl', 'val-teacher.pkl') if (round_dir / 'mix' / v).exists())]
         if vals:
-            extra += [*(x for v in vals[1:] for x in ('--val-chains', str(round_dir / 'mix' / v))), '--val-every', '20']
+            extra += [*(x for v in vals[1:] for x in ('--val-chains', v)), '--val-every', '20']
         env = {**{k: v for k, v in os.environ.items() if k not in ('WARMUP', 'BLT', 'VAL', 'EXTRA', 'PREFLIGHT_ONLY')},
                'CHAINS': str(self.round_mix(round_dir) / 'chains.pkl'),
                'CHAINS_SHA256': (round_dir / 'chains.sha256').read_text().split()[0],
@@ -4232,7 +4360,7 @@ class AsyncRoundDriver:
                'LR': str(self.a.lr), 'WARMUP': '10', 'BLT': '30000', 'ACT': str(activation_gb),
                'BUDGET': str(self.a.sft_budget), 'EXTRA': ' '.join([*extra, *self.a.sft_extra.split()])}
         if vals:
-            env['VAL'] = str(round_dir / 'mix' / vals[0])
+            env['VAL'] = vals[0]
         if preflight_only:
             env['PREFLIGHT_ONLY'] = '1'
         # the preflight is a 4 GB CPU unit on the round's critical path: at low priority with a 600 s wait it was not
@@ -5048,6 +5176,10 @@ class AsyncRoundDriver:
                 update_round_manifest(round_dir, trained_from=cur['sha256'], trained_from_version=cur['version'])
                 factors = self.train_sft(round_dir, cur)
                 mix = self.round_mix(round_dir)
+                try:
+                    self.round_validation(round_dir)
+                except Exception as error:      # telemetry never stops a round
+                    self.note(round=rid, validation_failed=repr(error)[:300])
             else:
                 self.stop_collections()
                 factors = self.train_grpo(round_dir, cur)
@@ -5468,6 +5600,24 @@ def main():
     ad.add_argument('--no-authored-teacher', action='store_true',
                     help='no authored-trajectory teacher pools (registry role ei-authored-teacher, '
                          'authored_trajectories.py feed) in the round extraction')
+    ad.add_argument('--no-fill-campaigns', action='store_true',
+                    help='the standing fills do not fill the teacher campaigns\' successes (--sft-work) and do not skip '
+                         'episodes the lineage trained (before 2026-11-25: seed and live WORKs only)')
+    ad.add_argument('--min-new-tokens', type=int, default=MIN_NEW_TOKENS,
+                    help='a round trains once its mix holds this many weighted target tokens outside the own successes '
+                         '(new supervision); fewer: it waits for the campaigns and fills (data and build again every '
+                         '--supply-recheck-minutes) up to --max-supply-wait-hours (0: no wait)')
+    ad.add_argument('--max-supply-wait-hours', type=float, default=MAX_SUPPLY_WAIT_HOURS)
+    ad.add_argument('--supply-recheck-minutes', type=float, default=SUPPLY_RECHECK_MINUTES)
+    ad.add_argument('--defer-unfilled-hours', type=float, default=DEFER_UNFILLED_HOURS,
+                    help='sft_sources build --defer-unfilled-hours: a new campaign episode the fill has not reached '
+                         'waits this long for its fill instead of training raw (0: off)')
+    ad.add_argument('--own-solved-anchor', type=int, default=0,
+                    help='sft_sources build --anchor-per-task: own episodes kept of a task the policy solves '
+                         '(>= 0.75; default 0: none; 1: the light anchor before 2026-11-25)')
+    ad.add_argument('--no-fixed-val', action='store_true',
+                    help='no fixed held-like validation set (ROOT/val-fixed, sft_sources --fixed-val) in the builds '
+                         'and the learner')
     ad.add_argument('--no-fallow22-aux', action='store_true',
                     help='leave the fallow-22 reference-program fan-in part (FALLOW22_AUX, share 0.01) out of the mix')
     ad.add_argument('--no-dgx-recap', action='store_true',

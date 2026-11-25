@@ -534,6 +534,8 @@ def _driver(tmp_path, monkeypatch, **over):
     argv = ['async-drive', '--root', str(tmp_path / 'loop'), '--name', 'aei', '--start', str(start),
             '--start-sha', 'a' * 64, '--commit', 'c' * 40, '--pin', str(pin), '--sft-work', str(tmp_path / 'work'),
             *over.pop('argv', [])]
+    if '--min-new-tokens' not in argv:      # the supply wait has its own test; preparation tests build tiny mixes
+        argv += ['--min-new-tokens', '0']
     parser_args = {}
     monkeypatch.setattr(sys, 'argv', ['expert_iteration.py', *argv])
     monkeypatch.setattr(ei, 'async_drive', lambda a: parser_args.setdefault('a', a) and 0)
@@ -2977,3 +2979,74 @@ def test_async_driver_retention_pass_and_opt_out(tmp_path, monkeypatch):
     d.retain('r0001 published').join(60)
     assert not actor.exists() and notes and notes[-1]['retention'] == 'r0001 published', notes
     assert notes[-1]['errors'] == 0 and notes[-1]['actions'] == 1
+
+
+def test_round_builds_take_the_fixed_val_set_drop_solved_own_and_defer_unfilled_campaign_episodes(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--fill', str(tmp_path / 'fill')])
+    cur = d.controller.current
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+    for name in ('teacher-r0001', 'teacher-r0002', 'teacher-r0003'):
+        (d.root / name).mkdir(parents=True)
+    for name in ('teacher-r0001', 'teacher-r0003'):
+        (d.root / name / 'manifest.jsonl').write_text('{}\n')
+    _, _, build = d.prepare_plan(d.root / 'r0001', [cur])
+    assert build[build.index('--fixed-val') + 1] == str(d.root / 'val-fixed')
+    assert build[build.index('--anchor-per-task') + 1] == '0'
+    assert build[build.index('--defer-unfilled-hours') + 1] == str(ei.DEFER_UNFILLED_HOURS)
+    assert build[build.index('--fill-out') + 1] == str(tmp_path / 'fill')
+    assert [build[i + 1] for i, x in enumerate(build) if x == '--campaign-work'] == \
+        [str(d.root / 'teacher-r0001'), str(d.root / 'teacher-r0003')]
+    _, off = _driver(tmp_path / 'off', monkeypatch, argv=['--fill', str(tmp_path / 'fill'), '--no-fixed-val',
+                                                          '--own-solved-anchor', '1', '--defer-unfilled-hours', '0'])
+    off.collect_dir(off.controller.current).mkdir(parents=True)
+    (off.collect_dir(off.controller.current) / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+    _, _, build = off.prepare_plan(off.root / 'r0001', [off.controller.current])
+    assert '--fixed-val' not in build and '--defer-unfilled-hours' not in build
+    assert build[build.index('--anchor-per-task') + 1] == '1'
+
+
+def test_the_learner_scores_the_fixed_val_sets_first_then_the_rounds_own(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'chains.sha256').write_text('f' * 64 + '\n')
+    (rd / 'mix' / 'val-teacher.pkl').write_bytes(b'x')
+    (d.root / 'val-fixed').mkdir(parents=True)
+    for kind in ('own', 'teacher'):
+        (d.root / 'val-fixed' / f'val-fixed-{kind}.pkl').write_bytes(b'x')
+    env = d.sft_env(rd, d.controller.current, activation_gb=56, preflight_only=False)
+    extra = env['EXTRA'].split()
+    assert env['VAL'] == str(d.root / 'val-fixed' / 'val-fixed-own.pkl')
+    assert [extra[i + 1] for i, x in enumerate(extra) if x == '--val-chains'] == \
+        [str(d.root / 'val-fixed' / 'val-fixed-teacher.pkl'), str(rd / 'mix' / 'val-teacher.pkl')]
+
+
+def test_a_round_short_of_new_supervision_waits_and_rebuilds_until_the_wait_expires(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--min-new-tokens', '5000000', '--max-supply-wait-hours', '6',
+                                                 '--supply-recheck-minutes', '45'])
+    rd = d.root / 'r0002'
+    (rd / 'stages').mkdir(parents=True)
+    for name in ('data', 'build'):
+        (rd / 'stages' / f'{name}.done').write_text('{}')
+    clock = [1_000_000.]
+    monkeypatch.setattr(ei.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: clock.__setitem__(0, clock[0] + s))
+    monkeypatch.setattr(d, 'standing_teacher', lambda: None)
+    short = {'mix': {'parts': {'rl-own': {'weighted_target_tokens': 4_800_000},
+                               'teacher': {'weighted_target_tokens': 1_200_000}}}}
+    assert d.supply_wait(rd, short)                        # short: waits 45 min, then data and build run again
+    assert clock[0] - 1_000_000 >= 45 * 60
+    assert not (rd / 'stages' / 'data.done').exists() and not (rd / 'stages' / 'build.done').exists()
+    record = json.loads((rd / 'stages' / 'supply.json').read_text())
+    assert record['decision'] == 'wait' and record['builds'][0]['new_weighted_target_tokens'] == 1_200_000
+    enough = {'mix': {'parts': {'rl-own': {'weighted_target_tokens': 4_800_000},
+                                'filled': {'weighted_target_tokens': 5_100_000}}}}
+    assert not d.supply_wait(rd, enough)
+    assert json.loads((rd / 'stages' / 'supply.json').read_text())['decision'] == 'train'
+    clock[0] += 6 * 3600                                     # still short, but the wait expired: it trains
+    assert not d.supply_wait(rd, short)
+    assert json.loads((rd / 'stages' / 'supply.json').read_text())['decision'] == 'train: wait expired'
+    _, off = _driver(tmp_path / 'off', monkeypatch, argv=['--min-new-tokens', '0'])
+    (off.root / 'r0001' / 'stages').mkdir(parents=True)
+    assert not off.supply_wait(off.root / 'r0001', short)
