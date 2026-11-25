@@ -99,6 +99,31 @@ def capture_integrity_errors(errors):
             if error != 'Assigned authored root did not complete successfully']
 
 
+def authored_lifecycle(packet):
+    """The outer runner RPC error carries its private, exact-Eval lifecycle.
+
+    Never search guest causes or infer a boundary from missing records, error
+    wording, or the generic orchestration phase. Older producers stay unknown.
+    """
+    execution = packet.get('execution') or {}
+    failure = execution.get('failure') if isinstance(execution, dict) else None
+    error = failure.get('error') if isinstance(failure, dict) else None
+    data = error.get('errorData') if isinstance(error, dict) else None
+    evidence = data.get('authoredLifecycle') if isinstance(data, dict) else None
+    if not isinstance(evidence, dict) or set(evidence) != {
+            'schema', 'runId', 'runtimeId', 'boundary', 'teacherStarted'}:
+        return None
+    if (evidence['schema'] != 'vibestudio.authored-lifecycle/1'
+            or evidence['boundary'] != 'assigned-program-load'
+            or type(evidence['teacherStarted']) is not bool
+            or not isinstance(evidence['runId'], str)
+            or not re.fullmatch(r'system-test-runner:teacher:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', evidence['runId'])
+            or not isinstance(evidence['runtimeId'], str)
+            or not re.fullmatch(r'do:vibestudio/internal:EvalDO:[0-9a-f]{40}', evidence['runtimeId'])):
+        return None
+    return evidence
+
+
 def outcomes(capture, names, held, training, cases):
     results = {}
     interruption = capture / 'collection-interruption.json'
@@ -174,6 +199,19 @@ def outcomes(capture, names, held, training, cases):
             results[name]['interrupted'] = True
             if not has_training_manifest(results[name]):
                 results[name]['status'] = 'interrupted'
+        if packet is not None:
+            lifecycle = authored_lifecycle(packet)
+            if lifecycle is not None:
+                # A retained actual call is stronger than a contradictory no-start
+                # marker. Preserve the contradiction as failed evidence, not a waiver.
+                observed_calls = teacher.get('rootCallIds') or teacher.get('calls')
+                if lifecycle['teacherStarted'] is False and observed_calls:
+                    capture_errors = [*(capture_errors or []), 'Authored lifecycle contradicts retained teacher calls']
+                elif not manifest.is_file():
+                    results[name]['authored_lifecycle'] = lifecycle
+                    results[name]['teacher_started'] = lifecycle['teacherStarted']
+                    if lifecycle['teacherStarted'] is False:
+                        results[name]['teacher_model_sampled'] = False
         if capture_errors:
             results[name]['capture_errors'] = capture_errors
         if results[name]['status'] in ('test-failed', 'partial'):
@@ -320,6 +358,9 @@ def infrastructure_failure(outcome, case, *, include_provider_transport=True):
             and provider_transport_failure(outcome)):
         return True
     if outcome['status'] == 'no-capture':
+        return True
+    if (outcome.get('teacher_started') is False
+            and (outcome.get('authored_lifecycle') or {}).get('teacherStarted') is False):
         return True
     reason = outcome.get('reason') or ''
     if outcome.get('teacher_started') is False and (
