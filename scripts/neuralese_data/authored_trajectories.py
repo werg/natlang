@@ -61,16 +61,15 @@ REPLAY_MAX_MODEL_REQUESTS = 1000   # a task's own semantics.episode_model_calls 
 
 
 def read_jsonl(path):
-    with open(path, encoding='utf-8') as handle:
-        return [json.loads(line) for line in handle if line.strip()]
+    from natlang_neuralese.common.jsonio import read_jsonl as rows
+    return list(rows(path))
 
 
-def write_jsonl(path, rows):
+def save_rows(path, rows):
+    from natlang_neuralese.common.jsonio import write_bytes_durable
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + '.tmp')
-    tmp.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows), encoding='utf-8')
-    os.replace(tmp, path)
+    write_bytes_durable(path, ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows).encode())
 
 
 def node():
@@ -127,7 +126,7 @@ def render(cases, *, source, author=None, runtime=None, scratch):
     runtime = Path(runtime or REPO / 'ts-host')
     scratch = Path(scratch)
     scratch.mkdir(parents=True, exist_ok=True)
-    write_jsonl(scratch / 'cases.jsonl', cases)
+    save_rows(scratch / 'cases.jsonl', cases)
     run = subprocess.run([node(), str(REPO / 'scripts/rl_tasks/reference_episodes.mjs'), str(runtime),
                           str(scratch / 'cases.jsonl'), str(scratch / 'episodes.jsonl')],
                          capture_output=True, text=True, timeout=7200)
@@ -207,16 +206,16 @@ def write_pool(rows, out):
             continue
         seen.add(name)
         directory = out / 'episodes' / name
-        write_jsonl(directory / 'cases.jsonl', [row['task']])
-        write_jsonl(directory / 'rollouts.jsonl', [rollout_row(row)])
+        save_rows(directory / 'cases.jsonl', [row['task']])
+        save_rows(directory / 'rollouts.jsonl', [rollout_row(row)])
         manifest.append({'index': index, 'task_id': row['task']['id'], 'family': row['task'].get('family'),
                          'base_rank': 'authored', 'root_mode': 'student', 'teacher': dict(TEACHER),
                          'authored': {'source': row.get('source'), 'author': row.get('author') or {}},
                          'episodes': [{'sample': 0, 'outcome': 'task_success', 'reward': 1.0,
                                        'turns': len(row['turns'])}],
                          'rollouts': str(directory / 'rollouts.jsonl'), 'provider_failure': False})
-    write_jsonl(out / 'authored.jsonl', [r for r in kept if episode_name(r) in seen])
-    write_jsonl(out / 'manifest.jsonl', manifest)
+    save_rows(out / 'authored.jsonl', [r for r in kept if episode_name(r) in seen])
+    save_rows(out / 'manifest.jsonl', manifest)
     summary = {'schema': 'natlang.authored-pool/1', 'episodes': len(manifest),
                'turns': sum(m['episodes'][0]['turns'] for m in manifest), 'refused': refused}
     (out / 'pool.json').write_text(json.dumps(summary, indent=1) + '\n')
@@ -394,7 +393,7 @@ def main(argv=None):
         cases = [c for path in args.cases for c in read_jsonl(path)]
         out = Path(args.out)
         rendered = render(cases, source=args.source, runtime=args.runtime, scratch=out.with_name(out.name + '.scratch'))
-        write_jsonl(out, [row for row, _ in rendered if row is not None])
+        save_rows(out, [row for row, _ in rendered if row is not None])
         print(json.dumps({'cases': len(cases), 'rendered': sum(r is not None for r, _ in rendered),
                           'refused': {c['id']: why for c, (r, why) in zip(cases, rendered) if r is None}}, indent=1))
     elif args.command == 'pool':
