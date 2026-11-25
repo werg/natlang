@@ -1,0 +1,69 @@
+{
+  "id": "teacher-reasoning-treatment-20261125",
+  "owner": "dgx",
+  "path": "data_nvme:teacher-reasoning-treatment-20261125",
+  "include": [
+    "treatment.json",
+    "audit.json",
+    "think_stats.py"
+  ],
+  "kind": "index",
+  "format": "natlang.teacher-think-treatment/1: treatment.json (sft_sources.ThinkTreatment), audit.json (natlang.teacher-reasoning-audit/2), think_stats.py",
+  "license": "derived",
+  "protected": false,
+  "supersedes": "teacher-reasoning-audit-20261120",
+  "note": "Per-model teacher think treatment (2026-11-25): models whose think blocks are their own visible reasoning (Nemotron, Qwen3.6, GLM) train at sft_sources --teacher-think-weight (0.1) where no filled unit replaces the episode; provider summaries and hidden reasoning (Claude, Codex Luna/Sol, Gemini) stay filled/context.",
+  "inputs": [
+    {
+      "id": "sft-teacher-demos-20261119",
+      "manifest_sha256": "6f73f25d1b904f7c0e5dbe183b67e5f16cf31f9b1e5c1c5f7617c4c52522351a"
+    },
+    {
+      "id": "sft-sources-20261120b",
+      "manifest_sha256": "ab2097eb2d03fda178eaef755dbcff60eb9c569b1190269e3df2475be12b5e66"
+    }
+  ],
+  "producer": {
+    "script": "/home/werg/data/teacher-reasoning-treatment-20261125/think_stats.py",
+    "argv": [
+      "record",
+      "--id",
+      "teacher-reasoning-treatment-20261125",
+      "--path",
+      "/home/werg/data/teacher-reasoning-treatment-20261125",
+      "--kind",
+      "index",
+      "--format",
+      "natlang.teacher-think-treatment/1: treatment.json (sft_sources.ThinkTreatment), audit.json (natlang.teacher-reasoning-audit/2), think_stats.py",
+      "--include",
+      "treatment.json",
+      "--include",
+      "audit.json",
+      "--include",
+      "think_stats.py",
+      "--input",
+      "sft-teacher-demos-20261119",
+      "--input",
+      "sft-sources-20261120b",
+      "--license",
+      "derived",
+      "--supersedes",
+      "teacher-reasoning-audit-20261120",
+      "--note",
+      "Per-model teacher think treatment (2026-11-25): models whose think blocks are their own visible reasoning (Nemotron, Qwen3.6, GLM) train at sft_sources --teacher-think-weight (0.1) where no filled unit replaces the episode; provider summaries and hidden reasoning (Claude, Codex Luna/Sol, Gemini) stay filled/context.",
+      "--producer-script",
+      "/home/werg/data/teacher-reasoning-treatment-20261125/think_stats.py"
+    ],
+    "git_commit": "7f9f3a4b70ea450908a0fab2e2996b413a1c64d3",
+    "dirty": true,
+    "host": "mltick"
+  },
+  "manifest_sha256": "8f6d057dd955f3506bad6bbc87be0359917f9ebf29aa362739d4cce8fac2c355",
+  "training_admission": "registry-recorded",
+  "roles": {
+    "teacher-think-treatment": {
+      "order": 0,
+      "file": "treatment.json"
+    }
+  }
+}

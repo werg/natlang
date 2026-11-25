@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "teacher-reasoning-treatment-20261125",
+  "owner": "dgx",
+  "path": "data_nvme:teacher-reasoning-treatment-20261125",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 15457,
+      "sha256": "bc6bee13b326f0148ac8d289150f5341eb82348c786b474430ee190bc93e5b2f"
+    },
+    {
+      "path": "think_stats.py",
+      "bytes": 3881,
+      "sha256": "8d05370f73851bed952669b3667f2ef70fced3f557514d362581e573a3fb27ba"
+    },
+    {
+      "path": "treatment.json",
+      "bytes": 1106,
+      "sha256": "f58028035039b9116b9df98399990b90e984abc1e6cf637e7ccc6a5c14f260a9"
+    }
+  ],
+  "bytes": 20444
+}

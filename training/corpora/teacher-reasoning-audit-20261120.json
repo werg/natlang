@@ -10,7 +10,7 @@
   "format": "natlang.teacher-think-treatment/1: treatment.json (sft_sources.ThinkTreatment), audit.json (natlang.teacher-reasoning-audit/1)",
   "license": "derived",
   "protected": false,
-  "note": "Per-model teacher reasoning audit (static part: presence, length vs the student, tool syntax, quoted action); the length gate puts every teacher model at filled.",
+  "note": "Per-model teacher reasoning audit (static part: presence, length vs the student, tool syntax, quoted action); the length gate puts every teacher model at filled. Superseded 2026-11-25 by teacher-reasoning-treatment-20261125 (role teacher-think-treatment moved there).",
   "inputs": [
     {
       "id": "sft-teacher-demos-20261119",
@@ -31,11 +31,5 @@
     "host": "mltick"
   },
   "manifest_sha256": "6e46a6223d2cabb41f2e804010c7da881cb96a0fd2cc3678fa90df7075f51bf7",
-  "training_admission": "registry-recorded",
-  "roles": {
-    "teacher-think-treatment": {
-      "order": 0,
-      "file": "treatment.json"
-    }
-  }
+  "training_admission": "registry-recorded"
 }
