@@ -13363,7 +13363,11 @@ and as queue head it holds 0.1 GB of backfill, so every medium job waits behind 
 
 **Clean re-measurement (running).** base e15b, r1 8e63, 3eb3 (rebuilt) and 6f19 on one pin (edd23ec451d3), the DGX
 held series (`dgx-held`), 4 samples, 32 slots, KV 6 GB, medium priority. Results in
-`ops/ei/aei1-remeasure-20261125/policy-*`; pairs by `held_eval compare`. Predicted from (2): r1, 3eb3 and 6f19 within
+`ops/ei/aei1-remeasure-20261125/policy-*`. Ledger unit `aeirm-compare2` pairs them with `held_eval compare
+--strict-series` as they complete: r1 vs 6f19 first, then the pairs with 3eb3, then each against the base, which
+`aeirm-chain-base` starts once two of the trained policies are done. The summary goes to `compare-summary.txt`.
+Throughput beside the other GB10 engines is about 1.6 episodes/min per engine (300-500 tok/s at 32 running), so r1 and
+6f19 take about 10 h, and all four about a day. Predicted from (2): r1, 3eb3 and 6f19 within
 about 2 pts of each other, all 2-6 pts over the base. If instead r1 leads by > 4 pts (p < 0.05), the rounds after r1
 lost ground, which would point at a learner or data defect.
 
