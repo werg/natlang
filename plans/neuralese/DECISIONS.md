@@ -12732,3 +12732,42 @@ answer (all the "<gold> and something else entirely" perturbation on golds conta
 other source kinds in grpo-pool (bgkit, decisions, codebase, authored, searchswarm) were not requalified on fb11b6359 in
 this pass (only composed and v2-origin dataset rows); AGENTS.md's `collect_exposure.py` flow (exposure of past training
 and collection) was not rerun for these sources: the rows are new to the pool, so they have no exposure yet.
+
+## 2026-11-25 10:10 Invented programs: quality at the top of the funnel; reviews only on a drawn sample (program-inventor agent)
+
+**Owner (2026-11-25):** "our qualification and admittance process is too heavy ... we need to create masses of data. So
+it's fine if individual samples are not perfect ... optimize how we generate ... so that at the top of the funnel, we
+start generating high quality stuff on average." "I think reviews should only be on a drawn sample."
+
+**Why.** Wave 1 (8 Sonnet builds, about 25 review rounds) spent most of its inference on review-fix loops, and the
+same seven failures recurred across rounds: text stating its judgment's answer, arithmetic and comparison inside
+judgments, scripted answers following a rule written nowhere (or only in NOTES) or applied unevenly, items with two
+readings where rules overlap or a definition has no direction, types that cannot hold what the text says, hand-derived
+expected answers wrong by the code's order, and fixes by deleting the trap. Each is cheaper to prevent in the brief and
+a builder self-check than to find in review.
+
+**Process change.**
+- Qualification admits (1a884f706). A review is one sampled pass (`invented.py sample-reviews N`; `REVIEW_BRIEF.md`):
+  grades, `wrong_expected` (only answers a careful reader rejects), and up to five `funnel_findings` for the brief and
+  skill. No requests to the builder, no rounds. `invented.py publish` withholds a program whose review of the admitted
+  version lists `wrong_expected`. The program-inventor app's per-program judged gate (`meetsBar.nl`) is removed for the
+  same reason (DECOMPOSITION part 10).
+- `BUILD_BRIEF.md`: a "One answer per item" section teaches the seven failures as positive habits with short worked
+  examples, and a self-check runs before qualify (`<slug>.SELFCHECK.md`: re-answer every scripted item from the
+  instruction and types without NOTES; every text a judgment sees against its answer; every number, date and
+  comparison with the TypeScript line doing it). Review rounds and the "expect two or three rounds" loop are gone;
+  ledger commands use medium priority, `--no-resumable`, `--wait-exit`. Skill: patterns.md (overlaps and directions,
+  leave the answer to the judgment, types hold what the text says), SKILL.md step 3 (quantities read, code computes),
+  language/refinements facts builders hit (`Date`, exported signature types, `untrusted(...)` through `decide`).
+- Tooling (c5f116d44): `invented.py dry-run [--controls]` (no model; 35 s with every control on a wave-1 submission,
+  against 5-40 min for qualify), qualify never leaves a stale `report.json`, a warning when an item-fragment entry
+  answers several different calls, C4 accepts a quoted phrase, S6 case-insensitive, S7 skips unit/id fields,
+  `memory_ledger.py run --wait-exit`. Bar `2026-11-25.4` for wave 2 (checks only loosened).
+- Wave 2: `/home/werg/data/natlang-novel-programs/wave2-20261125/BRIEF.md` (take, build, dry-run, self-check, qualify,
+  admit, report; friction log kept; ~190 cards unclaimed).
+
+**Success and failure.** Judged on a drawn sample of wave-2 admissions against wave 1's final grades: success is mean
+grades no lower than wave 1's final ones (semantic depth 3-4) with `wrong_expected` on at most one sampled program in
+four, at well under wave 1's builder-plus-reviewer inference per admitted program. Failure: a sampled wrong-expected
+rate above one in three, or a recurring finding the brief already covers; then the funnel findings change the brief
+again before wave 3.

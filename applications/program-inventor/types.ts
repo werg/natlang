@@ -69,16 +69,6 @@ export type RejectedIdea = {
   reason: string;
 };
 
-/** A requirement a built program must meet. `check: "crisp"` ones are decided by code (qualification reports);
- * `check: "judged"` ones by `meetsBar`. */
-export type Requirement = {
-  /** E.g. `S4`. */
-  id: string;
-  group: 'functional' | 'semantic' | 'complexity' | 'code-depth' | 'novelty';
-  check: 'crisp' | 'judged';
-  /** The requirement as a sentence a reviewer can hold the program to. */
-  statement: string;
-};
 
 /** A built program as the reviewer reads it. */
 export type ProgramView = {
@@ -126,7 +116,7 @@ export type Disagreement = {
 /** What one attempt produced. */
 export type AttemptResult = {
   slug: string;
-  status: 'accepted' | 'not-new' | 'idea-problems' | 'build-failed' | 'below-bar' | 'unsolvable';
+  status: 'accepted' | 'not-new' | 'idea-problems' | 'build-failed' | 'unsolvable';
   reason: string;
   /** The submission directory, when a program was built. */
   submission?: string;

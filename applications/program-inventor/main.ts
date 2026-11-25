@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statS
 import { join, relative, resolve } from 'node:path';
 import type { TargetContext } from '@natlang/node';
 import { inventRound, type InventorServices } from './invent.js';
-import type { Atlas, AtlasEntry, IdeaCard, LiveRun, ProgramView, Qualification, Requirement } from './types.js';
+import type { Atlas, AtlasEntry, IdeaCard, LiveRun, ProgramView, Qualification } from './types.js';
 
 type Config = { out: string; count: number; builder: 'claude' | 'codex'; builderModel: string; teacher: Record<string, unknown> };
 
@@ -41,12 +41,11 @@ function services(config: Config): InventorServices {
   const ledger = join(config.out, 'accepted.jsonl');
   const atlasJson = join(config.out, 'atlas.json');
   const brief = readFileSync(join(REPO, 'applications/program-inventor/BUILD_BRIEF.md'), 'utf8');
-  const requirements = JSON.parse(readFileSync(join(REPO, 'applications/program-inventor/requirements.json'), 'utf8')) as Requirement[];
+  const requirements = JSON.parse(readFileSync(join(REPO, 'applications/program-inventor/requirements.json'), 'utf8')) as object[];
   const agent = (directory: string, prompt: string) => config.builder === 'codex'
     ? run('codex', ['exec', '-m', config.builderModel, '-C', directory, '--dangerously-bypass-approvals-and-sandbox', prompt])
     : run('claude', ['-p', '--model', config.builderModel, '--permission-mode', 'bypassPermissions', '--add-dir', directory, prompt], directory);
   return {
-    requirements,
     async atlas(): Promise<Atlas> {
       const markdown = join(config.out, 'atlas.md');
       run(PYTHON, ['scripts/rl_tasks/program_atlas.py', 'build', '--accepted', ledger, '-o', atlasJson, '--markdown', markdown]);

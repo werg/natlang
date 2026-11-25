@@ -77,7 +77,7 @@ ORACLES = frozenset({'exact', 'normalized', 'verifier'})
 VERIFIER_ROOT = 'training/semantic_fp_tasks/verifiers/'
 # The bar a wave of builders qualifies against: BAR_VERSION and the requirements' digest go into every report.json, and
 # they change only between waves (coordinator 2026-11-25), never while builders iterate.
-BAR_VERSION = '2026-11-25.3'
+BAR_VERSION = '2026-11-25.4'
 # The bar (requirements.json; coordinator 2026-11-25 after the calibration review): size floors, code depth, notes.
 MIN_WORDS, MIN_TEXT_ITEMS, MIN_TS_LINES, MIN_HARDEST = 800, 15, 100, 3
 SUBMISSION_ENTRIES = frozenset({'program', 'submission.json', 'NOTES.md', 'qualification', 'idea.json', 'review.json'})
