@@ -13488,3 +13488,7 @@ least we are training up some Neuralese capabilities. Please implement this."
   agent, units `aeirm-*`); the 56 lost pairs are being explained. If a policy other than the lineage's measures
   clearly best, the loop moves to it.
 - Teacher campaign ledger budget 6 -> 10 GB: the standing unit was OOM-killed at 14:21 (6.1 GB peak after 6 h).
+
+## 2026-11-25 — escaped higher-order functions retain actual training decisions
+
+A zero-inference TEST-only Base capture executed creator → returned callable → later consumer → scalar ten through the official Workerd SDK and real NativeRecordsDO. Canonical Python live admission and Node disk verification/materialization retained all four original model decisions, including prompts with the consumer's live function binding and escaped lexical capture. Exact LFM3 tokenizer-only rendering confirmed prompt context and action loss masks. Keep the existing honest nonportable function snapshots; no codec or admission waiver is needed for this observed training path. Add real capture/bridge regressions, leave portable replay and training/held gains explicitly unchecked, and never register these scripted fixtures as teacher data. Details and source/evidence identities: `plans/neuralese/HIGHER_ORDER_TRAINING_PROOF_20261125.md`. Source35 collection was not gated or modified.

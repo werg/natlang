@@ -1,0 +1,29 @@
+# Actual escaped callable training proof
+
+A test-only local scripted gateway executed a genuine higher-order composition through Base `createEvalNatlang`, the official Workerd SDK, gatewayDriver/modelTurnCapture and the actual SQLite-backed NatlangRecordsDO. The named root calls `make(7)`, retains its returned inline callable after `make` completes, and passes it to `consume`, which invokes it on three. The final native scalar is ten. No provider connection, model inference, teacher registration or production dataset write occurred.
+
+The Base regression is `packages/natlang/src/higherOrderCaptureIntegration.test.ts`, commit `9055aaae` descending Source35 Base `1fe528553d30011a4a5f771f0b6b3aa6be9e7999`, using its unchanged Core SDK `44fe89f6fc47893b18696d9e68a61853e73bce29`. Source35 frozen sources were not edited.
+
+## Mechanism inventory and scope
+
+- Core runtime callable metadata, native callable bindings/value coercion, inline lowering and `toHost` retain executable function identity and lexical captures inside the live task. The earlier escaped-callable fix supplies the actual consumer's causal parent. This experiment adds no runtime change.
+- Core `calls/snapshot.ts` honestly marks the function-valued creator output and consumer input `complete:false, reason:nonportable`. It does not serialize executable functions. The escaped call's captured `delta` has a complete hash-bound JSON value seven.
+- Base gatewayDriver and modelTurnCapture preserve each original gateway request, Pi context, tool schema, reply, tool-call identity and observed successful action. NativeRecordsDO provides authoritative ownership, graph, timestamps and value blobs. Its trace is JSONL on the wire; the test exporter decodes those original bytes without inventing events.
+- Python `live_teacher_sources.load_episode` checks source artifact hashes, exact entry input/source, root and child inventory, invocation ownership, actual gateway exchanges, successful action receipts and outcome evidence. It retains opaque intermediate snapshots as evidence without requiring a portable ProgramRecord.
+- Node `verifyObservedWorkspaceEvidence` rechecks bound disk evidence; `materializeNativeRows` delegates observed captures to `teacher/observed-workspace.ts`. Every retained row keeps the original prompt/tools/action and the dynamic parent ID. No binding/admission check was waived.
+- Python `sft_sources.TemplateRenderer`, `call_row`, `think_context` and `rendered_row` apply the canonical tokenizer and teacher loss policy. Engine request rendering is reused tokenizer-only; no serving engine or model was instantiated. Managed llama-server, in-page wllama, native Python and SGLang execution were not rerun: this checks their common offline training representation, not execution parity.
+- Portable replay remains explicitly unsupported for observed-live episodes (`sft_sources.replay_episode` returns `observed_live_not_portable`). BrowserSlot execution, cross-process function transfer, optimizer updates and held capability gain were not checked. No claim of function JSON portability or learned performance follows from this proof.
+
+## Checked evidence
+
+Retained test artifacts: `/home/werg/data/escaped-offline-proof/capture`. They use only `test-only:offline:higher-order` IDs and are not registered. The manifest binds the clean committed Base test source; the vendor SDK remains pinned. `actual-capture.json`, four call artifacts, verification/validator source, exact scalar return evidence, manifest, Python episode/NativeIR, Node training rows and full token/mask evidence are retained.
+
+The actual graph is root → make and root → consume → escaped. Creator completion precedes consumer start. All four actual generations survive canonical Python admission and Node CLI materialization: one accepted trajectory, four eligible decisions, zero rejected, replayed-context or held actions. Exact original messages/tools/raw tool calls and parent IDs match for every row. The consumer prompt declares `fn` with its actual function signature and live callable handle; the escaped prompt declares captured `delta: number = 7` and input value three. These are original host-generated scope priming messages, retained as context rather than assistant targets. Forged application input and creator-based escaped ancestry are rejected by disk evidence verification.
+
+The tokenizer-only check used the read-only DGX Hugging Face snapshot `LiquidAI/LFM3-1.7B@1da06bec6a819da10b54c67e5c90972b46d81871`; only tokenizer/config/template files were streamed to private local scratch, no weights or source tree. Tokenizer SHA256 `7e226e34bface23ccf6e495d157bf77186c1c30a7659880e1a8994db528c3701`; template SHA256 `f45005c50cd2a97329722bf3a2dee9f16c04cdf825a589b280fb7e99e6827818`. All four prompt sequences remain context. Each completion has one zero-weight leading token; actual action tokens receive weight one: escaped 26, consume 27, make 36, root 36. Full token IDs and weights are saved in `training-mask-evidence.json`. This verifies canonical LFM3 rendering, not model inference.
+
+## Reproduce
+
+Run the Base regression in a host-owned source-alias test configuration, with `NATLANG_TEST_HOF_ARTIFACT_DIR` set to a private output directory. Then run the opt-in Node regression with `NATLANG_TEST_HOF_CAPTURE` pointing to `actual-capture.json` and `NATLANG_TEST_HOF_BASE` pointing to its clean Base checkout. Optional `NATLANG_TEST_HOF_TOKENIZER` selects an exact local tokenizer projection for actual mask assertions. Use the memory ledger at low priority. The helper is under `tests/neuralese`, never a production writer or registry ingestion command.
+
+No codec or training-admission gap was found in this concrete higher-order trajectory; changing the portable representation would be unnecessary. The new defaults are regression coverage and honest separation of observed training support from portable replay.
