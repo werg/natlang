@@ -1275,6 +1275,69 @@ def test_capture_after_an_imported_state_matches_the_native_engine(tmp_path):
                 torch.testing.assert_close(a[key], b[key], rtol=1e-5, atol=1e-6, msg=f'layer {index} {key}')
 
 
+def test_init_body_runs_on_sglang_and_matches_the_native_engine(tmp_path):
+    """A contextual body initialization (`native-states/init-body`) under an imported state: the front sends the fork
+    one capture request through the body (the native model stays released), and stores the native engine's block with
+    the same source capture. The text after the body is recorded but not computed (it cannot change the body's state)."""
+    import dataclasses
+    import torch
+    from natlang_neuralese.model.shared_state import native_step, splice_block
+    native, front, roles, word, stored = _span_fixture(tmp_path)
+    front.native_state_enabled = native.native_state_enabled = True
+    front.sglang_url = 'http://sglang.invalid'
+    soft = native.native_write_text('t20 t21 t22')['id']
+    block = dataclasses.replace(native.store.get_native_state(soft).block, producer_kind=None)   # spliced, not inline
+    soft = native.store.put_native_state(block).id
+    assert front.store.put_native_state(block).id == soft
+    placeholder = native.native_write_text('t30')['id']
+    front.store.put_native_state(native.store.get_native_state(placeholder).block)
+    requests = []
+
+    def capture(ids, start, end, metadata, adapter=None, imports=None):
+        requests.append({'ids': list(ids), 'start': start, 'end': end, 'imports': imports})
+        (spliced,) = imports
+        cache = native_step(native.shared_model, torch.tensor([ids[:spliced['start']]]))['cache']
+        cache = splice_block(native.shared_model, cache, block, checkpoint_sha256=block.checkpoint_sha256,
+                             tokenizer_fingerprint=block.tokenizer_fingerprint,
+                             embedding_weight_sha256=block.embedding_weight_sha256)
+        after = spliced['start'] + spliced['count']
+        cache = native_step(native.shared_model, torch.tensor([ids[after:start]]), cache)['cache']
+        out = native_step(native.shared_model, torch.tensor([ids[start:end]]), cache, producing=True)
+        import os, uuid
+        from natlang_neuralese.serve.store import write_native_state_file
+        tensors = {'token_ids': out['token_ids'], 'embeddings': out['embeddings'], 'positions': out['positions'],
+                   **{f'layers.{index}.{key}': value for index, layer in enumerate(out['layers'])
+                      for key, value in layer.items() if key != 'kind'}}
+        path = os.path.join(front._sglang_scratch(), f'{uuid.uuid4().hex}.safetensors')
+        write_native_state_file(path, metadata, tensors)
+        return path
+    front._sglang_capture = capture
+    front.native_endpoint_metrics = {}
+    messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 't4 '}, {'type': 'native_state', 'id': soft},
+                                             {'type': 'text', 'text': ' t5 '}, {'type': 'native_state', 'id': placeholder},
+                                             {'type': 'text', 'text': ' t6'}]}]
+    expected = native.native_init_body(messages, None, placeholder, 't7 t8', value_type='Neuralese<string>')
+    front.release_native({'checkpoint': str(tmp_path / 'native.pt'), 'device': 'cpu'})
+    front._ensure_native = lambda: pytest.fail('init-body on SGLang reloaded the native model')
+    actual = front.native_init_body(messages, None, placeholder, 't7 t8', value_type='Neuralese<string>')
+    assert front.__dict__.get('_native_model') is None   # no native reload
+    assert front.native_endpoint_metrics['natlang_native_endpoint_completed_total{endpoint="init_body_sglang"}'] == 1
+    (request,) = requests
+    assert request['end'] == len(request['ids']) and request['ids'][request['start'] - 1] == roles.produce_open
+    assert actual['init'] == expected['init'] and actual['gate'] == expected['gate'] is None
+    assert actual['source_text_sha256'] == expected['source_text_sha256']
+    drop = lambda capture: {k: v for k, v in capture.items() if k != 'policy'}
+    assert drop(actual['source_capture']) == drop(expected['source_capture'])
+    assert actual['native_state']['type'] == expected['native_state']['type'] == 'Neuralese<string>'
+    mine, theirs = stored['front'][-1], stored['native'][-1]
+    assert torch.equal(mine.token_ids, theirs.token_ids) and torch.equal(mine.positions, theirs.positions)
+    assert mine.producer_kind is None and theirs.producer_kind is None
+    for index, (a, b) in enumerate(zip(mine.layers, theirs.layers)):
+        for key in a:
+            if key != 'kind':
+                torch.testing.assert_close(a[key], b[key], rtol=1e-5, atol=1e-6, msg=f'layer {index} {key}')
+
+
 def test_adapted_requests_get_their_own_sglang_prefix_namespace(monkeypatch):
     """SGLang reuses a cached prefix on token ids + extra_key only: each adapter stack names its own extra_key, so a
     prompt state computed under one stack (or none) never serves a request with another; base requests keep none."""

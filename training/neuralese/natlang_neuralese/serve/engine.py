@@ -1664,8 +1664,10 @@ class Engine:
         return self._native_run(lambda: self._native_init_body_impl(messages, tools, placeholder, text,
             value_type=value_type, placeholder_occurrence=placeholder_occurrence, native_state_modes=native_state_modes), adapters)
 
-    def _native_init_body_impl(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None, native_state_modes=None):
-        """Capture supplied body tokens at their actual rendered causal position in a soft call."""
+    def init_body_plan(self, messages, tools, placeholder: str, text: str, *, placeholder_occurrence: int | None = None, native_state_modes=None):
+        """(rendered call, index of the body's text segment, token ids before the body in that segment, the body's
+        token ids, token ids after it) of a contextual body initialization: the call rendered with the body's text where
+        its placeholder stands. Shared by the native engine and the SGLang front (`SglangEngine.native_init_body`)."""
         if not getattr(self, "native_state_enabled", False):
             raise RequestError("neuralese-native-state-unavailable", "native body initialization requires shared-state serving")
         if not isinstance(placeholder, str) or not placeholder.startswith("nzs1_") or not isinstance(text, str):
@@ -1712,6 +1714,30 @@ class Engine:
         right = self._template_tokens(after, rendered.escape_nonce)
         if self.prompt_positions(messages, tools) >= self.context:
             raise RequestError("context-length", "contextual native body source exceeds this model context")
+        return rendered, body_segment, left, body, right
+
+    def init_body_result(self, block, record, body, text, value_type, position_start, source_segments, source_imports,
+                         payload_start, payload_stop):
+        """The init-body endpoint's reply for a stored body capture (native engine and SGLang front alike)."""
+        meta = record.meta()
+        if value_type is not None:
+            meta["type"] = value_type
+        result = {"id": record.id, "native_state": meta}
+        result["init"] = {"schema": "natlang.native-state-text-init/1", "tokens": len(body),
+                          "exact": False, "aligned": True, "exact_transport": True, "contextual": True,
+                          "source_position_start": position_start}
+        result["gate"] = None
+        result["source_capture"] = {"policy": self._native_block_identity(block), "segments": source_segments,
+                                    "imports": source_imports,
+                                    "payload_start": payload_start, "payload_stop": payload_stop}
+        result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return result
+
+    def _native_init_body_impl(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None, native_state_modes=None):
+        """Capture supplied body tokens at their actual rendered causal position in a soft call."""
+        rendered, body_segment, left, body, right = self.init_body_plan(
+            messages, tools, placeholder, text, placeholder_occurrence=placeholder_occurrence,
+            native_state_modes=native_state_modes)
         from ..model.shared_state import native_step
         cache = None
         captured = None
@@ -1766,19 +1792,8 @@ class Engine:
         if captured is None:
             raise RequestError("neuralese-native-state-text", "rendered call did not contain the body span")
         block, record = self._native_store_capture(body, [captured], text=text)
-        meta = record.meta()
-        if value_type is not None:
-            meta["type"] = value_type
-        result = {"id": record.id, "native_state": meta}
-        result["init"] = {"schema": "natlang.native-state-text-init/1", "tokens": len(body),
-                          "exact": False, "aligned": True, "exact_transport": True, "contextual": True,
-                          "source_position_start": captured["cache"].lengths[0] - len(body)}
-        result["gate"] = None
-        result["source_capture"] = {"policy": self._native_block_identity(block), "segments": source_segments,
-                                    "imports": source_imports,
-                                    "payload_start": payload_start, "payload_stop": payload_stop}
-        result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        return result
+        return self.init_body_result(block, record, body, text, value_type, captured["cache"].lengths[0] - len(body),
+                                     source_segments, source_imports, payload_start, payload_stop)
 
     def _native_step_logits(self, output):
         return output['logits'] if 'logits' in output else self._native_logits(output['h_final'])
