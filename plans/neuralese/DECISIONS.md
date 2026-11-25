@@ -13113,3 +13113,12 @@ and BUILD_BRIEF updated. Engines (llama-server, wllama, Python native, SGLang) d
 templates: the opening is rendered only in `ts-host/src/native/agent.ts` (the one "captured by this call" renderer),
 engines see tokens. Not changed: interpolated identifiers remain captured (spec; adaptation `slotBindings` need them),
 so their value appears twice.
+**Admitted data.** Replayed all 28 instances of the 14 authored programs with `trajectories.jsonl` under
+`admitted/` with the fix and with the opt-out (`NATLANG_LITERAL_CAPTURE_TYPES=1`, the old typing): every call is
+answered by the same entry under both, all 28 finish. Openings differ only in guidebook-route-to-trail-graph (both
+instances: captures `slope` and `way` were declared as literal unions of every branch's text). No authored program is
+exported yet at its admitted digest except the 13 pilot (stage) programs, whose pool
+(`authored/20261125-101744/authored.jsonl`) holds no captured-variable declarations at all; the feed renders pending
+programs with the current runtime, so guidebook-route-to-trail-graph is rendered with the fixed openings when fed (no
+re-replay of already-exported rows needed). Not checked: openings of collected (model-sampled) episodes; any
+literal-union captures there are in training data already exported by collection.

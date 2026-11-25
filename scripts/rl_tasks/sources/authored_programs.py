@@ -26,6 +26,11 @@ an exact oracle (`rl`) is also an RL task, an optional by-product.
       curriculum.reference is the authored trajectory and whose expected value is what it returns), cases.jsonl (the
       instances with an `rl` oracle, for `invented.py publish`), stats.json, admission.json; the idea enters
       ROOT/accepted.jsonl and its claim closes as accepted.
+      A call no entry answers is listed with its whole opening (instructions and arguments) and a suggested entry, and
+      gets a placeholder of its declared type so the replay goes on: one run lists every missing entry of every stage.
+  authored_programs.py dump SUBMISSION [--out FILE]
+      the whole replay as JSON (default SUBMISSION.dump.json beside SUBMISSION): each call's opening and the entry that
+      answered it, the call tree with arguments, eval code and values in full, failed actions, the statistics.
   authored_programs.py stats SUBMISSION [--runtime TS_HOST]       the statistics of one program (JSON)
   authored_programs.py wave-report WAVE_DIR [--runtime TS_HOST] [--previous REPORT.json]
       the statistics of every submission under WAVE_DIR/sub/, per program and for the wave, against the campaign's
@@ -78,6 +83,8 @@ TARGETS = {
     'nl_call_share_min': 0.85,         # natural-language calls / (natural-language + crisp helper calls)
     'literals_from_data_min': 1,       # NL literals per instance whose text is built from runtime data (synthesis)
     'literal_tree_share_min': 0.2,     # share of NL calls that run through an NL literal (it or its descendants)
+    'failed_refinements_min': 1,       # `holds` judgments (refinements, ensures predicates) answered false, per program
+    'ungrounded_share_max': 0.1,       # open answers stating numbers or names their call's opening does not show
 }
 # Semantic-FP construct kinds, in the campaign's vocabulary (plans/semantic-fp/README.md, skills/natlang-authoring)
 CONSTRUCTS = ('map', 'filter', 'partition', 'reduce', 'match', 'rank', 'repair', 'fixed-point', 'merge',
@@ -270,6 +277,24 @@ def capture_cause(fragments: list[str], captured: list[str]) -> str:
     return ''
 
 
+CAPTURE_MARKER = '// Variables of the calling code, captured by this call:'
+
+
+def captured_of(answer: dict) -> str:
+    """The capture declarations an inline `nl` call's opening shows (its prefilled scope code after CAPTURE_MARKER)."""
+    if answer.get('captured'):
+        return str(answer['captured'])
+    opening = str(answer.get('opening') or '')
+    for line in opening.splitlines():
+        if CAPTURE_MARKER in line and line.lstrip().startswith('{'):
+            try:
+                code = json.loads(line).get('code', '')
+            except ValueError:
+                code = line
+            return code.split(CAPTURE_MARKER, 1)[1].strip()
+    return ''
+
+
 def fragments_of(entry: dict) -> list[str]:
     """An entry's match fragments as the replay tests them: the call anchor of `fn` first, then `match`."""
     match = entry.get('match') or []
@@ -339,11 +364,13 @@ def consistency(data: dict, rows: list[dict]) -> tuple[list[str], list[str]]:
                                 'functions\' openings; give it `fn`')
             shown = {a.get('shown', '') for a in calls}
             if 'value' in entry and len(shown) > 1 and len(fragments_of(entry)) >= 2:
+                cause = capture_cause(fragments_of(entry)[1 if entry.get('fn') else 0:],
+                                      [c for c in (captured_of(a) for a in calls) if c])
                 warnings.append(f'{label}: trajectory.calls[{index + 1}] ({entry.get("fn") or entry.get("match")}) '
-                                f'answers {len(shown)} calls with different arguments with one value, e.g. '
+                                f'answers {len(shown)} different calls with one value, e.g. '
                                 f'{call_label(calls[0], 100)} and {call_label(calls[-1], 100)}: its fragments match more '
                                 'than its item; take the start of the argument\'s line (`message: Message = { messageId: '
-                                '"m3"`) or a passage only this call shows')
+                                '"m3"`) or a passage only this call shows' + cause)
         # A call that several written-for-an-item entries match is answered by the one with the most fragments (author
         # order breaks ties): when they answer differently, one of them is answering a call it was not written for.
         for a in row.get('answers') or []:
@@ -369,7 +396,11 @@ def consistency(data: dict, rows: list[dict]) -> tuple[list[str], list[str]]:
     return problems, warnings
 
 
-NUMBER = re.compile(r'(?<![\w.])\d+(?:[.,]\d+)?(?![\w])')
+NUMBER = re.compile(r'(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.,])\d+(?:\.\d+)?(?![\w])')
+
+
+def number(text: str) -> float:
+    return float(text.replace(',', ''))
 NAME = re.compile(r'(?<=[a-z,;:] )[A-Z][a-z]+(?:[\'’][a-z]+)?')
 
 
@@ -385,10 +416,10 @@ def ungrounded(row: dict, entries: list[dict], order: list[int]) -> list[dict]:
             continue
         opening = a['opening']
         lowered = opening.lower()
-        tokens = {m.group(0) for t in texts for m in NUMBER.finditer(t)} | \
-                 {m.group(0) for t in texts for m in NAME.finditer(t)}
-        absent = sorted(t for t in tokens if t not in opening and t.lower() not in lowered
-                        and t.replace(',', '.') not in opening)
+        shown_numbers = {number(m.group(0)) for m in NUMBER.finditer(opening)}
+        absent = sorted({m.group(0) for t in texts for m in NUMBER.finditer(t) if number(m.group(0)) not in shown_numbers}
+                        | {m.group(0) for t in texts for m in NAME.finditer(t)
+                           if m.group(0) not in opening and m.group(0).lower() not in lowered})
         if absent:
             out.append({'call': call_label(a, 80), 'entry': order[a['entry']] + 1, 'absent': absent[:8]})
     return out
@@ -575,7 +606,9 @@ def caller_of(tree: list[dict], by_id: dict) -> None:
             if h['id'] == n['id'] or n['parent'] == h['id']:
                 continue
             windows = [w for w in h['eval_windows'] if w[0] <= start <= w[1]]
-            if not windows or n['parent'] not in ancestors(h['id']) or h['id'] in ancestors(n['id']):
+            # the maker is above the caller (an unrecorded parent is the root, which is above every call)
+            maker_above = n['parent'] not in by_id or n['parent'] in ancestors(h['id'])
+            if not windows or not maker_above or h['id'] in ancestors(n['id']):
                 continue
             opened = max(w[0] for w in windows)
             if best is None or opened > best[0] or (opened == best[0] and len(ancestors(h['id'])) > best[1]):
@@ -786,6 +819,12 @@ def shortfalls(stats: dict, targets: dict = TARGETS) -> list[str]:
         out.append(f'open outputs {stats["open_output_share"]:.2f} < {targets["open_output_share_min"]}')
     if stats['nl_call_share'] < targets['nl_call_share_min']:
         out.append(f'NL call share {stats["nl_call_share"]:.2f} < {targets["nl_call_share_min"]}')
+    failed = (stats.get('judgments') or {}).get('holds', {}).get('false', 0)
+    if failed < targets['failed_refinements_min']:
+        out.append(f'refinements answered false {failed} < {targets["failed_refinements_min"]}')
+    if stats.get('ungrounded_share', 0) > targets['ungrounded_share_max']:
+        out.append(f'open answers stating what their call does not show {stats["ungrounded_share"]:.2f} > '
+                   f'{targets["ungrounded_share_max"]}')
     lit, n = stats['nl_literals'], max(1, len(stats['instances']))
     if lit['built_from_data'] / n < targets['literals_from_data_min']:
         out.append(f'NL literals built from data per instance {lit["built_from_data"] / n:.1f} < {targets["literals_from_data_min"]}')
@@ -795,8 +834,10 @@ def shortfalls(stats: dict, targets: dict = TARGETS) -> list[str]:
 
 
 def render_tree(row: dict) -> list[str]:
-    """The call tree of one replay, indented, for the builder: each NL call with what answered it."""
-    tree = row.get('tree') or []
+    """The call tree of one replay, indented, for the builder: each NL call (judges included) with what it returned;
+    calls through a function argument sit under the call that made them (caller_of)."""
+    tree = [dict(n) for n in row.get('tree') or []]
+    caller_of(tree, {n['id']: n for n in tree})
     kids = collections.defaultdict(list)
     ids = {n['id'] for n in tree}
     for n in tree:
@@ -808,8 +849,8 @@ def render_tree(row: dict) -> list[str]:
         label = {'std': f'[{n.get("combinator") or n["definition"][4:]}]', 'iterate': '[iterateOn]',
                  'pluggable': '[pluggable]'}.get(kind, n['name'])
         extra = ''
-        if kind in ('nl', 'inline'):
-            extra = f' -> {json.dumps(n.get("value"), ensure_ascii=False)[:140]}'
+        if kind in NL_KINDS:
+            extra = f' -> {json.dumps(n.get("value"), ensure_ascii=False)[:200]}'
             if n.get('decision'):
                 extra = ' (decision)' + extra
         elif kind == 'iterate':
@@ -900,7 +941,19 @@ def aggregate(stats: list[dict]) -> dict:
         for inst in s['instances']:
             outputs.update(inst['outputs'])
     total = sum(outputs.values())
+    judgments = collections.defaultdict(collections.Counter)
+    for s in stats:
+        for name, counts in (s.get('judgments') or {}).items():
+            judgments[name].update(counts)
     return {'programs': len(stats),
+            'judgments': {k: dict(v) for k, v in sorted(judgments.items())},
+            'programs_with_failed_refinement': sum(1 for s in stats
+                                                   if (s.get('judgments') or {}).get('holds', {}).get('false', 0)),
+            'repair_fixes_per_program': mean([s.get('repair_fixes', 0) for s in stats]),
+            'ungrounded_share': round(sum(s.get('ungrounded_open_answers', 0) for s in stats)
+                                      / max(1, outputs['open']), 3),
+            'literals_from_inputs_only_per_instance': mean([s['nl_literals'].get('from_inputs_only', 0)
+                                                            / max(1, len(s['instances'])) for s in stats]),
             'crisp_line_share': mean([s['source']['crisp_line_share'] for s in stats]),
             'ts_logic_lines': mean([s['source']['ts_logic_lines'] for s in stats]),
             'nl_functions': mean([s['source']['nl_functions'] for s in stats]),
@@ -943,16 +996,24 @@ def report_markdown(name: str, report: dict) -> str:
                 ('NL literals built from data per instance', w['literals_from_data_per_instance'],
                  f'>= {t["literals_from_data_min"]}'),
                 ('calls through NL literals per instance', w['literal_calls_per_instance'], ''),
-                ('call-tree share through NL literals', w['literal_tree_share'], f'>= {t["literal_tree_share_min"]}')]
+                ('call-tree share through NL literals', w['literal_tree_share'], f'>= {t["literal_tree_share_min"]}'),
+                ('NL literals interpolating only root inputs per instance', w['literals_from_inputs_only_per_instance'], ''),
+                ('programs with a refinement answered false', w['programs_with_failed_refinement'],
+                 f'>= 1 each ({t["failed_refinements_min"]})'),
+                ('repair/fixed-point step calls per program', w['repair_fixes_per_program'], ''),
+                ('open answers stating what their call does not show', w['ungrounded_share'],
+                 f'<= {t["ungrounded_share_max"]}')]
         prev = report.get('previous') or {}
         lines += ['| statistic | wave | previous | target |', '|---|---|---|---|']
         keys = ['crisp_line_share', 'ts_logic_lines', 'nl_functions', 'nl_depth', 'interior_functions', 'construct_kinds',
                 'higher_order_per_instance', 'combinators_per_instance', 'nl_calls_per_instance', 'nl_call_share',
                 'open_output_share', 'literals_per_instance', 'literals_from_data_per_instance',
-                'literal_calls_per_instance', 'literal_tree_share']
+                'literal_calls_per_instance', 'literal_tree_share', 'literals_from_inputs_only_per_instance',
+                'programs_with_failed_refinement', 'repair_fixes_per_program', 'ungrounded_share']
         for (label, value, target), key in zip(rows, keys):
             lines.append(f'| {label} | {value} | {prev.get(key, "")} | {target} |')
         lines += ['', f'Output mix of NL calls: {json.dumps(w["output_mix"])}', '',
+                  'Shipped judgments and refinements, by answer: ' + json.dumps(w['judgments']), '',
                   'Programs using each construct kind: ' + ', '.join(f'{k} {v}' for k, v in w['programs_using'].items()),
                   '', 'Never used this wave: ' + (', '.join(w['programs_never_using']) or 'none'), '']
     lines += ['## Programs', '', '| program | consistent | crisp share | depth | interior | kinds | higher-order/inst | '
@@ -992,6 +1053,12 @@ GUIDANCE = {
                 'from examples), then map, pass and compose it like any other function.',
     'share': 'Replace helper calls into TypeScript by calls of `.nl` functions; arithmetic and lookups the eval does '
              'in a line need no helper at all.',
+    'refine': 'Let refinements fail where a careful first answer honestly can: put the property the writer was not told '
+              'or could not see (a fact only the context holds, a promise the policy does not allow) in an `Is<T, "...">` '
+              'result or an `ensures:` predicate, answer its `holds` false, and author the corrected second answer '
+              '(`expected_failures`). Never break a rule the call\'s own instructions state to give a loop work.',
+    'ground': 'An open answer states only what its call\'s opening shows: pass a fact the writer should mention as an '
+              'argument rather than writing in what you know about the instance.',
 }
 
 
@@ -1006,7 +1073,9 @@ def emphasis(report: dict) -> str:
              ('open', w['open_output_share'] < t['open_output_share_min']),
              ('share', w['nl_call_share'] < t['nl_call_share_min']),
              ('literals', w['literals_from_data_per_instance'] < t['literals_from_data_min']
-              or w['literal_tree_share'] < t['literal_tree_share_min'])]
+              or w['literal_tree_share'] < t['literal_tree_share_min']),
+             ('refine', w['programs_with_failed_refinement'] < w['programs']),
+             ('ground', w['ungrounded_share'] > t['ungrounded_share_max'])]
     best = sorted((p for p in report['programs'] if p.get('stats')),
                   key=lambda p: (len(p['shortfalls']), -p['stats']['construct_kind_count']))[:2]
     lines = ['# Emphasis for the next wave', '',
@@ -1017,6 +1086,9 @@ def emphasis(report: dict) -> str:
             lines.append(f'- {GUIDANCE[key]}')
     if w['programs_never_using']:
         lines.append('- Constructs no program of the last wave used: ' + ', '.join(w['programs_never_using']) + '.')
+    few = [f'{k} ({v} of {w["programs"]})' for k, v in w['programs_using'].items() if v <= w['programs'] / 3]
+    if few:
+        lines.append('- Constructs few programs of the last wave used: ' + ', '.join(few) + '.')
     if best:
         lines += ['', 'Programs of the last wave closest to the targets, worth reading as examples: ' +
                   ', '.join(p['slug'] for p in best) + '.']
