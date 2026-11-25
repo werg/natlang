@@ -26,6 +26,7 @@ import json
 from pathlib import Path
 
 from ..common.hashing import canonical_json_sha256_hex
+from ..common.jsonio import json_line
 
 FAMILY = 'memetic_improve'
 STAGE_SCHEMA = 'natlang.memetic-tasks/1'
@@ -240,7 +241,7 @@ def build(cases, out, *, settings=None, excluded=frozenset(), pass_rates=None, l
         path.write_text(json.dumps(spec, ensure_ascii=False, sort_keys=True) + '\n')
         rows.append(episode_case(path, spec, settings=settings))
     source = out / 'cases.jsonl'
-    source.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
+    source.write_text(''.join(json_line(row) for row in rows), encoding='utf-8')
     families = sorted({row['curriculum']['program_family'] for row in rows})
     receipt = {'schema': STAGE_SCHEMA, 'settings': settings, 'programs': len(pool), 'rows': len(rows),
                'families': len(families), 'skipped': skipped, 'excluded_ids': len(excluded),
@@ -289,7 +290,7 @@ def main(argv=None):
     if args.command == 'measure':
         rows = unmeasured(cases, excluded=frozenset(excluded), pass_rates=rates, programs_limit=args.programs)
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
+        Path(args.out).write_text(''.join(json_line(row) for row in rows), encoding='utf-8')
         print(json.dumps({'worlds': len(rows), 'out': args.out}))
         return
     settings = {}

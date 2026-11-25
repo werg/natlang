@@ -4,9 +4,14 @@ from __future__ import annotations
 import json
 import os
 import random
+import sys
 import tempfile
 from collections import Counter
 from pathlib import Path
+
+if str(Path(__file__).resolve().parents[2] / 'training/neuralese') not in sys.path:
+    sys.path.append(str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
+from natlang_neuralese.common.jsonio import SURROGATE_ERRORS  # noqa: E402
 
 DEFAULT_OUTPUT_ROOT = Path(os.environ.get("NATLANG_NEURALESE_DATA", "/mnt/external/natlang-development-data/data/neuralese"))
 
@@ -77,7 +82,7 @@ class Sink:
 
     def _open(self, key: str, filename: str):
         fd, tmp = tempfile.mkstemp(prefix=filename + ".", suffix=".pending", dir=self.out_dir)
-        self._fds[key] = (os.fdopen(fd, "w", encoding="utf-8"), tmp, self.out_dir / filename)
+        self._fds[key] = (os.fdopen(fd, "w", encoding="utf-8", errors=SURROGATE_ERRORS), tmp, self.out_dir / filename)
 
     def accept(self, record: dict):
         self._fds["records"][0].write(json.dumps(record, ensure_ascii=False) + "\n")

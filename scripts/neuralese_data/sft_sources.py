@@ -44,6 +44,7 @@ sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE), str(REPO
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 from natlang_neuralese.common import data_registry  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+from natlang_neuralese.common.jsonio import json_line, utf8  # noqa: E402
 import recorded_turns  # noqa: E402
 
 SUCCESS = 'task_success'
@@ -86,7 +87,7 @@ class ZstdWriter:
         self.rows = 0
 
     def write(self, row):
-        self.writer.write((json.dumps(row, ensure_ascii=False) + '\n').encode())
+        self.writer.write(utf8(json_line(row)))
         self.rows += 1
 
     def close(self, *, publish=True):

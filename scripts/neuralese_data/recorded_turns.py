@@ -36,11 +36,12 @@ def path(work, name):
 def write(work, name, turns):
     """The recorded semantic turns of one episode (their exact-id captures dropped: rendering does not read them)."""
     import zstandard
+    from natlang_neuralese.common.jsonio import utf8
     target = path(work, name)
     target.parent.mkdir(parents=True, exist_ok=True)
     data = json.dumps([{k: v for k, v in turn.items() if k != 'exact'} for turn in turns], ensure_ascii=False)
     tmp = target.with_suffix('.tmp')
-    tmp.write_bytes(zstandard.ZstdCompressor(level=6).compress(data.encode()))
+    tmp.write_bytes(zstandard.ZstdCompressor(level=6).compress(utf8(data)))
     tmp.replace(target)
 
 

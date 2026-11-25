@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import json
 
+from ..common.jsonio import canonical_json_bytes
+
 
 def _sha(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
@@ -14,7 +16,7 @@ def _valid_sha(value) -> bool:
 
 
 def _canonical(value) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return canonical_json_bytes(value)
 
 
 def validate_provider_teacher_source(source, assistant, opening, tools, native_text_spans,
