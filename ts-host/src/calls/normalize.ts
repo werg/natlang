@@ -7,7 +7,7 @@
  */
 import ts from 'typescript';
 import { hexDigest } from '../native/hash.js';
-import { isPlainObject } from '../runtime/plain-object.js';
+import { dataEntries, isPlainDataObject } from './snapshot.js';
 
 /** Leaf values of the inputs by value, with the path that reaches each (the shortest when a value repeats). */
 export function inputLeaves(inputs: Record<string, unknown>): Map<string, string> {
@@ -22,12 +22,12 @@ export function inputLeaves(inputs: Record<string, unknown>): Map<string, string
         if (/\d/.test(part) || part.length >= 4) put(`part:${part.toLowerCase()}`, path);
       return;
     }
-    if (Array.isArray(value)) { value.slice(0, 50).forEach((item, index) => visit(item, `${path}[${index}]`, depth + 1)); return; }
-    if (isPlainObject(value))
-      for (const [key, item] of Object.entries(value).slice(0, 100))
+    if (Array.isArray(value)) { for (const [index,item] of dataEntries(value)) if (/^(0|[1-9]\d*)$/.test(index) && Number(index)<50) visit(item, `${path}[${index}]`,depth+1); return; }
+    if (isPlainDataObject(value))
+      for (const [key, item] of dataEntries(value).slice(0, 100))
         visit(item, /^[A-Za-z_$][\w$]*$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`, depth + 1);
   };
-  for (const [name, value] of Object.entries(inputs)) visit(value, name, 0);
+  for (const [name, value] of dataEntries(inputs)) visit(value, name, 0);
   return leaves;
 }
 

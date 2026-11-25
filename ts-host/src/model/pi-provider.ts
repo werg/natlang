@@ -1,3 +1,4 @@
+import {operationalErrorMetadata} from './operational-error.js';
 /** Optional provider backend. Natlang retains the conversation, tools, retries, and execution loop. */
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
@@ -279,9 +280,10 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       let untrackedDeltaEvents = 0, adjacentDuplicateDeltaEvents = 0;
       let previousDeltaFingerprint = '', currentRepeatRun = 0, longestRepeatRun = 0;
       const toolDeltaPreview = boundedStreamCapture(1024);
-      const emit = (status: ModelStreamProgress['status']) => {
+      const emit = (status: ModelStreamProgress['status'],error?:unknown) => {
         if (!onProgress) return;
         const progress: ModelStreamProgress = { status, ...counts, startedAt,
+          ...(status==='failed'?{error:operationalErrorMetadata(error)}:{}),
           observedAt: new Date().toISOString(), elapsedMs: Date.now() - started };
         try { onProgress(progress); } catch { /* progress observers must not affect model turns */ }
       };
@@ -329,7 +331,7 @@ export function createPiModelBackend(provider: string, modelId: string, environm
         turn = piAssistantToTurn(reply, provider);
         emit('completed');
       } catch (error) {
-        emit('failed');
+        emit('failed',error);
         throw error;
       }
       const { calls, text, reasoning, rawCalls: raw_calls } = piAssistantContent(reply);

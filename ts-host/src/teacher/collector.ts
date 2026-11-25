@@ -1,3 +1,4 @@
+import {providerFailureEvidence} from '../model/operational-error.js';
 import { compactCaptures, trajectoryTurn } from '../runtime/trajectory.js';
 import { createEpisodeCallStore, episodeCallStoreShared } from '../machine-store.js';
 import { episodeCallStoreRoot, runInEpisodeCallStore } from '../runtime/episode-call-store.js';
@@ -595,10 +596,11 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         if (signal?.aborted) return;
         // A natlang call ended by this failure rejects as its NatlangCallError; the failure itself is the cause.
         const error = underlyingError(wrapped);
+        const failureEvidence=providerFailureEvidence(error);
         if (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
             JSON.stringify({ index: item.index, program_id: item.record.id, ...errorBinding(expected), code: error.code,
-              error: `${error.name}: ${error.message}`, timeout: error.metadata }) + '\n');
+              error: `${failureEvidence.name}: ${failureEvidence.message}`, diagnostics:failureEvidence.diagnostics, timeout: error.metadata }) + '\n');
           await caseEvent(item, 'case_finish', { status: 'error', code: error.code });
           break;
         }
@@ -606,12 +608,11 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         if (!transportFailure(error) || attempt >= (config.transportRetries ?? 0) * (limited ? 3 : 1)) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
             JSON.stringify({ index: item.index, program_id: item.record.id, ...errorBinding(expected),
-              ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
-                ? { code: error.code } : {}),
+              ...(typeof failureEvidence.code==='string'?{code:failureEvidence.code}:{}),
               ...(providerFinishReason(error) ? { provider_finish_reason: providerFinishReason(error) } : {}),
               retry_not_before: Date.now() + retryAfterMs(error),
-              error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` }) + '\n');
-          await caseEvent(item, 'case_finish', { status: 'error', error_type: error instanceof Error ? error.name : 'Error' });
+              error: `${failureEvidence.name}: ${failureEvidence.message}`, diagnostics:failureEvidence.diagnostics }) + '\n');
+          await caseEvent(item, 'case_finish', { status: 'error', error_type: failureEvidence.name });
           break;
         }
         const wait = retryWaitMs(error, attempt++, config.retryDelayMs ?? 5_000);
@@ -1080,7 +1081,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       await persistTransportStart(entry, 'chat_transport', retryIndex);
     };
     let persistProviderExchange: (request: ModelTurnRequest, response: ModelTurn | undefined,
-      role: 'teacher' | 'judge', ordinal: number, error?: unknown) => Promise<void> = async () => {};
+      role: 'teacher' | 'judge', ordinal: number, failure?: {error:unknown}) => Promise<void> = async () => {};
     let fatalProviderDeadline: ProviderRequestTimeoutError | ProviderActionCycleTimeoutError | undefined;
     let fatalCollectionError: Error | undefined;
     const providerFatalAbort = new AbortController();
@@ -1185,7 +1186,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
               if (request.invocation_id && activeInvocationEntries.get(request.invocation_id) === entry)
                 activeInvocationEntries.delete(request.invocation_id);
               entry.status = 'failed';
-              await persistProviderExchange(request, undefined, role, requestOrdinal, error);
+              await persistProviderExchange(request, undefined, role, requestOrdinal, {error});
               const remembered = rememberProviderDeadline(error);
               // Refused credentials end the request as a provider failure (no model verdict) without a pointless resend.
               if (remembered === error && !actionSignal?.aborted && providerAuthFailure(error))
@@ -1201,12 +1202,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
               const retryEvent = { failed_request_ordinal: requestOrdinal, next_request_retry_index: retryIndex + 1,
                 wait_ms: wait, request_sha256: sha256(canonical(Object.fromEntries(
                   Object.entries(request).filter(([key]) => key !== 'invocation_id')))),
-                error: { name: error instanceof Error ? error.name : 'Error',
-                  message: error instanceof Error ? error.message : String(error),
-                  ...('status' in Object(error) ? { status: (error as { status?: unknown }).status } : {}),
-                  ...('providerCode' in Object(error) ? { provider_code: (error as { providerCode?: unknown }).providerCode } : {}),
-                  ...('providerRetryable' in Object(error) ? { provider_retryable: (error as { providerRetryable?: unknown }).providerRetryable } : {}),
-                  ...('retry_after_ms' in Object(error) ? { retry_after_ms: (error as { retry_after_ms?: unknown }).retry_after_ms } : {}) } };
+                error:providerFailureEvidence(error) };
               requestTelemetry.request_retries.push(retryEvent);
               await appendEvidence([{ kind: 'collector_provider_request_retry_scheduled', attempt_id: evidenceAttemptId,
                 ...retryEvent }]);
@@ -1394,18 +1390,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       attempt_id: entry.attempt_id, case_sequence: entry.case_sequence, request_ordinal: entry.request_ordinal,
       role: entry.role, purpose: entry.purpose, logical_turn: entry.logical_turn,
       transport_kind: transportKind, retry_index: retryIndex }]);
-    persistProviderExchange = (request, response, role, ordinal, error) => appendEvidence([{
+    persistProviderExchange = (request, response, role, ordinal, failure) => appendEvidence([{
       kind: 'provider_exchange', role, request_ordinal: ordinal,
       request_sha256: sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))),
       invocation_id: request.invocation_id ?? null, request: structuredClone(request),
       ...(response ? { response: structuredClone(response) } : {}),
-      ...(error ? { error: error instanceof Error ? { name: error.name, message: error.message,
-        ...('code' in error ? { code: (error as { code?: unknown }).code } : {}),
-        ...('status' in error ? { status: (error as { status?: unknown }).status } : {}),
-        ...('providerCode' in error ? { provider_code: (error as { providerCode?: unknown }).providerCode } : {}),
-        ...('providerRetryable' in error ? { provider_retryable: (error as { providerRetryable?: unknown }).providerRetryable } : {}),
-        ...('retry_after_ms' in error ? { retry_after_ms: (error as { retry_after_ms?: unknown }).retry_after_ms } : {}),
-      } : { message: String(error) } } : {}),
+      ...(failure ? {error:providerFailureEvidence(failure.error)} : {}),
     }]);
     const runId = programRunId(item.index, expected);
     const executionRunId = `${runId}/execution-${partial.execution_attempt_id}`;

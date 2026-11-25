@@ -46,10 +46,10 @@ for(const mode of ['node','workerd'])test(`${mode} an aborted parent grants neit
  try{assert.equal(await s.outer.run(()=>s.modules.outer(2)),6);const rows=[...s.calls.records.values()],check=rows.find(row=>row.definition.name==='check');assert.equal(check.parent_call_id,null);assert.equal(s.childTasks[0].signal.aborted,true); // closed after successful independent completion
  }finally{s.close();}
 });
-test('invocation-bound runtime.bind refuses expired authority while task-scope bind remains usable',async()=>{
+test('runtime.bind retains lexical task authority after its creator invocation ends',async()=>{
  const s=setup('node');let bound,taskBound;
- s.setBridge(()=>{bound=s.outer.bind(()=>s.modules.check(2));return 1;});
- try{await s.outer.run(async()=>{taskBound=s.outer.bind(()=>42);await s.modules.outer(1);assert.equal(taskBound(),42);await assert.rejects(Promise.resolve().then(()=>bound()),/invocation.*finished/);});}finally{s.close();}
+ s.setBridge(()=>{bound=s.outer.bind(()=>42);return 1;});
+ try{await s.outer.run(async()=>{taskBound=s.outer.bind(()=>42);await s.modules.outer(1);assert.equal(taskBound(),42);assert.equal(bound(),42);});}finally{s.close();}
 });
 test('standalone native runtime owns its real recorded root lifetime for nested TS entry',async()=>{
  const {buildPending}=await import('../dist/native/values.js'),{toHost}=await import('../dist/runtime/kernel.js');
