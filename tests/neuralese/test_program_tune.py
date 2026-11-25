@@ -449,8 +449,8 @@ def test_colab_bank_ships_the_fits_runs_as_a_tenant_and_brings_the_held_releases
 
 def test_two_colab_hosts_get_their_own_forwards_and_a_dedicated_session_needs_no_actor(monkeypatch):
     import pop_rl_actor as A
-    assert A.colab_forward_offset('colab-g4') == 10161 and A.colab_forward_offset('colab-g4b') == 11161
-    assert A.colab_forward_offset('colab-x') not in (10161, 11161)
+    assert A.colab_forward_offset('colab-g4') == 10161 and A.colab_forward_offset('colab-g4b') == 12161
+    assert A.colab_forward_offset('colab-x') not in (10161, 12161)
     monkeypatch.setenv('NATLANG_COLAB_FORWARD_OFFSETS', 'colab-x=13161')
     assert A.colab_forward_offset('colab-x') == 13161
     cfg = A.host_config('colab', host='colab-g4b')

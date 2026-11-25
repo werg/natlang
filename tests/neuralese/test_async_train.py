@@ -1574,9 +1574,14 @@ def test_dry_run_shows_the_remote_collection_and_the_dgx_sft_sizing(tmp_path, mo
     monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: True)
     plan = d.plan()
     (remote,) = plan['remote_collect']
-    assert remote['endpoint'] == 'http://127.0.0.1:18731' and remote['serves_policy'] and remote['budget_gb'] == round(remote['slots'] * ei.REMOTE_COLLECTOR_SLOT_GB) + 4
+    import remote_collect
+    # the collector runs on the VM beside its actor (remote_collect.py run): VM-local front, a small DGX claim
+    assert remote['endpoint'] == 'http://127.0.0.1:18731' and remote['serves_policy'] and remote['on_host']
+    assert remote['budget_gb'] == remote_collect.REMOTE_SYNC_GB
     argv = remote['collect']
-    assert argv[argv.index('--actor') + 1] == 'http://127.0.0.1:18731=64' and argv[argv.index('--slots') + 1] == '64'
+    assert argv[1].endswith('remote_collect.py') and argv[2:6] == ['run', '--host', 'colab-g4', '--work']
+    assert argv[argv.index('--') + 2].endswith('expert_iteration.py') and argv[argv.index('--') + 3] == 'collect'
+    assert argv[argv.index('--actor') + 1] == 'http://127.0.0.1:8570=64' and argv[argv.index('--slots') + 1] == '64'
     assert argv[argv.index('--work') + 1].endswith('-remote0')
     assert argv[argv.index('--checkpoint-sha256') + 1] == d.controller.current['sha256']
     assert plan['sft_dgx'] == {'activation_gb': 56, 'budget_gb': 80}

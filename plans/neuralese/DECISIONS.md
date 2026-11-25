@@ -12189,3 +12189,45 @@ repaired rows at the same tenant commit 206b5ebd6 (`progtune-l4-fits4-a/b`: verd
 multihop, searchqa); `progtune-l4-seq-readd` relaunches the measurement lane as `progtune-l4-seq-4` with verdict back in
 its list once its new release is home and l4-seq-3 is idle. The bank stage (after l4-seq) lowers rows with the pinned
 pin-51cf1173c code, which predates the `lower_rows` guard, but it reads the repaired rows files.
+
+## 2026-11-25 03:30 Collectors run beside their remote actors (remote_collect.py); every --colab-hosts session collects
+
+**Observation (02:20).** DGX host memory bound everything: the DGX collection held 58 GB (192 slots), and the DGX-side
+collector of the Colab A100 actor (`aei1-collect-v0001-remote0`, 64 slots) held 12-15 GB (main Python process 6.1 GB
+RSS: pool rows, custody, scoring; 8 node episode servers ~0.6-0.8 GB each; run_bonsai_queue children ~1 GB). It and
+Pop's collector were OOM-killed at 00:52; Pop's collector then waited 60 min in the ledger 11.6 GB short with Pop's GPU
+idle, and eight agent jobs queued behind it. The A100 VM had 156 GB host RAM free, 12 CPUs (the collector used 1.5
+cores).
+
+**Change (default; `--collect-on-dgx` opts out).** A Colab target's collector runs on its VM: the DGX unit is
+`remote_collect.py run --host H --work W -- <the same collect command, --actor at the VM-local front>` with a 3 GB claim
+(`REMOTE_SYNC_GB`). It mirrors the pin at its DGX path (a worktree at the pin commit of a VM checkout at the pin's
+canonical checkout path /home/werg/natlang, objects shared with the session clone, verified clean, plus the pin's
+ignored build outputs; the session venv), mirrors the data the collector reads at the same absolute paths with their
+symlinks (registry roles grpo-pool/memetic/held-eval*, held cases and predecessors, errata, variants, task order,
+custody sources resolved with the pin's code, task asset roots, the registry journal, every existing path pool/memetic/
+variant rows name: ~1.6 GB, 680 files and asset trees, first sync ~2 min), launches the collector detached under a
+host-RAM admission claim (6 + 0.2/slot GiB), and pulls the work dir back every 60 s over the ControlMaster (rsync -z,
+zstd): content first, each group's rollouts/rewards/score/versions staged and moved into place only after the content is
+pulled again, so build, health, teacher and frontier read the DGX copy as before. A fresh VM gets the small files of the
+DGX copy (rewards, journals, queues) so the collector resumes. SIGTERM stops the VM collector and pulls once more; an
+audit hook records paths the VM collector fails to open, which are mirrored before a relaunch (at most 3).
+Every `--colab-hosts` session not in `--rebind-actor` is a collection target too (`-remote-<alias>` units, front 8570,
+slots capped at its actor's running cap); one with no actor answering there is served the lineage head
+(`serve-checkpoint`, collection weight dtype; at most every 20 min; `--no-colab-collect-serve` opts out); the round's
+SFT session is left out; publication rebinds them like the A100. Pop keeps its collector on the DGX: its 14 GB hold the
+actor (11 GB claim) and the collector's main process alone peaks at ~6 GB.
+Also fixed: g4b's DGX forward offset was 11161, so its front 8570 mapped to 19731 = g4a's SGLang forward
+(forward_port keeps a listening port): offsets are now 2000 apart (g4b 12161).
+
+**Live.** aei1-collect-v0001-remote0 moved to the VM at 03:21 after six failed attempts from 02:41 (driver not restarted; same unit name, so the
+driver's stop at the next policy stops it). Mistake while migrating: the first relaunches used ledger priority high and
+preempted the DGX collection twice (02:40:52, 02:48:26; ~10 min lost); it was requeued by hand at 44 GB --shrunk. Twice the old driver relaunched its DGX-side remote0 between my attempts (its standing check); I stopped it. A stopped VM collector first left 59 episode workers and node servers running (they start their own sessions): the VM wrapper is now their subreaper and stops every descendant.
+**Restart needs:** the driver on a pin containing this commit, `--colab-hosts colab-g4,colab-g4b` for g4b (its current
+actor is program tuning's measure tenant at 8571, not an aei1 actor; serving aei1's policy there evicts preemptible
+program-tuning tenants through admission).
+
+**Not checked.** Pass-rate parity of VM-collected groups against DGX-collected ones on the same tasks (the next health
+report shows it); node-side episode reads of files outside the scanned set (no audit there); the L4's capacity for an
+actor alone plus a 64-slot collector; behaviour when a session is replaced mid-collection beyond the code path (push of
+small files) — not exercised; memetic family seconds seed only from the collection's own groups on the VM.

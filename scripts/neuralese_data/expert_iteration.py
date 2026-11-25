@@ -101,6 +101,14 @@ COLLECTOR_SLOT_GB = 0.3
 # 0.3/slot (23 GB) kept the 74 GB DGX collection out of the ledger for 30+ min (2026-11-24 13:51). NATLANG_REMOTE_COLLECTOR_SLOT_GB
 # opts back to the shared rate.
 REMOTE_COLLECTOR_SLOT_GB = float(os.environ.get('NATLANG_REMOTE_COLLECTOR_SLOT_GB', '0.2'))
+# Collectors beside their remote actors (DECISIONS 2026-11-25 "collectors run beside their remote actors"): a Colab
+# actor's collector (episode servers, pool rows, scoring: ~6 GB + 0.1-0.2 GB per slot) runs on the VM
+# (``remote_collect.py run``: the pin and the data mirrored at their DGX paths, scored groups pulled back over the
+# ControlMaster); its DGX unit claims remote_collect.REMOTE_SYNC_GB. Pop stays on the DGX: its 14 GB hold the actor
+# (pop_rl_actor.SGLANG_MEMORY_GB 11) and the collector's main process alone peaks at ~6 GB. --collect-on-dgx opts out.
+# Every Colab session of --colab-hosts is a collection target at this front port (VM-local), besides --rebind-actor's.
+COLAB_COLLECT_FRONT_PORT = 8570
+COLAB_SERVE_RETRY_SECONDS = 1200
 # The standing DGX collection (DECISIONS 2026-11-24 "the DGX collection yields to round preparation"). Concurrency:
 # v0006's engine ran at its cap (160 running = 128 slots + 32 fill, 5-10 queued, KV 0.61, mamba 0.49, 1.75-1.94k tok/s,
 # ~200-270 own episodes/h); decode is bandwidth-bound and the KV pool has room, so 192 slots (224 running with the fill).
@@ -3297,14 +3305,31 @@ class AsyncRoundDriver:
         """The ``--rebind-actor HOST@FRONT_URL[=SLOTS]`` targets: {index, host, front, slots, pop, suffix}. A target on
         Pop's host (``pop_rl_actor.POP``) is a standing Pop actor (``pop_step``: served, not rebound in place, and
         yielding to held measurements); its collector unit ends in ``POP_COLLECT_SUFFIX`` (every Pop serve stops it),
-        the others in ``-remote{index}``."""
+        the others in ``-remote{index}``. Every other Colab session of ``--colab-hosts`` is a target too ('session':
+        its front at COLAB_COLLECT_FRONT_PORT, served the policy by ``ensure_colab_actor``, unit suffix
+        ``-remote-<alias>``, slots at most its actor's running cap). 'on_host': its collector runs on the remote host
+        (``remote_collect.py``; every Colab target unless ``--collect-on-dgx``), else on the DGX."""
         import pop_rl_actor
-        out = []
+        out, hosts = [], set()
         for i, target in enumerate(self.a.rebind_actor):
             host, front, slots = parse_remote_target(target, self.a.remote_slots)
             pop = bool(host) and host == pop_rl_actor.POP
-            out.append({'index': i, 'host': host, 'front': front, 'slots': slots, 'pop': pop,
+            out.append({'index': i, 'host': host, 'front': front, 'slots': slots, 'pop': pop, 'session': False,
                         'suffix': pop_rl_actor.POP_COLLECT_SUFFIX if pop else f'-remote{i}'})
+            hosts.add(host)
+        for host in getattr(self, 'colab_hosts', None) or ():
+            if not host or host in hosts or host == pop_rl_actor.POP:
+                continue
+            hosts.add(host)
+            slots = self.a.remote_slots
+            record = pop_rl_actor.read_json(pop_rl_actor.colab_state_path(host)) or {}
+            cap = (record.get('sglang') or {}).get('max_running')
+            if isinstance(cap, int) and cap > 0:
+                slots = min(slots, cap)
+            out.append({'index': None, 'host': host, 'front': f'http://127.0.0.1:{COLAB_COLLECT_FRONT_PORT}',
+                        'slots': slots, 'pop': False, 'session': True, 'suffix': f'-remote-{host}'})
+        for t in out:
+            t['on_host'] = bool(t['host']) and not t['pop'] and not getattr(self.a, 'collect_on_dgx', False)
         return out
 
     def remote_units(self, unit):
@@ -3319,9 +3344,18 @@ class AsyncRoundDriver:
 
     def remote_actors(self, include_pop=True):
         """[(host, VM-local front URL, DGX-side endpoint)] of the hosted targets (Colab actors beside the learner reach
-        the DGX through the host's forwarded ports; Pop over Tailscale)."""
-        return [(t['host'], t['front'], self.target_endpoint(t)) for t in self.remote_targets()
-                if t['host'] and (include_pop or not t['pop'])]
+        the DGX through the host's forwarded ports; Pop over Tailscale). A session target whose port cannot be forwarded
+        (no tunnel up) is left out."""
+        out = []
+        for t in self.remote_targets():
+            if not t['host'] or (t['pop'] and not include_pop):
+                continue
+            try:
+                out.append((t['host'], t['front'], self.target_endpoint(t)))
+            except Exception:
+                if not t.get('session'):
+                    raise
+        return out
 
     def ensure_remote_collection(self, policy, rebind=True):
         """A DGX-side collector per remote actor that serves ``policy`` (``collect --actor``): restarted with the
@@ -3332,7 +3366,58 @@ class AsyncRoundDriver:
                 self.ensure_remote_policy(policy)
             for target in self.remote_targets():
                 if target['host'] and not target['pop']:     # Pop's collector: pop_step (it yields to held measurements)
-                    self.start_remote_collector(policy, target)
+                    try:
+                        if target.get('session'):
+                            self.ensure_colab_actor(policy, target)
+                        self.start_remote_collector(policy, target)
+                    except Exception as error:      # one session down never keeps the others from collecting
+                        if not target.get('session'):
+                            raise
+                        self.note(remote_collection_failed=repr(error)[:300], host=target['host'])
+
+    def ensure_colab_actor(self, policy, target):
+        """A ``--colab-hosts`` session (not the round's SFT session) serves ``policy`` for collection: when its front
+        answers with another policy, ``ensure_remote_policy`` rebinds it; when nothing answers there, the policy is
+        served (``pop_rl_actor serve-checkpoint --host-profile colab``, the collection weight dtype; in the background,
+        at most every COLAB_SERVE_RETRY_SECONDS). ``--no-colab-collect-serve`` opts out."""
+        host = target['host']
+        if getattr(self.a, 'no_colab_collect_serve', False) or host in self.colab_sft_hosts:
+            return
+        endpoint = self.target_endpoint(target)
+        if endpoint_alive(endpoint, policy['sha256']):
+            return
+        try:
+            with urllib.request.urlopen(endpoint + '/v1/neuralese/info', timeout=10):
+                return                       # an actor of another policy answers: the rebind's
+        except (OSError, ValueError):
+            pass
+        tried = self.__dict__.setdefault('_colab_serve_tried', {})
+        key = (host, policy['sha256'])
+        if time.time() - tried.get(key, 0) < COLAB_SERVE_RETRY_SECONDS or getattr(self, '_colab_serving', {}).get(host):
+            return
+        tried[key] = time.time()
+        self.__dict__.setdefault('_colab_serving', {})[host] = True
+        import pop_rl_actor
+        weight_dtype = getattr(self.a, 'collect_weight_dtype', COLLECT_WEIGHT_DTYPE)
+        argv = [PY, str(self.c.pin / 'scripts' / 'neuralese_data' / 'pop_rl_actor.py'), 'serve-checkpoint',
+                '--host-profile', 'colab', '--host', host, '--checkpoint', str(policy['checkpoint']),
+                '--policy-id', policy['sha256'], '--commit', self.a.commit, '--kv-cache-dtype',
+                pop_rl_actor.POP_KV_CACHE_DTYPE, '--weight-dtype', weight_dtype]
+
+        def serve():
+            started = time.time()
+            try:
+                with (self.root / f'colab-serve-{host}.log').open('a') as handle:
+                    rc = subprocess.run(argv, env=self.c.env, stdout=handle, stderr=subprocess.STDOUT,
+                                        timeout=7200).returncode
+                self.note(colab_collect_served=host, policy=policy['sha256'], rc=rc,
+                          seconds=round(time.time() - started))
+            except Exception as error:
+                self.note(colab_collect_serve_failed=host, error=repr(error)[:300])
+            finally:
+                self._colab_serving[host] = False
+        threading.Thread(target=serve, daemon=True).start()
+        self.note(colab_collect_serving=host, policy=policy['sha256'])
 
     def remote_collect_loop(self):
         """The standing check that every reachable remote actor serving the newest policy has its collector, whatever
@@ -3352,14 +3437,21 @@ class AsyncRoundDriver:
             self.note(remote_collection_failed=repr(error)[:300])
 
     def remote_collect_argv(self, policy, target, endpoint):
-        """(unit, work dir, argv, ledger GB) of ``target``'s DGX-side collector of ``policy``."""
+        """(unit, work dir, argv, ledger GB) of ``target``'s collector of ``policy``: on the remote host
+        (``target['on_host']``: ``remote_collect.py run`` around the collect command, which reaches the actor at its
+        VM-local front; the DGX unit only mirrors and pulls) or on the DGX (through ``endpoint``)."""
         unit = self.collection_unit(policy) + target['suffix']
         work = self.collect_dir(policy, target['suffix'])
+        on_host = target.get('on_host', False)
         with self.COLLECT_LOCK:
             self.c.collect_dir = work
             argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], target['slots'],
-                                          endpoints=[f'{endpoint}={target["slots"]}'])
+                                          endpoints=[f'{target["front"] if on_host else endpoint}={target["slots"]}'])
         argv[argv.index('--tasks') + 1] = str(self.collect_dir(policy) / 'tasks.json')
+        if on_host:
+            from remote_collect import REMOTE_SYNC_GB
+            return unit, work, self.c.py('remote_collect.py', 'run', '--host', target['host'], '--work', work, '--',
+                                         *argv), REMOTE_SYNC_GB
         return unit, work, argv, max(8, round(target['slots'] * REMOTE_COLLECTOR_SLOT_GB) + 4)
 
     def start_remote_collector(self, policy, target):
@@ -4400,9 +4492,12 @@ class AsyncRoundDriver:
         sha, errors = published['checkpoint_sha256'], []
         endpoints = {(host, front): endpoint for host, front, endpoint in self.remote_actors(include_pop=False)}
         for t in self.remote_targets():
-            host, front, target = t['host'], t['front'], self.a.rebind_actor[t['index']]
+            host, front = t['host'], t['front']
+            target = self.a.rebind_actor[t['index']] if t['index'] is not None else f'{host}@{front}'
             if t['pop'] or endpoint_alive(endpoints.get((host, front), front), sha):
                 continue                    # Pop: pop_step serves the new policy
+            if t.get('session') and (host, front) not in endpoints:
+                continue                    # a session whose tunnel is down: served again by ensure_colab_actor
             try:
                 pop_rl_actor.rebind_actor(front_url=front, policy_id=sha, version=version, factors_dir=factors,
                                           host=host or None, host_profile='colab',
@@ -4650,6 +4745,8 @@ class AsyncRoundDriver:
                                               label=f'{self.a.name} {round_dir.name}', close_previous=True,
                                               earlier_cached_only=True)
             health['policy'] = policies[-1]['sha256']
+            # the round mix's diversity and its regression flags against the previous build (sft_sources build)
+            collection_health.add_mix_diversity(health, round_dir / 'mix' / 'build.json')
             collection_health.write(health, out)
             self.note(round=round_dir.name, health=collection_health.summary_line(health), health_flags=len(health['flags']),
                       health_sfp=health['sfp_flagged'])
@@ -4834,10 +4931,14 @@ class AsyncRoundDriver:
         for t in self.remote_targets():
             if not t['host']:
                 continue
-            endpoint = self.target_endpoint(t)
+            try:
+                endpoint = self.target_endpoint(t)
+            except Exception as error:      # a session with no tunnel up
+                endpoint = f'unreachable: {error!r}'[:200]
             unit, _work, argv, budget = self.remote_collect_argv(cur, t, endpoint)
             remote.append({'unit': unit, 'host': t['host'], 'front': t['front'], 'endpoint': endpoint,
-                           'slots': t['slots'], 'pop': t['pop'], 'serves_policy': endpoint_alive(endpoint, cur['sha256']),
+                           'slots': t['slots'], 'pop': t['pop'], 'on_host': t['on_host'], 'session': t['session'],
+                           'serves_policy': endpoint.startswith('http') and endpoint_alive(endpoint, cur['sha256']),
                            'budget_gb': budget, 'collect': list(map(str, argv))})
         plan = {'phase': self.controller.phase, 'policy': cur, 'pin': str(self.c.pin),
                 'reader_sources': self.reader_sources(),
@@ -5153,6 +5254,12 @@ def main():
                          'collector slots. On Pop\'s host (POP_HOST@http://POP_IP:18531=32) a standing Pop actor: served '
                          'with each new policy and yielding to Pop held measurements')
     ad.add_argument('--remote-slots', type=int, default=64, help='collector slots per remote actor (default)')
+    ad.add_argument('--collect-on-dgx', action='store_true',
+                    help="run remote actors' collectors on the DGX (opt-out of remote_collect.py: by default a Colab "
+                         "actor's collector runs on its VM and the DGX unit only mirrors the data and pulls the groups)")
+    ad.add_argument('--no-colab-collect-serve', action='store_true',
+                    help='never serve the policy on a --colab-hosts session for collection (default: a session with '
+                         'no actor answering at its collection front gets the lineage head served)')
     ad.add_argument('--pop-max-running', type=int, default=32,
                     help='SGLang running cap of the Pop collection actor (pop_rl_actor.POP_COLLECT_RUNNING)')
     ad.add_argument('--round-target-tokens', type=int, default=ROUND_TARGET_TOKENS,
