@@ -526,6 +526,9 @@ def test_judge_adopts_neutral_and_rolls_back_only_a_significant_regression(monke
 def _driver(tmp_path, monkeypatch, **over):
     import expert_iteration as ei
     monkeypatch.setattr(ei, 'OPS', tmp_path / 'ops')
+    # never the live ledger's room or learned peaks (tests that need them set their own)
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda unit=None, priority='medium': None)
+    monkeypatch.setattr(ei, 'ledger_family_peaks', lambda: {})
     (tmp_path / 'ops' / 'grpo-v4').mkdir(parents=True, exist_ok=True)
     pin = tmp_path / 'pin'
     (pin / 'scripts' / 'neuralese_data').mkdir(parents=True, exist_ok=True)
@@ -2912,7 +2915,8 @@ def test_a_collection_queued_at_its_full_claim_is_requeued_at_the_prep_share(tmp
     monkeypatch.setattr(ei, 'ledger_queued', lambda u: u in queued)
     monkeypatch.setattr(ei, 'ledger_waiting_gb', lambda u: queued.get(u))
     monkeypatch.setattr(d.c, 'active', lambda u: False)
-    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (40, 70))
+    monkeypatch.setattr(d.c, 'collection_plan', lambda slots, room=None: {'budget': 40, 'full': 70, 'cap': 70,
+                                                                          'slots': 96, 'room_slots': None})
     stopped, relaunched = [], []
     monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), queued.pop(u, None)))
     monkeypatch.setattr(d, 'ensure_collection', lambda p: (relaunched.append(p['sha256']), queued.__setitem__(unit, 40)))
@@ -2944,16 +2948,87 @@ def test_a_collection_launched_at_the_prep_share_asks_the_ledger_for_a_shrunk_ad
     assert launches[0].index('--shrunk') < launches[0].index('--')
     calls = []
     monkeypatch.setattr(d.c, 'ledger', lambda unit, budget, *a, **kw: calls.append((unit, budget, kw.get('shrunk'))))
-    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (51, 70))
+    monkeypatch.setattr(d.c, 'collection_plan', lambda slots, room=None: {'budget': 51, 'full': 70, 'cap': 70,
+                                                                          'slots': 96, 'room_slots': None})
     monkeypatch.setattr(d.a, 'fill', None, raising=False)
     cur = d.controller.current
     (d.collect_dir(cur)).mkdir(parents=True)
     (d.collect_dir(cur) / 'tasks.json').write_text('[]')
     d.ensure_collection(cur)
     assert calls[-1] == (d.collection_unit(cur), 51, True)
-    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (70, 70))
+    monkeypatch.setattr(d.c, 'collection_plan', lambda slots, room=None: {'budget': 70, 'full': 70, 'cap': 70,
+                                                                          'slots': 192, 'room_slots': None})
     d.ensure_collection(d.controller.current)
     assert calls[-1][2] is False
+
+
+def test_a_waiting_collection_is_requeued_at_the_slots_that_fit_the_ledger_room(tmp_path, monkeypatch):
+    """2026-11-25 18:44-19:48 and 20:20-21:18+: v0009 (192 slots), preempted by a running data/build step, waited at its
+    full 70 GB (need 85) with 58.6 GB of headroom, DGX GPU idle. Whenever it waits, the driver requeues it at the most
+    slots whose budget fits the room (at least --collect-fit-min-slots); the collector starts with --room-slots and
+    restores its full claim (--ledger-full-gb), with MemoryMax at the formula cap. --collect-fit-min-slots 0 opts out."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')
+    cur = d.controller.current
+    unit = d.collection_unit(cur)
+    room = {'gb': 58.6 - 15}
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda u=None, priority='medium': room['gb'])
+    # the plan: 43.6 GB fits 12 + 20 + 0.2 x 58 = 43.6 -> 58 slots (budget 44 after rounding: 57 slots, 43)
+    plan = d.c.collection_plan(192, 43.6)
+    assert plan['room_slots'] == plan['slots'] and plan['budget'] <= 43.6 and plan['full'] == plan['cap'] == 70
+    assert ei.dgx_collection_budget_gb(12, plan['slots'] + 1) > 43.6
+    assert d.c.collection_plan(192, 80)['room_slots'] is None and d.c.collection_plan(192, 80)['budget'] == 70
+    assert d.c.collection_plan(192, 30)['room_slots'] is None      # below the minimum slots: left as it is
+    queued = {unit: 70.0}
+    monkeypatch.setattr(ei, 'ledger_queued', lambda u: u in queued)
+    monkeypatch.setattr(ei, 'ledger_waiting_gb', lambda u: queued.get(u))
+    monkeypatch.setattr(d.c, 'active', lambda u: False)
+    monkeypatch.setattr(d.c, 'present', lambda u: u in queued)
+    monkeypatch.setattr(d.a, 'fill', None, raising=False)
+    (d.collect_dir(cur)).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    stopped, launched = [], []
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), queued.pop(u, None)))
+    monkeypatch.setattr(d.c, 'ledger', lambda u, budget, prio, argv, log, **kw: (
+        launched.append((u, budget, argv, kw)), queued.__setitem__(u, budget)))
+    assert d.collection_pending() is True
+    u, budget, argv, kw = launched[-1]
+    assert stopped == [unit] and u == unit and budget == plan['budget']
+    assert argv[argv.index('--room-slots') + 1] == str(plan['slots']) and argv[argv.index('--slots') + 1] == '192'
+    assert argv[argv.index('--ledger-full-gb') + 1] == '70' and kw['shrunk'] is True and kw['host_max_gb'] == 70
+    assert d.collection_pending() is True and len(stopped) == 1        # at the fitted budget: left alone
+    room['gb'] = 39.                                                     # less room still: smaller again
+    assert d.collection_pending() is True and len(stopped) == 2 and launched[-1][1] <= 39
+    # a DGX SFT's stop_collections and a fit requeue never interleave: stopped under the same lock, not relaunched
+    queued.clear()
+    assert d.requeue_collection_to_fit(cur, unit) is False and len(launched) == 2
+    # the opt-out: no fit, the full claim
+    queued[unit] = 70.0
+    d.a.collect_fit_min_slots = 0
+    assert d.collection_room_gb(unit) is None and d.collection_pending() is True and len(stopped) == 2
+
+
+def test_the_full_collection_claim_follows_the_measured_peaks_capped_by_the_formula(tmp_path, monkeypatch):
+    """Measured use 50-55 GB beside a 70 GB claim: the full claim is the largest learned peak of the newest three DGX
+    collection units x 1.1, at most the formula (which stays MemoryMax); fills, selects and remote collectors are other
+    families; no peak: the formula; --no-measured-collection-claim opts out."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')
+    G = 2**30
+    peaks = {'aei-collect-v0001': 66 * G, 'aei-collect-v0002': 50 * G, 'aei-collect-v0003': 52 * G,
+             'aei-collect-v0004': 48 * G, 'aei-collect-v0004-fill': 90 * G, 'aei-collect-v0004-remote0': 90 * G,
+             'other-collect-v0009': 90 * G}
+    assert ei.measured_collection_gb('aei', peaks) == round(52 * 1.1) == 57
+    assert ei.measured_collection_gb('aei', {}) is None
+    monkeypatch.setattr(ei, 'ledger_family_peaks', lambda: peaks)
+    assert d.c.collection_full_gb(192) == (57, 70) and d.c.collection_budget(192) == (57, 57)
+    with ei.yield_claim(tmp_path / 'prio', 'aei-r0002-prep', 0.5):
+        assert d.c.collection_budget(192) == (51, 57)                   # the share's formula budget, under the full
+    peaks['aei-collect-v0005'] = 80 * G
+    assert d.c.collection_full_gb(192) == (70, 70)                      # capped by the formula
+    d.c.a.measured_collection_claim = False
+    peaks.pop('aei-collect-v0005')
+    assert d.c.collection_full_gb(192) == (70, 70)
 
 
 def test_async_driver_retention_pass_and_opt_out(tmp_path, monkeypatch):

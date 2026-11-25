@@ -790,6 +790,33 @@ def test_round_preparation_claim_shrinks_the_dgx_collection_further_and_its_ledg
     collector._resize_claim('restore')
     assert calls[-1] == [*ei.LEDGER, 'resize', '--unit', 'aei-collect-v0001', 'restore', '--budget-gb', '70.0']
 
+def test_a_collection_launched_at_room_slots_runs_them_until_the_ledger_has_room(tmp_path, monkeypatch):
+    """The collector started at --room-slots does not yield its (already fitted) claim; it takes its full slots and
+    restores its claim once ledger_room_gb covers the growth to --ledger-full-gb."""
+    resized = []
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(
+        start=lambda: args and resized.append(args[0])))
+    import scripts.memory_ledger as ml
+    monkeypatch.setattr(ml, 'claimed_budget', lambda unit, state_path=None: 44 * ml.GIB)
+    room = {'gb': 10.}
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda u=None, priority='medium': room['gb'])
+    collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    collector.active_slots = 192
+    collector.setup(['t1'], time.time() + 3600, endpoints=[('http://own', 192)], priority_dir=tmp_path / 'prio',
+                    ledger_unit='aei-collect-v0001', ledger_full_gb=70., room_slots=58)
+    assert collector.active_slots == 58
+    collector._priority()
+    assert collector.active_slots == 58 and resized == []             # no yield: the launch budget fits the slots
+    room['gb'] = 30.                                                   # 26 GB to grow: room
+    collector.priority_read = 0
+    collector._priority()
+    assert collector.active_slots == 192 and collector.room_slots is None and resized == ['restore']
+    plain = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    plain.active_slots = 64
+    plain.setup(['t1'], time.time() + 3600, endpoints=[('http://own', 64)], room_slots=64)
+    assert plain.room_slots is None and plain.active_slots == 64        # not fewer than its slots: no limit
+
+
 def test_pop_rl_actor_profiles_keep_pop_settings():
     pop_settings, pop_fmt = pop_rl_actor.pop_sglang('fp8_e4m3', 20, profile='pop')
     assert pop_settings['max_running'] == 20 and pop_fmt == 'sglang-pop-rtx4060-bf16-vendor-projection-kv-fp8_e4m3'

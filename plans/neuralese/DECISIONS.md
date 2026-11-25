@@ -13994,3 +13994,27 @@ episode labels are weak early in an episode. Criterion (0.78) not met; diagnosis
 (DGX `cmp-t1-build-4`): 2,052 rollouts, 178 twins / 47 episodes after removing answer-verdict feedback (681 failed
 episodes have no diagnostic fact): OPSD supply from these worlds is thin; richer diagnostic facts (verifier diffs that
 name no answer) are the lever. T1 training queued on g4b (`cmp-t1-opsd`).
+
+## 2026-11-25 21:30 aei1: the DGX collection runs at what fits (collection-fit agent)
+
+**Observation.** Twice today (18:44-19:48, 20:20-21:18+) `aei1-collect-v0009` (192 slots), preempted by a round's
+data/build step (24 GB, high), waited in the ledger at its full 70 GB claim (need 85 with the 15 GB reserve; 58.6 GB
+headroom) for about an hour, DGX GPU at 0%. The prep-share requeue ran only from `wait_for_room`, before a stage
+launched; once the stage ran, nothing resized the waiting collection.
+
+**Change (default on, `scripts/neuralese_data/expert_iteration.py`).**
+- Whenever the driver's DGX collection waits in the ledger (a `collection_fit_loop` thread every 60 s, every
+  `wait_for_room` poll, and each launch), it is requeued at the largest slot count whose budget fits `ledger_room_gb`
+  (ledger headroom less the reserve and the budgets of waiting jobs of at least its priority queued ahead of it), at
+  least 32 slots. The collector starts with `--room-slots N` (no yield on its first check: its launch budget already
+  matches), and once the ledger has room for the growth to `--ledger-full-gb` it takes its full slots and restores its
+  claim (`memory_ledger resize restore`, the existing path). `stop_collections` and the requeue share `COLLECT_LOCK`, so
+  a DGX SFT's stop is never undone by a requeue. Opt-out: `--collect-fit-min-slots 0` / `NATLANG_EI_COLLECT_FIT_MIN_SLOTS=0`.
+- The full claim follows measured use: the largest ledger-learned peak of the newest three `<name>-collect-vNNNN`
+  units x 1.1, capped by `dgx_collection_budget_gb`. Opt-out: `--no-measured-collection-claim` /
+  `NATLANG_EI_MEASURED_COLLECT_CLAIM=0`. With today's peaks (v0007 61.8, v0008 56.1, v0009 65.5 GiB) this is 72 ->
+  capped at 70, so it changes nothing until the peaks fall; the room fit is the operative fix.
+- Fixed along the way: a collection launched below its full size (shrunk, or now a measured claim) got MemoryMax =
+  its launch budget whenever its family (one per version) had no learned peak yet, so restoring the claim to 70 GB left
+  a cgroup cap at the shrunk size. Every DGX collection launch (async driver and `cycle` collect/recollect) now passes
+  `--host-max-gb` = the formula cap.

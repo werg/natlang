@@ -127,6 +127,76 @@ DGX_COLLECTOR_SLOT_GB = 0.2
 def dgx_collection_budget_gb(kv_gb, slots):
     """Ledger GB of a DGX collection unit: its SGLang engine (KV pool + DGX_ENGINE_GB) and its collector slots."""
     return round(kv_gb + DGX_ENGINE_GB + slots * DGX_COLLECTOR_SLOT_GB)
+
+
+# A waiting DGX collection runs at what fits (DECISIONS 2026-11-25 "the DGX collection runs at what fits"): twice on
+# 2026-11-25 (18:44-19:48, 20:20-21:18+) v0009 was preempted by a round's data/build step (24 GB, high) and then waited
+# in the ledger at its full 70 GB (need 85 with the 15 GB reserve, 58.6 GB headroom) for about an hour, DGX GPU at 0%;
+# the prep-share requeue ran only before a stage launched. Now, whenever the driver's DGX collection waits in the ledger
+# (checked every COLLECT_FIT_CHECK_SECONDS and at each launch), it is requeued at the largest slot count whose budget
+# fits the room now (``ledger_room_gb``: headroom less the reserve and the waiting jobs ahead of it), at least
+# COLLECT_FIT_MIN_SLOTS; the collector starts with those slots (``collect --room-slots``) and takes its full slots and
+# claim back once the ledger has room for the difference. 0 opts out (--collect-fit-min-slots 0, or
+# NATLANG_EI_COLLECT_FIT_MIN_SLOTS=0 in the driver's environment).
+COLLECT_FIT_MIN_SLOTS = int(os.environ.get('NATLANG_EI_COLLECT_FIT_MIN_SLOTS', '32'))
+COLLECT_FIT_CHECK_SECONDS = 60
+# The full claim follows measured use: the largest ledger-learned peak (``family_peaks``) of this driver's newest
+# MEASURED_COLLECT_RECENT DGX collection units times MEASURED_COLLECT_MARGIN (the ledger's own learned-peak margin),
+# capped by ``dgx_collection_budget_gb`` (which stays the unit's MemoryMax). Without a measured peak: the formula.
+# Opt-out: --no-measured-collection-claim (or NATLANG_EI_MEASURED_COLLECT_CLAIM=0).
+MEASURED_COLLECT_CLAIM = os.environ.get('NATLANG_EI_MEASURED_COLLECT_CLAIM', '1') != '0'
+MEASURED_COLLECT_RECENT = 3
+MEASURED_COLLECT_MARGIN = 1.1
+
+
+def ledger_family_peaks():
+    """The memory ledger's learned peaks (bytes) by unit family; {} when unreadable."""
+    try:
+        from scripts.memory_ledger import read_snapshot
+        return dict(read_snapshot().get('family_peaks') or {})
+    except Exception:
+        return {}
+
+
+def measured_collection_gb(name, peaks, recent=MEASURED_COLLECT_RECENT, margin=MEASURED_COLLECT_MARGIN):
+    """GB: the largest learned peak among the newest ``recent`` DGX collection units ``<name>-collect-vNNNN`` (fills,
+    selects and remote collectors are other families) times ``margin``; None without one."""
+    pattern = re.compile(rf'{re.escape(name)}-collect-v(\d+)')
+    rows = sorted((int(m.group(1)), peak) for family, peak in peaks.items() if (m := pattern.fullmatch(family)) and peak)
+    if not rows:
+        return None
+    return round(max(peak for _, peak in rows[-recent:]) / 2**30 * margin)
+
+
+def ledger_room_gb(unit=None, priority='medium'):
+    """GB a job could be admitted with now: the ledger's headroom (MemAvailable less what running claims still
+    reserve) less the reserve and the budgets of waiting jobs of at least ``priority`` queued ahead of ``unit`` (all
+    of them when ``unit`` is not queued). None when unknown."""
+    try:
+        from scripts.memory_ledger import (GIB, PRIORITIES, default_reserve, headroom, read_snapshot, shared_usage,
+                                           waiting_order)
+        state = read_snapshot()
+        state.setdefault('claims', {})
+        gpu, usage = shared_usage()
+        free, _ = headroom(state, gpu, usage)
+        name = unit if unit is None or unit.endswith('.service') else unit + '.service'
+        rank, ahead = PRIORITIES[priority], 0
+        for other, entry in waiting_order(state):
+            if other == name:
+                break
+            if PRIORITIES.get(entry.get('priority'), 2) >= rank:
+                ahead += int(entry.get('budget') or 0)
+        return (free - default_reserve(0) - ahead) / GIB
+    except Exception:
+        return None
+
+
+def fit_collection_slots(room_gb, slots, budget_of, min_slots):
+    """The largest slot count in [min_slots, slots] whose ``budget_of(slots)`` fits ``room_gb``; None if none does."""
+    for count in range(int(slots), max(1, int(min_slots)) - 1, -1):
+        if budget_of(count) <= room_gb:
+            return count
+    return None
 # Collection defaults (async-train §3 FP8 collection weights, §8 JOLT+ guided attempts; every collection path, cycle
 # and async driver, reads them). FP8: fork ec27f0809a runs online FP8 weights in LFM3's natlang projections and reloads
 # them in place; an actor on an older fork checkout or a GPU below sm_89 serves BF16 and logs
@@ -459,7 +529,7 @@ def frontier_collector(base):
         ``priority_share``."""
 
         def setup(self, order, deadline, endpoints=None, priority_dir=None, priority_share=HELD_PRIORITY_SHARE,
-                  verify=None, ledger_unit=None, ledger_full_gb=None):
+                  verify=None, ledger_unit=None, ledger_full_gb=None, room_slots=None):
             self.order = collections.deque(t for t in order if t in self.by_id and t not in self.own)
             self.deadline = deadline
             self.endpoints = list(endpoints) if endpoints else [(getattr(self.args, 'actor', None),
@@ -472,6 +542,12 @@ def frontier_collector(base):
             self.ledger_unit = ledger_unit      # this collection's ledger unit: its claim follows a yield
             self.ledger_full_gb = ledger_full_gb    # its full-size claim (a collection launched shrunk restores to it)
             self.full_slots = sum(count for _, count in self.endpoints)
+            # launched at the slots that fitted the ledger's room (``fit_collection_slots``): it runs these until the
+            # ledger has room for its full claim, then takes its full slots and claim back (``_room_returned``); its
+            # launch budget already matches them, so the first check does not yield
+            self.room_slots = int(room_slots) if room_slots and int(room_slots) < self.full_slots else None
+            if self.room_slots:
+                self.active_slots = min(getattr(self, 'active_slots', self.full_slots), self.room_slots)
             self._learnable()
 
         def _priority(self):
@@ -480,12 +556,35 @@ def frontier_collector(base):
                 return
             self.priority_read = time.time()
             active = priority_slots(self.full_slots, held_priority_claims(self.priority_dir), self.priority_share)
+            if self.room_slots:
+                if self._room_returned():
+                    print(json.dumps({'event': 'ledger room returned', 'room_slots': self.room_slots,
+                                      'slots': self.full_slots}), flush=True)
+                    self.room_slots = None
+                else:
+                    active = min(active, self.room_slots)
             if active != self.active_slots:
                 print(json.dumps({'event': 'held priority', 'active_slots': active, 'slots': self.full_slots}), flush=True)
                 if self.ledger_unit and (active < self.full_slots) != (self.active_slots < self.full_slots):
                     threading.Thread(target=self._resize_claim, args=('yield' if active < self.full_slots else 'restore',),
                                      daemon=True).start()
                 self.active_slots = active
+
+        def _room_returned(self):
+            """Whether the ledger now has room (``ledger_room_gb``) for this collection's claim to grow to its full
+            size (``ledger_full_gb``)."""
+            if not self.ledger_unit or not self.ledger_full_gb:
+                return False
+            try:
+                from scripts.memory_ledger import GIB, claimed_budget
+                claimed = claimed_budget(self.ledger_unit)
+            except Exception:
+                return False
+            if claimed is None:
+                return False
+            grow = float(self.ledger_full_gb) - claimed / GIB
+            room = ledger_room_gb(self.ledger_unit, COLLECTION_PRIORITY) if grow > 0 else 0.
+            return grow <= 0 or (room is not None and room >= grow)
 
         def _resize_claim(self, mode):
             """Yielding slots, the collection lowers its ledger claim to its use (the memory its idle slots release
@@ -722,7 +821,8 @@ def collect(args):
                     priority_dir=None if args.no_held_priority or actor is None else Path(args.held_priority_dir),
                     priority_share=args.held_priority_share, verify=actor is None,
                     ledger_unit=None if actor is None else args.unit_prefix,
-                    ledger_full_gb=getattr(args, 'ledger_full_gb', None))
+                    ledger_full_gb=getattr(args, 'ledger_full_gb', None),
+                    room_slots=None if actor is None else getattr(args, 'room_slots', None))
     # the groups earlier runs of this policy left unfinished (stops, preemptions, OOM kills) resume first
     resumed, not_resumed = collector.resume_unfinished()
     if resumed or not_resumed:
@@ -1477,14 +1577,40 @@ class Cycle:
         return yield_claim(HELD_PRIORITY_DIR, f'{name}-prep', float(getattr(self.a, 'prep_yield_share', PREP_YIELD_SHARE)),
                            extra={'reason': 'round preparation'})
 
-    def collection_budget(self, slots):
-        """(ledger GB to launch a DGX collection of ``slots`` with, its full-size GB): while a round prepares
-        (``prep_share``) it launches at the prepared share's budget, since its collector starts with that share of its
-        slots, and restores the full claim when the preparation ends (2026-11-24 17:18: v0007 launched at its full
-        70 GB beside r0008's build and waited 11 min, GPU idle)."""
-        full = dgx_collection_budget_gb(self.a.kv_gb, slots)
+    def collection_full_gb(self, slots):
+        """(full-size ledger GB of a DGX collection of ``slots``, its cap): the formula (``dgx_collection_budget_gb``,
+        the cap and the unit's MemoryMax), lowered to the measured use of this driver's recent collections
+        (``measured_collection_gb``) unless --no-measured-collection-claim."""
+        cap = dgx_collection_budget_gb(self.a.kv_gb, slots)
+        measured = (measured_collection_gb(self.a.name, ledger_family_peaks())
+                    if getattr(self.a, 'measured_collection_claim', MEASURED_COLLECT_CLAIM) else None)
+        return (min(cap, max(measured, self.a.kv_gb + DGX_ENGINE_GB)) if measured else cap), cap
+
+    def collection_plan(self, slots, room_gb=None):
+        """How to launch a DGX collection of ``slots``: {budget, full, cap, slots, room_slots}. While a round prepares
+        (``prep_share``) it starts at the prepared share of its slots (2026-11-24 17:18: v0007 launched at its full
+        70 GB beside r0008's build and waited 11 min, GPU idle); with ``room_gb`` (``ledger_room_gb``) at most the
+        slots whose budget fits it, if at least --collect-fit-min-slots (``room_slots``: the collector restores its
+        full slots when room returns). ``full``: the claim it restores; ``cap``: its MemoryMax."""
+        full, cap = self.collection_full_gb(slots)
         share = prep_share(HELD_PRIORITY_DIR) if float(getattr(self.a, 'prep_yield_share', PREP_YIELD_SHARE)) < 1 else 1.
-        return (full if share >= 1 else dgx_collection_budget_gb(self.a.kv_gb, max(1, round(slots * share)))), full
+        start = slots if share >= 1 else max(1, round(slots * share))
+
+        def budget_of(count):
+            return full if count >= slots else min(full, dgx_collection_budget_gb(self.a.kv_gb, count))
+        room_slots = None
+        min_slots = int(getattr(self.a, 'collect_fit_min_slots', COLLECT_FIT_MIN_SLOTS) or 0)
+        if room_gb is not None and min_slots > 0 and budget_of(start) > room_gb:
+            fitted = fit_collection_slots(room_gb, start, budget_of, min(min_slots, start))
+            if fitted is not None and fitted < start:
+                start = room_slots = fitted
+        return {'budget': budget_of(start), 'full': full, 'cap': cap, 'slots': start, 'room_slots': room_slots}
+
+    def collection_budget(self, slots):
+        """(ledger GB to launch a DGX collection of ``slots`` with, its full-size GB) at the prep share
+        (``collection_plan`` without a room fit)."""
+        plan = self.collection_plan(slots)
+        return plan['budget'], plan['full']
 
     collection_pending = staticmethod(lambda: False)   # the async driver's: its standing collection waits in the ledger
 
@@ -1506,13 +1632,14 @@ class Cycle:
         return True
 
     def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None, room=False,
-               shrunk=False):
+               shrunk=False, host_max_gb=None):
         """``command`` (argv) as ledger unit ``unit``; waits for it unless ``detach``; a running unit is joined.
         ``repo``: the checkout on NATLANG_REPO/PYTHONPATH (default the pin). A unit the ledger holds requeued (preempted,
         awaiting its relaunch) is joined too, never launched a second time. ``room``: first ``wait_for_room`` (a
         preparation stage beside a yielding collection). ``shrunk``: it starts at a reduced share of its full size and
         restores its claim later (a collection launched during round preparation): admitted at ``budget``, not raised
-        to its family's learned peak (``memory_ledger run --shrunk``)."""
+        to its family's learned peak (``memory_ledger run --shrunk``). ``host_max_gb``: its MemoryMax when above
+        ``budget`` (a collection claiming less than the size it may grow to: shrunk, or a measured claim)."""
         if room:
             self.wait_for_room(unit, budget)
         if not self.present(unit):
@@ -1524,6 +1651,7 @@ class Cycle:
                                                                     'OMP_NUM_THREADS', 'MKL_NUM_THREADS')]]
             subprocess.run([*LEDGER, 'run', '--unit', unit, '--budget-gb', str(budget), '--priority', priority,
                             '--wait', '36000', '--detach', *(['--shrunk'] if shrunk else []),
+                            *(['--host-max-gb', str(host_max_gb)] if host_max_gb and host_max_gb > budget else []),
                             '--workdir', str(workdir or self.pin), '--',
                             *env, '/bin/sh', '-c', f'exec {shell}'], check=True)
         if not detach:
@@ -1748,7 +1876,7 @@ class Cycle:
             os.replace(self.collect_dir, aside)
             self.note(stage='collect', moved_aside=str(aside), served=sorted(served))
 
-    def collect_command(self, unit, start, sha, slots, endpoints=(), full_gb=None):
+    def collect_command(self, unit, start, sha, slots, endpoints=(), full_gb=None, room_slots=None):
         """``expert_iteration.py collect`` for this cycle (one builder for the DGX actor and remote endpoints): the
         task order, k, hours, Neuralese variants, JOLT+ attempts, FP8 collection weights, slots; the DGX actor's
         engine flags, or ``--actor`` endpoints."""
@@ -1767,7 +1895,8 @@ class Cycle:
                        '--memetic-nested-slots' if getattr(self.a, 'memetic_nested_slots', True)
                        else '--no-memetic-nested-slots',
                        '--slots', slots, '--unit-prefix', unit, *actor,
-                       *(['--ledger-full-gb', full_gb] if full_gb is not None and not endpoints else []))
+                       *(['--ledger-full-gb', full_gb] if full_gb is not None and not endpoints else []),
+                       *(['--room-slots', room_slots] if room_slots and not endpoints else []))
 
     def serve_colab(self, hosts, start, sha, profile):
         """Serve the collected policy on each reachable Colab G4 session (``pop_rl_actor serve-checkpoint
@@ -1816,10 +1945,11 @@ class Cycle:
                             self.collect_command(unit, start, sha, profile.collect_slots, endpoints),
                             self.dir / 'collect.log', detach=True)
             else:
-                budget, full = self.collection_budget(self.a.slots)
+                plan = self.collection_plan(self.a.slots)
+                budget, full = plan['budget'], plan['full']
                 self.ledger(unit, budget, COLLECTION_PRIORITY,
                             self.collect_command(unit, start, sha, self.a.slots, full_gb=full),
-                            self.dir / 'collect.log', detach=True, shrunk=budget < full)
+                            self.dir / 'collect.log', detach=True, shrunk=budget < full, host_max_gb=plan['cap'])
                 if self.a.fill:         # filled reasoning draws on the DGX actor (a remote one exposes no SGLang port)
                     self.fill_alongside(unit, sha)
             time.sleep(20)
@@ -2455,10 +2585,11 @@ class Cycle:
             sha = self.previous_start_sha(reference)
             self.set_collect_aside(sha)
             unit = f'{self.a.name}-recollect'
-            budget, full = self.collection_budget(self.a.slots)
+            plan = self.collection_plan(self.a.slots)
+            budget, full = plan['budget'], plan['full']
             self.ledger(unit, budget, COLLECTION_PRIORITY,
                         self.collect_command(unit, reference, sha, self.a.slots, full_gb=full),
-                        self.dir / 'collect.log', detach=True, shrunk=budget < full)
+                        self.dir / 'collect.log', detach=True, shrunk=budget < full, host_max_gb=plan['cap'])
             record['collecting'] = unit
         if stop_next and self.done('next'):
             nxt = json.loads((self.dir / 'stages' / 'next.done').read_text())
@@ -3352,6 +3483,8 @@ class AsyncRoundDriver:
             dir=str(self.root), name=a.name, start=a.start, start_sha=a.start_sha or BASE_SHA, commit=a.commit,
             pin=a.pin, sft_work=a.sft_work, seed_work=a.seed_work, live_work=a.live_work, k=a.k, collect_hours=a.collect_hours, slots=a.slots,
             kv_gb=a.kv_gb, prep_yield_share=getattr(a, 'prep_yield_share', PREP_YIELD_SHARE),
+            collect_fit_min_slots=getattr(a, 'collect_fit_min_slots', COLLECT_FIT_MIN_SLOTS),
+            measured_collection_claim=getattr(a, 'measured_collection_claim', MEASURED_COLLECT_CLAIM),
             fill=a.fill, fill_inflight=a.fill_inflight, neuralese_variants=a.neuralese_variants,
             neuralese_variant_share=a.neuralese_variant_share, no_neuralese_variants=a.no_neuralese_variants,
             collect_weight_dtype=a.collect_weight_dtype, teacher_attempts=a.teacher_attempts,
@@ -3430,34 +3563,55 @@ class AsyncRoundDriver:
     def collection_pending(self):
         """Whether the standing DGX collection of the newest policy waits in the ledger (launched or requeued, not
         running): the round's preparation steps let it in first (``Cycle.wait_for_room``). One queued at more than
-        the budget it would launch with now (``collection_budget``: the prep share while a round prepares) is
-        requeued at that budget first (``requeue_collection_at_share``)."""
+        the budget it would launch with now (``collection_plan``: the prep share while a round prepares, at most what
+        fits the ledger's room) is requeued at that budget first (``requeue_collection_to_fit``)."""
         try:
             cur = self.controller.current
             unit = self.collection_unit(cur)
             if not ledger_queued(unit) or self.c.active(unit):
                 return False
-            self.requeue_collection_at_share(cur, unit)
+            self.requeue_collection_to_fit(cur, unit)
             return ledger_queued(unit) and not self.c.active(unit)
         except Exception:
             return False
 
-    def requeue_collection_at_share(self, policy, unit):
-        """A DGX collection waiting in the ledger at more than ``collection_budget`` asks now is cancelled and queued
-        again at that budget (its collector restores the full claim after the preparation, as at any launch).
-        2026-11-25 00:39: a restarted driver queued v0001 at its full 70 GB before the round's prep share existed;
-        it could not fit (short 4.7 GB behind unpreemptible remote collectors) and the frontier waited out
-        PREP_YIELD_WAIT behind it with the GPU idle. Returns whether it requeued."""
-        queued = ledger_waiting_gb(unit)
-        if queued is None:
-            return False
-        budget, _ = self.c.collection_budget(self.a.slots)
-        if queued <= budget + 0.5:
-            return False
-        self.c.stop_unit(unit)
-        self.note(collection_requeued=unit, from_gb=round(queued, 1), to_gb=budget, why='the prep share')
-        self.ensure_collection(policy)
-        return True
+    def collection_fit_loop(self):
+        """The standing check that the DGX collection never waits in the ledger at more than fits
+        (``collection_pending``), whatever the main loop waits on: 2026-11-25 v0009 waited ~1 h twice at its full
+        70 GB while a round's data/build step ran, GPU idle. Off with --collect-fit-min-slots 0."""
+        while int(getattr(self.a, 'collect_fit_min_slots', COLLECT_FIT_MIN_SLOTS) or 0) > 0:
+            time.sleep(COLLECT_FIT_CHECK_SECONDS)
+            self.collection_pending()
+
+    def collection_room_gb(self, unit):
+        """``ledger_room_gb`` for the DGX collection ``unit``; None when the room fit is off."""
+        if int(getattr(self.a, 'collect_fit_min_slots', COLLECT_FIT_MIN_SLOTS) or 0) <= 0:
+            return None
+        return ledger_room_gb(unit, COLLECTION_PRIORITY)
+
+    def requeue_collection_to_fit(self, policy, unit):
+        """A DGX collection waiting in the ledger at more than ``collection_plan`` asks now is cancelled and queued
+        again at that budget (its collector restores the full claim after the preparation and once the ledger has
+        room, as at any launch). 2026-11-25 00:39: a restarted driver queued v0001 at its full 70 GB before the
+        round's prep share existed; it could not fit (short 4.7 GB behind unpreemptible remote collectors) and the
+        frontier waited out PREP_YIELD_WAIT behind it with the GPU idle. 2026-11-25 18:44 and 20:20: v0009, preempted
+        by a running data/build step, waited ~1 h at 70 GB with 58.6 GB of headroom. Returns whether it requeued."""
+        with self.COLLECT_LOCK:         # never beside stop_collections (a DGX SFT stops it for good)
+            if not ledger_queued(unit) or self.c.active(unit):
+                return False
+            queued = ledger_waiting_gb(unit)
+            if queued is None:
+                return False
+            room = self.collection_room_gb(unit)
+            plan = self.c.collection_plan(self.a.slots, room)
+            if queued <= plan['budget'] + 0.5:
+                return False
+            self.c.stop_unit(unit)
+            self.note(collection_requeued=unit, from_gb=round(queued, 1), to_gb=plan['budget'], slots=plan['slots'],
+                      room_gb=None if room is None else round(room, 1),
+                      why='the ledger room' if plan['room_slots'] else 'the prep share')
+            self.ensure_collection(policy)
+            return True
 
     def ensure_collection(self, policy):
         """The standing DGX collection serves exactly ``policy`` (the newest published): an earlier policy's collection
@@ -3489,11 +3643,15 @@ class AsyncRoundDriver:
             self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
         with self.COLLECT_LOCK:
             self.c.collect_dir = work
-            budget, full = self.c.collection_budget(self.a.slots)
-            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots, full_gb=full)
+            plan = self.c.collection_plan(self.a.slots, self.collection_room_gb(unit))
+            budget, full = plan['budget'], plan['full']
+            argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots, full_gb=full,
+                                          room_slots=plan['room_slots'])
         argv[argv.index('--tasks') + 1] = str(tasks)
-        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True, shrunk=budget < full)
-        self.note(collection_started=unit, policy=policy['sha256'], work=str(work))
+        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True, shrunk=budget < full,
+                      host_max_gb=plan['cap'])
+        self.note(collection_started=unit, policy=policy['sha256'], work=str(work), budget_gb=budget, full_gb=full,
+                  slots=plan['slots'])
         if self.a.fill:
             threading.Thread(target=self._fill_beside, args=(unit, work, policy), daemon=True).start()
         return unit
@@ -3829,11 +3987,12 @@ class AsyncRoundDriver:
     def stop_collections(self, *, remote=True):
         """Stop the DGX collections and their fills (they hold the GPU the DGX learner needs) and, with ``remote``,
         the remote actors' collection clients too."""
-        for work in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists() else ():
-            unit = f'{self.a.name}-collect-{work.name.split("-")[0]}'
-            for u in (unit, f'{unit}-fill', *(self.remote_units(unit) if remote else ())):
-                if self.c.present(u):          # a requeued one too, or the ledger relaunches it beside the learner
-                    self.c.stop_unit(u)
+        with self.COLLECT_LOCK:         # a fit requeue (collection_fit_loop) never relaunches one it stops
+            for work in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists() else ():
+                unit = f'{self.a.name}-collect-{work.name.split("-")[0]}'
+                for u in (unit, f'{unit}-fill', *(self.remote_units(unit) if remote else ())):
+                    if self.c.present(u):          # a requeued one too, or the ledger relaunches it beside the learner
+                        self.c.stop_unit(u)
 
     def standing_teacher(self):
         """``ensure_teacher`` from a wait or the loop: a failure is logged, never the caller's end."""
@@ -5243,6 +5402,7 @@ class AsyncRoundDriver:
             self.controller.resume_after_hunt()
         threading.Thread(target=self.teacher_loop, daemon=True).start()
         threading.Thread(target=self.remote_collect_loop, daemon=True).start()
+        threading.Thread(target=self.collection_fit_loop, daemon=True).start()
         completed = 0
         while self.a.max_rounds <= 0 or completed < self.a.max_rounds:
             self.standing_teacher()
@@ -5499,6 +5659,9 @@ def main():
     c.add_argument('--episode-reruns', type=int, default=None, help="grpo's --episode-reruns")
     c.add_argument('--ledger-full-gb', type=float,
                    help='the full-size ledger claim this collection restores after a yield (one launched shrunk)')
+    c.add_argument('--room-slots', type=int,
+                   help='start with this many active slots (what fitted the ledger) and take the full --slots and '
+                        '--ledger-full-gb claim back once the ledger has room for them')
     f = sub.add_parser('frontier')
     f.add_argument('--out', required=True)
     f.add_argument('--collect', action='append', required=True)
@@ -5542,6 +5705,10 @@ def main():
     y.add_argument('--prep-yield-share', type=float, default=PREP_YIELD_SHARE,
                    help='share of its slots a DGX collection keeps while a round prepares beside it (it also lowers its ledger '
                         'claim instead of being preempted; 1 opts out; env NATLANG_EI_PREP_YIELD_SHARE)')
+    y.add_argument('--no-measured-collection-claim', dest='measured_collection_claim', action='store_false',
+                   default=MEASURED_COLLECT_CLAIM,
+                   help='claim the formula size for a DGX collection, not its recent measured peak x 1.1 '
+                        '(env NATLANG_EI_MEASURED_COLLECT_CLAIM=0)')
     y.add_argument('--fill', help='filled_reasoning.py OUT directory: generate on the collect actor, build into the mix')
     y.add_argument('--fill-inflight', type=int, default=32,
                    help='filled-reasoning draws kept in flight on the collect actor, which runs this many requests '
@@ -5766,6 +5933,14 @@ def main():
     ad.add_argument('--prep-yield-share', type=float, default=PREP_YIELD_SHARE,
                    help='share of its slots a DGX collection keeps while a round prepares beside it (it also lowers its ledger '
                         'claim instead of being preempted; 1 opts out; env NATLANG_EI_PREP_YIELD_SHARE)')
+    ad.add_argument('--collect-fit-min-slots', type=int, default=COLLECT_FIT_MIN_SLOTS,
+                    help='a DGX collection waiting in the ledger is requeued at the most slots (at least this many) '
+                         'whose budget fits the room now, restoring its full slots when room returns (0 opts out; env '
+                         'NATLANG_EI_COLLECT_FIT_MIN_SLOTS)')
+    ad.add_argument('--no-measured-collection-claim', dest='measured_collection_claim', action='store_false',
+                    default=MEASURED_COLLECT_CLAIM,
+                    help='claim the formula size for a DGX collection, not its recent measured peak x 1.1 '
+                         '(env NATLANG_EI_MEASURED_COLLECT_CLAIM=0)')
     ad.add_argument('--collect-hours', type=float, default=72.,
                     help="a standing collection's horizon (the next publication stops it first)")
     ad.add_argument('--snapshot-min-hours', type=float, default=1.0,
