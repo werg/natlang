@@ -19,6 +19,7 @@ from natlang_neuralese.common.jsonio import (  # noqa: E402
     canonical_json_str,
     utc_now_iso,
     write_json_durable,
+    write_bytes_durable,
 )
 
 NESTED = {"b": [1, {"z": 1, "a": "é☃"}], "a": None, "é": 1.5}
@@ -92,6 +93,76 @@ def test_write_json_durable_replaces_whole_file(tmp_path):
     write_json_durable(path, {"b": 1, "a": [2]})
     assert path.read_text() == '{\n  "a": [\n    2\n  ],\n  "b": 1\n}'
     assert sorted(p.name for p in tmp_path.iterdir()) == ["state.json"]
+
+
+def test_concurrent_durable_publications_never_share_pending_bytes(tmp_path, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    path = tmp_path / 'state.json'
+    barrier = threading.Barrier(2)
+    pending = []
+    replace = Path.replace
+    def overlap(source, destination):
+        if Path(destination) == path:
+            pending.append(source)
+            barrier.wait(timeout=5)
+        return replace(source, destination)
+    monkeypatch.setattr(Path, 'replace', overlap)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        jobs = [workers.submit(write_bytes_durable, path, value) for value in (b'one' * 10000, b'two' * 10000)]
+        for job in jobs:
+            job.result(timeout=5)
+    assert len(set(pending)) == 2
+    assert path.read_bytes() in (b'one' * 10000, b'two' * 10000)
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_failed_publisher_cannot_remove_another_pending_publication(tmp_path, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    path = tmp_path / 'state.json'
+    barrier, failed = threading.Barrier(2), threading.Event()
+    role = threading.local()
+    replace = Path.replace
+    def overlap(source, destination):
+        if Path(destination) == path:
+            barrier.wait(timeout=5)
+            if role.fail:
+                raise OSError('owned publication failure')
+            assert failed.wait(timeout=5)
+        return replace(source, destination)
+    def publish(fail):
+        role.fail = fail
+        if fail:
+            try:
+                with pytest.raises(OSError, match='owned publication failure'):
+                    write_bytes_durable(path, b'failed')
+            finally:
+                failed.set()
+        else:
+            write_bytes_durable(path, b'kept')
+    monkeypatch.setattr(Path, 'replace', overlap)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        jobs = [workers.submit(publish, fail) for fail in (False, True)]
+        for job in jobs:
+            job.result(timeout=5)
+    assert path.read_bytes() == b'kept'
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_durable_publication_refuses_foreign_temporary_name_without_removing_it(tmp_path, monkeypatch):
+    import os
+    from types import SimpleNamespace
+    from natlang_neuralese.common import jsonio
+    monkeypatch.setattr(jsonio.uuid, 'uuid4', lambda: SimpleNamespace(hex='collision'))
+    pending = tmp_path / f'.natlang-state-{os.getpid()}-collision.pending'
+    pending.write_bytes(b'belongs to another publication')
+    path = tmp_path / 'state.json'
+    path.write_bytes(b'original')
+    with pytest.raises(FileExistsError):
+        write_bytes_durable(path, b'new')
+    assert path.read_bytes() == b'original'
+    assert pending.read_bytes() == b'belongs to another publication'
 
 
 def test_zstd_jsonl_preserves_exact_lines_and_all_frames(tmp_path):

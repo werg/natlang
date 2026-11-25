@@ -11,6 +11,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts' / 'neural
 import vibestudio_campaign
 
 
+@pytest.mark.parametrize('sync_catalog', [True, False])
+def test_drive_publishes_current_catalog_before_archival_work(tmp_path, monkeypatch, sync_catalog):
+    catalog = tmp_path / 'catalog.jsonl'
+    catalog.write_text('{"requiresReview":true}\n')
+    monkeypatch.setattr(vibestudio_campaign, 'campaign_scope', lambda *_: (None, {}, {}))
+    monkeypatch.setattr(vibestudio_campaign, 'attempt_context', lambda *_: ('epoch', {}, {}))
+    monkeypatch.setattr(vibestudio_campaign, 'prerequisite_holds', lambda *_: {})
+    monkeypatch.setenv('NATLANG_CAMPAIGN_SYNC_CATALOG', '1' if sync_catalog else '0')
+    published = []
+    def sync(_args, paths, *, checkpoint):
+        published.append(list(paths))
+        if paths == [catalog]:
+            assert not (tmp_path / 'reused.json').exists()
+            assert catalog.read_text() == '{"requiresReview":true}\n'
+    monkeypatch.setattr(vibestudio_campaign, 'sync_index', sync)
+    vibestudio_campaign.drive(SimpleNamespace(root=tmp_path, held=tmp_path/'held', seed=[], host=tmp_path,
+        review_model=None, attempts=2, max_waves=0))
+    assert ([catalog] in published) is sync_catalog
+    assert published[-1] == [tmp_path/'status.json', tmp_path/'reused.json']
+
+
 def test_new_release_fresh_coverage_precedes_historical_genuine_failures():
     cases = {'old': {'workspace': 'system', 'family': 'old'},
              'new-a': {'workspace': 'system', 'family': 'fresh-a'},

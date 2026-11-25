@@ -4,6 +4,8 @@
  * ONCE_EFFECTS run once per distinct arguments.
  */
 import { hostCopy } from './values.js';
+import { currentFrame, NatlangContextError } from '../runtime/context.js';
+import type { NatlangTask } from '../runtime/runtime.js';
 
 /** One service call, as recorded: requested, then completed or failed. */
 export type EffectEvent = { phase: 'requested' | 'completed' | 'failed'; service: string; method: string;
@@ -12,6 +14,33 @@ export type EffectEvent = { phase: 'requested' | 'completed' | 'failed'; service
   seq?: number;
   /** The exact arguments and result, for call records (§3.1). Traces keep only the previews above. */
   exact?: { args?: unknown[]; result?: unknown; async?: boolean } };
+
+export type EffectObserver = (event: EffectEvent) => unknown;
+export type EffectScope = { task: NatlangTask; callId?: string };
+const serviceObservers = new WeakMap<object, EffectObserver>();
+const observerSequences = new WeakMap<EffectObserver, number>();
+/** Only the recorder that created this exact service set can supply its observer. */
+export const recordingEffectObserver = (services: object): EffectObserver | undefined => serviceObservers.get(services);
+
+function currentObserver(scope: EffectScope | undefined, fallback: EffectObserver): EffectObserver | undefined {
+  if (!scope) return fallback;
+  if (scope.task.isClosed || scope.task.signal.aborted)
+    throw new NatlangContextError('The task that owns this native function has closed or been cancelled.');
+  const frame = currentFrame();
+  const recorder = scope.task.runtime.callStore();
+  const authenticated = frame && (frame.task === scope.task ||
+    (recorder && recorder === frame.task.runtime.callStore()));
+  if (frame?.parentCallId && frame.task.isInvocationActive(frame.parentCallId) && !authenticated)
+    throw new NatlangContextError('The native function belongs to a different recorder; invoke its lexical callable context.');
+  if (authenticated) {
+    if (frame.signal?.aborted) throw frame.signal.reason ?? new Error('The invoking call was cancelled.');
+    const observe = frame.parentCallId && frame.task.invocationEffectObserver(frame.parentCallId);
+    if (observe) return observe;
+  }
+  // Unscoped host code has no semantic decision to record. Never mutate a
+  // completed creator's capture. Language functions open their normal roots.
+  return scope.callId === undefined || scope.task.isInvocationActive(scope.callId) ? fallback : undefined;
+}
 
 /** Marks services that are already wrapped, so they are never recorded twice. */
 const RECORDED = Symbol('natlang.recorded-services');
@@ -86,7 +115,7 @@ function argumentsKey(method: string, args: unknown[]): string | undefined {
  */
 export function recordingServices<T extends Record<string, unknown>>(services: T,
   emit: (event: EffectEvent) => unknown,
-  authority?: T): T {
+  authority?: T, scope?: EffectScope): T {
   // Checked service-result wrappers belong to this invocation. Its descendants
   // reapply their own checks to the same lexical ports, rather than executing
   // through an ancestor's checker and observer.
@@ -98,7 +127,6 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
       return text === undefined ? String(value) : text.length > 400 ? `${text.slice(0, 400)} … (${text.length} chars)` : JSON.parse(text);
     } catch { return String(value); }
   };
-  let sequence = 0;
   const wrap = (target: object, label: string): object => {
     // The proxy stands over an empty shell, not over the service: a host may hand over frozen or hardened objects, and a
     // proxy over a non-configurable, non-writable property must return that property's own value.
@@ -116,19 +144,22 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
       if (typeof property === 'symbol') return value;
       if (typeof value === 'function') {
         const recorded = (...given: unknown[]) => {
+        const observe = currentObserver(scope, emit);
         const args = given.map(item => hostCopy(item));
-        const seq = sequence++;
-        emit({ phase: 'requested', service: label, method: property, args: preview(args), seq, exact: { args } });
+        const sink = observe ?? emit;
+        const seq = observerSequences.get(sink) ?? 0;
+        observerSequences.set(sink, seq + 1);
+        observe?.({ phase: 'requested', service: label, method: property, args: preview(args), seq, exact: { args } });
         try {
           const result = invokeServiceMethod(object, property, value, args);
           if (result && typeof (result as PromiseLike<unknown>).then === 'function')
-            return Promise.resolve(result).then(async resolved => { await emit({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
+            return Promise.resolve(result).then(async resolved => { await observe?.({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
               exact: { result: resolved, async: true } }); return resolved; },
-              async error => { await emit({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq, exact:{async:true} }); throw error; });
-          emit({ phase: 'completed', service: label, method: property, result: preview(result), seq, exact: { result, async: false } });
+              async error => { await observe?.({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq, exact:{async:true} }); throw error; });
+          observe?.({ phase: 'completed', service: label, method: property, result: preview(result), seq, exact: { result, async: false } });
           return result;
         } catch (error) {
-          emit({ phase: 'failed', service: label, method: property, error: String((error as Error)?.message ?? error), seq });
+          observe?.({ phase: 'failed', service: label, method: property, error: String((error as Error)?.message ?? error), seq });
           throw error;
         }
         };
@@ -159,6 +190,7 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
   const wrapped = Object.fromEntries(Object.entries(services).map(([name, service]) =>
     [name, service && typeof service === 'object' ? wrap(service, name) : service]));
   recordingSources.set(wrapped, source);
+  serviceObservers.set(wrapped, emit);
   Object.defineProperty(wrapped, RECORDED, { value: true });
   return Object.freeze(wrapped) as T;
 }

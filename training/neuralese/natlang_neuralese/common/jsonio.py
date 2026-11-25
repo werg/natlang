@@ -12,6 +12,7 @@ import re
 import os
 import io
 import subprocess
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
@@ -105,9 +106,14 @@ def write_canonical_jsonl(path, rows) -> int:
 def write_bytes_durable(path, data: bytes) -> None:
     """Durably replace bytes: fsync file, atomic rename, fsync containing directory."""
     path = Path(path)
-    pending = path.with_suffix(path.suffix + '.pending')
+    # A shared fixed .pending name lets a second publisher overwrite or unlink
+    # the first publisher's bytes before rename. Each operation owns its file.
+    pending = path.parent / f'.natlang-state-{os.getpid()}-{uuid.uuid4().hex}.pending'
+    created = False
     try:
-        with pending.open('wb') as stream:
+        descriptor = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        created = True
+        with os.fdopen(descriptor, 'wb') as stream:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
@@ -118,7 +124,8 @@ def write_bytes_durable(path, data: bytes) -> None:
         finally:
             os.close(directory)
     except BaseException:
-        pending.unlink(missing_ok=True)
+        if created:
+            pending.unlink(missing_ok=True)
         raise
 
 
