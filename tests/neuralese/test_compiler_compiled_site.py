@@ -101,3 +101,32 @@ def test_the_release_is_exactly_what_was_trained(tmp_path):
     served = native_graph_gradient(engine, body, None, evaluation_callback=lambda loss, groups, meta: float(loss.detach()),
                                    evaluation_target_specs={'s': {'kind': 'native-state', 'id': state}})
     assert served == pytest.approx(trained, rel=1e-5, abs=1e-6)
+
+
+def test_prepare_keeps_real_header_calls_and_counts_episode_state_imports(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.compiler import run_t2
+    from natlang_neuralese.rl import held_eval
+    monkeypatch.setattr(held_eval, 'training_exclusion_ids', lambda cases: frozenset({'held'}))
+    user = 'You are inside this call: f(x: string): string\n\nInstructions:\nDo it.\n\nIn eval you can use x.'
+    plain = [{'role': 'system', 'content': 's'}, {'role': 'user', 'content': user}]
+    stated = [{'role': 'system', 'content': 's'}, {'role': 'user', 'content': user},
+              {'role': 'tool', 'content': [{'type': 'native_state', 'id': {'id': 'nzs1_' + 'a' * 52}}]}]
+    turn = lambda messages: {'messages': messages, 'tools': [], 'target': {'role': 'assistant', 'content': 'ok'},
+                             'sampling': {'prompt': [{'token_ids': [1, 2, 3]}]}}
+    group = tmp_path / 'c' / 'groups' / 'g000000'
+    group.mkdir(parents=True)
+    (group / 'cases.jsonl').write_text('\n'.join(json.dumps({'id': t}) for t in ('t1', 'held')) + '\n')
+    rollouts = [{'task_id': 't1', 'outcome': 'task_success', 'sample': i, 'seed': i, 'turns': [turn(plain), turn(stated)]}
+                for i in range(3)]
+    rollouts += [{'task_id': 'held', 'outcome': 'task_success', 'sample': 9, 'seed': 9, 'turns': [turn(plain)]},
+                 {'task_id': 't1', 'outcome': 'semantic_mismatch', 'sample': 8, 'seed': 8, 'turns': [turn(plain)]}]
+    (group / 'rollouts.jsonl').write_text('\n'.join(json.dumps(r) for r in rollouts) + '\n')
+    out = tmp_path / 'rows.jsonl'
+    run_t2.prepare(SimpleNamespace(collections=[str(tmp_path / 'c')], out=str(out), max_prompt_tokens=4096, per_site=8,
+                                   min_per_site=2, dev_site_percent=0))
+    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    funnel = json.loads(out.with_suffix('.summary.json').read_text())['funnel']
+    assert funnel['imports_native_state'] == 3 and funnel['held_excluded_rollouts'] == 1 and funnel['failed_rollouts'] == 1
+    assert len(rows) == 3 and not any(run_t2.imports_native_state(row['messages']) for row in rows)
+    assert {row['split'] for row in rows} == {'train', 'dev-seen'}

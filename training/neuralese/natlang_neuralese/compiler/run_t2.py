@@ -44,6 +44,17 @@ def _jsonl(path):
                 yield json.loads(line)
 
 
+def imports_native_state(messages):
+    """Whether a call's messages carry a native-state part (an episode's Neuralese value or compaction capture)."""
+    def walk(value):
+        if isinstance(value, dict):
+            return value.get('type') == 'native_state' or any(walk(item) for item in value.values())
+        if isinstance(value, list):
+            return any(walk(item) for item in value)
+        return False
+    return walk(messages)
+
+
 def prepare(args):
     from ..rl.held_eval import training_exclusion_ids
     from .compiled_site import site_binding, site_header
@@ -57,7 +68,7 @@ def prepare(args):
     excluded = training_exclusion_ids(list(cases.values()))
     funnel = {'groups': len(groups), 'cases': len(cases), 'excluded_cases': len(excluded), 'rollouts': 0,
               'held_excluded_rollouts': 0, 'unknown_case_rollouts': 0, 'failed_rollouts': 0, 'calls': 0,
-              'no_header': 0, 'too_long': 0, 'kept_calls': 0}
+              'no_header': 0, 'too_long': 0, 'imports_native_state': 0, 'kept_calls': 0}
     by_site = {}
     for group in groups:
         path = Path(group) / 'rollouts.jsonl'
@@ -81,6 +92,11 @@ def prepare(args):
                 header = site_header(turn.get('messages') or [])
                 if header is None or not sampling:
                     funnel['no_header'] += 1
+                    continue
+                if imports_native_state(turn['messages']):
+                    # a state produced in its episode lives only in that collection's actor store (a live aei1 store
+                    # is not read here); the training engine could not render the call, so it is left out and counted
+                    funnel['imports_native_state'] += 1
                     continue
                 tokens = sum(len(part.get('token_ids') or ()) for part in sampling.get('prompt') or ())
                 if tokens > args.max_prompt_tokens:
