@@ -38,7 +38,7 @@ from concurrent.futures import Future
 import numpy as np
 
 from .chat import RequestError
-from .engine import TEXT_IN_CONTEXT_MODE, Engine, Sequence, _insert_privileged, derive_seed, role_bans
+from .engine import TEXT_IN_CONTEXT_MODE, Engine, GenerationRequest, Sequence, _insert_privileged, derive_seed, role_bans
 from ..common.sampling import TOP_K_MASS_FIELD
 from .native_protocol import FAILURE_CODES, capture_enabled, failure_descriptor
 
@@ -769,9 +769,69 @@ class SglangEngine(Engine):
             self.sglang_state_writes += 1
         return self._capture_result(block, record, prefix, span, value_type, imports, blocks, text=text)
 
-    def native_init_body(self, messages, tools, placeholder, text, **kwargs):
-        return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
+    def native_init_body(self, messages, tools, placeholder, text, *, adapters=None, **kwargs):
+        if adapters or not self.sglang_url or os.environ.get('NATLANG_SGLANG_INIT_BODY', '1') == '0':
+            return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
+                messages, tools, placeholder, text, adapters=adapters, **kwargs))
+        return self._measure_native_endpoint('init_body_sglang', lambda: self._sglang_init_body(
             messages, tools, placeholder, text, **kwargs))
+
+    def _sglang_init_body(self, messages, tools, placeholder, text, *, value_type=None, placeholder_occurrence=None,
+                          native_state_modes=None):
+        """`Engine._native_init_body_impl` on SGLang: the body's tokens captured at their rendered position in the soft
+        call by one capture request, the call's imports before it spliced by the fork as in generation
+        (`_sglang_import`). The tokens after the body cannot change its causal state, so they are recorded in the
+        source capture but not computed. Before 2026-11-25 every init-body reloaded the native model into the front:
+        on Pop (a CPU front) ~5 GB of host memory and CPU forwards, which OOM-killed the actor unit (DECISIONS
+        2026-11-25 "Pop actor OOM"). NATLANG_SGLANG_INIT_BODY=0 keeps the native path."""
+        rendered, body_segment, left, body, right = self.init_body_plan(
+            messages, tools, placeholder, text, placeholder_occurrence=placeholder_occurrence,
+            native_state_modes=native_state_modes)
+        seq = Sequence(GenerationRequest(messages=[], rl_capture=True, native_state_modes=native_state_modes), None)
+        ids, seq.sglang_imports = [], []
+
+        def tokens(part, producing=False):
+            if part:
+                seq.native_rl_prompt.append({'kind': 'tokens', 'token_ids': list(part),
+                                             'producing': [bool(producing)] * len(part)})
+                seq.native_own_position += len(part)
+
+        start = payload_start = payload_stop = None
+        for index, segment in enumerate(rendered.segments):
+            if isinstance(segment, int):
+                # an import after the body is recorded where it stands but not computed (the capture ends at the body)
+                spliced = len(seq.sglang_imports)
+                self._sglang_import(seq, ids if start is None else [], rendered.blocks[segment],
+                                    stop_gradient=bool(rendered.block_stop_gradients and rendered.block_stop_gradients[segment]),
+                                    source_occurrence=rendered.block_source_occurrences[segment]
+                                    if rendered.block_source_occurrences else None)
+                if start is not None:
+                    del seq.sglang_imports[spliced:]
+            elif index == body_segment:
+                ids.extend(left)
+                tokens(left)
+                ids.append(int(self.role_tokens.produce_open))
+                tokens([int(self.role_tokens.produce_open)])
+                start, payload_start = len(ids), seq.native_own_position
+                ids.extend(body)
+                tokens(body, producing=True)
+                payload_stop = seq.native_own_position
+                tokens([int(self.role_tokens.produce_close)])
+                tokens(right)
+            else:
+                part = self._template_tokens(segment, rendered.escape_nonce)
+                if start is None:
+                    ids.extend(part)
+                tokens(part)
+        if start is None:
+            raise RequestError('neuralese-native-state-text', 'rendered call did not contain the body span')
+        block, record = self._native_store_capture(body, [{'ids': ids, 'start': start, 'end': len(ids),
+                                                          **({'imports': seq.sglang_imports} if seq.sglang_imports else {})}],
+                                                   text=text)
+        with self._sglang_lock:
+            self.sglang_state_writes += 1
+        return self.init_body_result(block, record, body, text, value_type, start, seq.native_rl_prompt,
+                                     seq.native_imports, payload_start, payload_stop)
 
     # Each SGLang-served request runs on its own thread, which ends with the request (`_spawn`), never on a long-lived
     # pool. torch's CPU allocator on aarch64 is mimalloc (linked into libc10), whose heaps are per thread: an idle thread
@@ -1582,6 +1642,14 @@ class SglangEngine(Engine):
             raise ValueError('native state layer kinds disagree with the consumer')
         if bool((block.token_ids >= int(self.sglang_export['producer_embedding']['input_id_offset'])).any()):
             raise ValueError('native state token IDs are outside the target vocabulary')
+
+    def _native_exact(self, block):
+        """`Engine._native_exact`, answered from the export while the native model is released: the check is the same
+        identity and layer kinds, and asking the native backbone for them reloaded the whole model into the front
+        (`prompt_positions` of every init-body, 2026-11-25)."""
+        if self.__dict__.get('_native_backbone') is None and getattr(self, 'sglang_export', None):
+            return self._sglang_exact(block)
+        return super()._native_exact(block)
 
     def _sglang_exact(self, block):
         """`_native_exact` without the native model: the layer kinds come from the export."""

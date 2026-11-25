@@ -156,7 +156,12 @@ def test_start_and_serve_checkpoint_claim_one_admissible_pop_budget(monkeypatch)
     monkeypatch.setenv('NATLANG_POP_HELD_BUDGET_GB', '9.0')
     assert pop_rl_actor.pop_sglang_budget_gb() == '9.0'
     for path in (pop_rl_actor.start, pop_rl_actor._serve_pop):     # serve_checkpoint serves Pop through _serve_pop
-        assert 'pop_sglang_budget_gb()' in inspect.getsource(path)
+        assert 'pop_sglang_ledger_args()' in inspect.getsource(path)
+    # the engine runs on the host in the unit's cgroup: MemoryMax is the cap SGLANG_MEMORY_GB - 0.5, not the claim
+    # (the held serve ran under the 9.5 GB claim and was OOM-killed, 2026-11-25)
+    args = pop_rl_actor.pop_sglang_ledger_args()
+    assert args[args.index('--budget-gb') + 1] == '9.0'
+    assert float(args[args.index('--host-max-gb') + 1]) == pop_rl_actor.SGLANG_MEMORY_GB - .5
 
 
 def test_held_eval_job_refuses_the_superseded_colab_series(tmp_path, monkeypatch):

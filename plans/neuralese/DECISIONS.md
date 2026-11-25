@@ -12491,11 +12491,55 @@ SOURCES `searchswarm`; 0e6a11cbe). One real SearchSwarm item per task, no templa
   its length, including "X and Y" and "not X". Words outside the span that are QA hedges (and/or/not/maybe…) absent from
   the gold now reject. Opt-out `NATLANG_QA_CONTAINMENT_HEDGES=0`, tests in `ts-host/test/oracle.test.mjs`. This is a
   scoring change for every QA family: a pin with it is a new held scoring series. The 435 cases whose only failure was the
-  perturbation (`build/searchswarm/requalify-ids.json`) are requalified on a runtime with the fix as a second supply. They
-  are not admitted before then, because older pins score them leniently.
-- **Enters:** EI collections that draw the grpo-pool role after this commit (order 24). Opt-out: drop the role.
+  perturbation (`build/searchswarm/requalify-ids.json`) were requalified on a pin with the fix (0834b9013b4d, its own
+  verify.mjs). 381 passed; 54 still passed the perturbation through span F1 >= 0.8 on long golds (8+ tokens) or golds
+  that contain "and". Supply `natlang-rl-web-research-20261125b` holds 355 train rows (latin short 336, phrase 19) and is
+  in grpo-pool (order 25). Its held packets are `natlang-rl-web-research-{dev,confirmation}-20261125b` (10 + 16).
+  held-v3/v4 verify, custody and exclusion are 0. Collection pins older than fb11b6359 still accept "X and Y" for
+  these rows. Exposure is bounded because they share the source's single program shape (1% cap).
+- **Enters:** EI collections that draw the grpo-pool role after this commit (orders 24 and 25). Opt-out: drop the
+  role.
 - **Not checked:** the policy's pass rate (the questions are BrowseComp-style chains; the teacher used a median of 169
   search/visit calls including its sub-agents, and only 310 train items kept every sub-agent's evidence); episode length
   against the 40-call budget; visits with a goal other than the recorded one (they return the closest recorded reading);
   merging the corpora of duplicate questions; these same items are SFT rows in `sft-rows-sa2nl-20261124-searchswarm-*`,
   so an SFT round that trains them makes these tasks partly seen.
+
+## 2026-11-25 05:45 Pop actor OOM: init-body reloaded the native model into the CPU front; init-body runs on SGLang, Pop's held-serve MemoryMax is the 10.5 GB cap
+
+- **Observations.** aei1's Pop actor (`popheld-8e634a0f46ce-*`, SGLang on Pop's host, MemoryMax 9.5 GiB) was
+  OOM-killed at 04:48 and 05:17 after 27-60 min of serving. The kernel reports name the front
+  (`serve_native_checkpoint.py --device cpu`) as the victim both times with 5.7-5.8 GB anon (it starts at 0.86 GB);
+  cgroup anon was 9.9 GB, file cache 0.24 GB. The actor log shows the native model's `Loading weights 287/287` in
+  the middle of serving 12 and 15 min before each kill (04:36:18, 05:02:45), not at startup; the faulting thread was
+  in a scalar float loop (a CPU forward).
+- **Cause.** `SglangEngine.native_init_body` (the `native-states/init-body` endpoint: a Neuralese body initialized
+  from its text at its rendered position, `ts-host/src/neuralese/text-init.ts`) had no SGLang path: every call ran the
+  native engine, whose first use lazily reloads the released native model (`_ensure_native`) into the front. On
+  Pop the front is a CPU process: the 3.46 GB BF16 view plus CPU forwards of the call took it to ~5.8 GB beside the
+  scheduler's 2.4 GB and the 9.5 GB cap killed the unit, and with it 64 collection slots. The DGX actor of the same
+  collection shows the same route: `init_body` is its only native endpoint (12 calls, ~104 s each), and its native
+  model is resident. Write-text and capture already ran on SGLang (`write_text_sglang`, 2026-11-12).
+- **Fix (default on).** `native_init_body` runs on SGLang (`_sglang_init_body`): the shared `Engine.init_body_plan`
+  renders the call, imports before the body go through `_sglang_import` as in generation, and one capture request
+  through the body stores the block (the tokens after the body are recorded in the source capture but not computed:
+  they cannot change the body's causal state). Same result fields as the native path (`init_body_result`). Adapted
+  calls and a front with no SGLang keep the native path; `NATLANG_SGLANG_INIT_BODY=0` opts out. Metric
+  `natlang_native_endpoint_*{endpoint="init_body_sglang"}`. Every SGLang front (DGX, Colab, Pop) takes it.
+  Found on the way: `Engine.prompt_positions` (every init-body, and any caller that sizes a prompt with imports) asked
+  `_native_exact`, which reads the native backbone's layer kinds and so reloaded the model by itself.
+  `SglangEngine._native_exact` answers from the export (`_sglang_exact`, the same identity and layer-kind check) while
+  the model is released.
+- **Cap.** `_serve_pop` (held serve and the aei1 Pop actor) passed only `--budget-gb 9.5`, so MemoryMax was the claim,
+  not the `SGLANG_MEMORY_GB - 0.5` = 10.5 GB that `start` already set; its comment said the engine ran in a docker
+  container capped by `--memory`, which is true only for the native engine. Both paths now take
+  `pop_sglang_ledger_args()` (claim 9.5, MemoryMax 10.5).
+- **Enters:** the Pop actor at its next serve from a pin with this commit (the aei1 driver re-serves Pop after an
+  exit); the DGX and Colab fronts at their next serve. A front already serving keeps the native route until then.
+- **Tests:** `test_sglang_actor.py::test_init_body_runs_on_sglang_and_matches_the_native_engine` (an imported state
+  before the body, text after it: same init/source-capture fields and block tensors as the native engine, native
+  model stays released), `test_pop_held_detached.py::test_start_and_serve_checkpoint_claim_one_admissible_pop_budget`.
+- **Not checked:** other native-only endpoints on an SGLang front (adapted write/capture/turns, and the native
+  endpoints `encode`, `embed`, gradients and optimizers) still reload the native model; on Pop's CPU front any of
+  them can do the same. No guard refuses a reload that cannot fit the unit's cap. The live Pop actor was not
+  watched through an init-body call after the fix (it serves the old code until its next serve).

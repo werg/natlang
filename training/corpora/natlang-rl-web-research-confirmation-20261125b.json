@@ -1,0 +1,12 @@
+{
+  "id": "natlang-rl-web-research-confirmation-20261125b",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-web-research-confirmation-20261125b",
+  "admission": "evaluation-only-never-training",
+  "include": [
+    "cases.jsonl"
+  ],
+  "kind": "held",
+  "protected": true,
+  "note": "Held confirmation packet of the web-research (SearchSwarm D02) RL source, requalified supply b (16 verified cases, split confirmation), registered 20261125b. Related units share a split. For development and confirmation of RL outcomes; never a training source."
+}

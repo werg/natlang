@@ -540,6 +540,14 @@ def pop_sglang_budget_gb():
     return os.environ.get('NATLANG_POP_HELD_BUDGET_GB', str(SGLANG_MEMORY_GB - 1.5))
 
 
+def pop_sglang_ledger_args():
+    """Pop ledger arguments of an SGLang actor unit (`start` and `_serve_pop` alike): the admissible claim
+    (`pop_sglang_budget_gb`) and the MemoryMax the actor runs under. The engine runs on Pop's host in the unit's own
+    cgroup (no container), so MemoryMax is its only cap: SGLANG_MEMORY_GB - 0.5. Without --host-max-gb the ledger set
+    MemoryMax to the 9.5 GB claim, 1 GB under the cap the docstring above names (aei1 held serve, 2026-11-25)."""
+    return ['--budget-gb', pop_sglang_budget_gb(), '--host-max-gb', str(SGLANG_MEMORY_GB - .5)]
+
+
 RL_MEMORY_GB = 8   # container cap and ledger claim; 4 GiB was OOM-killed after 4 h at 3 workers (anon 4.2 GiB, 2026-11-09)
 
 
@@ -954,10 +962,9 @@ def start(args):
     # The SGLang front holds the CPU-loaded view until the server is up, beside the server's own processes; the same
     # admissible budget as serve-checkpoint (pop_sglang_budget_gb: 10.5 was refused beside the gdm greeter, 2026-11-20).
     # On the host (no container) MemoryMax is the real cap: it stays at the 10.5 GB the actor has run with.
-    budget = pop_sglang_budget_gb() if args.engine == 'sglang' else str(RL_MEMORY_GB)
-    cap = ['--host-max-gb', str(SGLANG_MEMORY_GB - .5)] if args.engine == 'sglang' else []
+    claim = pop_sglang_ledger_args() if args.engine == 'sglang' else ['--budget-gb', str(RL_MEMORY_GB)]
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
-                        '--budget-gb', budget, *cap, '--reserve-gb', str(POP_RESERVE_GB),
+                        *claim, '--reserve-gb', str(POP_RESERVE_GB),
                         '--class', 'experiment', '--no-resumable', '--stop-seconds', str(POP_ACTOR_STOP_SECONDS),
                         '--wait', str(POP_ADMISSION_WAIT), *container, '--workdir', work, '--',
                         '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']), timeout=POP_ADMISSION_WAIT + 300)
@@ -2217,12 +2224,13 @@ def _serve_pop(args):
     _pop_upload_json(job, f'{work}/job.json')
     unit = f'{name}-{int(time.time())}'
     # Pop's 15 GB leave 10.9-11.5 GiB admissible (10.9 with the gdm greeter and slab after a desktop logout,
-    # 2026-11-19: 10.5 + the 0.5 reserve waited out its admission). The engine runs in a docker container capped by
-    # its own --memory, so this unit's budget is accounting for the driver, not the engine's limit.
+    # 2026-11-19: 10.5 + the 0.5 reserve waited out its admission). The SGLang engine runs on Pop's host inside this
+    # unit (no container; job['memory'] caps only the native engine's container), so MemoryMax is its real cap:
+    # pop_sglang_ledger_args.
     # --stop-seconds: a stop gives the driver the 90 s it waits for its engine's process group before systemd kills
     # the unit (the default 60 s TimeoutStopSec cut it: 2026-11-24 18:55 'stop-sigterm timed out')
     ssh(shlex.join(['/usr/bin/python3', POP_REPO + '/scripts/memory_ledger.py', 'run', '--unit', unit,
-                    '--budget-gb', pop_sglang_budget_gb(), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
+                    *pop_sglang_ledger_args(), '--reserve-gb', str(POP_RESERVE_GB), '--class', 'experiment',
                     '--no-resumable', '--stop-seconds', str(POP_ACTOR_STOP_SECONDS),
                     '--wait', str(POP_ADMISSION_WAIT), '--workdir', work, '--', '/usr/bin/python3', f'{work}/driver.py', f'{work}/job.json']),
         timeout=POP_ADMISSION_WAIT + 300)
