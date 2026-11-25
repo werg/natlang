@@ -886,18 +886,31 @@ def compact_leftovers(work, groups, quiet_seconds=300):
 
 
 def collect_actor_blocks(collector, store, grace):
-    """The collection actor's native-state cache: block files untouched since before the oldest live group (less
-    ``grace`` s) go (``grpo.collect_blocks``). Run every 5 minutes by ``collect`` for its own (local) actor. Each episode imports only states its own calls stored, the actor touches
-    a block file whenever it stores or reads it, and nothing reads the store after the episode (the build trains imports
-    as pass-through from the recorded write); aei1-collect-v0001 held 6-10 GB of them, one of 3.4 GB. ``--block-gc-grace``
-    < 0 opts out."""
+    """The collection actor's native-state cache: block files untouched since before the oldest running episode (less
+    ``grace`` s) go (``grpo.collect_blocks``). Run every 5 minutes by ``collect`` for its own (local) actor. Each episode
+    imports only states its own calls stored, the actor touches a block file whenever it stores or reads it, and nothing
+    reads the store after the episode (the build trains imports as pass-through from the recorded write; a resumed
+    partial never continues past a Neuralese write, ``episode_files.partial_continuable``). A live memetic group (its
+    preparation writes guidance states its later episodes import) still holds back to its creation.
+
+    The cutoff was the oldest live group's creation: a group resumed by a restarted collector keeps its first creation
+    time (``grpo.Collector.resume_unfinished``), and one slow group held every block since (aei1 v9 2026-11-25: 16 GB,
+    ~5 GB/hour, the oldest live group 7 h old). ``NATLANG_BLOCK_GC_BY_GROUP=1`` restores that rule; ``--block-gc-grace``
+    < 0 opts out of the collection."""
     import grpo
     if grace < 0:
         return
     try:
+        by_group = os.environ.get('NATLANG_BLOCK_GC_BY_GROUP') == '1' or not hasattr(collector, 'oldest_running_start')
         with collector.lock:     # scored groups stay in ``groups`` here (no learner prunes them): only running ones
-            oldest = min([info['created'] for info in collector.groups.values()
-                          if not info.get('abandoned') and info.get('done', 0) < info.get('size', 0)], default=time.time())
+            live = [info for info in collector.groups.values()
+                    if not info.get('abandoned') and info.get('done', 0) < info.get('size', 0)]
+        if not by_group:
+            live = [info for info in live if info.get('dir') is not None
+                    and (Path(info['dir']) / 'memetic-spec.json').exists()]
+        oldest = min([info['created'] for info in live], default=time.time())
+        if not by_group:
+            oldest = min(oldest, collector.oldest_running_start())
         files, freed = grpo.collect_blocks(store, oldest - grace)
         if files:
             log({'event': 'native states collected', 'files': files, 'freed_gb': round(freed / 1e9, 2)})

@@ -272,7 +272,8 @@ def test_teacher_demonstrations_are_verified_held_closed_capped_and_least_replay
     assert episode['role'] == 'sd_teacher' and len(episode['rows']) == 2
     row = episode['rows'][0]
     assert row['prompt'].tolist() == [1, 2, 3] and row['sample'].tolist() == [7, 8, 9] and row['teacher']
-    assert row['weight'].tolist() == [0, 1, 1]                             # the empty think block is context
+    # the empty think block and the token after it are context (serve.targets.empty_think_first_end, c1abc6a47)
+    assert row['weight'].tolist() == [0, 0, 1]
     seen = {first[0]['round']}
     for _ in range(3):
         seen.add(demos.take(['a'], 8, stats)[0]['round'])

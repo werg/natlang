@@ -515,6 +515,9 @@ class Collector:
         self.paused = threading.Event()             # set during a held measurement on the training actor
         self.active_slots = args.slots
         self.running = 0                            # episodes in flight (their node work and KV stay live)
+        # slot -> start time of the episode or memetic preparation it runs (``oldest_running_start``: the EI actor's
+        # native-state GC, expert_iteration.collect_actor_blocks)
+        self.slot_starts = {}
         self.generated = 0                          # sampled tokens of finished episodes (throughput)
         self.episodes = 0
         self.env = pinned_env()
@@ -843,6 +846,12 @@ class Collector:
         serves the collected policy (a replaced Colab session may come back serving another one)."""
         return True
 
+    def oldest_running_start(self):
+        """The start time of the oldest episode (or memetic preparation) a slot runs now; now when none runs. Recorded
+        before its process starts, so nothing it stores on the actor predates it."""
+        with self.lock:
+            return min(getattr(self, 'slot_starts', {}).values(), default=time.time())
+
     def slot(self, index=0):
         sampling = self.work / 'sampling-config.json'
         while not self.stop.is_set():
@@ -859,8 +868,15 @@ class Collector:
                 continue
             group, entry = item
             info = self.groups[group]
+            starts = self.__dict__.setdefault('slot_starts', {})     # (tests build collectors without __init__)
             if entry.get(MEMETIC_PREPARE):
-                self._prepare_memetic(group, info)
+                with self.lock:
+                    starts[index] = time.time()
+                try:
+                    self._prepare_memetic(group, info)
+                finally:
+                    with self.lock:
+                        starts.pop(index, None)
                 continue
             workers = info['dir'] / 'workers'
             workers.mkdir(exist_ok=True)
@@ -880,10 +896,12 @@ class Collector:
                        '--chat-completions-url', actor_url + '/v1/chat/completions', '--model-id', 'natlang-rl',
                        '--model-concurrency', '1', '--chat-request-config', str(sampling), '--neuralese-server']
             with (workers / f'{key}.log').open('a') as handle:
+                begun = time.time()
                 process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
                                            start_new_session=True)
                 with self.lock:
                     self.running += 1
+                    starts[index] = begun
                 try:
                     while process.poll() is None:
                         if self.stop.wait(2):
@@ -893,6 +911,7 @@ class Collector:
                 finally:
                     with self.lock:
                         self.running -= 1
+                        starts.pop(index, None)
             if self.stop.is_set():
                 # the collection stops under it: a restart of the same policy resumes the group (resume_unfinished)
                 if not resume_enabled(self.args):
