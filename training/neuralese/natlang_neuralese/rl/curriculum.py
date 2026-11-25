@@ -45,12 +45,22 @@ VISIT_ROUNDS_KEPT=64  # observations retain this many most recent visit rounds; 
 V2_FIELDS=frozenset(DEFAULT)
 
 
+def selection_refusal(row):
+    """Why a pool row may not be selected for production collection, or None: a ``curriculum.rl.qualification``
+    other than absent or ``qualified`` (a scaffold awaiting live model-facing qualification). The one predicate:
+    ``metadata`` raises on it and the collectors' pool load (``grpo.load_tasks``) leaves such rows out."""
+    value=(row.get('curriculum') or {}).get('rl') or {}
+    if value.get('qualification') not in (None,'qualified'):
+        return 'task scaffold requires live model-facing qualification before production selection'
+    return None
+
+
 def metadata(row):
     value=(row.get('curriculum') or {}).get('rl') or {}
     level=value.get('level',3)
     if type(level) is not int or level<0:raise ValueError('task curriculum level must be a nonnegative integer')
-    if value.get('qualification') not in (None,'qualified'):
-        raise ValueError('task scaffold requires live model-facing qualification before production selection')
+    refusal=selection_refusal(row)
+    if refusal:raise ValueError(refusal)
     family=value.get('family',row.get('family','unspecified'))
     if family is None or family=='':family='unspecified'
     if not isinstance(family,str):raise ValueError('task curriculum family must be a string or unknown')

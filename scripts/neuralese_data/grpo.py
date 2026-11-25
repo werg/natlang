@@ -4109,8 +4109,13 @@ def load_tasks(args, work=None):
     errata_paths = errata_files(args)
     for path in errata_paths:
         errata |= {row['id'] for row in read_jsonl(path)}
+    # rows the curriculum refuses for production selection (curriculum.selection_refusal: awaiting live qualification);
+    # --include-unqualified opts out
+    from natlang_neuralese.rl.curriculum import selection_refusal
+    unqualified = set() if getattr(args, 'include_unqualified', False) else {
+        r['id'] for r in rows if selection_refusal(r)}
     eligible = [r for r in rows if r['id'] not in excluded and r['id'] not in errata and r.get('split', 'train') == 'train'
-                and not (broken and broken.search(str(r.get('family') or '')))]
+                and r['id'] not in unqualified and not (broken and broken.search(str(r.get('family') or '')))]
     random.Random(args.seed).shuffle(eligible)
     if getattr(args, 'explore_order', 'row') == 'family':
         eligible = family_round_robin(eligible, random.Random(args.seed))
@@ -4125,6 +4130,7 @@ def load_tasks(args, work=None):
                   'excluded_family_regex': args.exclude_family_regex,
                   'excluded_errata': [{'path': str(p), 'sha256': sha256_file_hex_cached(Path(p))} for p in errata_paths],
                   'excluded_errata_ids': len(errata & {r['id'] for r in rows}),
+                  'excluded_unqualified_ids': len(unqualified),
                   'selection': {'pass_rates': args.pass_rates, 'band': args.pass_band, 'min_scored': args.pass_min_scored,
                                 'explore': args.explore, 'explore_order': getattr(args, 'explore_order', 'row'),
                                 'own_outcomes': 'latest scored group per task replaces its rate'},
@@ -5832,6 +5838,9 @@ def build_parser():
     t.add_argument('--explore-wrapper-share', type=float, default=0.15,
                    help='explored groups that are one-function dataset wrappers, at most this share (ExploreWalk; held-v3 '
                         'has 9%% wrappers, a family-ordered walk over the pool ~36%%); 1: no cap')
+    t.add_argument('--include-unqualified', action='store_true',
+                   help='select pool rows the curriculum refuses (curriculum.selection_refusal: qualification other than '
+                        'qualified, e.g. source-only-live-pending); default: left out of the pool load')
     t.add_argument('--explore-shape-cap', type=float, default=SHAPE_CAP,
                    help='the unmeasured-task walk is ordered so that no program shape (measure_repetition.program_shape: '
                         'the program with item data abstracted) takes more than this share of any prefix (cap_shapes; '

@@ -256,7 +256,8 @@ def pool_args(args):
     from types import SimpleNamespace
     return SimpleNamespace(pool=args.pool or grpo.default_pools(), held_manifest=args.held_manifest or grpo.default_held(),
                            exclude_manifest=[], task_ids=None, exclude_family_regex=args.exclude_family_regex,
-                           exclude_ids=[], no_default_errata=False, seed=args.seed, pass_rates=None, pass_band=(0.1, 0.9),
+                           exclude_ids=[], no_default_errata=False, seed=args.seed,
+                           include_unqualified=getattr(args, 'include_unqualified', False), pass_rates=None, pass_band=(0.1, 0.9),
                            pass_min_scored=1, explore=None, max_model_requests=None, case_seconds=None)
 
 
@@ -610,6 +611,7 @@ def collect(args):
     g.top_p = check_top_p(g.top_p)
     g.pool = args.pool or grpo.default_pools()
     g.held_manifest = args.held_manifest or grpo.default_held()
+    g.include_unqualified = getattr(args, 'include_unqualified', False)   # as select (pool_args)
     g.memetic_tasks = getattr(args, 'memetic_tasks', None) or (grpo.default_memetic_tasks() if memetic_share > 0 else None)
     g.memetic_max_groups = int(getattr(args, 'memetic_max_groups', MEMETIC_MAX_GROUPS))
     g.memetic_layout = getattr(args, 'memetic_layout', 'staged')
@@ -4900,6 +4902,8 @@ def main():
         p.add_argument('--held-manifest', help='default: grpo.default_held() (held-v3)')
         p.add_argument('--exclude-family-regex', default='(?!)', help="families left out (default: none, as grpo-v5)")
         p.add_argument('--seed', type=int, default=20261120)
+        p.add_argument('--include-unqualified', action='store_true',
+                       help='select pool rows the curriculum refuses (curriculum.selection_refusal); default: left out')
 
     def memetic_flags(p):
         p.add_argument('--memetic-share', type=float, default=MEMETIC_SHARE,

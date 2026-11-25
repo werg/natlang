@@ -125,3 +125,25 @@ def test_program_shape_abstracts_item_data_but_not_the_template():
     assert a == program_shape(row('torvalds/linux', 'kernel/x.c', root='other_name.nl'))   # the root's stem abstracted
     assert a != program_shape(row('torvalds/linux', 'kernel/x.c', question='how many commits touched'))
     assert program_shape({'id': 'x'}) == 'id:x'
+
+
+def test_pool_load_leaves_out_rows_the_curriculum_refuses_with_an_opt_out(tmp_path, monkeypatch):
+    import json
+    import expert_iteration as ei
+    from natlang_neuralese.rl import curriculum
+    rows = [{'id': 'q', 'curriculum': {'rl': {'qualification': 'qualified'}}}, {'id': 'plain'},
+            {'id': 'pending', 'curriculum': {'rl': {'qualification': 'source-only-live-pending'}}}]
+    pool = tmp_path / 'pool.jsonl'
+    pool.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    monkeypatch.setattr(held_eval, 'training_exclusion_ids', lambda *a, **k: set())
+    monkeypatch.setattr(grpo, 'ERRATA', str(tmp_path / 'none'))
+    assert [curriculum.selection_refusal(r) is None for r in rows] == [True, True, False]
+    with pytest.raises(ValueError, match='qualification'):
+        curriculum.metadata(rows[2])                                    # the curriculum's refusal: the same predicate
+    args = SimpleNamespace(pool=[str(pool)], held_manifest=None, exclude_family_regex=None, seed=0)
+    tasks, _ = grpo.load_tasks(ei.pool_args(args), tmp_path)           # expert-iteration select and collect
+    assert sorted(r['id'] for r in tasks) == ['plain', 'q']
+    assert json.loads((tmp_path / 'pool.json').read_text())['excluded_unqualified_ids'] == 1
+    args.include_unqualified = True                                     # the opt-out
+    assert len(grpo.load_tasks(ei.pool_args(args), None)[0]) == 3
+    assert not parsed(monkeypatch).include_unqualified                  # grpo train: left out by default

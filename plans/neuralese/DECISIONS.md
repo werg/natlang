@@ -12064,6 +12064,13 @@ binds at 500 and 2,000-prefix families fall 521 -> 479 (many-family wrappers def
 rows with `curriculum.rl.qualification: source-only-live-pending`, which `curriculum.metadata` refuses for production
 selection but neither collector reads (open: they are still selected).
 
+**Fixed (same day, coordinator).** `curriculum.selection_refusal(row)` is the one predicate: `curriculum.metadata`
+raises on it and `grpo.load_tasks` leaves such rows out of the pool, which covers expert-iteration select and collect
+(`pool_args`), the GRPO walk, teacher_gen's pool and `neuralese_variants`. `pool.json` records
+`excluded_unqualified_ids`. Opt-out: `--include-unqualified` on `grpo.py train` and `expert_iteration.py select` /
+`collect` (collect passes it to its pool load). async-drive has no collect-args passthrough, so a driver-level opt-out
+would need `--select-args "--include-unqualified"` and a collect flag it does not have yet.
+
 **Not checked / left out.** Shapes are declared program text, not episode behaviour; item words that are lowercase
 prose (an item's topic inside a template sentence) still split a template into several shapes, and two genuinely
 different programs that differ only in abstracted identifiers merge. Held-set effect: not measured (enters at the next
