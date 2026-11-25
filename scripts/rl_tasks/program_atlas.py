@@ -37,9 +37,10 @@ An idea bank (a directory of idea cards, one JSON file each, written centrally) 
 
   program_atlas.py bank-check BANK [--root ROOT]         every card against the atlas, the accepted and claimed ideas
                                                          and the bank's other cards: near duplicates and taken slugs
-  program_atlas.py take BANK --by AGENT [--root ROOT]    the next free card, claimed under the lock (the claim check
-      above); a card that is a near duplicate of an accepted or claimed idea is recorded `duplicate` and skipped.
-      Prints {ok, slug, card, nearest} or {ok: false} when the bank is exhausted. The builder ends its claim with
+  program_atlas.py take BANK --by AGENT [--root ROOT] [--sub WAVE/sub]    the next free card, claimed under the lock
+      (the claim check above); a card that is a near duplicate of an accepted or claimed idea is recorded `duplicate`
+      and skipped. Prints {ok, slug, card, nearest} or {ok: false} when the bank is exhausted; with --sub the card is
+      written as WAVE/sub/<slug>/idea.json. The builder ends its claim with
       `invented.py admit` (accepted) or `release SLUG --status failed --reason ...`.
 
 `near` is a crisp retrieval floor for the novelty judgment, not the judgment: it picks which existing ideas the judge
@@ -349,8 +350,19 @@ def bank_check(root: Path, bank: Path, threshold: float = THRESHOLD) -> dict:
             'refused': [r for r in report if not r['ok']], 'watch': watch, 'cards_checked': report}
 
 
-def take(root: Path, bank: Path, by: str, threshold: float = THRESHOLD) -> dict:
-    """The next free card of the bank, claimed for `by` (one builder per card)."""
+def take(root: Path, bank: Path, by: str, threshold: float = THRESHOLD, sub: Path | None = None) -> dict:
+    """The next free card of the bank, claimed for `by` (one builder per card). With `sub` (a wave's `sub/`), the card
+    is also written as `sub/<slug>/idea.json`, the submission's idea (authored_programs.py admit reads it)."""
+    result = take_card(root, bank, by, threshold)
+    if result['ok'] and sub is not None:
+        home = Path(sub) / result['slug']
+        home.mkdir(parents=True, exist_ok=True)
+        (home / 'idea.json').write_text(json.dumps(result['card'], ensure_ascii=False, indent=1) + '\n')
+        result['idea'] = str(home / 'idea.json')
+    return result
+
+
+def take_card(root: Path, bank: Path, by: str, threshold: float = THRESHOLD) -> dict:
     for path, card in bank_cards(bank):
         states = claim_states(root)
         if card.get('slug') in states and states[card['slug']].get('status') not in ('abandoned',):
@@ -398,6 +410,7 @@ def main(argv=None) -> int:
     tk.add_argument('--by', required=True)
     tk.add_argument('--root', type=Path, default=ROOT)
     tk.add_argument('--threshold', type=float, default=THRESHOLD)
+    tk.add_argument('--sub', type=Path, help="the wave's sub/ directory: write the card as SUB/<slug>/idea.json")
     q = sub.add_parser('near')
     q.add_argument('atlas', type=Path)
     q.add_argument('idea', type=Path)
@@ -435,7 +448,7 @@ def main(argv=None) -> int:
         (claims_dir(args.root) / f'bank-check-{Path(args.bank).parent.name}.json').write_text(json.dumps(report, indent=1))
         return 0 if not report['refused'] else 1
     elif args.command == 'take':
-        result = take(args.root, args.bank, args.by, args.threshold)
+        result = take(args.root, args.bank, args.by, args.threshold, args.sub)
         print(json.dumps(result, ensure_ascii=False, indent=1))
         return 0 if result['ok'] else 1
     else:

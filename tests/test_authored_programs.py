@@ -146,7 +146,8 @@ def test_statistics_report_the_semantic_fp_shape_and_nl_literals():
     assert inst['nl_calls'] == 5            # root, readMessage, summarizeTopic, isSettled, the inline call
     for kind in ('decision', 'decide', 'iterate-nl-until', 'inline-nl', 'nl-literal-from-data', 'untrusted'):
         assert kind in inst['construct_kinds'], kind
-    assert inst['nl_literals'] == {'created': 1, 'built_from_data': 1, 'calls': 1, 'call_tree_share': 0.2}
+    assert inst['nl_literals'] == {'created': 1, 'built_from_data': 1, 'from_inputs_only': 0, 'calls': 1,
+                                   'call_tree_share': 0.2}
     assert inst['crisp_helper_calls'] == 1 and inst['nl_call_share'] == round(5 / 6, 3)
     assert inst['outputs'] == {'open': 1, 'closed': 3, 'structured': 1}
     assert stats['source']['ts_logic_lines'] == 2 and stats['source']['ts_unjustified'] == ['digest/count.ts']
@@ -175,3 +176,102 @@ def test_wave_report_writes_report_and_emphasis(tmp_path, monkeypatch):
     assert (tmp_path / 'REPORT.md').read_text().count('thread-digest') == 1
     emphasis = (tmp_path / 'EMPHASIS.draft.md').read_text()
     assert 'Grow the tree downwards' in emphasis and 'Programs of the last wave closest' in emphasis
+
+
+def node(i, parent, definition, name, **extra):
+    return {'id': i, 'parent': parent, 'definition': definition, 'name': name, 'outcome': 'done', 'actions': [],
+            'decision': None, 'functional': False, 'value': None, **extra}
+
+
+def test_selection_outputs_iterate_inside_combinators_and_judgments():
+    root_id = 'curriculum-reference:replay:x'
+    long = 'Ana proposes the lake lodge again for its large room and a projector.'
+    tree = [node('t/1', root_id, 'nl:digest/readMessage.nl', 'readMessage', args={'items': [{'gist': long}]},
+                 value=[{'gist': long}]),
+            node('t/2', root_id, 'std:semanticRepair', 'semanticRepair', combinator='semanticRepair'),
+            node('t/3', 't/2', 'iterateOn:unsited:repair', 'iterateOn', iteration={'predicate': None}),
+            node('t/4', 't/2', 'nl:digest/summarizeTopic.nl', 'summarizeTopic', value='A fixed draft of the summary that says more.'),
+            node('t/5', root_id, 'refinement:holds', 'holds', value=False),
+            node('t/6', root_id, 'nl:/@natlang/std/beats.nl', 'beats', value=True, decision={'options': [], 'chosen': 0})]
+    row = {**tree_row(), 'tree': tree, 'answers': []}
+    inst = ap.program_stats(submission(), FILES, [row])['instances'][0]
+    assert inst['outputs']['selection'] == 1          # copied from its arguments: writes nothing new
+    assert 'iterate-measure' not in inst['construct_kinds']   # semanticRepair's own loop
+    assert inst['judgments'] == {'holds': {'false': 1}, 'beats': {'true': 1}}
+    assert inst['repair_fixes'] == 1 and inst['nl_calls'] == 5  # root, readMessage, summarizeTopic, holds, beats
+
+
+def test_calls_through_a_function_argument_sit_under_the_call_that_ran_them():
+    root_id = 'curriculum-reference:replay:x'
+    tree = [node('t/1', root_id, 'nl:digest/summarizeTopic.nl', 'summarizeTopic', functional=True,
+                 started=100, eval_windows=[[110, 150], [160, 200]]),
+            node('t/2', root_id, 'nl:digest/readMessage.nl', 'readMessage', started=170),   # bound in the root
+            node('t/3', root_id, 'nl:digest/readMessage.nl', 'readMessage', started=300),   # the root's own call
+            node('t/4', 't/1', 'nl:digest/summarizeTopic/isSettled.nl', 'isSettled', started=120)]
+    by_id = {n['id']: n for n in tree}
+    ap.caller_of(tree, by_id)
+    assert by_id['t/2']['parent'] == 't/1' and by_id['t/2']['moved_from_maker']
+    assert by_id['t/3']['parent'] == root_id and by_id['t/4']['parent'] == 't/1'
+    inst = ap.program_stats(submission(), FILES, [{**tree_row(), 'tree': [dict(n, parent=root_id if n['id'] != 't/4' else 't/1')
+                                                                         for n in tree], 'answers': []}])['instances'][0]
+    assert inst['nl_depth'] == 3
+
+
+def test_missing_entries_are_problems_and_loose_fragments_are_named():
+    data = submission(trajectory={'root': [['eval', {'code': 'return 1;', 'finish': True}]], 'calls': [
+        {'match': ['venue'], 'value': {'topic': 'venue'}},
+        {'fn': 'readMessage', 'match': ['messageId: "m1"'], 'value': {'topic': 'a'}},
+        {'fn': 'readMessage', 'match': ['messageId: "m2"'], 'value': {'topic': 'b'}}]})
+    anchor = ap.ANCHOR.format('readMessage')
+    answers = [{'name': 'readMessage', 'entry': 0, 'shown': 'message: Message = { messageId: "m2", earlier: messageId: "m1"',
+                'opening': anchor + 'message: Message = { messageId: "m2" } earlier: [{ messageId: "m1" }]'},
+               {'name': 'summarizeTopic', 'entry': 2, 'shown': 'topic: string = "venue"', 'opening': 'topic venue'},
+               {'name': 'isSettled', 'entry': 2, 'shown': 'gists about venue', 'opening': 'venue'},
+               {'name': 'summarizeTopic', 'entry': -1, 'shown': 'topic: string = "date"\nother', 'opening': 'x',
+                'placeholder': True}]
+    problems, warnings = ap.consistency(data, [{**tree_row(), 'answers': answers}])
+    assert any('NO ENTRY for a call of summarizeTopic' in p and 'placeholder' in p for p in problems)
+    assert any('answers calls of 2 functions (isSettled, summarizeTopic)' in w for w in warnings)
+    assert any('is matched by trajectory.calls 2, 3' in w for w in warnings)
+    blocks = ap.no_entry_blocks(data, [{**tree_row(), 'answers': answers}])
+    assert blocks[0].startswith('NO ENTRY in instance a for a call of summarizeTopic')
+    assert '"topic: string = \\"date\\""' in blocks[1]
+
+
+def test_open_answers_that_state_what_their_call_does_not_show():
+    entries = [{'fn': 'w', 'value': 'Sam pays Elif 30.83 euros for the ferry at a rate of 1.17, as agreed on Monday.'}]
+    row = {'answers': [{'name': 'w', 'entry': 0, 'shown': '', 'opening': 'transfers: from Sam to Elif amount 30.830 ferry'}]}
+    found = ap.ungrounded(row, entries, [0])
+    assert found[0]['absent'] == ['1.17', 'Monday']
+
+
+def test_literals_that_interpolate_only_root_inputs_are_not_counted_as_built_from_data():
+    root = [['eval', {'code': 'const same = nl<(i: Issue) => boolean>`i is about ${unit}`;\n'
+                              'const crit = nl<(i: Issue) => boolean>`i meets ${rubric.text}`;', 'finish': True}]]
+    inst = ap.program_stats({**submission(), 'instances': [{**submission()['instances'][0], 'inputs': {'unit': 'AHU-3'},
+                                                            'trajectory': {'root': root, 'calls': []}}]},
+                            FILES, [{**tree_row(), 'tree': [], 'answers': []}])['instances'][0]
+    assert inst['nl_literals']['created'] == 2
+    assert inst['nl_literals']['built_from_data'] == 1 and inst['nl_literals']['from_inputs_only'] == 1
+
+
+def test_check_cli_names_a_missing_submission_json_and_removes_generated_declarations(tmp_path, capsys, monkeypatch):
+    assert ap.main(['check', str(tmp_path)]) == 1
+    assert 'submission.json is missing' in capsys.readouterr().out
+    sub = tmp_path / 'thread-digest'
+    for rel, text in FILES.items():
+        (sub / 'program' / rel).parent.mkdir(parents=True, exist_ok=True)
+        (sub / 'program' / rel).write_text(text)
+    (sub / 'submission.json').write_text(json.dumps(submission()))
+
+    def natlang_check(program):
+        (program / 'digest.d.nl.ts').write_text('declare const x: 1;')
+        return []
+    monkeypatch.setattr(ap.invented, 'natlang_check', natlang_check)
+    monkeypatch.setattr(ap.invented, 'runtime_problems', lambda runtime: [])
+    monkeypatch.setattr(ap, 'replay', lambda cases, runtime: {'results': [tree_row()]})
+    ap.main(['check', str(sub)])
+    assert not list((sub / 'program').rglob('*.d.nl.ts'))
+    assert ap.main(['dump', str(sub), '--out', str(tmp_path / 'd.json')]) == 0
+    dumped = json.loads((tmp_path / 'd.json').read_text())
+    assert dumped['instances'][0]['answers'][0]['entry'] == 2 and dumped['stats']['slug'] == 'thread-digest'

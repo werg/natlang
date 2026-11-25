@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { admitRow, coverage, referenceDriver, renderOpening, replayReference, verifyCases } from '../dist/teacher/curriculum.js';
+import { admitRow, coverage, NO_PLACEHOLDER, referenceDriver, renderOpening, replayReference, verifyCases } from '../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { sourceReviewReason } from '../dist/teacher/source-review.js';
 import { FAMILIES } from '../scripts/inline-curriculum/families.mjs';
@@ -34,6 +34,23 @@ test('reference child selection follows the current scoped FileHandle, not a car
   record.curriculum.reference.children.push(child('pass-02.md', 'conflict'));
   const ambiguous = await referenceDriver(record)({ messages: context });
   assert.equal(ambiguous.calls[0][1].status, 'failed', 'duplicate scoped bindings fail closed');
+});
+
+test('a child call no entry matches is answered by the missing hook, or fails as before', async () => {
+  const record = { semantics: { root: 'root.nl', failure_seed: null }, curriculum: { reference: { root: [], children: [] } } };
+  const context = [{ role: 'system', content: 'system' }, { role: 'user', content: 'You are inside this call: judge(x: number): boolean' },
+    { role: 'tool', tool_call_id: 'scope_0', content: 'x: number = 3' }];
+  const seen = [];
+  const answered = await referenceDriver(record, undefined, answer => seen.push(answer), () => true)(
+    { messages: context, tools: [{ type: 'function', function: { name: 'return_result' } }], invocation_id: 'c1' });
+  assert.deepEqual(answered.calls[0], ['return_result', { status: 'success', value: true }]);
+  assert.equal(seen[0].entry, -1);
+  // A decision readout (no tools) gets the value's JSON text
+  const readout = await referenceDriver(record, undefined, undefined, () => 'b')({ messages: context, tools: [], invocation_id: 'c2' });
+  assert.equal(readout.text, '"b"');
+  const kept = await referenceDriver(record, undefined, undefined, () => NO_PLACEHOLDER)(
+    { messages: context, tools: [{ type: 'function', function: { name: 'return_result' } }], invocation_id: 'c3' });
+  assert.equal(kept.calls[0][1].status, 'failed');
 });
 
 test('synthetic curriculum references verify or remain explicitly held for source review', async t => {

@@ -290,6 +290,55 @@ trace and specialise. Every combinator nests its child calls under a `std:<name>
   companion helpers intact), and `compileRule(rule, { examples?, check?, attempts? })` (synthesizes and example-verifies
   a reusable judgment function).
 
+### The judgments the combinators and refinements ask
+
+Each shipped judgment is a call of its own, with the opening of any natlang call: its signature, its instructions, and
+one line per argument as `name: Type = value`. `unknown` arguments render the value as written (a record on one line,
+`first: unknown = { storyId: "S09", ...`).
+
+| Judgment | Asked by | Arguments in its opening | Answer |
+|---|---|---|---|
+| `meets` | `semanticFilter(items, "criterion")` (a string criterion), once per item | `criterion: string`, `item: unknown` | `true` when the item meets the criterion (`readout: decision`) |
+| `relates` | `semanticMatch(left, right, { relation })`, once per candidate pair | `relation: string`, `left: unknown`, `right: unknown` | `true` when the pair corresponds under the relation (`readout: decision`) |
+| `beats` | `semanticRank(items, goal)`, per pair | `goal: string`, `first: unknown`, `second: unknown` | `true` when `first` serves the goal better (`readout: decision`) |
+| `settled` | `fixedPoint(step, first)`, after every step | `revision: Revision = { previous: ..., current: ... }` | `true` when `current` only rewords `previous` (`readout: decision`) |
+| `holds` | a result typed `Is<T, "predicate">`, `refine(value, "predicate")`, an `ensures:` `predicate:` | `value: unknown`, `predicate: string`, and `context: unknown` when the property names other values (`ensures` `against:`, `refine(..., { context })`) | `true` when the value is what the predicate describes |
+
+- `semanticRank` is debiased by default: it asks `beats` in both orders of every pair, n(n-1) calls for n items, and
+  averages the two answers, so the order a pair is shown in does not decide it. `{ debiased: false }` asks each pair
+  once (n(n-1)/2 calls). A list of zero or one item makes no calls.
+- `semanticMatch` with `match: (left, right) => ...` (a `.nl` function or an `nl` literal) asks that function for each
+  pair instead of `relates`.
+- An `Is<T, "...">` result is judged once per value produced, so a function returning `Is<string, "...">[]` gets one
+  `holds` call per element. When `holds` answers `false`, the return is refused with the predicate as the reason and the
+  call answers again: put the refinement on the value a function finally returns, where a failed check is a real
+  defect to repair.
+
+### Rebinding a function's context: `withContext` or `.in`
+
+`fn.in(NatlangContext.empty().with({ policy }))` replaces what `fn` sees with exactly that context: right for a leaf.
+A function with a callable folder of its own needs its companion items in its context, so rebind it with
+`withContext(fn, { policy })`, which adds `policy` to the context the function already has
+(`fn.in(Context.ofCallable(fn).with({ policy }))`). Both return a function value you can `.partial`, pass and map:
+`semanticMap(comments, withContext(examineComment, { conventions }).partial(board))`.
+
+### How untrusted text appears in an opening
+
+A value of type `Untrusted<string>`, and any string copied from one (a name taken from a chat message, a field of a
+record read from it), is shown fenced, on lines of its own, with a header naming where it came from:
+
+````
+person: string = 
+```untrusted data from argument chat of settleTrip
+Ana
+```
+````
+
+Inside a record the field's text is fenced the same way (`{ id: "m4", text: ` then the fenced block, then `, ... }`).
+The model reads the fenced text as data, never as instructions. A `match` fragment of an authored trajectory that
+should name such a call takes the record's start before the fence (`message: Message = { id: "m4"`), or the whole
+fenced block with its header line.
+
 In a call's eval the combinators are built-ins: the model running a `.nl` function writes
 `const summaries = await semanticMap(notes, summarize)` or `await semanticReduce(rows, '', fold)` without an import, and
 their spans nest under that call. `proposeAndVerify` and `branchAndSelect` are there when the call has a folder;

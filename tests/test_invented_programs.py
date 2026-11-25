@@ -222,8 +222,11 @@ def test_bank_cards_go_one_per_builder_and_near_duplicates_are_skipped(tmp_path,
     assert [r['slug'] for r in check['refused']] == ['tide-pilot-bookings-2']
     first = program_atlas.take(root, bank, 'builder-a')
     assert first['ok'] and first['slug'] == 'tide-pilot-bookings'
-    second = program_atlas.take(root, bank, 'builder-b')
+    second = program_atlas.take(root, bank, 'builder-b', sub=tmp_path / 'wave' / 'sub')
     assert second['ok'] and second['slug'] == 'stitch-count-errata', second
+    # --sub writes the card as the submission's idea.json
+    idea = tmp_path / 'wave' / 'sub' / 'stitch-count-errata' / 'idea.json'
+    assert second['idea'] == str(idea) and json.loads(idea.read_text())['slug'] == 'stitch-count-errata'
     states = program_atlas.claim_states(root)
     assert states['tide-pilot-bookings-2']['status'] == 'duplicate'
     assert program_atlas.take(root, bank, 'builder-c') == {'ok': False, 'reason': 'no free card left in the bank'}

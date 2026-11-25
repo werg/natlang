@@ -93,25 +93,28 @@ The replay records every call. Your trajectory answers each call below the root 
 |---|---|---|
 | Named function | `assess.nl` in the caller's folder | a call of `assess`: an entry `{fn: "assess", match: [item fragment], value}` |
 | Interior function | `summarize.nl` with folder `summarize/` | `{fn: "summarize", match: [...], turns: [["eval", {code}], ["return_result", {...}]]}`: its eval calls its own items |
-| Decision | `readout: decision` on a finite result | `value` is the chosen option; in a caller, `decide(fn, ...args)` returns `{ value, probabilities, confidence }` |
+| Decision | `readout: decision` on a finite result | `value` is the chosen option; in a caller, `decide(fn, ...args)` returns `{ value, probabilities, confidence }`: branch on `.confidence` where a doubtful answer should go another way (a second judge, `escalate`, a rule) |
+| Pick one of several | one decision over the candidates (`returns:` a union of their ids, or `semanticRank`) | one call that sees every candidate, not a filter of N booleans of which one is true |
 | NL literal | ``nl<(x: T) => R>`instructions`(arg)`` in eval | a call named `nl@eval:N`, matched by a fragment of its instructions |
 | NL literal built from data | ``nl<(g: Gist) => boolean>`g bears on ${topic}` `` in eval, `topic` derived by the program | its creation in the eval code, then its calls, matched by the interpolated text |
-| Function synthesized by a function | `returns: "(item: Item) => boolean"` in front matter | that call's turn is `["eval", {"code": "return nl<(item: Item) => boolean>`...${...}...`;", "finish": true}]`; the returned function's calls nest under it |
-| Function as argument | `args: { judge: "(item: Item) => boolean" }` | the receiving call's eval calls `judge(item)`; the calls of `judge` appear under it |
+| Function synthesized by a function | `returns: "(item: Item) => boolean"` in front matter | that call's turn is `["eval", {"code": "return nl<(item: Item) => boolean>`...${...}...`;", "finish": true}]`; the returned function's calls nest under it. Its literal is all those calls see: carry into it what the program derived about this case (this character's usual look, the rubric an earlier call wrote) and every clause of the synthesizing function's instructions, not only a name |
+| Function as argument | `args: { judge: "(item: Item) => boolean" }` | the receiving call's eval calls `judge(item)`; `check` prints the calls of `judge` under the receiving call |
 | Partial application | `meets.partial(rule)` in eval | the bound function is passed or mapped; its calls carry the bound argument |
-| Rebinding | `verdict.in(NatlangContext.empty().with({ policy }))` | calls of the rebound function see `policy` in their opening |
+| Rebinding | a leaf: `verdict.in(NatlangContext.empty().with({ policy }))`; a function with its own callable folder: `withContext(examine, { policy })`, which keeps its companion items | calls of the rebound function see `policy` in their opening |
 | Map | `await semanticMap(items, assess)` | a `[semanticMap]` span, one call per item under it |
-| Filter | `await semanticFilter(items, test)` (a function, or a criterion string judged by the shipped `meets`) | a `[semanticFilter]` span, one call per item |
+| Filter | `await semanticFilter(items, test)` (a function, or a criterion string judged by the shipped `meets`) | a `[semanticFilter]` span, one call per item; a string criterion asks `meets` (`criterion: string`, `item: unknown`) |
 | Partition | `await semanticPartition(items, classify)` → `{ groups, uncertain }` | a span, one call per item |
 | Reduce, carrying state | `await semanticReduce(thread, [], (gists, m) => readMessage(m, gists).then(g => [...gists, g]))` | a span, one call per item, each seeing the state so far |
-| Match, rank | `semanticMatch(left, right, { relation })`, `semanticRank(items, goal)` | a span; the shipped `relates` / `beats` judgments are calls you answer (match them by the relation or goal text) |
-| Repair, fixed point | `semanticRepair(draft, { check, fix, attempts })`, `fixedPoint(revise, first)` | the `fix` / step calls; `fixedPoint` asks the shipped `settled` judgment after each step |
-| `iterateOn` with an NL check | ``await iterateOn(draft => revise(draft, notes), first).until(nl<(d: Draft) => boolean>`...`)`` | the check is called on the first state and after every step (`false`, step, ..., `true`); each step's calls |
+| Match | `semanticMatch(left, right, { relation })` (two lists: old and new versions, claims and sources, requirements and findings) | one `relates` call per candidate pair: `{fn: "relates", match: ["left: unknown = { id: \"r2\"", "right: unknown = { id: \"f7\""], value: true}`; with `match: fn` the pair calls are calls of `fn` |
+| Rank | `semanticRank(items, goal)` | debiased by default: `beats` in both orders of every pair, n(n-1) calls (`{ debiased: false }`: n(n-1)/2); entries `{fn: "beats", match: ["first: unknown = { id: \"x4\"", "second: unknown = { id: \"x2\""], value}` |
+| Repair | `semanticRepair(draft, { check, fix, attempts })` | the `fix` calls, one per failed check; a check that holds on the first draft is a correct trajectory with no fix call |
+| Fixed point | `fixedPoint(revise, first)` (a value revised until a revision only rewords it: a summary tightened, a plan reconciled) | each step's calls, then `settled` on `revision: Revision = { previous: ..., current: ... }`: `false` while the step still changes what the value says, `true` when it only rewords |
+| `iterateOn` with an NL check | ``await iterateOn(draft => revise(draft, notes), first).until(nl<(d: Draft) => boolean>`...`)`` | the check is called on the first state and after every step (`false`, step, ..., `true`); each step's calls. Each check's opening shows its state, and earlier states may be quoted in it: match a sentence only this state contains. A check still false after about ten steps also asks a `progress_judge` call |
 | `iterateOn` with a measure | `.withMeasure(state => state.pending.length).until(state => state.pending.length === 0)` | each step's calls until the code check holds |
-| Structural recursion | `recursive: structural` (or `measure:`), the function calls itself on a part | one call per level, each with its own entry |
-| Postcondition | `ensures:` with `check:` (code, no call) or `predicate:` | a `predicate` is judged by a call named `holds`: answer `{match: ["<predicate text>"], value: true}` |
-| Refinement | `refine(value, 'predicate', { context })` in eval, or a result typed `Is<T, "...">` | a judge call, like `holds` |
-| Folder reducer | root `kind: directory-reducer` with `writes:`; the instance gives `folder_files` | the root's turns use `list_files`, `read_file`, `write_file`, `edit_file`; `folder.apply(reducer, ...)` runs a nested reducer |
+| Structural recursion | `recursive: structural` (or `measure:`), the function calls itself on a part: a reply and its replies, a section and its subsections, a claim and the claims it depends on | one call per level, each with its own entry. An input type may be recursive (`type Reply = { text: Untrusted<string>; replies: Reply[] }`) |
+| Postcondition | `ensures:` with `check:` (code, no call) or `predicate:` with `against: [args]` | a `predicate` is judged by a call named `holds` with `value: unknown`, `predicate: string` and `context: unknown` (the `against` values): `{fn: "holds", match: ["value: unknown = <start of the value>"], value: true}` |
+| Refinement | `refine(value, 'predicate', { context })` in eval, or a result typed `Is<T, "...">` | one `holds` call per value produced (`value: unknown`, `predicate: string`). A refinement that fails: `holds` answers `false` for the first value, and the producing call's entry has `turns` with two `return_result` turns, the refused value and the corrected one (the refusal is not an `expected_failures` action) |
+| Folder reducer | root `kind: directory-reducer` with `writes:`; the instance gives `folder_files` (a program that maintains a folder: a manuscript's chapter files, a suite's test files, a household's notes) | the root's turns use `list_files`, `read_file`, `write_file`, `edit_file`; `folder.apply(reducer, ...)` runs a nested reducer |
 | `pluggable` | `pluggable({ crisp, nl }, setting)` in a helper | a `pluggable` span and the side it ran |
 | Escalation, context | `escalate(fn, { to, floor })`, `withContext(fn, { policy })` | the wrapped function's calls |
 
@@ -126,6 +129,11 @@ week's letters, as people write them. Every call in the trajectory is yours to w
 you can read and answer with care: typically 10-25 items and 800-2,000 words of prose. The card's size is an upper
 sketch. Every input is literal data written for this program: no generator, no template, no variants.
 
+Make the instances differ in structure, not only in names: which of the card's traps occur, in what order, how much of
+the input is beside the point (a real chat is mostly not about money). Each trap of the card's `instance_sketch` should
+occur in some instance and reach the root's output. A union type that reads the source's own vocabulary covers every
+value the source uses (screenplay headings say `DAY` and `CONTINUOUS`), or its doc comment says how each maps.
+
 ## The trajectory
 
 **Write every answer yourself, reading that call's opening as the model would.** A script may assemble the JSON from
@@ -139,6 +147,22 @@ answers, including the open text a function writes (the summary, the reply, the 
 careful, competent model running the program would do and write. Answers need not be perfect. They must be
 consistent with the program: each value has the declared type, each eval runs, each call your code makes has an
 entry.
+
+- **An answer uses what its call's opening shows.** You know the whole instance; the call knows its instructions, its
+  arguments and its captures. A writer that receives a ledger entry cannot mention the birthday in the chat or the
+  exchange rate in the rules. When the answer needs a fact, change the program to pass it (add the field, the note, the
+  rate as an argument). `check` lists open answers that state numbers or names their opening does not show.
+- **Loops get honest work.** A draft a careful model writes follows its own instructions. Never break a rule a call's
+  instructions state so that a repair, an `iterateOn` or a refinement has something to do: training would teach the
+  broken draft. A check that holds on the first state is a correct trajectory with zero steps. Loops and refinements
+  get real work from what a careful first answer honestly misses: a property the producing call was not told or could
+  not see (an `ensures:` predicate judged `against` the source the writer only summarized, a promise the policy in the
+  check's context does not allow), a revision that still changes the meaning (`fixedPoint`), a judgment that needs a
+  second look. Answer that `holds` `false` and author the corrected answer.
+- **Refinements on final values.** Put `Is<T, "...">` on the value a function finally returns, not on drafts a later
+  repair fixes: a draft typed as the refinement is judged before the repair can run.
+- **A literal's instructions refer to its parameters and interpolated values.** Anything else it needs is a parameter
+  (bind it with `.partial`) or interpolated text the program derived.
 
 ```json
 {
@@ -174,7 +198,14 @@ entry.
   item fragment: an id alone also matches every call whose arguments include that record (the `earlier` list of a
   reduce, for one). The entry with the most fragments that match answers the call. An entry with only `fn` answers
   every remaining call of that function, which is right for an interior function whose turns are the same code
-  (eval code reads the call's own parameters). An NL literal's opening also declares the variables it captured: every
+  (eval code reads the call's own parameters). Give every entry `fn` (`holds`, `beats`, `relates`, `meets`,
+  `settled` and `nl@eval:N` included): an entry without it can answer another function's call whose arguments quote the
+  same text. A string copied from `Untrusted` text shows as a fenced block (```` ```untrusted data from argument chat of
+  settleTrip ````, then the text, then ```` ``` ````), inside records too: end a fragment before the fence
+  (`message: Message = { id: "m4"`) or take the whole block. A fragment taken from an earlier record or an earlier
+  draft also matches later calls that quote it (a reduce's `earlier` list, a revision that keeps the draft's first
+  sentence): take a passage only this call shows. Two calls with identical openings are answered by one entry. An NL
+  literal's opening also declares the variables it captured: every
   visible variable its instructions name, as an ordinary word too ("could not be played" captures a `played` array), and
   every variable interpolated into it. A fragment can match there; the check names the variable when it does. Reword
   the instructions or list the captures with `nl.with({ … })` when a word captures a variable the call does not need.
@@ -200,11 +231,18 @@ python3 /home/werg/natlang/scripts/memory_ledger.py run --unit <unit>-<what>-<n>
 ```
 
 - **`check SUBMISSION`** (well under a minute): `natlang check` on the program, then the replay of every instance's
-  trajectory. It prints each instance's call tree (each call, its nesting and what it returned), every call with no
-  entry (`NO ENTRY ...` with the start of its arguments: add an entry), every failed action, warnings for entries that
-  answered nothing or one value that answered several different calls, and the program's statistics against the
-  campaign targets. `ok: true` means the trajectory is consistent. Iterate on this. `--no-natlang-check` skips the
-  compile step for a quicker replay.
+  trajectory. First it lists every call with no entry, in every stage at once: `NO ENTRY ...` with the call's whole
+  opening (instructions and arguments) and a suggested entry (`fn` and the first argument line no other call of that
+  function shows). A missing call is answered by a placeholder of its type so the replay reaches the later stages;
+  `ok` stays false until every call has an entry. Then each instance's call tree (each call, its nesting and what it
+  returned; calls through a function argument under the call that made them), the returned value in full, every failed
+  action in full, the instance's statistics, and warnings: an entry that answered nothing, one value that answered
+  calls with different arguments, an entry that answered calls of several functions, a call that several entries
+  match with different answers, open answers stating what their call does not show. `ok: true` means the trajectory
+  is consistent. Iterate on this. `--no-natlang-check` skips the compile step for a quicker replay.
+- **`dump SUBMISSION`**: the whole replay as JSON in `SUBMISSION.dump.json` beside SUBMISSION (`--out FILE` elsewhere):
+  every call's opening and the entry that answered it, the call tree with arguments, eval code and values in full,
+  failed actions, the statistics. Read it instead of writing a dump wrapper.
 - **`admit SUBMISSION`**: checks again and admits: the trajectories go to the training pipeline, the idea to the
   campaign's ledger.
 - **`stats SUBMISSION`**: the statistics alone (JSON).
@@ -222,14 +260,17 @@ arguments it declares, so `semanticMap(items, assess)` works with a one-paramete
 - higher-order uses: functions passed, bound, returned, iterated;
 - NL literals: how many are created, how many are built from data, the calls made through them, and the share of the
   call tree that runs through them;
-- answer lengths, and the mix of open, structured and closed outputs.
+- answer lengths, and the mix of open, structured, selection (text copied from the arguments) and closed outputs;
+- the shipped judgments and refinements by answer (`holds` false counts the refinements that failed and were repaired);
+- open answers stating numbers or names their call's opening does not show.
 
 Aim at the targets the output names. Where your program falls short of one, consider the design again rather than
 padding: a construct used because it fits the work is the training signal; one bolted on is noise.
 
 ## In a campaign
 
-1. Take a card: the wave brief gives the `program_atlas.py take` line. One builder per card.
+1. Take a card: the wave brief gives the `program_atlas.py take` line, which writes the card as `SUBMISSION/idea.json`.
+   One builder per card.
 2. Design the types and the function tree, then write the program. Then write instance a and its trajectory, run
    `check` until `ok: true`, then the other instances.
 3. `admit` admits it. A card you cannot build: `program_atlas.py release SLUG --status failed --reason "..."`.

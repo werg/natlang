@@ -425,8 +425,14 @@ function scopedArgumentNames(context: Message[]): Set<string> {
  * -1 when none matched) and the call's opening, once per opening. */
 export type ChildAnswer = { name: string; entry: number; opening: string; shown: string };
 
+/** Answers a child call no `children` entry matches (authored_replay.mjs: a type-shaped placeholder, so one replay
+ * reports every missing entry instead of stopping at the first); NO_PLACEHOLDER keeps the failure. */
+export type MissingChild = (request: ModelTurnRequest, name: string) => unknown;
+/** The value a `MissingChild` hook returns to leave the call unanswered. */
+export const NO_PLACEHOLDER = Symbol('no placeholder');
+
 export function referenceDriver(record: CurriculumRecord, reasoningFor?: ReasoningHook,
-    onChild?: (answer: ChildAnswer) => void): (request: ModelTurnRequest) => Promise<ModelTurn> {
+    onChild?: (answer: ChildAnswer) => void, missing?: MissingChild): (request: ModelTurnRequest) => Promise<ModelTurn> {
   const rootName = record.semantics.root.replace(/\.nl$/, '').split('/').pop()!;
   let step = 0, seeded = !record.semantics.failure_seed;
   const childTurns = new Map<string, number>();
@@ -468,6 +474,12 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
       const turn = childTurns.get(callKey) ?? 0;
       childTurns.set(callKey, turn + 1);
       if (turn === 0) onChild?.({ name, entry: answer ? children.indexOf(answer) : -1, opening, shown: argumentText(context) });
+      const placeholder = !answer && turn === 0 && missing ? missing(request, name) : NO_PLACEHOLDER;
+      if (placeholder !== NO_PLACEHOLDER) {
+        const reply = scriptedSuccess(request, placeholder);
+        if ('text' in reply) return reply;
+        return { calls: reply.calls, reasoning: actionNote(reply.calls) };
+      }
       // A decision readout's request offers no tools, so a failed return_result there would read as a malformed
       // choice; the missing entry is the error.
       if (!answer && Array.isArray(request.tools) && request.tools.length === 0) throw new Error(unansweredChild(context, name));
@@ -527,11 +539,11 @@ export function actionNote(calls: [string, Record<string, unknown>][]): string {
 
 /** Replay a case's reference solution through the collector's execution path, recording a trajectory. */
 export async function replayReference(record: CurriculumRecord, systemPrompt: string, reasoningFor?: ReasoningHook,
-    options: { onChild?: (answer: ChildAnswer) => void;
+    options: { onChild?: (answer: ChildAnswer) => void; missing?: MissingChild;
       /** Every model request and the scripted reply as the runtime sent and received them (authored-trajectory export:
        * scripts/rl_tasks/reference_episodes.mjs; a decision readout's reply is its `text`). */
       onTurn?: (request: ModelTurnRequest, response: ModelTurn) => void } = {}): Promise<{ run: ProgramRun; trajectory: Turn[] }> {
-  const trajectory: Turn[] = [], reference = referenceDriver(record, reasoningFor, options.onChild);
+  const trajectory: Turn[] = [], reference = referenceDriver(record, reasoningFor, options.onChild, options.missing);
   const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
     const response = await reference(request);
     options.onTurn?.(structuredClone(request), structuredClone(response));
