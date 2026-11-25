@@ -1,0 +1,49 @@
+{
+  "id": "natlang-rl-web-research-assets-20261125",
+  "owner": "dgx",
+  "path": "runs/natlang-rl-web-research-assets-20261125",
+  "include": [
+    "web-research/*.json"
+  ],
+  "kind": "corpus",
+  "format": "one JSON corpus per SearchSwarm item: {results: [{title, url, snippet}], pages: {url: [{goal, text, head}]}}, bound by SHA-256 in each case web service",
+  "license": "MIT (SearchSwarm/SearchSwarm-SFT 4bad3397); recorded search results and page readings of the release",
+  "protected": false,
+  "note": "Runtime input of natlang-rl-web-research-20261125 and its held packets; on NVMe because collectors read it while training (runs/ entry is a symlink; NATLANG_RL_WEB_ASSETS overrides). Also holds the corpora of 435 cases awaiting requalification under the hedge-aware QA containment (fb11b6359).",
+  "inputs": [
+    {
+      "id": "subagent-sources-nvme-20261124",
+      "path": "data_nvme:sa2nl-20261124/source/D02_train.parquet",
+      "sha256": "d68150911c33d942f9bc59114ce57ee68caa72c14679974b311400c4a2d5fb38"
+    }
+  ],
+  "producer": {
+    "script": "scripts/rl_tasks/sources/web_research.py",
+    "argv": [
+      "record",
+      "--id",
+      "natlang-rl-web-research-assets-20261125",
+      "--path",
+      "runs/natlang-rl-web-research-assets-20261125",
+      "--kind",
+      "corpus",
+      "--format",
+      "one JSON corpus per SearchSwarm item: {results: [{title, url, snippet}], pages: {url: [{goal, text, head}]}}, bound by SHA-256 in each case web service",
+      "--include",
+      "web-research/*.json",
+      "--input",
+      "/home/werg/data/sa2nl-20261124/source/D02_train.parquet",
+      "--license",
+      "MIT (SearchSwarm/SearchSwarm-SFT 4bad3397); recorded search results and page readings of the release",
+      "--note",
+      "Runtime input of natlang-rl-web-research-20261125 and its held packets; on NVMe because collectors read it while training (runs/ entry is a symlink; NATLANG_RL_WEB_ASSETS overrides). Also holds the corpora of 435 cases awaiting requalification under the hedge-aware QA containment (fb11b6359).",
+      "--producer-script",
+      "scripts/rl_tasks/sources/web_research.py"
+    ],
+    "git_commit": "fb11b6359abb097abfc84b5a394b2d5c4000781a",
+    "dirty": false,
+    "host": "mltick"
+  },
+  "manifest_sha256": "52deb0e5466964128941e2aef8e424e58e1ba8329c5eda397f22e92e61e88ddd",
+  "training_admission": "registry-recorded"
+}
