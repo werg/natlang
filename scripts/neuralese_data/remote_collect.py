@@ -55,7 +55,20 @@ if (REPO / 'training' / 'neuralese').is_dir():     # not the VM wrapper's copy i
 
 REMOTE_SYNC_GB = 3          # the DGX unit: this process and its rsyncs (file lists of ~100k files), no episodes
 SYNC_SECONDS = 60
-MIRROR_ROOTS = ('/home/werg/', '/mnt/external/')   # data the VM mirrors at the same absolute path
+from natlang_neuralese.common import paths as _paths   # noqa: E402
+
+
+def mirror_roots():
+    """The logical machine roots (``common.paths``: data_nvme, data_hdd, models and the canonical checkout, as configured
+    here) whose files the VM mirrors at the same absolute path."""
+    names = ('data_nvme', 'data_hdd', 'models')
+    found = {str(_paths.root(n)).rstrip('/') + '/' for n in names}
+    # the canonical checkout, not a pin NATLANG_REPO may name (the pin lies under data_nvme)
+    found.add(str(Path(_paths._profile().get('repo') or _paths.DEFAULTS['repo']).expanduser()).rstrip('/') + '/')
+    return tuple(sorted(found))
+
+
+MIRROR_ROOTS = mirror_roots()      # data the VM mirrors at the same absolute path
 # a group's scoring outputs: a DGX reader takes a group's outcome from these, so they arrive after its content
 MARKERS = ('rollouts.jsonl', 'rewards.jsonl', 'score.json', 'versions.json')
 # pin outputs never mirrored: aarch64 native modules of an application the collector does not run
@@ -66,8 +79,8 @@ PUSH_EXCLUDE = ('rollouts.jsonl', 'journal.jsonl', 'row-*/', '*.log', 'actor/', 
 MISSING_RELAUNCHES = 3
 LOST_SECONDS = 1800         # a VM that answers no ssh this long is gone: the unit ends (rc 75) and the driver restarts it
 SESSION_LOST_RC = 75
-PATH_RE = re.compile(rb'(?:/home/werg|/mnt/external)/[A-Za-z0-9._+\-/]+')
-MIN_DIR_DEPTH = 5           # a scanned directory reference this shallow (e.g. /home/werg/natlang/runs) is never mirrored
+PATH_RE = re.compile(rb'(?:' + b'|'.join(re.escape(r.rstrip('/').encode()) for r in MIRROR_ROOTS) + rb')/[A-Za-z0-9._+\-/]+')
+MIN_DIR_DEPTH = 5           # a scanned directory reference this shallow (e.g. the checkout's runs/) is never mirrored
 
 
 def log(**event):
@@ -82,7 +95,7 @@ def mirrored(path):
 def mirror_plan(paths):
     """(links, files): every symlink on the way to each of ``paths`` (``[(link path, its target as written)]``, outermost
     first) and the real files or directories to copy, so the VM resolves each lexical path as the DGX does (a registry
-    role path ``data_nvme:x`` reaches /mnt/external/... through a link; a pin's ``runs`` is a link to the checkout's)."""
+    role path ``data_nvme:x`` reaches the HDD root through a link; a pin's ``runs`` is a link to the checkout's)."""
     links, files = {}, set()
 
     def walk(path, depth=0):
@@ -304,7 +317,7 @@ def pin_outputs(pin):
 
 def ensure_remote_pin(host, cfg, pin, commit, scratch):
     """The DGX pin at the same path on ``host``: a detached worktree at ``commit`` (verified clean) of a checkout at the
-    DGX pin's canonical checkout path (``data_registry.canonical_checkout_repo``: /home/werg/natlang; a VM checkout
+    DGX pin's canonical checkout path (``data_registry.canonical_checkout_repo``; a VM checkout
     sharing the session clone's objects), so checkout-relative registry paths (``runs/...``) resolve where the DGX
     resolves them; the pin's build outputs rsynced over it, its venv the session's and its data links as on the DGX."""
     from natlang_neuralese.common.data_registry import canonical_checkout_repo
