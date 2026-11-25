@@ -5,7 +5,7 @@ description: Embed natlang in Node/TypeScript and browser applications. Use when
 
 # Integrate natlang applications
 
-Build an application in which natlang makes the judgments and ordinary TypeScript does the rest: storage, transport, exact operations, and presentation. Natural-language functions are ordinary async functions in the application; there is no separate program runner.
+Build an application in which natlang owns semantic judgments and domain-specific goal composition, while ordinary TypeScript owns storage, transport, exact operations, and presentation. Natural-language functions are ordinary async functions in the application; there is no separate program runner.
 
 Start by locating the installed `@natlang/node` / `@natlang/browser` version or the checkout and any existing embedding. Reuse its runtime and model lifecycle. Repository paths in the references are lookup hints relative to a natlang checkout.
 
