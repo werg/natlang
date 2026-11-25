@@ -13182,3 +13182,15 @@ ungrounded writers again dominate the drawn sample's bad answers; then the brief
 ### 2026-11-25: recorded nested TypeScript entries and invocation lifetimes
 
 Independent review of e52 found that the inherited causal ID suppressed fresh loaded pure-TS entry capture, and that task liveness alone allowed stale callback ancestry. The shared task-owned invocation registry now distinguishes active own entries from external causal parents, expires all kernel/crisp/native-root paths, revalidates deferred task entry, records fresh TS entries as crisp children and preserves same-task helper suppression. Expired callbacks cannot retain invocation service scopes; task-level bindings remain valid. Parent frame references clear at task.close. Standalone native sessions and StdSpan receive their own real lifetime hooks; synthetic spans do not claim recorder-backed custody. Existing optouts remain. Official Node/Core/browser build passed,54 targeted actual tests passed(10.88s,1.4GiB),quick passed18.2s/1.1GiB; no model calls. Historical0064 capture bytes are preserved, not retrospectively reparented. The older StdSpan durable-record gap remains a separate owned follow-up.
+
+### 2026-11-25 — Keep nested deployment limits out of ordinary teacher waves
+
+Actual V34 wave0065 selected64 goals, only one requiring installed deployment,
+but the wave-wide cap reduced all64 from four workers to two. The shared
+scheduler now groups that resource requirement with workspace/review boundaries
+and ranks by effective worker slots. The nested cap stays two; fresh deployment
+work still precedes ordinary retries, all goals stay eligible, and tail filling
+uses the selected resource class's real capacity. `--mixed-deployment-waves`
+restores prior mixed grouping. Inventory: `VIBE_RESOURCE_WAVES_20261125.md`.
+Actual89 campaign tests passed (0.70s/51.8MiB); no paid probe. Existing useful
+collection continues; the new driver enters at a safe checkpoint.

@@ -549,7 +549,8 @@ def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, 
     return rows
 
 
-def next_wave(cases, rows, size, *, epoch_first_retries=False, concurrency=None, strict_priority_waves=False):
+def next_wave(cases, rows, size, *, epoch_first_retries=False, concurrency=None,
+              strict_priority_waves=False, deployment_concurrency=2, mixed_deployment_waves=False):
     pending = [name for name, row in rows.items() if row['status'] == 'pending']
     if not pending or size <= 0:
         return []
@@ -560,7 +561,11 @@ def next_wave(cases, rows, size, *, epoch_first_retries=False, concurrency=None,
         return (row['attempts'],) if epoch_first_retries else (cumulative, row['attempts'])
     def group(name):
         case = cases[name]
-        return case['workspace'], bool(case.get('requiresReview'))
+        deployment = bool(case.get('requiresDeploymentPackage')) and not mixed_deployment_waves
+        return case['workspace'], bool(case.get('requiresReview')), deployment
+    workers = min(size, concurrency if concurrency is not None else size)
+    def group_workers(key):
+        return min(workers, deployment_concurrency) if key[2] else workers
     for name, row in rows.items():
         attempts[cases[name]['workspace']] += row['attempts'] if epoch_first_retries else row.get('cumulative_teacher_attempts', row['attempts'])
     best = min(map(priority, pending))
@@ -572,15 +577,14 @@ def next_wave(cases, rows, size, *, epoch_first_retries=False, concurrency=None,
         for name in pending:
             groups.setdefault(group(name), []).append(name)
         eligible = [key for key, names in groups.items() if any(priority(name)[0] == best[0] for name in names)]
-        workers = min(size, concurrency if concurrency is not None else size)
         def group_priority(key):
             available = sum(priority(name)[0] == best[0] for name in groups[key])
-            return (available < workers, -min(available, workers),
+            return (-min(available, group_workers(key)),
                     min(priority(name) for name in groups[key]), attempts[key[0]])
         chosen = groups[min(eligible, key=group_priority)]
     # Later exposure bands fill idle workers, never pad an already productive
     # wave to its maximum size at the expense of fresh work in other groups.
-    target = size if strict_priority_waves else min(size, max(workers,
+    target = size if strict_priority_waves else min(size, max(group_workers(group(chosen[0])),
         sum(priority(name)[0] == best[0] for name in chosen)))
     names = []
     for rank in sorted({priority(name) for name in chosen}):
@@ -717,7 +721,9 @@ def _drive(args, checkpoint):
             names = next_wave(cases, rows, args.wave_size,
                               epoch_first_retries=getattr(args, 'epoch_first_retries', False),
                               concurrency=args.concurrency,
-                              strict_priority_waves=getattr(args, 'strict_priority_waves', False))
+                              strict_priority_waves=getattr(args, 'strict_priority_waves', False),
+                              deployment_concurrency=getattr(args, 'deployment_concurrency', 2),
+                              mixed_deployment_waves=getattr(args, 'mixed_deployment_waves', False))
             if not names:
                 if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required') for row in rows.values()):
                     return
@@ -807,6 +813,8 @@ def main():
                      help='use the former epoch-only retry ordering (default: cumulative fresh coverage first)')
     run.add_argument('--strict-priority-waves', action='store_true',
                      help='restore exact-priority group waves rather than filling worker slots and group tails')
+    run.add_argument('--mixed-deployment-waves', action='store_true',
+                     help='restore mixed installed-deployment and ordinary waves, applying the deployment cap to the entire wave')
     run.add_argument('--attempt-epoch', help='explicit retry epoch; defaults to the pinned release manifest SHA-256')
     run.add_argument('--infrastructure-hold-threshold', type=int, default=2,
                      help='hold after this many structural failures, or provider failures also reaching the fraction limit; 0 disables holds')

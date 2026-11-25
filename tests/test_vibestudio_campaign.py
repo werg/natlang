@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 import subprocess
 import sys
 import pytest
@@ -795,6 +796,63 @@ def test_tail_fallback_only_fills_workers_without_padding_with_retries():
     result = vibestudio_campaign.next_wave(cases,rows,64,concurrency=8)
     assert len(result)==9
     assert all(rows[name]['cumulative_teacher_attempts']==0 for name in result)
+
+
+def test_one_deployment_case_does_not_throttle_ordinary_wave():
+    cases, rows = wave_candidates([('system', False, [0] * 10)])
+    nested = list(cases)[-1]
+    cases[nested]['requiresDeploymentPackage'] = True
+    selected = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=4)
+    assert len(selected) == 9
+    assert nested not in selected
+    limits = SimpleNamespace(concurrency=4, deployment_concurrency=2, cases_per_instance=8)
+    assert vibestudio_campaign.collection_limits(limits, [cases[name] for name in selected])['concurrency'] == 4
+    for name in selected:
+        rows[name]['status'] = 'verified'
+    assert vibestudio_campaign.next_wave(cases, rows, 64, concurrency=4) == [nested]
+    assert vibestudio_campaign.collection_limits(limits, [cases[nested]])['concurrency'] == 2
+
+
+def test_fresh_deployment_goals_precede_full_ordinary_retry_group():
+    cases, rows = wave_candidates([('system', False, [1] * 8 + [0] * 2)])
+    for name in list(cases)[-2:]:
+        cases[name]['requiresDeploymentPackage'] = True
+    selected = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=4)
+    assert len(selected) == 2
+    assert all(cases[name].get('requiresDeploymentPackage') for name in selected)
+
+
+def test_deployment_tail_only_fills_its_effective_worker_limit():
+    cases, rows = wave_candidates([('system', False, [0] + [1] * 8)])
+    for case in cases.values():
+        case['requiresDeploymentPackage'] = True
+    selected = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8, deployment_concurrency=2)
+    assert len(selected) == 2
+    assert [rows[name]['cumulative_teacher_attempts'] for name in selected] == [0, 1]
+    assert len(vibestudio_campaign.next_wave(cases, rows, 64, concurrency=8, deployment_concurrency=3)) == 3
+
+
+def test_resource_selection_uses_actual_slots_and_preserves_all_goals():
+    cases, rows = wave_candidates([('system', False, [0] * 5)])
+    for name in list(cases)[-2:]:
+        cases[name]['requiresDeploymentPackage'] = True
+    first = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=4)
+    assert len(first) == 3  # Three ordinary workers beat a full two-worker deployment group.
+    assert not any(cases[name].get('requiresDeploymentPackage') for name in first)
+    for name in first:
+        rows[name]['status'] = 'verified'
+    second = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=4)
+    assert len(second) == 2
+    assert set(first + second) == set(cases)
+
+
+def test_mixed_deployment_optout_restores_whole_wave_limit():
+    cases, rows = wave_candidates([('system', False, [0] * 9)])
+    cases[list(cases)[-1]]['requiresDeploymentPackage'] = True
+    selected = vibestudio_campaign.next_wave(cases, rows, 64, concurrency=4, mixed_deployment_waves=True)
+    assert len(selected) == 9
+    limits = SimpleNamespace(concurrency=4, deployment_concurrency=2)
+    assert vibestudio_campaign.collection_limits(limits, [cases[name] for name in selected])['concurrency'] == 2
 
 
 @pytest.mark.parametrize('command,code', [(['ssh', 'archive-host'], 255), (['rsync', 'owned-source'], 12)])
