@@ -3445,3 +3445,12 @@ Authoring guidance now distinguishes model-owned domain composition from pure de
 ### 2026-11-25 — intersect declared constraints instead of rejecting valid narrowing
 
 Record refinements such as `Review & { journal: "matched"; readback: NonNullReadback }` now intersect the existing literal/nullable unions correctly. The old object-only merger threw before a real shouldStageEvalResult model call despite an independently confirmed readback. Shared normalization handles supported unions/scalars/records/dictionaries/collections without widening the declared constraints; impossible intersections are `never`. Aliased discriminant fields also narrow before variant/callback fitting while recursive object fields stay lazy. Finite readouts resolve direct intersection/index/utility types through the same normalizer; an empty decision domain fails before inference. Actual captured input hashes and strict negative mutations were checked offline, with Node/Workerd boundary regressions and no model calls. Inventory: `plans/INTERSECTION_NORMALIZATION_20261125.md`.
+
+## 2026-11-25 — historical presentation meaning review
+
+The local-presentation reassessment now gives the independent reviewer the actual
+source, actual canonical presentation and source-verified native visible receipt.
+It excludes reference props/component IDs and never invents uncaptured final DOM
+text/control state. A bound accepted reviewer exchange is required before a
+completed outcome can be emitted. This changes offline data admission, not the
+language or executing teacher prompt; the existing original trajectory is reused.

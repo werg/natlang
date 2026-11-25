@@ -12607,3 +12607,18 @@ A separate live packaging operation created packages/extension-host/dist-publish
 The full campaign resumes automatically on official driver22c39b0cddc2e6a38b2e99bbcbdb6111add82452, eight workers, eight cases per runtime, two nested-deployment slots,64-case archival waves and no wave limit. Two actual eight-case managed runs peaked9,544,425,472 bytes (8.89GiB); expected claim12GiB leaves35% margin to that measurement, with hard ceiling18GiB, reserve7.5GiB and the active guard unchanged. This is an estimate with margin, not a universal bound; later observed peak10.51GiB is recorded and remains below the expected claim. Existing attempts, seed mappings and raw data remain intact. Structural circuit-breaking remains; transient provider failures use the tested cohort fraction. One observed failed call was definitively pre-head TCP connect timeout to both vetted addresses, not DNS; broader historical terminated-body causes remain open. Coding, packaging and native checks stay low priority and yield to useful collection.
 
 Remaining work is explicit: finish independent installed package validation for three nested deployment goals, ship publisher/preconnect and genuinely observed presentation checks, continue the full queue and opportunistic native reference sweep, and improve domain codebases toward model-owned hierarchical composition. Passing operational checks or authoring guidance does not close that architectural capability gap. Useful current trajectories remain in training.
+
+## 2026-11-25 — recover native presentations without arbitrary gold props
+
+Actual0058 booking preview rendered the correct Cedar/Willow Choices component,
+with a legitimate question/default multiple=false and an actor-chosen control
+ID. The fixture's gold comparison rejected those incidental props and skipped
+its final DOM observer. SST7424031 and Host1e4353ed fix both open presentation
+consumers through safe actual rendering and mandatory bound artifact meaning
+review; strict literal/function renderer tests remain. The offline shared
+`reassess_local_presentation.mjs` likewise now uses actual canonical MDX,
+source-hashed original native preview guarantees and exact captured effect/receipt
+identity, preserving every other native check. It requires an independently
+captured accepted meaning review and leaves uncaptured final DOM absent. No
+teacher rerun or raw packet/manifest rewrite is involved. Default preparation
+without a review cannot emit a completed-outcome assessment.
