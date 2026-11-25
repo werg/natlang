@@ -421,7 +421,12 @@ function scopedArgumentNames(context: Message[]): Set<string> {
     .filter((name): name is string => name !== undefined));
 }
 
-export function referenceDriver(record: CurriculumRecord, reasoningFor?: ReasoningHook): (request: ModelTurnRequest) => Promise<ModelTurn> {
+/** What a replay reports about each child call: the function, the `children` entry that answered it (its index, or
+ * -1 when none matched) and the call's opening, once per opening. */
+export type ChildAnswer = { name: string; entry: number; opening: string; shown: string };
+
+export function referenceDriver(record: CurriculumRecord, reasoningFor?: ReasoningHook,
+    onChild?: (answer: ChildAnswer) => void): (request: ModelTurnRequest) => Promise<ModelTurn> {
   const rootName = record.semantics.root.replace(/\.nl$/, '').split('/').pop()!;
   let step = 0, seeded = !record.semantics.failure_seed;
   const childTurns = new Map<string, number>();
@@ -460,6 +465,10 @@ export function referenceDriver(record: CurriculumRecord, reasoningFor?: Reasoni
       }
       const turn = childTurns.get(opening) ?? 0;
       childTurns.set(opening, turn + 1);
+      if (turn === 0) onChild?.({ name, entry: answer ? children.indexOf(answer) : -1, opening, shown: argumentText(context) });
+      // A decision readout's request offers no tools, so a failed return_result there would read as a malformed
+      // choice; the missing entry is the error.
+      if (!answer && Array.isArray(request.tools) && request.tools.length === 0) throw new Error(unansweredChild(context, name));
       const scripted = answer?.calls?.[turn];
       if (!scripted && answer && !answer.call) {
         // A value answer: JSON text on a decision readout's tool-free request, else return_result (scriptedSuccess).
@@ -484,9 +493,11 @@ function referenceEnded(context: Message[]): string {
   return observed ? `The reference solution ended without finishing the call; its last action returned: ${observed}` :
     'The reference solution ended without finishing the call.';
 }
+/** How a call's arguments render in its opening (the messages after the signature and instructions). */
+const argumentText = (context: Message[]) => context.slice(2, openingLength(context)).map(message => text(message.content)).join('\n');
 /** A child call no `children` entry matches, named with the start of its arguments so the entry to add is clear. */
 function unansweredChild(context: Message[], name: string): string {
-  const shown = oneLine(context.slice(2, openingLength(context)).map(message => text(message.content)).join(' '), 300);
+  const shown = oneLine(argumentText(context), 300);
   return `The reference has no answer for the child call ${name}${shown ? ` (its arguments: ${shown})` : ''}; ` +
     'add a children entry whose match fragments all appear in this call\'s opening.';
 }
@@ -513,9 +524,9 @@ export function actionNote(calls: [string, Record<string, unknown>][]): string {
 }
 
 /** Replay a case's reference solution through the collector's execution path, recording a trajectory. */
-export async function replayReference(record: CurriculumRecord, systemPrompt: string, reasoningFor?: ReasoningHook):
-    Promise<{ run: ProgramRun; trajectory: Turn[] }> {
-  const trajectory: Turn[] = [], reference = referenceDriver(record, reasoningFor);
+export async function replayReference(record: CurriculumRecord, systemPrompt: string, reasoningFor?: ReasoningHook,
+    options: { onChild?: (answer: ChildAnswer) => void } = {}): Promise<{ run: ProgramRun; trajectory: Turn[] }> {
+  const trajectory: Turn[] = [], reference = referenceDriver(record, reasoningFor, options.onChild);
   const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
     const response = await reference(request);
     trajectory.push({ context: structuredClone(request.messages) as Message[],

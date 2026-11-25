@@ -5,7 +5,9 @@
 // give every model call: `calls` counts the model turns of the whole run (root and children, what the collector's
 // episode budget counts), and `children` lists each `.nl` call below the root with its function path, its arguments
 // as the call received them, the value it returned and its model turns. A call whose arguments hold a function value
-// is listed with `functional: true` (it cannot become a task of its own).
+// is listed with `functional: true` (it cannot become a task of its own). `value` is what the run returned and `answers`
+// says, for each distinct child call, which `children` entry answered it (`entry`: its index, -1 for none) and how its
+// arguments rendered in the call's opening (`shown`: the text match fragments are found in).
 import fs from 'node:fs';
 const [runtime, input, out] = process.argv.slice(2);
 const { replayReference } = await import(runtime + '/dist/teacher/curriculum.js');
@@ -17,8 +19,13 @@ const results = [];
 for (const record of rows) {
   const row = { id: record.id };
   try {
-    const { run, trajectory } = await replayReference(record, TOOLS_PROMPT);
+    const answers = [];
+    const { run, trajectory } = await replayReference(record, TOOLS_PROMPT, undefined,
+      { onChild: ({ name, entry, shown }) => answers.push({ name, entry, shown: shown.slice(0, 2000) }) });
     row.status = run.outcome.status;
+    row.value = run.outcome.value ?? null;
+    if (run.outcome.status !== 'done') row.detail = JSON.stringify(run.outcome.detail ?? run.outcome.status).slice(0, 1500);
+    row.answers = answers;
     row.accepted = run.outcome.accepted === true;
     row.calls = trajectory.length;
     row.children = [];

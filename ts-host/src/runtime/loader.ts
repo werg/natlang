@@ -301,13 +301,36 @@ function checkName(path: string, name: string): void {
   if (RESERVED_CALLABLE_PROPERTIES.has(name)) throw new NatlangSourceError(path, reservedNameMessage(name));
 }
 
+/** The TypeScript helper beside a `.nl` file (or in a folder above it) that declares type `name`, if one does. */
+function helperDeclaring(path: string, name: string, files?: SourceFiles): string | undefined {
+  if (!files) return;
+  const declares = new RegExp(`\\bexport\\s+(?:type|interface)\\s+${name}\\b`);
+  let dir = files.dirname(path);
+  for (let depth = 0; depth < 4; depth++) {
+    try {
+      for (const entry of files.list(dir)) {
+        const file = files.join(dir, entry);
+        if (/\.ts$/.test(entry) && !/\.d\.(nl\.)?ts$/.test(entry) && entry !== 'types.ts' && files.isFile(file) && declares.test(files.read(file)))
+          return file;
+      }
+    } catch { return; }
+    const up = files.dirname(dir);
+    if (up === dir || files.isFile(files.join(dir, 'natlang.json'))) return;
+    dir = up;
+  }
+}
+
 function checkSignature(path: string, args: Record<string, string>, returns: string, types: Record<string, string>,
-  text = ''): void {
+  text = '', files?: SourceFiles): void {
   const env = new TypeEnv(parseAliases(types));
   const check = (type: string, line: () => number | undefined) => {
     try { env.checkNames(parseTypeCached(type)); }
     catch (error) {
       const unknown = /^unknown type name (\S+)/.exec((error as Error).message)?.[1];
+      // A type a helper exports is TypeScript's, not the judgment's: signatures read the aliases of types.ts.
+      const helper = unknown ? helperDeclaring(path, unknown, files) : undefined;
+      if (helper) throw new NatlangSourceError(path, `unknown type name ${unknown}: it is declared in ${files!.basename(helper)}, ` +
+        `and a function's signature reads the aliases of types.ts; move ${unknown} to types.ts and import it from there in the helper`, line());
       const near = unknown && closestName(unknown, [...Object.keys(types), ...PLAIN_TYPES]);
       throw new NatlangSourceError(path, (error as Error).message, line(), near ? `did you mean ${near}?` : undefined);
     }
@@ -350,7 +373,7 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   if (generic && (meta.readout === 'decision' || meta.readout === 'instant'))
     throw new NatlangSourceError(path, `readout: ${meta.readout} scores a finite crisp result; declare returns: ${generic.crisp} for it`, frontmatterLine(text, 'readout'));
   const returns = generic?.crisp ?? meta.returns;
-  checkSignature(path, args, returns, types, text);
+  checkSignature(path, args, returns, types, text, files);
   if (generic) checkSignature(path, {}, generic.neuralese, types);
   if (meta.readout !== undefined) {
     if (meta.readout !== 'decision' && meta.readout !== 'instant' && meta.readout !== 'template')

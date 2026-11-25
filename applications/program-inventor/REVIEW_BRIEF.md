@@ -34,6 +34,10 @@ inline `nl`):
   nicknames, labels), including fields of records passed to it and text a TypeScript helper assembles from outside
   fields before passing it on, is typed `Untrusted<...>`. Identifiers, numbers and closed value sets need not be
   (`invented.py qualify` flags plain `string` fields as S6; you judge the rest).
+- **Every rule a scripted answer rests on is written down**: in the instruction, a doc comment of an argument type, or
+  code. A scripted answer that needs a precedence or resolution rule found nowhere in what the call sees fails S4; so
+  does a doc-comment rule applied to some items and not others. `qualification/reference.txt` lists which children
+  entry answered which item: read the items a shared entry answered with special care.
 - Each judgment receives what it needs to answer and nothing it must not see (no expected answers, no other items'
   verdicts it should not depend on, no ids that leak the answer).
 
