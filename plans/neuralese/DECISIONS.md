@@ -13815,3 +13815,22 @@ about 3-12/h, ERNIE (OpenRouter free) at most about 26 episodes/day, Gemini 3.5 
 
 `teacher_free_models.py signups` prints the exact steps. Once a key file exists, the next 6-hourly run lists the
 provider, probes it, qualifies its models and admits the ones that pass.
+
+## 2026-11-25 16:10 Collector application controllers run as the episode's root invocation (capabilities-probe fix)
+
+Observation: `ts-host/dist/teacher/cli.js --capabilities json` threw `NatlangContextError: The invocation that owns
+this callback has finished` from its application-controller probe; four shared-collector tests in
+`tests/test_bonsai_queue.py` failed with it. Cause: 7f4bafb63 (invocation-bound liveness) made `resolveFrame` refuse a
+frame whose `parentCallId` is not a live invocation. `NodeNativeRuntime.frame` names the run id as its parent, but that
+invocation is begun only inside `run()`/`evaluate()`. The collector's controller path (`executeProgramInEpisode`)
+entered `runtime.frame` directly with `runInFrame`, so the controller's first Natlang operation ran under an invocation
+that never began. db4aa4b4e is not the cause (it only reroutes through the same check). Fix: `NodeNativeRuntime.runHosted`
+begins and ends the run invocation around host code (shared with `evaluate`); the collector controller path uses it.
+Inventory: the only out-of-`run()` entry into a native runtime's frame is that collector path (`git grep
+"runInFrame(.*runtime\.frame"`; `native/agent.ts` uses run inside `run()`). Tests: `ts-host/test/application-controller.test.mjs`
+(child is parented under the run; `runHosted` owns the invocation only while it runs), the capabilities probe, and the
+shared-collector tests. Production: `--capabilities` is called only by `scripts/run_reviewed_luna_dispatcher.py`, not by
+the expert-iteration collectors. Pin exposure: pins with 7f4bafb63 (ee84247cab9a, the v0009 collections and teacher;
+8b06ad22876b, the driver and Colab fill; 35a778eb9bc1; edd23ec451d3) fail any task with `application_controller`.
+The v0009 collections hold no such case (0 of 171 group `cases.jsonl`) and their logs never show the error, so aei1
+data is unaffected; the fix enters at the next pin. The driver was not restarted.
