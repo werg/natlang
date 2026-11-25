@@ -14026,3 +14026,86 @@ launched; once the stage ran, nothing resized the waiting collection.
   its launch budget whenever its family (one per version) had no learned peak yet, so restoring the claim to 70 GB left
   a cgroup cap at the shrunk size. Every DGX collection launch (async driver and `cycle` collect/recollect) now passes
   `--host-max-gb` = the formula cap.
+
+## 2026-11-25 21:30 Natlang compiler: the second agent's uncommitted work reviewed and integrated (integration agent)
+
+Owner (2026-11-25): the other compiler agent's uncommitted work "can be reviewed, improved, and integrated". Two agents
+had edited the compiler at once; the coordinator's review fixes (18:45 entry) restored committed files over the other
+agent's edits, whose later versions were saved (`compiled_site.py`, `run_t2.py`, the compiled-site test) and are now
+merged onto those fixes. Both sides kept: Mode P stays the header's native state plus a residual with no gate, losses,
+OPSD, the FO-MAML gradient path, the real hindsight-kb store and the declared dependency are unchanged.
+
+**Integrated (with changes):**
+- `compiled_site`: unified slots `Z = [z_site, z_kb, null]` (evidence gate `w/(null_mass+w)` on retrieved slots,
+  `log w` on the logits, a learned null slot), AdapterReader V2 cores `tanh(diag + U V^T)` (`adapter_inner_rank`,
+  0 = dense), learned per-family core scale, independent `kv_drop`/`adapter_drop`, `compose_site_cores`,
+  `LearnedBankBasis` (tune/learned/bank.py's bank basis as live FP32 leaves, `native_grad` passes an adapter's basis
+  leaves through `adapter_leaves_override`), `split_compositional_header`.
+- `run_t2`: Live-KB slots per row (`LiveExperienceWriter`), FO-MAML episodes, compositional `C_scope + C_body` steps,
+  call-level (Engine A) rows in `prepare`, a learned basis and writer in the resumable state, `shuffled_kb` ablation arm.
+- `per_call_hkb.PerCallNeuralHKBCompiler`, `latent_ttt.refine_compiled_site` (Tier 1.5 on Mode P),
+  `train_compiler`/T2 recipe default to Mode W (hindsight-kb refuses `positioned` since 29b952a) and full-vocabulary KL.
+- ts-host: `compiledDecisions` (one calibrated scoring pass settles a confident `readout: decision`, else the reasoned
+  readout), `branchSearch` (prefix-shared branch@N, crisp-first ranking), `contract-hoist.ts` (structural return checks
+  via `coerce`). Off unless configured.
+- hindsight-kb: fused single-pass Mode-W attention (exact LSE merge; Triton on CUDA inference) and the fused `B C A`
+  linear, default on with `HKB_FUSED_MODE_W=0` opt-out and a CUDA parity test against the reference.
+
+**Defects found and fixed in the integrated code:**
+- Factorized cores sat on a saddle: with `U = V = 0` neither gets gradient, so only the diagonal ever trained. U now
+  starts nonzero, V at zero (core still 0 at step 0); test checks V's gradient at step 0.
+- `LearnedBankBasis.orthonormalize_` every 50 steps replaced `B` by `Q` (`B = QR`) without re-expressing the cores the
+  head emits (`bank.transform_core`), changing every compiled site's update at once; removed (`--ortho-every` gone).
+- Live-KB positives excluded only the row's own task id: a source-group sibling's experience text (signature + verified
+  reply) could carry the answer, in training and in the dev ablation. Peers now exclude the row, its task and every
+  source-group sibling.
+- Null-memory restraint zeroed the weights, which only masks the slots (identical to "no memory") and teaches nothing;
+  restraint rows now see distractors only at their real weights (plan: 20%, the new default).
+- `LiveExperienceWriter`'s 000000002 warm start was a silent no-op (it read `writer_warmstart.pt`, the extractor writes
+  `writer_H.pt`; keys were matched by name across a pplx-embed 0.6B and a 2-layer pooler) while the receipt reported a
+  warm start; removed with the dual-LR groups. Its byte-as-token-id fallback for a missing tokenizer is gone.
+- Hard negatives from a `ScopedExperienceKB` mixed records of another writer's value space into this writer's slots;
+  removed (cross-family peers encoded by the same writer remain). `per_call_hkb` documents the one-space requirement.
+- `prepare` fabricated case rows (`{id, source_groups}`) for call-level tasks missing from the collections and ran the
+  held check over them; now fail closed (`call_level_unknown_case`). The funnel lacked `imports_native_state` (KeyError
+  on the first state-importing call); call-level rows are also checked for native-state imports.
+- The compositional step summed the signature's core with the full header's core (no algebra learned); it now compiles
+  scope and body separately (their text states written in the real call) and trains `C_scope + C_body` alone.
+- FO-MAML crashed whenever the Reptile weight was nonzero (the default 0.1): the Reptile term backpropagated through
+  `z0`'s graph after the query backward had freed it (the episode was never exercised by a test). The pull now
+  re-encodes the header. Support was one call; it is now every call but the last, query the last.
+- Resume was not exact: the run's `random.Random` (peers, null rows, episodes) was not saved and dropout drew from the
+  CUDA generator; both are now restored (CPU generator draws).
+- `CompiledSiteConfig.from_dict` silently dropped unknown keys; strict again. `compose_site_cores` refuses mismatched
+  targets. `PerCallCompileRequest` had placeholder `compiler_sha='compiler-v2'`/`policy_sha='base'` defaults and a cache
+  key missing `exclude_tasks` and the base; both identities are now required and the key covers them. Swallowed
+  exceptions in the KB generation lookup removed.
+- ts-host: the decision fast path swallowed scoring errors; branch 0 of branch search got `seed 0` when the request had
+  no seed (it is now the exact pass@1 request).
+
+**Dropped, and why:**
+- The positioned `soft:kb` span: a fixed "[KB] [KB] ..." text state spliced after the header, so step 0 was not the
+  uncompiled call (extra tokens) and the span did not start from input-specific text (AGENTS.md "Learned operators
+  start from text"); no engine or ts-host release binding places a second soft state, so a release carrying it would
+  serve something other than what was trained. Retrieved experience enters through `Z` into the header state residual
+  and the cores (plan §4.1/§4.3). A KB span initialized from the Stage-A record text, with a serving placement, is the
+  route if Stage C needs more bandwidth.
+- ts-host `crispFastPaths`: a second crisp-case mechanism beside `runCrispCase` (guards that decline, type check and
+  refinements on the result, effects, capture, audits), without the type check; §6.3 promotion should emit compiled
+  cases. The kernel's JIT binding: it attached the compiled adapter through a hand-built weights frame (`identity: {}`)
+  and dropped the compiled native state, serving half of what was trained, and swallowed errors; Tier-1 weights should
+  bind as a tuned release (state + adapter) through `tuned-serving`. `partialBindings` (only the JIT used it) and the
+  unused `hoistContracts` option went with it.
+- `step_verifier.harvest_branch_wins`: no caller, and it read `trace_events`/`branch_win` fields no rollout carries.
+- The other agent's 18:06 versions (`collapse`, `unified_head`, `call_level_engine`, `opsd_privileged`, `hkb_bridge`,
+  hindsight-kb `attention`/`native_lfm`): superseded by the committed fixes (Mode P collapse algebra removed, tail-bucket
+  JSD, CE on verified continuations, sibling exclusion, real SQLiteKB, real rollout formats); nothing unique kept.
+
+Tests: `test_compiler_compiled_site` (learned basis release serves the trained loss, V gets gradient at step 0, strict
+config, Live-KB sibling exclusion and restraint, FO-MAML and compositional gradients reach the encoder),
+`test_natlang_compiler`, `test_learned_optimizer_bank` (21 passed); ts-host build + compiler-jit/decision/callable
+tests (62 passed); hindsight-kb kernel/attention/LFM3 tests incl. the new CUDA Triton parity tests (42 passed).
+
+**Open:** T2 on hindsight-kb's `ExperienceWriter` with the 000000002 `H`/`Q` (W0.2 extraction on g4a) instead of the
+stand-in writer; Tier-1 runtime binding as a tuned release; call-level rows carry no prompt token count (the teach
+step's size cap bounds them).
