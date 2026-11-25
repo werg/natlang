@@ -135,3 +135,284 @@ def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0
                'divergence': float(divergence.detach()), 'n_verified': float(n_verified), 'ce': float(ce.detach()),
                'mean_log_ratio': float(log_ratio[kept].mean()) if n_kept else 0.}
     return loss, metrics
+
+
+# ---------------------------------------------------------------------------- Recipe T1 (OPSD tier) on real rollouts
+#
+# build: failed, scored rollouts of ONE policy -> per-call twins (root calls with token-only prompts), facts from the
+#        group's own case rows (custody: ProtectedWorlds.load(), fails closed) and the run's verifier outcome as attempt
+#        feedback; held tasks and siblings excluded by held_eval.training_exclusion_ids. Validation tasks by source-group
+#        hash (the T0 rule) are kept apart for the receipt's before/after divergence.
+# train: the shared LoRA learner core (frozen BF16 base, FP32 LoRA factors + AdamW, lfm3_fast.hidden); per twin a
+#        no-grad forward of the current policy over the twin, a forward with gradients over the student sequence,
+#        opsd_loss at the aligned completion positions. Per-step jsonl, resumable learner state, factor export,
+#        and a wrong-world control: the same divergence against twins carrying another world's facts.
+
+T1_SCHEMA = 'natlang.compiler.t1-opsd/1'
+
+
+def lfm3_rendering(tokenizer, *, consume_open=0, consume_close=0, fingerprint='0' * 64):
+    """The declared guidance-turn rendering for the LFM3 ChatML template from an HF tokenizer (text form only: the
+    consume markers are unused by ``turn``)."""
+    from .privileged_context import PrivilegedRendering
+    start, end = tokenizer.convert_tokens_to_ids(['<|im_start|>', '<|im_end|>'])
+    return PrivilegedRendering('lfm3', tokenizer.bos_token_id, start, end, consume_open, consume_close, fingerprint,
+                               lambda text: tokenizer(text, add_special_tokens=False)['input_ids'])
+
+
+def build_t1_twins(collections, out, *, policy_sha256, tokenizer, max_tokens=16384, max_calls_per_episode=6,
+                   max_episodes=None, held_manifest=None):
+    import glob
+    import json
+    from pathlib import Path
+    import zstandard
+    from ..common.custody import ProtectedWorlds
+    from ..common.jsonio import json_line, read_jsonl
+    from ..train.step_verifier import SUCCESS_OUTCOMES, _completion_ids, _prompt_ids, _split_group, is_validation
+    from .held_eval import training_exclusion_ids
+    custody = ProtectedWorlds.load()
+    rendering = lfm3_rendering(tokenizer)
+    funnel = {'rollouts': 0, 'other_policy': 0, 'success_or_unscored': 0, 'held_excluded': 0, 'no_case': 0,
+              'custody_refused': 0, 'no_facts': 0, 'episodes': 0, 'twins': 0, 'too_long': 0, 'validation_twins': 0}
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    partial = out.with_suffix(out.suffix + '.partial')
+    with partial.open('wb') as raw, zstandard.ZstdCompressor(level=6).stream_writer(raw) as writer:
+        for collection in collections:
+            for group in sorted(glob.glob(str(Path(collection) / 'groups' / 'g*'))):
+                rollouts_path, cases_path = Path(group) / 'rollouts.jsonl', Path(group) / 'cases.jsonl'
+                if not rollouts_path.exists() or not cases_path.exists():
+                    continue
+                cases = list(read_jsonl(cases_path))
+                by_id = {case['id']: case for case in cases}
+                excluded = training_exclusion_ids(cases, held_manifest)
+                details = {}
+                rewards = Path(group) / 'rewards.jsonl'
+                for row in (read_jsonl(rewards) if rewards.exists() else ()):
+                    details[(row.get('task_id'), row.get('group'), row.get('sample'))] = row.get('detail')
+                with rollouts_path.open(encoding='utf-8') as handle:
+                    for line in handle:
+                        if not line.strip():
+                            continue
+                        rollout = json.loads(line)
+                        funnel['rollouts'] += 1
+                        if (rollout.get('policy') or {}).get('checkpoint_sha256') != policy_sha256:
+                            funnel['other_policy'] += 1
+                            continue
+                        if rollout.get('unscored') or rollout.get('outcome') in SUCCESS_OUTCOMES or not rollout.get('outcome'):
+                            funnel['success_or_unscored'] += 1
+                            continue
+                        task_id = rollout['task_id']
+                        if task_id in excluded:
+                            funnel['held_excluded'] += 1
+                            continue
+                        case = by_id.get(task_id)
+                        if case is None:
+                            funnel['no_case'] += 1
+                            continue
+                        detail = details.get((task_id, rollout.get('group'), rollout.get('sample')))
+                        feedback = f"the run ended with outcome {rollout['outcome']}" + (f'; verifier detail: {detail}'
+                                                                                         if detail else '')
+                        try:
+                            receipt, facts = opsd_facts(case, custody=custody, attempt_feedback=[
+                                {'case_id': task_id, 'attempt': int(rollout.get('sample') or 0), 'feedback': feedback}])
+                        except Exception:
+                            funnel['custody_refused'] += 1
+                            continue
+                        if not facts:
+                            funnel['no_facts'] += 1
+                            continue
+                        texts = [fact.text for fact in facts]
+                        roots = [index for index, turn in enumerate(rollout['turns'])
+                                 if turn.get('invocation_role') == 'root' and _prompt_ids(turn) is not None
+                                 and _completion_ids(turn)]
+                        if len(roots) > max_calls_per_episode:   # evenly spread over the episode
+                            step = len(roots) / max_calls_per_episode
+                            roots = [roots[int(i * step)] for i in range(max_calls_per_episode)]
+                        validation = is_validation(rollout)
+                        kept = 0
+                        for index in roots:
+                            turn = rollout['turns'][index]
+                            twin = twin_sequences(rendering, _prompt_ids(turn), _completion_ids(turn), texts,
+                                                  receipt={'custody': receipt, 'facts': [f.id for f in facts]})
+                            if len(twin.twin_ids) > max_tokens:
+                                funnel['too_long'] += 1
+                                continue
+                            kept += 1
+                            funnel['twins'] += 1
+                            funnel['validation_twins'] += int(validation)
+                            writer.write(json_line({'task_id': task_id, 'family': rollout.get('family'),
+                                                    'split_group': _split_group(rollout), 'validation': validation,
+                                                    'episode': f"{Path(group).name}/{rollout['group']}/{rollout['sample']}",
+                                                    'turn': index, 'outcome': rollout['outcome'], 'facts': texts,
+                                                    'prompt_ids': list(twin.student_ids[:len(twin.student_ids) - len(twin.targets)]),
+                                                    'completion_ids': list(twin.targets)}).encode('utf-8') + b'\n')
+                        funnel['episodes'] += int(kept > 0)
+                        if max_episodes and funnel['episodes'] >= max_episodes:
+                            break
+                if max_episodes and funnel['episodes'] >= max_episodes:
+                    break
+            if max_episodes and funnel['episodes'] >= max_episodes:
+                break
+    partial.replace(out)
+    return funnel
+
+
+def _twin_rows(path):
+    import io
+    import json
+    import zstandard
+    with open(path, 'rb') as raw, zstandard.ZstdDecompressor().stream_reader(raw) as reader:
+        for line in io.TextIOWrapper(reader, encoding='utf-8'):
+            if line.strip():
+                yield json.loads(line)
+
+
+def _positions_logits(learner, ids, positions, *, grad):
+    from ..train import lfm3_fast
+    tensor = torch.tensor(ids, device=learner.device)
+    with torch.set_grad_enabled(grad):
+        h = lfm3_fast.hidden(learner.model, tensor, adapters=learner.bundles, trainable_rows=learner.trainable_rows)
+        rows = h[torch.tensor(positions, device=learner.device)]
+        weight = learner.model.lm_head.weight
+        special = learner.trainable_rows
+        # the learner's own head rule: the trainable Neuralese rows score their ids (lfm3_fast._head_logits_chunk)
+        logits = lfm3_fast._head_logits_chunk(rows.to(weight.dtype), weight,
+                                               special.token_ids if special is not None else None,
+                                               special.rows if special is not None else None)
+    return logits.float()
+
+
+def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=128.0, lr=3e-5, warmup=20,
+             batch_twins=8, max_steps=None, kind='forward_kl', topk=None, max_log_ratio=6.0, state_every=25,
+             validation_limit=64, seed=0):
+    import json
+    import random
+    from pathlib import Path
+    from ..common.code_provenance import code_provenance
+    from ..train.lfm3_learner import AdapterSpec, Lfm3Learner
+    from ..train.learner_state import load_learner_state, save_learner_state
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    rendering = lfm3_rendering(tokenizer)
+    rows = list(_twin_rows(twins_path))
+    train_rows = [row for row in rows if not row['validation']]
+    val_rows = [row for row in rows if row['validation']][:validation_limit]
+    rng = random.Random(seed)
+    rng.shuffle(train_rows)
+    learner = Lfm3Learner.from_checkpoint(checkpoint, base, AdapterSpec.for_sft(rank=rank, alpha=alpha), seed=seed,
+                                          compile_layers=False)
+    optimizer = learner.build_optimizer(lr)
+    step = 0
+    state_dir = out / 'learner-state'
+    if (state_dir / 'learner_manifest.json').exists():
+        restored = load_learner_state(state_dir, learner, optimizer)
+        step = int(restored.get('learner_step') or 0)
+    total_steps = max_steps or max(1, len(train_rows) // batch_twins)
+
+    def twin_of(row, facts=None):
+        return twin_sequences(rendering, row['prompt_ids'], row['completion_ids'], facts or row['facts'])
+
+    def divergence_on(sample, wrong=False):
+        values = []
+        for i, row in enumerate(sample):
+            facts = sample[(i + 1) % len(sample)]['facts'] if wrong and len(sample) > 1 else None
+            twin = twin_of(row, facts)
+            with torch.no_grad():
+                t = _positions_logits(learner, twin.twin_ids, twin.twin_positions, grad=False)
+                s = _positions_logits(learner, twin.student_ids, twin.student_positions, grad=False)
+                _, metrics = opsd_loss(s, t, torch.tensor(twin.targets, device=s.device), kind=kind, topk=topk,
+                                       max_log_ratio=max_log_ratio)
+            values.append(metrics['divergence'])
+        return sum(values) / max(1, len(values))
+
+    receipt = {'schema': T1_SCHEMA, 'twins': str(twins_path), 'checkpoint': str(checkpoint), 'rows': len(rows),
+               'train_twins': len(train_rows), 'validation_twins': len(val_rows), 'rank': rank, 'alpha': alpha,
+               'lr': lr, 'kind': kind, 'topk': topk, 'max_log_ratio': max_log_ratio, 'code': code_provenance()}
+    if step == 0 and val_rows:
+        receipt['validation_before'] = {'divergence': divergence_on(val_rows),
+                                        'wrong_world_divergence': divergence_on(val_rows, wrong=True)}
+    log = (out / 'train.jsonl').open('a')
+    cursor = step * batch_twins
+    while step < total_steps and cursor < len(train_rows):
+        batch = train_rows[cursor:cursor + batch_twins]
+        cursor += batch_twins
+        scale = min(1.0, (step + 1) / max(1, warmup))
+        for group in optimizer.param_groups:
+            group['lr'] = lr * scale * group.get('lr_scale', 1.0)
+        optimizer.zero_grad(set_to_none=True)
+        sums = {'divergence': 0., 'shortcut_masked_frac': 0., 'n': 0.}
+        for row in batch:
+            twin = twin_of(row)
+            t = _positions_logits(learner, twin.twin_ids, twin.twin_positions, grad=False).detach()
+            s = _positions_logits(learner, twin.student_ids, twin.student_positions, grad=True)
+            loss, metrics = opsd_loss(s, t, torch.tensor(twin.targets, device=s.device), kind=kind, topk=topk,
+                                      max_log_ratio=max_log_ratio)
+            (loss / len(batch)).backward()
+            for key in sums:
+                sums[key] += metrics[key] / len(batch)
+        grad_norm = float(torch.nn.utils.clip_grad_norm_(learner.trainable_parameters(), 1.0))
+        optimizer.step()
+        step += 1
+        log.write(json.dumps({'step': step, 'lr': lr * scale, 'grad_norm': grad_norm, **sums}) + '\n')
+        log.flush()
+        if step % state_every == 0:
+            save_learner_state(state_dir, learner, optimizer, learner_step=step, source_checkpoint_id=str(checkpoint),
+                               objective_version=T1_SCHEMA)
+    log.close()
+    save_learner_state(state_dir, learner, optimizer, learner_step=step, source_checkpoint_id=str(checkpoint),
+                       objective_version=T1_SCHEMA)
+    if val_rows:
+        receipt['validation_after'] = {'divergence': divergence_on(val_rows),
+                                       'wrong_world_divergence': divergence_on(val_rows, wrong=True)}
+    tensors, scales = learner.factor_tensors()
+    torch.save({'tensors': tensors, 'scales': scales, 'spec': learner.spec.to_dict()}, out / 'factors.pt')
+    receipt['steps'] = step
+    (out / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    return receipt
+
+
+def main(argv=None):
+    import argparse
+    import json
+    from pathlib import Path
+    from transformers import AutoTokenizer
+    parser = argparse.ArgumentParser(description='Recipe T1: OPSD per-call twins on real failed rollouts')
+    sub = parser.add_subparsers(dest='command', required=True)
+    b = sub.add_parser('build')
+    b.add_argument('--collection', action='append', required=True)
+    b.add_argument('--policy-sha256', required=True)
+    b.add_argument('--tokenizer', required=True)
+    b.add_argument('--out', required=True)
+    b.add_argument('--max-episodes', type=int)
+    b.add_argument('--held-manifest')
+    t = sub.add_parser('train')
+    t.add_argument('--twins', required=True)
+    t.add_argument('--checkpoint', required=True)
+    t.add_argument('--base', required=True)
+    t.add_argument('--out', required=True)
+    t.add_argument('--max-steps', type=int)
+    t.add_argument('--batch-twins', type=int, default=8)
+    t.add_argument('--lr', type=float, default=3e-5)
+    t.add_argument('--kind', choices=DIVERGENCES, default='forward_kl')
+    t.add_argument('--topk', type=int)
+    args = parser.parse_args(argv)
+    if args.command == 'build':
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+        result = build_t1_twins(args.collection, args.out, policy_sha256=args.policy_sha256, tokenizer=tokenizer,
+                                max_episodes=args.max_episodes, held_manifest=args.held_manifest)
+        from ..common.code_provenance import code_provenance
+        Path(args.out + '.json').write_text(json.dumps({'schema': T1_SCHEMA, 'stage': 'build', 'funnel': result,
+                                                        'collections': args.collection,
+                                                        'policy_sha256': args.policy_sha256,
+                                                        'code': code_provenance()}, indent=2) + '\n')
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.base)
+        result = train_t1(args.twins, args.out, checkpoint=args.checkpoint, base=args.base, tokenizer=tokenizer,
+                          max_steps=args.max_steps, batch_twins=args.batch_twins, lr=args.lr, kind=args.kind,
+                          topk=args.topk)
+    print(json.dumps(result, indent=2, default=str))
+
+
+if __name__ == '__main__':
+    main()
