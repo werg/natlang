@@ -10,6 +10,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import sha256_file_hex
+from natlang_neuralese.common.jsonio import canonical_json_bytes
 from observed_graph_metrics import graph_metrics
 
 NATIVE_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1'
@@ -729,7 +730,27 @@ def observed_graph(details, ancestry, scopes, exclusions):
     ]
 
 
+def observed_graph_custody_digest(record, children):
+    """Core graphCustodyDigest bytes for the closed call/effect-reference protocol.
+
+    Its structural field names are ASCII and its numeric fields are integer
+    ordinals/byte counts. Existing canonical JSON preserves Unicode string values,
+    including lone UTF-16 units, without embedding actual referenced user values.
+    """
+    value = {'schema': 'natlang.call-graph-chronology/1', 'task_id': record['task_id'],
+             'call_id': record['call_id'], 'parent_call_id': record['parent_call_id'],
+             'child_call_ids': children}
+    if 'effects' in record:
+        value['effects'] = record['effects']
+    return hashlib.sha256(canonical_json_bytes(value, allow_nan=False)).hexdigest()
+
+
 def verify_observed_child_inventory(records):
+    """Bind causal edges, including fresh tasks, to each call's own recorded inventory.
+
+    Task identity scopes execution authority and effect ordering, not causal parentage.
+    Call artifacts and the independent capture scope authenticate owner/run membership.
+    """
     if not any(record.get('graph_custody') is not None for record in records.values()):
         return
     children = defaultdict(set)
@@ -743,7 +764,7 @@ def verify_observed_child_inventory(records):
                 not record.get('task_id') or custody.get('task_id') != record['task_id'] or
                 not isinstance(custody.get('sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', custody['sha256']) or
                 len(declared) != len(children[call_id]) or set(declared) != children[call_id] or
-                any(records[child].get('task_id') != record['task_id'] for child in children[call_id])):
+                custody['sha256'] != observed_graph_custody_digest(record, declared)):
             raise ValueError('observed workspace call graph differs from recorded child inventory')
 
 
