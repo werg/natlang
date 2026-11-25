@@ -30,8 +30,11 @@ def default_lfm3_tap_layers(num_layers: int) -> tuple[int, ...]:
 
 @dataclass(frozen=True)
 class HeaderEncoderConfig:
-    hidden_dim: int
+    hidden_dim: int = 0
     num_tap_layers: int = 3
+    # per-tap feature widths (e.g. a header state's convolution rows and attention values); default: num_tap_layers
+    # hidden states plus the final hidden state, each hidden_dim wide
+    tap_dims: tuple = ()
     num_slots: int = 16
     value_dim: int = 256
     key_dim: int = 128
@@ -39,12 +42,17 @@ class HeaderEncoderConfig:
     dropout: float = 0.0
 
     def __post_init__(self):
-        if self.hidden_dim <= 0 or self.num_tap_layers <= 0 or self.num_slots <= 0:
+        if self.num_slots <= 0 or (not self.tap_dims and (self.hidden_dim <= 0 or self.num_tap_layers <= 0)) or any(
+                int(d) <= 0 for d in self.tap_dims):
             raise ValueError("HeaderEncoderConfig dimensions must be positive")
         if self.value_dim <= 0 or self.key_dim <= 0 or self.num_heads <= 0:
             raise ValueError("HeaderEncoderConfig slot/key/head dims must be positive")
         if self.value_dim % self.num_heads != 0:
             raise ValueError(f"value_dim ({self.value_dim}) must divide num_heads ({self.num_heads})")
+
+    @property
+    def input_dims(self) -> tuple:
+        return tuple(int(d) for d in self.tap_dims) or (self.hidden_dim,) * (self.num_tap_layers + 1)
 
 
 class _CrossAttentionBlock(nn.Module):
@@ -70,20 +78,20 @@ class _CrossAttentionBlock(nn.Module):
 
 
 class HeaderEncoder(nn.Module):
-    """Pool LFM3 tapped hidden states into unified (z_site, k_site, weights) semantic slots.
+    """Pool LFM3's reading of a header into unified (z_site, k_site, weights) semantic slots.
 
-    All parameters live in FP32 (AGENTS.md LFM3 precision rule). Forward accepts BF16 or FP32
-    tapped tensors from LFM3 and computes in FP32 for exact Tier-1.5 and T2 gradients.
+    Taps are per-token features of the header: tapped hidden states plus the final hidden state, or (the compiler's
+    default, ``compiled_site.default_taps``) the rows of the header's text-initialized native state at several depths.
+    All parameters live in FP32 (AGENTS.md LFM3 precision rule); inputs of any float dtype compute in FP32.
     """
 
     def __init__(self, config: HeaderEncoderConfig):
         super().__init__()
         self.config = config
-        in_dim = config.hidden_dim * (config.num_tap_layers + 1)
-        self.input_proj = nn.Sequential(
-            nn.Linear(in_dim, config.value_dim),
-            nn.LayerNorm(config.value_dim),
-        )
+        # one normalized projection per tap, summed: taps of different widths (state rows of different layer kinds)
+        self.tap_norms = nn.ModuleList([nn.LayerNorm(d) for d in config.input_dims])
+        self.tap_proj = nn.ModuleList([nn.Linear(d, config.value_dim) for d in config.input_dims])
+        self.input_norm = nn.LayerNorm(config.value_dim)
         self.slot_queries = nn.Parameter(torch.randn(1, config.num_slots, config.value_dim) * 0.02)
         self.blocks = nn.ModuleList([
             _CrossAttentionBlock(config.value_dim, config.num_heads, config.dropout),
@@ -93,10 +101,26 @@ class HeaderEncoder(nn.Module):
         self.value_head = nn.Linear(config.value_dim, config.value_dim)
         self.key_head = nn.Linear(config.value_dim, config.key_dim)
         self.weight_head = nn.Linear(config.value_dim, 1)
-        # Initialize value head softly so step-0 compiled slots stay well-conditioned.
         nn.init.normal_(self.value_head.weight, std=0.02)
         nn.init.zeros_(self.value_head.bias)
         nn.init.zeros_(self.weight_head.bias)
+
+    def context(self, taps, extra_context_slots: torch.Tensor | None = None) -> torch.Tensor:
+        """Per-token context [B, T, Dv] from the taps (each [B, T, d_i])."""
+        if len(taps) != len(self.tap_proj):
+            raise ValueError(f"Expected {len(self.tap_proj)} taps, got {len(taps)}")
+        ctx = self.input_norm(sum(proj(norm(t.float())) for t, norm, proj in zip(taps, self.tap_norms, self.tap_proj)))
+        if extra_context_slots is not None and extra_context_slots.shape[1] > 0:
+            ctx = torch.cat((ctx, extra_context_slots.float()), dim=1)
+        return ctx
+
+    def pool(self, ctx: torch.Tensor, pad_mask: torch.Tensor | None = None):
+        """(z [B, M, Dv], k [B, M, Dk] normalized, weights [B, M]) from a context; pad_mask True = ignored."""
+        queries = self.slot_queries.expand(ctx.shape[0], -1, -1)
+        for block in self.blocks:
+            queries = block(queries, ctx, key_padding_mask=pad_mask)
+        h = self.out_norm(queries)
+        return self.value_head(h), F.normalize(self.key_head(h), dim=-1), F.softplus(self.weight_head(h)).squeeze(-1)
 
     def forward(
         self,
@@ -106,39 +130,15 @@ class HeaderEncoder(nn.Module):
         attention_mask: torch.Tensor | None = None,
         extra_context_slots: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Encode tapped LFM3 hidden states -> (z_site [B, M, Dv], k_site [B, M, Dk], weights [B, M]).
-
-        Args:
-            tapped_states: tuple of num_tap_layers tensors [B, T, D_hidden]
-            final_hidden: final-norm LFM3 hidden state [B, T, D_hidden]
-            attention_mask: optional bool/0-1 mask [B, T] (True/1 = valid token)
-            extra_context_slots: optional pre-encoded semantic slots [B, M_extra, Dv]
-                (e.g., memetic guidance states or Neuralese compacted spans) concatenated into
-                the cross-attention key/value context.
-        """
+        """Encode tapped LFM3 hidden states (plus the final hidden state) -> (z_site, k_site, weights)."""
         if len(tapped_states) != self.config.num_tap_layers:
             raise ValueError(
                 f"Expected {self.config.num_tap_layers} tapped layers, got {len(tapped_states)}"
             )
-        cat = torch.cat([*(t.float() for t in tapped_states), final_hidden.float()], dim=-1)
-        ctx = self.input_proj(cat)  # [B, T, Dv]
+        ctx = self.context([*tapped_states, final_hidden], extra_context_slots)
         pad_mask = None
         if attention_mask is not None:
-            pad_mask = ~attention_mask.to(torch.bool)  # True = ignored by MultiheadAttention
-        if extra_context_slots is not None and extra_context_slots.shape[1] > 0:
-            extra = extra_context_slots.float()
-            ctx = torch.cat((ctx, extra), dim=1)
-            if pad_mask is not None:
-                extra_valid = torch.zeros(
-                    (pad_mask.shape[0], extra.shape[1]), dtype=torch.bool, device=pad_mask.device
-                )
-                pad_mask = torch.cat((pad_mask, extra_valid), dim=1)
-
-        queries = self.slot_queries.expand(ctx.shape[0], -1, -1)
-        for block in self.blocks:
-            queries = block(queries, ctx, key_padding_mask=pad_mask)
-        h = self.out_norm(queries)
-        z_site = self.value_head(h)
-        k_site = F.normalize(self.key_head(h), dim=-1)
-        weights = F.softplus(self.weight_head(h)).squeeze(-1)
-        return z_site, k_site, weights
+            pad_mask = ~attention_mask.to(torch.bool)
+            if ctx.shape[1] > pad_mask.shape[1]:
+                pad_mask = torch.cat((pad_mask, pad_mask.new_zeros(pad_mask.shape[0], ctx.shape[1] - pad_mask.shape[1])), 1)
+        return self.pool(ctx, pad_mask)
