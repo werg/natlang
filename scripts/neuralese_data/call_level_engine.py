@@ -141,6 +141,13 @@ def decision_labels(messages):
     return labels or None
 
 
+def native_state(messages):
+    """Whether a request carries Neuralese state as non-text content parts (a ``native_state`` import): only a
+    native-state server reads those; a hosted teacher refuses the request."""
+    return any(isinstance(p, dict) and p.get('type', 'text') != 'text'
+               for m in messages if isinstance(m.get('content'), list) for p in m['content'])
+
+
 def call_kind(turn, n_header):
     if not turn.get('tools'):
         return 'decision' if decision_labels(turn['messages']) else 'readout'
@@ -264,7 +271,7 @@ def site_rows(episode, turns, source, invocations=None, *, kinds=DEFAULT_KINDS, 
             'parent_definition': functions.get(parent) if parent else None,
             'argument_binding_sha256': inv.get('argument_binding_sha256'),
             'header_sha': header_sha, 'input_sha': input_sha, 'header_messages': n_header,
-            'messages': messages, 'tools': turn.get('tools') or [],
+            'messages': messages, 'tools': turn.get('tools') or [], 'native_state': native_state(messages),
             **({'prompt_ids': exact['prompt_ids']} if exact and exact.get('prompt_ids') else {}),
             'task_id': episode['task_id'], 'family': episode.get('family'),
             'source_groups': episode.get('source_groups') or [], 'source': source,
@@ -397,6 +404,12 @@ def extract(args):
     out.mkdir(parents=True, exist_ok=True)
     held_manifest = args.held_manifest or data_registry.role_path('held-eval')
     colls, pools, works = collections_of(args), authored_pools(args), [Path(w) for w in args.work or ()]
+    unregistered = []
+    if not args.collection:   # a discovered collection no registry entry holds is left out (and listed), never read
+        registry = data_registry.load()
+        unregistered = [c for c in colls
+                        if (registry.find(c) or {'admission': data_registry.INVENTORY}).get('admission') == data_registry.INVENTORY]
+        colls = [c for c in colls if c not in unregistered]
     data_registry.require_registered([*map(str, colls), *map(str, pools), *map(str, works)])
     units = []
     for coll in colls:
@@ -482,7 +495,8 @@ def extract(args):
                'distinct_sites': len({b[0] for b in per_site}), 'site_headers': len(per_site),
                'funnel': dict(sorted(funnel.items())),
                'sources': {k: dict(sorted(v.items())) for k, v in by_source.items()},
-               'collections': [str(c) for c in colls], 'authored_pools': [str(p) for p in pools],
+               'collections': [str(c) for c in colls], 'unregistered_collections': [str(c) for c in unregistered],
+               'authored_pools': [str(p) for p in pools],
                'works': [str(w) for w in works]}
     (out / 'extract.json').write_text(json.dumps(summary, indent=1) + '\n')
     if not args.no_register:
@@ -579,6 +593,9 @@ def select_sites(args, funnel):
         row = json.loads(line)
         funnel['sites_read'] += 1
         if row['kind'] not in rank:
+            continue
+        if native_state(row['messages']):
+            funnel['native_state'] += 1
             continue
         size = len(json.dumps(row['messages'], ensure_ascii=False)) + len(json.dumps(row['tools'], ensure_ascii=False))
         if size > args.max_prompt_chars:

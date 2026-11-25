@@ -277,19 +277,48 @@ def _twin_rows(path):
                 yield json.loads(line)
 
 
-def _positions_logits(learner, ids, positions, *, grad):
+def _positions_hidden(learner, ids, positions, *, grad):
     from ..train import lfm3_fast
     tensor = torch.tensor(ids, device=learner.device)
     with torch.set_grad_enabled(grad):
         h = lfm3_fast.hidden(learner.model, tensor, adapters=learner.bundles, trainable_rows=learner.trainable_rows)
-        rows = h[torch.tensor(positions, device=learner.device)]
-        weight = learner.model.lm_head.weight
-        special = learner.trainable_rows
-        # the learner's own head rule: the trainable Neuralese rows score their ids (lfm3_fast._head_logits_chunk)
-        logits = lfm3_fast._head_logits_chunk(rows.to(weight.dtype), weight,
-                                               special.token_ids if special is not None else None,
-                                               special.rows if special is not None else None)
-    return logits.float()
+        return h[torch.tensor(positions, device=learner.device)]
+
+
+def _head(learner, rows):
+    from ..train import lfm3_fast
+    weight = learner.model.lm_head.weight
+    special = learner.trainable_rows
+    # the learner's own head rule: the trainable Neuralese rows score their ids (lfm3_fast._head_logits_chunk)
+    return lfm3_fast._head_logits_chunk(rows.to(weight.dtype), weight,
+                                        special.token_ids if special is not None else None,
+                                        special.rows if special is not None else None).float()
+
+
+def twin_loss(learner, twin, *, grad, scale=1.0, chunk=256, **loss_options):
+    """``opsd_loss`` of one twin, its full-vocabulary logits formed ``chunk`` completion positions at a time (a long
+    completion's [n, V] FP32 logits do not fit beside the model). With ``grad`` the chunks backpropagate one by one
+    through the shared student hidden states, each weighted by its share of the positions times ``scale``. Returns
+    the position-weighted metrics."""
+    with torch.no_grad():
+        t_rows = _positions_hidden(learner, twin.twin_ids, twin.twin_positions, grad=False)
+    s_rows = _positions_hidden(learner, twin.student_ids, twin.student_positions, grad=grad)
+    targets = torch.tensor(twin.targets, device=s_rows.device)
+    n = len(twin.targets)
+    totals = {'divergence': 0., 'shortcut_masked_frac': 0., 'n': float(n)}
+    for start in range(0, n, chunk):
+        stop = min(n, start + chunk)
+        share = (stop - start) / n
+        with torch.no_grad():
+            t = _head(learner, t_rows[start:stop])
+        with torch.set_grad_enabled(grad):
+            s = _head(learner, s_rows[start:stop])
+            loss, metrics = opsd_loss(s, t, targets[start:stop], **loss_options)
+            if grad:
+                (loss * share * scale).backward(retain_graph=stop < n)
+        totals['divergence'] += metrics['divergence'] * share
+        totals['shortcut_masked_frac'] += metrics['shortcut_masked_frac'] * share
+    return totals
 
 
 def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=128.0, lr=3e-5, warmup=20,
@@ -328,10 +357,7 @@ def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=12
             facts = sample[(i + 1) % len(sample)]['facts'] if wrong and len(sample) > 1 else None
             twin = twin_of(row, facts)
             with torch.no_grad():
-                t = _positions_logits(learner, twin.twin_ids, twin.twin_positions, grad=False)
-                s = _positions_logits(learner, twin.student_ids, twin.student_positions, grad=False)
-                _, metrics = opsd_loss(s, t, torch.tensor(twin.targets, device=s.device), kind=kind, topk=topk,
-                                       max_log_ratio=max_log_ratio)
+                metrics = twin_loss(learner, twin, grad=False, kind=kind, topk=topk, max_log_ratio=max_log_ratio)
             values.append(metrics['divergence'])
         return sum(values) / max(1, len(values))
 
@@ -353,11 +379,8 @@ def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=12
         sums = {'divergence': 0., 'shortcut_masked_frac': 0., 'n': 0.}
         for row in batch:
             twin = twin_of(row)
-            t = _positions_logits(learner, twin.twin_ids, twin.twin_positions, grad=False).detach()
-            s = _positions_logits(learner, twin.student_ids, twin.student_positions, grad=True)
-            loss, metrics = opsd_loss(s, t, torch.tensor(twin.targets, device=s.device), kind=kind, topk=topk,
-                                      max_log_ratio=max_log_ratio)
-            (loss / len(batch)).backward()
+            metrics = twin_loss(learner, twin, grad=True, scale=1.0 / len(batch), kind=kind, topk=topk,
+                                max_log_ratio=max_log_ratio)
             for key in sums:
                 sums[key] += metrics[key] / len(batch)
         grad_norm = float(torch.nn.utils.clip_grad_norm_(learner.trainable_parameters(), 1.0))

@@ -79,3 +79,25 @@ def test_opsd_loss_masks_shortcuts_and_trains_ce_only_on_verified_positions():
     full, _ = opsd_loss(student, twin, targets, kind='jsd')
     bucket, _ = opsd_loss(student, twin, targets, kind='jsd', topk=10)
     torch.testing.assert_close(full, bucket, rtol=1e-4, atol=1e-6)
+
+
+def test_chunked_twin_loss_equals_one_pass():
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import opsd_privileged as O
+    torch.manual_seed(0)
+    emb = torch.nn.Embedding(200, 8)
+    head = torch.nn.Linear(8, 20, bias=False)
+    learner = SimpleNamespace()
+    O_hidden, O_head = O._positions_hidden, O._head
+    try:
+        O._positions_hidden = lambda _l, ids, pos, grad: torch.tanh(emb(torch.tensor(ids)).cumsum(0))[list(pos)]
+        O._head = lambda _l, rows: head(rows).float()
+        twin = twin_sequences(rendering(), [BOS, 4, 5, 6], [7, 8, 9, 10, 11], ['fact'])
+        one = O.twin_loss(learner, twin, grad=True, chunk=100)
+        g_one = emb.weight.grad.clone()
+        emb.weight.grad = None
+        many = O.twin_loss(learner, twin, grad=True, chunk=2)
+        assert abs(one['divergence'] - many['divergence']) < 1e-5
+        torch.testing.assert_close(emb.weight.grad, g_one, rtol=1e-4, atol=1e-6)
+    finally:
+        O._positions_hidden, O._head = O_hidden, O_head

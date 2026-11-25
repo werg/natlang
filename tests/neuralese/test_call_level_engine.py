@@ -134,6 +134,8 @@ def test_signature_and_answer_parsing():
     assert cle.parse_answer('decision', '```json\n"pass"\n```', [], ['pass'])[0] == 'decision_label'
     assert cle.parse_answer('entry', '', [('return_result', {'status': 'success', 'value': 3})]) == ('return_value', 3)
     assert cle.parse_answer('entry', '', [('eval', {'code': 'x'})])[0] == 'action'
+    assert cle.native_state([{'role': 'tool', 'content': [{'type': 'native_state', 'block': 'b'}]}])
+    assert not cle.native_state([{'role': 'tool', 'content': [{'type': 'text', 'text': 't'}]}, {'role': 'user', 'content': 'x'}])
     text, calls = cle.normalize_reply('', [{'function': {'name': 'return_result', 'arguments': '{"value": 1}'}}])
     assert calls == [('return_result', {'value': 1})]
 
