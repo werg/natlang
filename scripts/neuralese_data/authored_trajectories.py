@@ -19,6 +19,11 @@ the authored reply (tool calls, or a decision readout's JSON text). With ``turns
 trajectory enters training only after ``sft_sources replay`` re-ran its task under the training pin's runtime with those
 replies and the task's oracle accepted the result.
 
+Neuralese is rendered as the serving engines read it by default (ts-host ``model/in-context-neuralese.ts``): a learned
+compaction site's operator call (``<call>#operator-<n>``, function ``view``) is a turn of its own whose target is the
+authored summary, and every consumer's messages carry each state's text in place (no sentinel, no markers). The replay
+of these episodes (``sft_sources replay``, ``authored_episode``) reads Neuralese the same way.
+
 Turns carry no reasoning. The reasoning between actions is the student's, filled by ``filled_reasoning.py`` (the
 ``filled`` tier, ``replaces=teacher``); until a fill exists the episode trains as a teacher episode: its empty think
 block is zero-weight context and its actions are targets (sft_sources ThinkTreatment default).
@@ -43,6 +48,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -155,9 +161,16 @@ def episode_name(row):
 READOUT_REPEATS = 16
 
 
+def operator_turn(turn):
+    """A learned operator's call (``<call>#operator-<n>``, learned compaction): its own per-call chain, the authored
+    summary as its target, never a decision readout (it is asked once and its reply is captured in place)."""
+    return bool(re.search(r'#operator-\d+$', turn.get('invocation_id') or ''))
+
+
 def readout_turn(turn):
     """A tool-free request answered with text: a decision readout (or a generated value)."""
-    return not (turn.get('tools') or []) and not (turn.get('target') or {}).get('tool_calls')
+    return (not (turn.get('tools') or []) and not (turn.get('target') or {}).get('tool_calls')
+            and not operator_turn(turn))
 
 
 def rollout_row(row):

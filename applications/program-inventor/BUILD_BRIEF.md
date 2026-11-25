@@ -117,6 +117,8 @@ The replay records every call. Your trajectory answers each call below the root 
 | Folder reducer | root `kind: directory-reducer` with `writes:`; the instance gives `folder_files` (a program that maintains a folder: a manuscript's chapter files, a suite's test files, a household's notes) | the root's turns use `list_files`, `read_file`, `write_file`, `edit_file`; `folder.apply(reducer, ...)` runs a nested reducer |
 | `pluggable` | `pluggable({ crisp, nl }, setting)` in a helper | a `pluggable` span and the side it ran |
 | Escalation, context | `escalate(fn, { to, floor })`, `withContext(fn, { policy })` | the wrapped function's calls |
+| Long value (learned compaction) | nothing to write: an argument or an eval output over 8,000 characters (a whole document, a long log) | the runtime cuts it and calls the learned operator `view` on the whole value: `{fn: "view", match: ["answers: <start of the receiving function's instructions>"], value: "<the summary>"}`. Its opening is `instructions:` (for an argument `The call that receives this argument as doc (string) answers: ...`; for an eval output `Read this eval result for: ...`) and `value:` (the whole value). Write what that purpose needs from the value: names, numbers, where things are. The receiving call's listing shows your summary in the value's place (`doc: string = <summary>  // view of the value; doc holds all of it`); an eval output shows its cut, then `Compacted value: ` and your summary. Its answer may use what the summary says; eval code still reads the whole variable |
+| Neuralese value | `returns: Neuralese<string>` (a gist, a running state handed on); a consumer takes `gist: Neuralese<string>` | the producing call's `value` is the text; each consumer's opening shows that text where the value stands. Pass it on whole; `await read(g)` in eval is a model call with its own entry |
 
 Front matter is YAML: a `description:` containing `: ` goes in double quotes. Eval code follows the iteration rules: `for...of`, counted loops, array methods, `iterateOn`; no `while`. Outside text
 is never interpolated into an NL literal's instructions: pass it as an argument (`untrusted-instruction`), and build
@@ -241,6 +243,9 @@ python3 /home/werg/natlang/scripts/memory_ledger.py run --unit <unit>-<what>-<n>
   calls with different arguments, an entry that answered calls of several functions, a call that several entries
   match with different answers, open answers stating what their call does not show. `ok: true` means the trajectory
   is consistent. Iterate on this. `--no-natlang-check` skips the compile step for a quicker replay.
+  Neuralese is replayed as the serving engines read it: every learned-compaction site makes its `view` call (a
+  missing one is `NO ENTRY ... for a call of view`, and its suggested fragment is the line of its instructions), and
+  `Neuralese<T>` values are read as their text in place. The statistics count `operator_calls`.
 - **`dump SUBMISSION`**: the whole replay as JSON in `SUBMISSION.dump.json` beside SUBMISSION (`--out FILE` elsewhere):
   every call's opening and the entry that answered it, the call tree with arguments, eval code and values in full,
   failed actions, the statistics. Read it instead of writing a dump wrapper.

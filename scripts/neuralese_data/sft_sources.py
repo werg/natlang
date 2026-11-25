@@ -1239,6 +1239,13 @@ def safe_name(key):
     return hashlib.sha256(key.encode()).hexdigest()[:20]
 
 
+def authored_episode(episode):
+    """An authored trajectory's teacher episode (authored_trajectories.py pool: teacher provider ``authored``). Its turns
+    were rendered with Neuralese read in context (learned compaction's operator calls, ``Neuralese<T>`` values as their
+    text in place: ts-host model/in-context-neuralese.ts), so its replay reads them the same way."""
+    return (episode.get('teacher') or {}).get('provider') == 'authored'
+
+
 def has_native_state(episode):
     return any(isinstance(m.get('content'), list) and any(isinstance(part, dict) and part.get('type') == 'native_state'
                                                            for part in m['content'])
@@ -1288,6 +1295,8 @@ def replay_episode(args, server, episode, env):
     entry = list(read_jsonl(directory / 'queue.jsonl'))[0]
     entry.update(seed=episode.get('seed') or entry['seed'], prompt_rendering='full', request_retries=0,
                  context_tokens=replay_context_tokens(episode['source']))
+    if authored_episode(episode):   # its trajectory was rendered reading Neuralese in context (reference_episodes.mjs)
+        entry['in_context_neuralese'] = True
     (directory / 'queue.jsonl').write_text(json.dumps(entry, sort_keys=True) + '\n')
     queue_file = directory / f"{entry['key']}.queue.jsonl"
     queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')

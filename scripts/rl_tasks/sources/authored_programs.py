@@ -47,6 +47,10 @@ Trajectory entries (`instances[].trajectory`):
          answers (author order breaks ties). `value` answers in one turn (a decision readout's choice, or
          return_result); `turns` plays several turns ([tool, args] each, e.g. an eval that calls this function's own
          callable items, then return_result).
+         Neuralese is read as the serving engines read it by default (ts-host model/in-context-neuralese.ts): a value
+         over 8,000 characters in an argument listing or a tool output gets a learned operator's call, `fn: "view"`,
+         whose `value` is the summary text its consumer reads in place beside the cut; a `Neuralese<T>` result is its
+         producing call's text, read in place by its consumers.
 """
 from __future__ import annotations
 
@@ -91,7 +95,8 @@ CONSTRUCTS = ('map', 'filter', 'partition', 'reduce', 'match', 'rank', 'repair',
               'propose-verify', 'branch-select', 'escalate', 'with-context', 'compile-rule',
               'higher-order', 'partial', 'context-rebind', 'function-result', 'iterate-measure', 'iterate-nl-until',
               'structural-recursion', 'folder-reducer', 'folder-transaction', 'decision', 'decide', 'ensures',
-              'refine', 'untrusted', 'refinement-type', 'neuralese', 'inline-nl', 'pluggable')
+              'refine', 'untrusted', 'refinement-type', 'neuralese', 'compaction', 'inline-nl', 'pluggable')
+OPERATOR_CALL = 'view'   # a learned operator's call (learned compaction), as curriculum.ts OPERATOR_CALL names it
 STD_KIND = {'semanticMap': 'map', 'semanticFilter': 'filter', 'semanticPartition': 'partition',
             'semanticReduce': 'reduce', 'semanticMatch': 'match', 'semanticRank': 'rank', 'semanticRepair': 'repair',
             'fixedPoint': 'fixed-point', 'semanticMerge': 'merge', 'proposeAndVerify': 'propose-verify',
@@ -716,6 +721,10 @@ def instance_stats(row: dict, files: dict[str, str], item_kinds: dict[str, str],
         constructs['refinement-type'] += 1
     if re.search(r'\bNeuralese<', joined) or 'neuralese' in src['declared']:
         constructs['neuralese'] += 1
+    # learned compaction: a long value's operator call (`view`, curriculum.ts OPERATOR_CALL), its summary read in place
+    operator_calls = sum(1 for a in row.get('answers') or [] if a.get('name') == OPERATOR_CALL)
+    if operator_calls:
+        constructs['compaction'] += operator_calls
     crisp_names = [n for n, k in item_kinds.items() if k == 'ts']
     crisp_calls = sum(len(re.findall(rf'(?<![\w.]){re.escape(n)}\s*\(', joined)) for n in crisp_names)
     kinds = collections.Counter(output_kind(n) for n in nl_nodes)
@@ -734,6 +743,7 @@ def instance_stats(row: dict, files: dict[str, str], item_kinds: dict[str, str],
     refusals = sum(1 for n in tree for a in n.get('actions') or [] if a.get('outcome') in ('rejected', 'refused'))
     return {
         'status': row.get('status'), 'model_calls': row.get('model_calls'), 'nl_calls': len(nl_nodes),
+        'operator_calls': operator_calls,
         'judgments': {k: dict(v) for k, v in judgments.items()}, 'refused_actions': refusals,
         'repair_fixes': sum(1 for n in tree if kind_of(n['definition']) == 'std' and n.get('combinator', n['definition'][4:])
                             in ('semanticRepair', 'fixedPoint') for c in tree if c.get('parent') == n['id']

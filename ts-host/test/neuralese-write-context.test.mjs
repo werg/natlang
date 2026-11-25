@@ -90,3 +90,42 @@ test('a production engine without native.text-write gets the grammar write port'
   assert.equal(options.port.dialect, 'native-state/lfm3');
   assert.equal(options.port.forcedText, true);
 });
+
+test('a grammar capture of the reply asks for producer_kind capture when the server serves it; a write never does', async () => {
+  const { grammarCapture } = await import('../dist/model/native-operator.js');
+  const requests = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const body = init?.body ? JSON.parse(init.body) : undefined;
+    requests.push({ url: String(url), body });
+    if (String(url).endsWith('/tokenize'))
+      return new Response(JSON.stringify({ tokens: body.content === '<think>' ? [6] : body.content === '</think>' ? [7] :
+        body.content === '<|im_end|>' ? [2] : [50, 51] }));
+    return new Response(JSON.stringify({ error: 'stop here' }), { status: 500 });
+  };
+  const forced = () => requests.filter(r => r.url.endsWith('/v1/chat/completions')).at(-1).body;
+  const native_state = { enabled: true, production: true, architecture: 'lfm3', role_marker_ids: [100, 101, 102, 103] };
+  const call = { messages: [{ role: 'user', content: 'x' }], tools: [], prompt: [1, 6], reply: [6, 7, 12, 2] };
+  try {
+    const serving = grammarCapture({ endpoint: 'http://fork', store: new MemoryNeuraleseStore(),
+      info: { native_state, capabilities: ['native.producer-kind.capture'] } });
+    await assert.rejects(serving(call), /forced span failed \(500\)/);
+    assert.equal(forced().x_natlang_producer_kind, 'capture');
+    await assert.rejects(serving({ ...call, write: 'the value' }), /forced span failed \(500\)/);
+    assert.equal(forced().x_natlang_producer_kind, undefined);
+    // an older fork serves no capture kind: the request carries no field it would refuse
+    const older = grammarCapture({ endpoint: 'http://fork', store: new MemoryNeuraleseStore(), info: { native_state, capabilities: [] } });
+    await assert.rejects(older(call), /forced span failed \(500\)/);
+    assert.equal(forced().x_natlang_producer_kind, undefined);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('the store keeps a capture-kind state (a reply captured in its own context) with its kind in the content id', async () => {
+  const { nativeStateFixture } = await import('./fixtures/native-state.mjs');
+  const { encodeNativeStateWire, decodeNativeState } = await import('../dist/native/neuralese-store.js');
+  const kind = producer_kind => { const value = nativeStateFixture('lfm3'); value.metadata.producer_kind = producer_kind; return encodeNativeStateWire(value); };
+  const capture = kind('capture'), span = kind('span');
+  assert.notEqual(capture.id, span.id);
+  assert.equal(decodeNativeState(capture.wire, capture.id).metadata.producer_kind, 'capture');
+  assert.throws(() => kind('other'), /producer_kind/);
+});
