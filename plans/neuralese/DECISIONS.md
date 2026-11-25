@@ -13902,7 +13902,7 @@ tree, apigen retail, pubmed, multihop, plus the in-progress searchqa and neurale
 lanes `progtune-l4-fits4-a/b` and their VM learners; `progtune-l4-seq-4` stopped 15:40). Base arms stay valid (same
 series). The multihop base arm completes on its own.
 
-**Rerun (running).** `program-tune-20261117/rows-20261125.sh` (`progtune-rows-20261125b`, low): the nine programs'
+**Rerun (running).** `program-tune-20261117/rows-20261125.sh` (`progtune-rows-20261125c`, medium: low was preempted every 5 min): the nine programs'
 4,013 support episodes replayed with the arms' runtime (pin-de2b36add32f, so base arms stay one series), rows rebuilt
 (old rows kept as `rows.jsonl.replay-20261117`). Then `rerun-20261125.sh PIN TENANT_COMMIT`: old fits/merged/arms to
 `fit/invalid-reasoning-20261125/`, VM fit state deleted, fresh plans (same recipe), fit lanes `progtune-l4-fits5-a/b`
