@@ -100,7 +100,7 @@ COLLECTOR_SLOT_GB = 0.3
 # A collector beside a remote actor holds no engine: aei1-collect-v0004/v0005-remote0 (64 slots) peaked at 6.5-7.0 GB, and
 # 0.3/slot (23 GB) kept the 74 GB DGX collection out of the ledger for 30+ min (2026-11-24 13:51). NATLANG_REMOTE_COLLECTOR_SLOT_GB
 # opts back to the shared rate.
-REMOTE_COLLECTOR_SLOT_GB = float(os.environ.get('NATLANG_REMOTE_COLLECTOR_SLOT_GB', '0.12'))
+REMOTE_COLLECTOR_SLOT_GB = float(os.environ.get('NATLANG_REMOTE_COLLECTOR_SLOT_GB', '0.2'))
 # The standing DGX collection (DECISIONS 2026-11-24 "the DGX collection yields to round preparation"). Concurrency:
 # v0006's engine ran at its cap (160 running = 128 slots + 32 fill, 5-10 queued, KV 0.61, mamba 0.49, 1.75-1.94k tok/s,
 # ~200-270 own episodes/h); decode is bandwidth-bound and the KV pool has room, so 192 slots (224 running with the fill).
@@ -1293,11 +1293,14 @@ class Cycle:
             self.note(stage='prep yield', unit=unit, budget_gb=budget, room=True, waited=round(time.time() - started))
         return True
 
-    def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None, room=False):
+    def ledger(self, unit, budget, priority, command, log_path, detach=False, workdir=None, repo=None, room=False,
+               shrunk=False):
         """``command`` (argv) as ledger unit ``unit``; waits for it unless ``detach``; a running unit is joined.
         ``repo``: the checkout on NATLANG_REPO/PYTHONPATH (default the pin). A unit the ledger holds requeued (preempted,
         awaiting its relaunch) is joined too, never launched a second time. ``room``: first ``wait_for_room`` (a
-        preparation stage beside a yielding collection)."""
+        preparation stage beside a yielding collection). ``shrunk``: it starts at a reduced share of its full size and
+        restores its claim later (a collection launched during round preparation): admitted at ``budget``, not raised
+        to its family's learned peak (``memory_ledger run --shrunk``)."""
         if room:
             self.wait_for_room(unit, budget)
         if not self.present(unit):
@@ -1308,7 +1311,8 @@ class Cycle:
             env = ['/usr/bin/env', *[f'{k}={values[k]}' for k in ('NATLANG_REPO', 'PYTHONPATH', 'HF_HUB_OFFLINE',
                                                                     'OMP_NUM_THREADS', 'MKL_NUM_THREADS')]]
             subprocess.run([*LEDGER, 'run', '--unit', unit, '--budget-gb', str(budget), '--priority', priority,
-                            '--wait', '36000', '--detach', '--workdir', str(workdir or self.pin), '--',
+                            '--wait', '36000', '--detach', *(['--shrunk'] if shrunk else []),
+                            '--workdir', str(workdir or self.pin), '--',
                             *env, '/bin/sh', '-c', f'exec {shell}'], check=True)
         if not detach:
             self.wait(unit)
@@ -1603,7 +1607,7 @@ class Cycle:
                 budget, full = self.collection_budget(self.a.slots)
                 self.ledger(unit, budget, COLLECTION_PRIORITY,
                             self.collect_command(unit, start, sha, self.a.slots, full_gb=full),
-                            self.dir / 'collect.log', detach=True)
+                            self.dir / 'collect.log', detach=True, shrunk=budget < full)
                 if self.a.fill:         # filled reasoning draws on the DGX actor (a remote one exposes no SGLang port)
                     self.fill_alongside(unit, sha)
             time.sleep(20)
@@ -2227,7 +2231,7 @@ class Cycle:
             budget, full = self.collection_budget(self.a.slots)
             self.ledger(unit, budget, COLLECTION_PRIORITY,
                         self.collect_command(unit, reference, sha, self.a.slots, full_gb=full),
-                        self.dir / 'collect.log', detach=True)
+                        self.dir / 'collect.log', detach=True, shrunk=budget < full)
             record['collecting'] = unit
         if stop_next and self.done('next'):
             nxt = json.loads((self.dir / 'stages' / 'next.done').read_text())
@@ -3248,7 +3252,7 @@ class AsyncRoundDriver:
             budget, full = self.c.collection_budget(self.a.slots)
             argv = self.c.collect_command(unit, policy['checkpoint'], policy['sha256'], self.a.slots, full_gb=full)
         argv[argv.index('--tasks') + 1] = str(tasks)
-        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
+        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True, shrunk=budget < full)
         self.note(collection_started=unit, policy=policy['sha256'], work=str(work))
         if self.a.fill:
             threading.Thread(target=self._fill_beside, args=(unit, work, policy), daemon=True).start()
