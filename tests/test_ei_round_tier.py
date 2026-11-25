@@ -379,3 +379,40 @@ def test_compaction_ignores_a_campaign_named_on_a_command_line(tmp_path, monkeyp
     monkeypatch.setattr(m, 'process_references', lambda: [('9', 'fd', str(sample / 'jobs' / '000001-bb.result.json'))])
     m.retain(root, ops=('compact',))
     assert (sample / 'jobs' / '000001-bb.result.json').exists()
+
+
+def test_retain_keeps_what_a_configured_consumer_names_between_its_runs(tmp_path, monkeypatch):
+    """2026-11-25: the sweep deleted aei1's v0000 actor export (moved to the HDD, symlinked back) while the vibe
+    student fill, relaunched by a keeper from its JSON config, was between runs; no process named it."""
+    m = load()
+    root, state = trained_driver(tmp_path)
+    ops = tmp_path / 'ops'
+    monkeypatch.setattr(m, 'OPS', ops)
+    monkeypatch.setattr(m, 'DEST', tmp_path / 'hdd' / 'dgx-moved-ei')
+    monkeypatch.setattr(m, 'LOG', tmp_path / 'log.jsonl')
+    monkeypatch.setattr(m, 'process_references', lambda: [])
+    monkeypatch.setattr(m, 'unit_commands', lambda: [])
+    # v0001 moved to the HDD earlier: the collection is a symlink, the delete path is the resolved one
+    c1 = root / 'collect' / f'v0001-{sha("1")[:12]}'
+    hdd = tmp_path / 'hdd' / 'moved' / c1.name
+    hdd.parent.mkdir(parents=True)
+    c1.rename(hdd)
+    c1.symlink_to(hdd)
+    config = tmp_path / 'campaign' / 'fill-config.json'
+    write(config, json.dumps({'argv': ['filled_reasoning.py', '--export', str(c1 / 'actor' / 'sglang-hf')]}).encode())
+    write(ops / 'consumers.d' / 'fill.json', json.dumps({'consumer': 'fill keeper', 'configs': [str(config)]}).encode())
+    # a launch script named in a unit's command line names r0002's export
+    script = write(tmp_path / 'launch.sh', f'serve --hf-export-dir {root}/r0002/policy/sglang-hf\n'.encode())
+    monkeypatch.setattr(m, 'unit_commands', lambda: [('x.service', f'{{ argv[]=/bin/sh {script} ; }}')])
+    summary = m.retain(root)
+    assert summary['errors'] == 0
+    assert (hdd / 'actor' / 'sglang-hf' / 'model.safetensors').exists()           # the fill's export stays
+    assert not (hdd / 'actor' / 'blocks').exists()                                 # nothing names the blocks
+    assert (root / 'r0002' / 'policy' / 'sglang-hf' / 'model.safetensors').exists()
+    assert not (root / 'r0001' / 'policy' / 'sglang-hf').exists()
+    kept = [json.loads(line) for line in (tmp_path / 'log.jsonl').read_text().splitlines()]
+    assert any(k['event'] == 'kept' and any('fill-config.json' in r for r in k['reason']) for k in kept)
+    # opt-out: configured consumers are not references
+    m.retain(root, consumer_configs=False)
+    assert not (hdd / 'actor' / 'sglang-hf').exists()
+    assert not (root / 'r0002' / 'policy' / 'sglang-hf').exists()

@@ -80,3 +80,44 @@ def test_pin_walk_never_follows_symlinks(tmp_path, monkeypatch):
     (data / 'run' / 'linked').symlink_to(elsewhere)
     monkeypatch.setattr(m, 'PIN_ROOTS', (data,))
     assert m.pin_dirs() == [str(real)]
+
+
+def test_configured_consumers_and_failed_units_reference(tmp_path, monkeypatch, capsys):
+    """A periodic consumer between runs (a keeper relaunching from its config, a failed attempt) still references."""
+    m = load()
+    unit_commands = m.unit_commands
+    ops = tmp_path / 'ops'
+    corpora = tmp_path / 'corpora'
+    target = tmp_path / 'pins' / 'reader-929'
+    globbed = tmp_path / 'campaign' / 'a-config.json'
+    globbed.parent.mkdir(parents=True)
+    globbed.write_text(json.dumps({'source_pin': str(target)}))
+    (ops / 'consumers.d').mkdir(parents=True)
+    (ops / 'consumers.d' / 'fill.json').write_text(json.dumps({'configs': [str(tmp_path / 'campaign' / '*-config.json'),
+                                                                           str(tmp_path / 'absent.json')]}))
+    corpora.mkdir()
+    (corpora / 'ds.json').write_text('{}')
+    script = tmp_path / 'run.sh'
+    script.write_text('exec true\n')
+    units = [('u.service', f'{{ path=/bin/sh ; argv[]=/bin/sh {script} --cfg={globbed} ; }}')]
+    found = m.configured_consumers(units, ops=ops, corpora=corpora)
+    assert found == [ops / 'consumers.d' / 'fill.json', globbed, corpora / 'ds.json', script]
+    monkeypatch.setattr(m, 'OPS', ops)
+    monkeypatch.setattr(m, 'CORPORA', corpora)
+    monkeypatch.setattr(m, 'process_references', lambda: [])
+    monkeypatch.setattr(m, 'unit_commands', lambda: [])
+    monkeypatch.setattr(m, 'state_files', lambda days, now: [])
+    assert m.main(['--check', str(target)]) == 1
+    assert 'a-config.json' in capsys.readouterr().out
+    assert m.main(['--no-consumer-configs', '--check', str(target)]) == 0
+
+    # unit_commands: a failed service counts (its keeper relaunches the same command); an inactive one does not
+    def run(argv, **kw):
+        if 'list-units' in argv:
+            out = ('fill-1.service loaded failed failed x\nold.service loaded inactive dead x\n'
+                   'live.service loaded active running x\n')
+        else:
+            out = ''.join(f'Id={u}\nExecStart=cmd {u}\n\n' for u in argv if u.endswith('.service'))
+        return type('R', (), {'stdout': out})()
+    monkeypatch.setattr(m.subprocess, 'run', run)
+    assert [u for u, _ in unit_commands()] == ['fill-1.service', 'live.service']

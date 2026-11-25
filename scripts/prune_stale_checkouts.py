@@ -11,7 +11,10 @@ runs roots, that lies on the root filesystem. It is removed only when all of the
 - it is older than ``--min-age-hours`` (pin creation time, else the newest mtime of its top-level entries);
 - no process references it: cwd, executable, open files, memory maps, command line or environment (any readable
   process, so container processes and ledger units count);
-- no active or timer-triggered user unit names it in its command line;
+- no active, failed (a relaunched consumer's last attempt) or timer-triggered user unit names it in its command line;
+- no configured consumer names it (``configured_consumers``: ``ops/current-policy.json``, ``ops/watchdog.json``, the
+  registrations in ``ops/consumers.d/`` and the config files they list, the data registry entries, and the config
+  and script files a unit's command line names); ``--no-consumer-configs`` opts out;
 - no watch or state file names it: files of at most 2 MB modified within ``--state-days`` days directly in the ops
   tree's first three levels (drivers' state, launch scripts, ``watch`` directories);
 - it carries no ``.keep-on-nvme`` / ``.natlang-keep`` marker and is not listed in
@@ -30,6 +33,7 @@ logged as one JSON line.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import shutil
@@ -45,6 +49,12 @@ PIN_ROOTS = (OPS, REPO / 'runs', HOME / 'data')
 EXCLUDE_FILE = HOME / '.config' / 'natlang' / 'archive-exclude.txt'
 MARKERS = ('.keep-on-nvme', '.natlang-keep')
 STATE_MAX_BYTES = 2 * 2**20
+# Periodic consumers whose launcher reads a config file between runs (a keeper relaunching a fill from its JSON
+# config) register here: one JSON file per consumer, {"consumer": ..., "configs": [file or glob, ...]}; the
+# registration's own text and every listed config count as references (DECISIONS 2026-11-25 "configured consumers").
+CONSUMERS = 'consumers.d'
+CORPORA = REPO / 'training' / 'corpora'
+CONFIG_SUFFIXES = ('.json', '.sh')
 
 
 def _under(path: str, root: str) -> bool:
@@ -91,7 +101,8 @@ def process_references() -> list[tuple[str, str, str]]:
 
 
 def unit_commands() -> list[tuple[str, str]]:
-    """(unit, ExecStart text) of active user units and of the services user timers trigger."""
+    """(unit, ExecStart text) of active and failed user units and of the services user timers trigger (a failed unit
+    is usually a periodic consumer's last attempt: its keeper relaunches the same command; ``reset-failed`` ends it)."""
     def show(units, prop):
         if not units:
             return []
@@ -120,7 +131,7 @@ def unit_commands() -> list[tuple[str, str]]:
         unit, active = parts[0], parts[2]
         if unit.endswith('.timer'):
             timers.append(unit)
-        elif active in ('active', 'activating', 'reloading', 'deactivating'):
+        elif active in ('active', 'activating', 'reloading', 'deactivating', 'failed'):
             services.append(unit)
     services += [row.get('Triggers', '') for row in show(timers, 'Triggers') if row.get('Triggers')]
     return [(row.get('Id', ''), row.get('ExecStart', '')) for row in show(sorted(set(services)), 'ExecStart')]
@@ -243,6 +254,65 @@ def age_hours(path: Path, now: float) -> float:
     return (now - newest) / 3600
 
 
+def _small_file(token: str) -> Path | None:
+    path = Path(token)
+    try:
+        return path if path.is_file() and path.stat().st_size <= STATE_MAX_BYTES else None
+    except OSError:
+        return None
+
+
+def configured_consumers(units, ops: Path | None = None, corpora: Path | None = None) -> list[Path]:
+    """Files whose text names what a configured consumer reads, also while none of its processes runs: the current
+    policy pointer and the watchdog roster, every registration in ``consumers.d`` with the config files (or globs) its
+    ``configs`` list names, the data registry entries (``training/corpora/*.json``), and the config and script files
+    (``.json``, ``.sh``) named in the units' command lines (a launch script names the pins and exports it runs)."""
+    ops = OPS if ops is None else ops
+    consumers, corpora = ops / CONSUMERS, CORPORA if corpora is None else corpora
+    found = [ops / 'current-policy.json', ops / 'watchdog.json']
+    for registration in sorted(consumers.glob('*.json')) if consumers.is_dir() else []:
+        found.append(registration)
+        try:
+            listed = json.loads(registration.read_text()).get('configs') or []
+        except (OSError, ValueError, AttributeError):
+            continue
+        for pattern in listed:
+            pattern = os.path.expanduser(str(pattern))
+            found += sorted(Path(p) for p in glob.glob(pattern)) if glob.has_magic(pattern) else [Path(pattern)]
+    if corpora.is_dir():
+        found += sorted(corpora.glob('*.json'))
+    for _unit, command in units:
+        for token in command.replace('=', ' ').replace(';', ' ').split():
+            token = token.strip('\'"')
+            if token.startswith('/') and token.endswith(CONFIG_SUFFIXES):
+                small = _small_file(token)
+                if small is not None:
+                    found.append(small)
+    return [p for p in dict.fromkeys(found) if _small_file(str(p)) is not None]
+
+
+_TEXTS: dict[str, tuple[tuple[int, int], str]] = {}
+
+
+def _state_text(state: Path) -> str | None:
+    """A state file's text, read once per pass while its size and mtime are unchanged (many candidates x thousands of
+    registry entries)."""
+    try:
+        st = state.stat()
+    except OSError:
+        return None
+    key = (st.st_mtime_ns, st.st_size)
+    cached = _TEXTS.get(str(state))
+    if cached is not None and cached[0] == key:
+        return cached[1]
+    try:
+        text = state.read_text(errors='replace')
+    except OSError:
+        return None
+    _TEXTS[str(state)] = (key, text)
+    return text
+
+
 def references(path: str, procs, units, states) -> list[str]:
     """Why ``path`` is in use (empty: unused)."""
     why = []
@@ -264,9 +334,8 @@ def references(path: str, procs, units, states) -> list[str]:
         # the pin's own creation log (ops/ei/pin-<c12>.log, <run>/pin.log) names it without using it
         if _under(str(state), path) or state.name == 'pin.log' or state.name.startswith(base + '.'):
             continue
-        try:
-            text = state.read_text(errors='replace')
-        except OSError:
+        text = _state_text(state)
+        if text is None:
             continue
         if path in text or real in text or (base.startswith('pin-') and base in text):
             why.append(f'state {state}')
@@ -348,14 +417,18 @@ def main(argv=None):
     parser.add_argument('--min-age-hours', type=float, default=6.0)
     parser.add_argument('--state-days', type=float, default=3.0)
     parser.add_argument('--check', nargs='+', metavar='PATH', help='report references of PATHs; exit 1 if any')
+    parser.add_argument('--no-consumer-configs', dest='consumer_configs', action='store_false',
+                        help='opt out of the configured consumers (configured_consumers) as references')
     args = parser.parse_args(argv)
     now = time.time()
     procs, units, states = process_references(), unit_commands(), state_files(args.state_days, now)
+    configured = configured_consumers(units) if args.consumer_configs else []
+    states = list(dict.fromkeys([*states, *configured]))
     if args.check:
         busy = False
         for path in args.check:
             path = os.path.abspath(path)
-            why = references(path, procs, units, [])
+            why = references(path, procs, units, configured)
             if why:
                 busy = True
                 log({'path': path, 'referenced': why}, sys.stdout)
