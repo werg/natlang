@@ -13,7 +13,7 @@ import {
   calibrateTemperature,
   scoreCompiledDecision,
 } from '../dist/tune/decision-compile.js';
-import { verifyCrispCandidate, wrapCrispFastPath } from '../dist/tune/crisp-promote.js';
+import { buildCompiledCasesModule, verifyCrispCandidate, wrapCrispFastPath } from '../dist/tune/crisp-promote.js';
 import {
   createWhichScopesPolicy,
   createWorthRememberingPolicy,
@@ -231,4 +231,87 @@ test('Prefix-shared branch@4 ranks crisp-first, verifier-second, and fires onBra
   assert.equal(wins[0].selectedCrispOk, true);
   assert.equal(wins[0].selectedScore, 0.88);
   assert.deepEqual(rankBranchCandidates(res.ranked).map(c => c.index), [3, 2, 0, 1]);
+});
+
+test('Promoted crisp fast-paths emit standard cases.ts modules for runCrispCase', () => {
+  const src = buildCompiledCasesModule(
+    [
+      {
+        whenSource: '({ amount }) => typeof amount === "number" && amount > 1000',
+        runSource: '() => "escalate"',
+      },
+    ],
+    {
+      promoted: true,
+      reason: 'ok',
+      dev: { total: 10, hits: 5, correctHits: 5, falsePositives: 0, errors: 0, coverage: 0.5 },
+      confirmation: { total: 10, hits: 5, correctHits: 5, falsePositives: 0, errors: 0, coverage: 0.5 },
+    },
+  );
+  assert.match(src, /export const cases = \[/);
+  assert.match(src, /when: \(\{ amount \}\)/);
+  assert.match(src, /run: \(\) => "escalate"/);
+
+  assert.throws(() =>
+    buildCompiledCasesModule(
+      [{ whenSource: '() => true', runSource: '() => "x"' }],
+      {
+        promoted: false,
+        reason: 'nonzero false positives',
+        dev: { total: 10, hits: 5, correctHits: 4, falsePositives: 1, errors: 0, coverage: 0.5 },
+        confirmation: { total: 10, hits: 5, correctHits: 5, falsePositives: 0, errors: 0, coverage: 0.5 },
+      },
+    ),
+  );
+});
+
+test('compiler.jit binds the compiled adapter and instruction state on the frame the model call reads, and records them', async () => {
+  const host = await import('../dist/index.js');
+  const { activeNativeAdapters, activeSoftStates } = await import('../dist/native/model-recording.js');
+  const app = host.compileVirtualProject({ files: {
+    'echo.nl': '---\nargs: { value: string }\nreturns: string\n---\nReturn value.\n',
+    'main.ts': "import echo from './echo.nl'; export default echo;" } }, host, { target: 'node' });
+  assert.equal(app.ok, true, host.formatDiagnostics(app.diagnostics));
+  const actor = { architecture: 'fixture-native', checkpoint_sha256: 'a'.repeat(64),
+    tokenizer_fingerprint: 'b'.repeat(64), embedding_weight_sha256: 'c'.repeat(64), consumption_modes: [] };
+  const JIT_STATE = 'nzs1_' + 'a'.repeat(52);
+  const states = new Map([[JIT_STATE, { id: JIT_STATE, metadata: { schema: 'neuralese.native-state/1', text: 'Return value.', ...actor } }]]);
+  const neuralese = { store: { async pin() {}, async getNativeState(id) { return states.get(id); } },
+    nativeStateConsumerForCall: async () => actor };
+  const seen = [], compiled = [], traces = [];
+  const driver = async request => {
+    seen.push({ adapters: activeNativeAdapters().map(a => a.id), states: [...activeSoftStates()], request });
+    return { calls: [['return_result', { status: 'success', value: 'ok' }]] };
+  };
+  driver.neuralese = true;
+  const cache = new CompiledSiteCache(8);
+  const runtime = host.createNatlangRuntime({ model: driver, neuralese, trace: trace => traces.push(trace), compiler: { jit: {
+    cache, compilerSha: 'c'.repeat(12), policySha: 'p'.repeat(12),
+    compile: async site => { compiled.push(site); return { adapterId: 'jit-adapter-1', nativeStateId: JIT_STATE }; } } } });
+  const echo = app.require('main.ts').default;
+  assert.equal(await runtime.run(() => echo('hi')), 'ok');
+  assert.equal(await runtime.run(() => echo('again')), 'ok');
+  assert.equal(compiled.length, 1, 'the second call is a cache hit');
+  assert.equal(compiled[0].resolvedHeaderText, 'Return value.');
+  assert.equal(seen.length, 2);
+  for (const { adapters, states: soft, request } of seen) {
+    assert.deepEqual(adapters, ['jit-adapter-1']);
+    assert.deepEqual(soft, [JIT_STATE]);
+    const opening = request.messages[1].content;
+    assert.ok(Array.isArray(opening) && opening.some(part => part.type === 'native_state' && part.id === JIT_STATE));
+    assert.ok(!opening.some(part => part.type === 'text' && part.text.includes('Return value.')), 'the state replaces its text');
+  }
+  const events = traces.flatMap(t => t.events ?? []);
+  assert.ok(events.some(e => e.kind === 'jit_compile_bound' && e.adapter_id === 'jit-adapter-1' && e.native_state_id === JIT_STATE));
+  assert.ok(events.some(e => e.kind === 'manifest' && e.weight_stack?.effective?.[0]?.id === 'jit-adapter-1'));
+  assert.ok(traces.some(t => t.adaptation?.weights?.identity?.length === 64));
+
+  const plain = async () => ({ calls: [['return_result', { status: 'success', value: 'plain' }]] });
+  for (const [compile, pattern] of [[async () => { throw new Error('compile exploded'); }, /compile exploded/],
+    [async () => ({ adapterId: null, nativeStateId: 'jit-state-1' }), /not a native-state block ID/]]) {
+    const failing = host.createNatlangRuntime({ model: plain, trace: trace => traces.push(trace), compiler: { jit: {
+      cache: new CompiledSiteCache(8), compilerSha: 'c', policySha: 'p', compile } } });
+    assert.equal(await failing.run(() => echo('x')), 'plain', 'a failed compile leaves the call uncompiled');
+    assert.ok(traces.flatMap(t => t.events ?? []).some(e => e.kind === 'jit_compile_error' && pattern.test(e.error)));
+  }
 });
