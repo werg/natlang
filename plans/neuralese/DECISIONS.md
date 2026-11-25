@@ -12669,3 +12669,39 @@ that wrap these datasets' items were not requalified on fb11b6359; the 9,600 fur
 successor build that v2 lacks (tabfact, toolace, msr-sqa, wikisql, nestful, convfinqa, multihiertt, databench 381, bird
 23) are not in this admission; the procedural rows already in the pool (reasoning-gym 1,770, inline curriculum 1,324,
 babi 650, knights-knaves 100, clutrr 98, countdown/rg-* 253) were left in place.
+
+## 2026-11-25 09:10 Broad-external follow-up: successor-build datasets admitted (`natlang-rl-broad-external-real-20261125b`, 8,809 rows); composed rows requalified; `held_eval verify --avoid-cases` (task-supply agent)
+
+**Correction to the 07:40 entry.** "`held_eval verify` needs a `cases` key held-v3's manifest lacks" was wrong: the
+manifest has it (I listed only its first 14 keys). `held_eval verify --manifest ops/held-v3/manifest.json` runs. Its real
+gap: `verify` resolves split/source groups only for avoided ids that are rows of the held set's pinned pool, so
+`--avoid-ids` on a new source checked ids alone (on the 07:40 rows: `avoid_groups` 0). New `--avoid-cases FILE` avoids
+the rows' ids and their own groups (`avoided_case_groups`; test in `tests/neuralese/test_held_verification.py`; 99f6536e8).
+Rerun on `natlang-rl-broad-external-real-20261125` (21,098 rows, 33,706 groups): held-v3, held-v4, held-inv overlap 0/0.
+
+**Successor-build rows.** `broad-rl-tasks-20261031/full-core-effects-20261102` (the verified successor build) holds
+real-dataset train rows v2 lacks. Same rules as the 07:40 admission (`funnel2.py`, `admit2.py` in
+`/home/werg/data/natlang-rl-broad-external-real-20261125/tools/`):
+- 9,720 rows of tabfact, toolace, msr-sqa, wikisql, nestful, convfinqa, multihiertt, databench, bird; already in pool 837;
+- held: `training_exclusion_ids` 5 (convfinqa 3, multihiertt 1, bird 1); content (`held_texts`) 68 (multihiertt 52,
+  convfinqa 16); custody 0; the successor build's own dev/confirmation packets (11,554 rows) 0 by id, group or upstream id;
+- requalified on pin b053651cdc5f (fb11b6359 in) with its own verify.mjs: 8,810 -> 8,809 (1 multihiertt accepts a
+  wrong answer);
+- left out as not real datasets or generated upstream: codebase-py/natlang/codebase-natlang (project code questions),
+  countdown and rg-* (generated), design-brief-gates (project-authored), inline curriculum.
+Per source: tabfact 1,434, msr-sqa 1,404, toolace 1,373, wikisql 1,209, nestful 1,169, convfinqa 997, multihiertt 824,
+databench 380, bird 19. `held_eval verify --avoid-cases` on held-v3/v4/inv: 0/0 (20,514 groups). Promoted to grpo-pool
+(order 27, 84434d16d). ToolACE is LLM-synthesized (like xLAM) and kept as a real dataset.
+**Repetition:** 28 shapes, all already in the pool. Eligible pool 60,078 -> 68,887 rows; shapes 3,853 -> 3,853;
+effective 415 -> 383; top shape 5.4% -> 4.7%; these sources go from 62-288 rows to 886-1,499
+(`composition-b.json` in the work dir).
+
+**Composed rows requalified.** All 6,493 grpo-pool `external-rl:composed` rows replayed on the same pin: 41 accept a wrong
+answer (all the "<gold> and something else entirely" perturbation on golds containing "and": neuralese_typed 20, fanin
+12, iterate 4, multihop_deep 3, relay 2). They are pool errata (`ops/pool-errata/composed-requal-20261125.jsonl`, read by
+`grpo.load_tasks` by default); eligible composed rows 6,414 -> 6,374.
+
+**Not checked:** pass rates on the new sources; teacher campaigns and the mix build do not yet hold these tasks; the
+other source kinds in grpo-pool (bgkit, decisions, codebase, authored, searchswarm) were not requalified on fb11b6359 in
+this pass (only composed and v2-origin dataset rows); AGENTS.md's `collect_exposure.py` flow (exposure of past training
+and collection) was not rerun for these sources: the rows are new to the pool, so they have no exposure yet.
