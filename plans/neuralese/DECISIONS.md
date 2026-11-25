@@ -11887,3 +11887,85 @@ program.
 
 Whether to stop training on A and B rows (a pool-errata or role change, plus a mix filter) is put to the owner. aei1
 keeps running as it is.
+
+## 2026-11-25 02:00 Teacher trajectories in the round mix: nothing drops them for their reasoning; real teacher reasoning trains at weight 0.1
+
+**Owner.** 2026-11-24: teacher reasoning may be in the data as context, never a target; filling every trace is not
+required; "want real teacher reasoning traces". 2026-11-25: "And are we using trajectories that have teacher reasoning
+traces? In a pinch, I think they would teach the model something." Then: "I originally just meant to just make sure
+that we use those trajectories with the teacher traces and don't keep them out of training or downweight them in the
+mix. But I could see maybe using teacher reasoning traces as targets, but very, very sparing and downweighted. And I
+don't know whether it's worth the compute then to do that."
+
+**Are teacher trajectories kept out or downweighted? No stage selects on reasoning.** Round 7's build
+(`ops/ei/aei1/r0007/mix/build.json`, pin b63c35c54707), teacher funnel:
+- Verified successes: 39,354. Replay-failed (4,375) and inexact (1,174) episodes are out. Held siblings (38) and
+  near-duplicates (415) are out.
+- Frontier: 437 out because the policy's own success on the task trains instead, 70 because the task is solved.
+- Caps applied to every source alike: per-task cap by base rate, family share (6,136 out), wrapper share (1,095).
+- 9,309 train as their filled-reasoning unit (`filled_instead`: teacher actions after the student's filled reasoning,
+  outside the teacher forward budget). 4,574 are over the teacher forward budget (306M tokens).
+- 11,591 raw teacher episodes are admitted. 1,750 are at treatment `context`, and 9,841 are at `filled` with no fill;
+  both render the teacher's think block as zero-weight context, so none is dropped. `drop_unfilled_live` keeps
+  unfilled live episodes (51 kept, 0 dropped).
+- The round cap is forward-bound at fraction 0.3876. It keeps that fraction of every part's weighted target tokens
+  (unseen episodes first): raw teacher 3,471 of 11,591 episodes (2.34M of 6.04M), filled 5,018 of 13,245 (8.11M of
+  20.9M), own 834 of 2,515.
+- Teacher trajectories are 55.3% of round 7's loss: raw 12.4% plus filled 42.9%. No teacher-specific weight exists:
+  a row's weight is 0 on its think block, its lead-in text and backend detours, and 1 on its actions.
+
+From round 9 on, `--max-prior-exposures 1` (owner 2026-11-24, no repetition) removes every episode an earlier build
+trained. In round 7, 86% of the kept raw teacher episodes (2,986) and 96% of the filled ones (4,794) had trained
+before. So the teacher share now depends on new teacher episodes. This is the no-repetition rule, not a reasoning
+filter.
+
+**Fix found on the way.** Exposure counted a fill unit (round `filled:<teacher key>`) and its raw episode as two units.
+A teacher episode that trained raw could train again as its fill, and the reverse. `Exposures` now gives a stand-in unit
+and the episode it replaces one exposure (`stand_in`). Test:
+`test_a_stand_in_unit_and_the_episode_it_replaces_share_one_exposure`.
+
+**What the think blocks are (measured).** All teacher episodes in `/home/werg/data/ei-sources`:
+`/home/werg/data/teacher-reasoning-treatment-20261125/audit.json`.
+
+| Model (main sources) | Replies with a think block | Policy tokens p50 (p10-p90) | Kind |
+|---|---:|---:|---|
+| claude-haiku-5-5 (pool-v1/v2-rich/gap-v1) | 88-92% | 58-90 (29-156) | Anthropic summarized thinking (Pi `display: summarized`; Claude returns no raw chain of thought) |
+| gpt-6-luna, gpt-6.1-sol (pools, aei1 teacher rounds) | 0.04-5.7% | 6-7 | Codex summary headers ("**Inspecting donor note**"); the reasoning is encrypted |
+| openai-codex:gpt-6-luna (live campaign) | 0% | - | none recorded |
+| gemini-3.5/3.7, gemini-3.1-pro, gemini-4-argon | 0% | - | hidden |
+| nvidia/Qwen3.6-35B-A3B (October) | 64-100% | 25-54 (11-261) | raw (vLLM `reasoning_content`) |
+| nvidia/nemotron-3-ultra(-free) (NIM/OpenRouter) | 99.7-100% | 41-87 (7-384) | raw |
+| nvidia/nemotron-3.5-super-vl | 100% | 178 (24-1011) | raw |
+| glm-4.7-flash | 100% | 61 (11-1226) | raw (70 replies) |
+
+The student's own reasoning is about 1,539 characters at p50 (2026-11-20 audit). Every teacher block is shorter.
+
+**Decision.** Real reasoning trains, sparingly. `sft_sources` treatment `train` now means `train@W`, with
+`--teacher-think-weight` defaulting to 0.1. The think block through `</think>` carries weight W, the lead-in text before
+the first tool call stays 0, and the action stays 1 (`think_context` -> `WeightedLead`, `rendered_row`). `train@W` sets
+W per table entry, `--teacher-think-weight 1` restores full weight, and 0 is context.
+
+The new registry table, role `teacher-think-treatment` (`teacher-reasoning-treatment-20261125`, superseding
+`teacher-reasoning-audit-20261120`):
+- `train`: Nemotron 3 Ultra (and `:free`), Nemotron 3.5 Super, Qwen3.6-35B, GLM-4.7-flash.
+- `filled`: Claude Haiku, Luna, Sol and the Gemini models. A summary or a hidden or empty block stays zero-weight
+  context.
+
+A filled unit still replaces its episode whatever the treatment, so one episode never trains twice. Builds report
+`think_weighted_tokens` and `think_weighted_mass` per producer.
+
+**Compute.** Nothing new runs: these tokens are already in every forward and backward pass as context, and only their
+loss weight changes. Round 7 kept 157,626 think tokens of real-reasoning teachers in unfilled episodes: Qwen 68,587,
+Nemotron Ultra 68,113, Nemotron Super 20,926. At W = 0.1 that adds about 15.8k weighted target tokens to an 18.9M round
+(0.08%). Haiku's summaries (686k tokens in the kept episodes) stay context. sft-v3-run1's full-weight teacher reasoning
+cut the student's reasoning to a fifth (DECISIONS 2026-11-18). At 0.08% of the loss the next held eval shows whether
+the reasoning-length telemetry moves.
+
+**Generation paths.** Neither Claude nor Codex returns raw reasoning. Pi requests Claude's summarized thinking and
+Codex's `reasoning.summary: auto`, and natlang records both. One leak is fixed: Pi turns a `redacted_thinking` block into the text
+"[Reasoning redacted]", which `piAssistantContent` recorded as reasoning. It now leaves it out, and
+`live_teacher_sources` accepts captures in both forms (`ts-host/test/pi-translation.test.mjs`).
+
+**Not checked.** Whether the filled reasoning should give way to real teacher reasoning for the raw models; it does
+not today. Whether richer Codex summaries (`reasoningSummary: detailed`) would carry more; they would still be summaries.
+Round 9's funnel: its build was still replaying when this entry was written.

@@ -924,8 +924,12 @@ def load_episode(path):
             if [[c['name'], c['arguments']] for c in original_calls] != (reply.get('calls') or []):
                 raise ValueError('normalized live calls differ from original assistant response')
             text = ''.join(block['text'] for block in blocks if block.get('type') == 'text')
-            reasoning = '\n'.join(block['thinking'] for block in blocks if block.get('type') == 'thinking')
-            if (reply.get('text') or '') != text or (reply.get('reasoning') or '') != reasoning:
+            # a redacted thinking block's text is Pi's placeholder, not reasoning (ts-host piAssistantContent leaves
+            # it out; captures before 2026-11-25 recorded it in the reply's reasoning)
+            reasoning = '\n'.join(block['thinking'] for block in blocks
+                                   if block.get('type') == 'thinking' and not block.get('redacted'))
+            recorded = '\n'.join(block['thinking'] for block in blocks if block.get('type') == 'thinking')
+            if (reply.get('text') or '') != text or (reply.get('reasoning') or '') not in (reasoning, recorded):
                 raise ValueError('normalized live text/reasoning differs from original assistant response')
             target = {'role': 'assistant', 'content': text}
             if reasoning:

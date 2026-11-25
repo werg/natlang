@@ -265,6 +265,39 @@ def test_a_teacher_reasoning_block_is_context_by_default_and_a_target_with_train
         s.think_context(renderer, 'teacher', reasoning, target, 'drop')
 
 
+def test_a_weighted_teacher_think_block_trains_at_its_weight_and_its_lead_in_stays_context():
+    renderer = s.TemplateRenderer.__new__(s.TemplateRenderer)
+    renderer.tokenizer = _Tokens()
+    reasoning = {'role': 'assistant', 'content': '', 'reasoning_content': 'plan',
+                 'tool_calls': [{'function': {'name': 'eval'}}]}
+    target = [7, 7, 1, 2, 3, 4, 5, 6]    # plan plan </think> \n\n <tool_call> eval </tool_call> <|im_end|>
+    lead = s.think_context(renderer, 'teacher', reasoning, target, 'train@0.1')
+    assert lead == 4 and isinstance(lead, s.WeightedLead) and lead.think_end == 4
+    row, _ = s.rendered_row((np.array([0], np.int32), np.array(target, np.int32), lead), 'teacher', 'k', 0,
+                            {'target': reasoning})
+    assert row['weight'].tolist() == pytest.approx([0.1] * 4 + [1] * 4)
+    # the text before the tool call stays zero weight; only the think block carries W
+    narrated = {**reasoning, 'content': 'note'}
+    narrated_target = [7, 1, 8, 3, 4, 5, 6]
+    lead = s.think_context(renderer, 'teacher', narrated, narrated_target, 'train@0.25')
+    row, _ = s.rendered_row((np.array([0], np.int32), np.array(narrated_target, np.int32), lead), 'teacher', 'k', 0,
+                            {'target': narrated})
+    assert row['weight'].tolist() == pytest.approx([0.25, 0.25, 0, 1, 1, 1, 1])
+    # an empty block stays context; W 0 is context; W 1 is the full-weight train rule; own replies are untouched
+    empty = s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ' '}, [1, 2, 3, 6], 'train@0.1')
+    assert empty == 2 and not isinstance(empty, s.WeightedLead)
+    assert s.think_context(renderer, 'teacher', reasoning, target, 'train@0') == 4
+    assert s.think_context(renderer, 'teacher', reasoning, target, 'train@1') == 0
+    assert s.think_context(renderer, 'rl-own', reasoning, target, 'train@0.1') == 0
+    # the lead survives the worker-process boundary (RenderAhead pickles render results)
+    import pickle
+    again = pickle.loads(pickle.dumps(s.WeightedLead(4, 3, 0.1)))
+    assert (int(again), again.think_end, again.think_weight) == (4, 3, 0.1)
+    for bad in ('train@2', 'context@0.1', 'train@x', 'drop'):
+        with pytest.raises(ValueError):
+            s.think_context(renderer, 'teacher', reasoning, target, bad)
+
+
 def test_text_a_teacher_writes_before_its_tool_call_is_context_and_a_final_answer_trains_whole():
     renderer = s.TemplateRenderer.__new__(s.TemplateRenderer)
     renderer.tokenizer = _Tokens()

@@ -17,7 +17,7 @@ export type PiJsonValue = null | boolean | number | string | readonly PiJsonValu
 export type PiJsonObject = { [key: string]: PiJsonValue };
 
 export type PiTextBlock = { type: 'text'; text: string };
-export type PiThinkingBlock = { type: 'thinking'; thinking: string };
+export type PiThinkingBlock = { type: 'thinking'; thinking: string; redacted?: boolean };
 export type PiToolCallBlock = { type: 'toolCall'; id: string; name: string; arguments: PiJsonObject; thoughtSignature?: string };
 export type PiContentBlock = PiTextBlock | PiThinkingBlock | PiToolCallBlock;
 
@@ -143,7 +143,10 @@ export function piDeltaTranslator(): (event: PiStreamEvent) => ModelTurnDelta | 
 export function piAssistantContent(reply: PiAssistantMessage) {
   const calls = reply.content.filter((block): block is PiToolCallBlock => block.type === 'toolCall');
   const text = reply.content.filter((block): block is PiTextBlock => block.type === 'text').map(block => block.text).join('');
-  const reasoning = reply.content.filter((block): block is PiThinkingBlock => block.type === 'thinking').map(block => block.thinking).join('\n');
+  // A redacted thinking block's text is Pi's placeholder ("[Reasoning redacted]"), not the model's reasoning: the
+  // recorded reasoning (and the history and training data built from it) leaves it out.
+  const reasoning = reply.content.filter((block): block is PiThinkingBlock => block.type === 'thinking' && !(block as PiThinkingBlock).redacted)
+    .map(block => block.thinking).join('\n');
   const rawCalls = calls.map(call => ({ id: call.id, type: 'function', function: { name: call.name,
     arguments: JSON.stringify(call.arguments) },
   ...(typeof call.thoughtSignature === 'string' ? { thought_signature: call.thoughtSignature } : {}) }));

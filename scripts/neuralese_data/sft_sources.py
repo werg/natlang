@@ -618,6 +618,42 @@ class TemplateRenderer:
 OWN_SOURCES = ('rl-own', 'jolt-guided')
 TEACHER_THINK = ('context', 'train')
 TEACHER_LEAD_IN = ('context', 'train')
+# A teacher think block of real visible reasoning trains at a small per-token weight (owner 2026-11-25: "maybe using
+# teacher reasoning traces as targets, but very, very sparing and downweighted"): ``train@W`` weights its tokens W,
+# ``train`` (a treatment table's or --teacher-think's) means ``train@--teacher-think-weight``. Summaries, hidden and
+# empty blocks stay zero-weight context (the treatment table keeps their models at context or filled).
+TEACHER_THINK_WEIGHT = 0.1
+
+
+def parse_think(value):
+    """('context' | 'train', weight) of a think value: 'context', 'train' (weight 1) or 'train@W' (0 <= W <= 1)."""
+    mode, _, weight = str(value).partition('@')
+    if mode not in TEACHER_THINK or (weight and mode != 'train'):
+        raise ValueError(f'teacher_think {value!r}: context, train or train@W')
+    try:
+        w = float(weight) if weight else 1.0
+    except ValueError:
+        raise ValueError(f'teacher_think {value!r}: W must be a number') from None
+    if not 0 <= w <= 1:
+        raise ValueError(f'teacher_think {value!r}: W must lie in [0, 1]')
+    return mode, w
+
+
+class WeightedLead(int):
+    """A reply's zero-weight lead (an int, as ``think_context`` returns) whose first ``think_end`` tokens (the teacher's
+    think block through ``</think>``) carry weight ``think_weight`` instead of 0 (``rendered_row``); the lead-in text
+    between them and the action stays 0."""
+
+    def __new__(cls, lead, think_end, think_weight):
+        self = super().__new__(cls, lead)
+        self.think_end, self.think_weight = int(think_end), float(think_weight)
+        return self
+
+    def __reduce__(self):
+        return WeightedLead, (int(self), self.think_end, self.think_weight)
+
+    def __repr__(self):
+        return f'WeightedLead({int(self)}, think_end={self.think_end}, think_weight={self.think_weight})'
 
 
 def think_context(renderer, source, target_message, target_ids, teacher_think='context', lead_in='context',
@@ -631,9 +667,8 @@ def think_context(renderer, source, target_message, target_ids, teacher_think='c
     template's empty think block of an own reply without reasoning: a decision readout the actor scored, not sampled
     (its option is the scored continuation after the prefix all options share, so ``</think>`` at the first target
     position is never the student's choice; the base gives it ~20 nats). sft-v4-run1 trained it in 18 own rows."""
-    from natlang_neuralese.serve.targets import non_student_context
-    if teacher_think not in TEACHER_THINK:
-        raise ValueError(f'teacher_think {teacher_think!r} not in {TEACHER_THINK}')
+    from natlang_neuralese.serve.targets import non_student_context, think_end
+    think, think_weight = parse_think(teacher_think)
     if lead_in not in TEACHER_LEAD_IN:
         raise ValueError(f'lead_in {lead_in!r} not in {TEACHER_LEAD_IN}')
     if own_empty_think not in TEACHER_THINK:
@@ -642,7 +677,13 @@ def think_context(renderer, source, target_message, target_ids, teacher_think='c
         if own_empty_think == 'train' or (target_message.get('reasoning_content') or '').strip():
             return 0
         return non_student_context(renderer.tokenizer, target_message, target_ids, think='context', lead_in='train')
-    return non_student_context(renderer.tokenizer, target_message, target_ids, think=teacher_think, lead_in=lead_in)
+    if think == 'train' and think_weight < 1:
+        lead = non_student_context(renderer.tokenizer, target_message, target_ids, think='context', lead_in=lead_in)
+        if not think_weight or not (target_message.get('reasoning_content') or '').strip():
+            return lead          # an empty block stays context
+        end = think_end(renderer.tokenizer, target_ids)
+        return WeightedLead(lead, end, think_weight) if end else lead
+    return non_student_context(renderer.tokenizer, target_message, target_ids, think=think, lead_in=lead_in)
 
 
 # Teacher reasoning is chosen per teacher model, source or episode (owner 2026-11-20): a treatment table published through
@@ -650,6 +691,8 @@ def think_context(renderer, source, target_message, target_ids, teacher_think='c
 # a non-student reply's think block trains (``train``: long enough, close to the student's style, actions likely after
 # it), stays masked context (``context``) or gives way to student-filled reasoning (``filled``: the filled version is an
 # ``--aux NAME=PATH,replaces=teacher`` part, filled_reasoning.py; an episode without one renders as ``context``).
+# ``train`` weights the block's tokens ``train_weight`` (``--teacher-think-weight``, default 0.1); ``train@W`` sets W.
+# A filled unit replaces its episode whatever the treatment (``filled_keys``): one episode never trains twice.
 THINK_TREATMENTS = ('train', 'context', 'filled')
 THINK_TREATMENT_ROLE = 'teacher-think-treatment'
 
@@ -658,28 +701,34 @@ class ThinkTreatment:
     """``natlang.teacher-think-treatment/1``: {"default": T, "models": {teacher model id: T}, "sources": {run or pool
     label: T}, "episodes": {episode key: T}}; the most specific entry wins (episode, source, model, default)."""
 
-    def __init__(self, spec=None, default='context', path=None):
+    def __init__(self, spec=None, default='context', path=None, train_weight=TEACHER_THINK_WEIGHT):
         spec = spec or {}
         self.path, self.default = path, spec.get('default', default)
+        self.train_weight = float(train_weight)
+        if not 0 <= self.train_weight <= 1:
+            raise ValueError(f'teacher think weight {train_weight!r} not in [0, 1]')
         self.models, self.sources, self.episodes = (dict(spec.get(k) or {}) for k in ('models', 'sources', 'episodes'))
         for value in [self.default, *self.models.values(), *self.sources.values(), *self.episodes.values()]:
-            if value not in THINK_TREATMENTS:
-                raise ValueError(f'think treatment {value!r} not in {THINK_TREATMENTS}')
+            mode, _, weight = str(value).partition('@')
+            if mode not in THINK_TREATMENTS or (weight and mode != 'train'):
+                raise ValueError(f'think treatment {value!r} not in {THINK_TREATMENTS} (or train@W)')
+            if weight:
+                parse_think(value)
         self.counts = collections.Counter()
 
     @classmethod
-    def load(cls, path, default):
+    def load(cls, path, default, train_weight=TEACHER_THINK_WEIGHT):
         """PATH, 'none' (every episode ``default``), or None: the registry role's file when one dataset holds it."""
         if path == 'none':
-            return cls(default=default)
+            return cls(default=default, train_weight=train_weight)
         if path is None:
             paths = data_registry.role_paths(THINK_TREATMENT_ROLE)
             if not paths:
-                return cls(default=default)
+                return cls(default=default, train_weight=train_weight)
             if len(paths) > 1:
                 raise ValueError(f'registry role {THINK_TREATMENT_ROLE} names {len(paths)} files')
             path = paths[0]
-        return cls(json.loads(Path(path).read_text()), default, str(path))
+        return cls(json.loads(Path(path).read_text()), default, str(path), train_weight)
 
     def of(self, c):
         """The treatment of candidate ``c`` (own episodes: None, every sampled token is theirs)."""
@@ -693,10 +742,15 @@ class ThinkTreatment:
     def render(self, c):
         """The ``teacher_think`` a candidate renders with (``filled`` while it is not replaced: context)."""
         value = self.of(c)
-        return 'context' if value in (None, 'filled') else value
+        if value in (None, 'filled', 'context'):
+            return 'context'
+        if value == 'train':
+            return 'train' if self.train_weight >= 1 else f'train@{self.train_weight:g}'
+        return value
 
     def report(self):
         return {'path': self.path, 'sha256': sha256_file(self.path) if self.path else None, 'default': self.default,
+                'train_weight': self.train_weight,
                 'models': self.models, 'sources': self.sources, 'episodes': len(self.episodes),
                 'admitted_episodes': dict(self.counts)}
 
@@ -1856,18 +1910,38 @@ MAX_PRIOR_EXPOSURES = 1
 class Exposures:
     """How many earlier builds (``--prefer-unseen``) trained a unit ``(part, task, round)``: a build counts once when
     its rows hold the episode key or its trained units hold ``(task, round)`` (``unit_seen``). ``keys``, ``tasks`` and
-    ``units`` are the unions ``trained_in`` and ``trained_units`` return."""
+    ``units`` are the unions ``trained_in`` and ``trained_units`` return.
+
+    One episode is one unit whichever part trained it: a stand-in unit (``replaces``: round ``<prefix>:<episode key>``,
+    e.g. a filled-reasoning unit of a teacher episode) and the episode it stands in for share their exposure, so a
+    teacher episode trained raw does not train again as its fill, nor a filled one again raw (``stand_in``)."""
 
     def __init__(self, per_build):
-        self.per_build = [(frozenset(keys), frozenset(units)) for keys, _, units in per_build]
-        self.keys = frozenset().union(*(k for k, _ in self.per_build))
-        self.units = frozenset().union(*(u for _, u in self.per_build))
+        self.per_build = [(frozenset(keys), frozenset(units),
+                           frozenset((t, r) for t, r in (stand_in(u) for u in units) if r is not None))
+                          for keys, _, units in per_build]
+        self.keys = frozenset().union(*(k for k, _, _ in self.per_build))
+        self.units = frozenset().union(*(u for _, u, _ in self.per_build))
+        self.replaced = frozenset().union(*(r for _, _, r in self.per_build))
         self.tasks = frozenset().union(*(t for _, t, _ in per_build))
 
     def __call__(self, key):
-        if key[2] not in self.keys and key[1:] not in self.units:
+        task, round_ = key[1], key[2]
+        stood = stand_in((task, round_))[1]     # the episode this unit stands in for, if it is a stand-in
+        if (round_ not in self.keys and key[1:] not in self.units and (task, round_) not in self.replaced
+                and (stood is None or (stood not in self.keys and (task, stood) not in self.units))):
             return 0
-        return sum(1 for keys, units in self.per_build if key[2] in keys or key[1:] in units)
+        return sum(1 for keys, units, replaced in self.per_build
+                   if round_ in keys or key[1:] in units or (task, round_) in replaced
+                   or (stood is not None and (stood in keys or (task, stood) in units)))
+
+
+def stand_in(unit):
+    """(task, the episode key a stand-in unit's round ``<prefix>:<episode key>`` names) or (task, None): the key after
+    the prefix counts only when it is itself an episode key (``<source>:...:<sample>``)."""
+    task, round_ = unit
+    rest = str(round_).split(':', 1)[1] if ':' in str(round_) else ''
+    return (task, rest) if rest.count(':') >= 2 else (task, None)
 
 
 def trained_exposures(builds):
@@ -2266,6 +2340,8 @@ def rendered_row(rendered, source, key, index, turn, backend_workarounds='contex
            'prompt': prompt.view(np.int32), 'sample': target.view(np.int32)}
     if context:
         row['weight'] = (np.arange(len(target)) >= context).astype(np.float32)
+        if isinstance(context, WeightedLead):    # a weighted teacher think block (``think_context`` train@W)
+            row['weight'][:min(context.think_end, len(target))] = context.think_weight
     if source not in OWN_SOURCES and detour_call(turn, backend_workarounds):
         row['weight'] = np.zeros(len(target), np.float32)   # the detour after the refusal: context
     decision = decision[0] if decision else None
@@ -2732,7 +2808,8 @@ def build(args):
     previous_policy = getattr(args, 'previous_policy', None) or frontier_prev_policy
     rates.update({k: (v['successes'], v['scored']) for k, v in frontier.items() if v.get('scored')})
     tiers = {k: v.get('tier') for k, v in frontier.items()}
-    treatment = ThinkTreatment.load(getattr(args, 'think_treatment', None), args.teacher_think)
+    treatment = ThinkTreatment.load(getattr(args, 'think_treatment', None), args.teacher_think,
+                                    getattr(args, 'teacher_think_weight', TEACHER_THINK_WEIGHT))
 
     def base_rate(task_id):
         s, n = rates.get(task_id, (None, 0))
@@ -2933,6 +3010,12 @@ def build(args):
         producers[producer]['weighted_target_tokens'] += int(sum(float(r['weight'].sum()) if 'weight' in r
                                                                  else len(r['sample']) for r in rows))
         producers[producer]['think_context_calls'] += sum('weight' in r for r in rows)
+        # weighted teacher think tokens (train@W, 0 < W < 1): their loss mass, and how many tokens carry it
+        think_mass = [r['weight'][(r['weight'] > 0) & (r['weight'] < 1)] for r in rows if 'weight' in r]
+        producers[producer]['think_weighted_tokens'] += int(sum(len(m) for m in think_mass))
+        producers[producer]['think_weighted_mass'] += float(sum(m.sum() for m in think_mass))
+        s['think_weighted_tokens'] += int(sum(len(m) for m in think_mass))
+        s['think_weighted_mass'] += float(sum(m.sum() for m in think_mass))
         producers[producer]['reasoning_free_calls'] += sum(not (t['target'].get('reasoning_content') or '').strip()
                                                            for t in turns)
         episode = {'task_id': c['task_id'], 'round': c['key'], 'rows': rows, 'source': source,
@@ -3938,6 +4021,10 @@ def main():
                    'zero weight through </think>, the action is the target) or train (visible reasoning is target; '
                    'an empty think block stays context). think_context has the evidence. The default treatment: '
                    '--think-treatment chooses per teacher model, source or episode')
+    b.add_argument('--teacher-think-weight', type=float, default=TEACHER_THINK_WEIGHT, metavar='W',
+                   help='per-token loss weight of a teacher think block whose treatment is train (default '
+                        f'{TEACHER_THINK_WEIGHT}: real visible reasoning, sparingly; owner 2026-11-25); 1 trains it '
+                        'at full weight, 0 keeps it context; a table entry train@W sets its own')
     b.add_argument('--think-treatment', default=None, metavar='JSON|none',
                    help='teacher think treatment per model/source/episode (ThinkTreatment; default: the registry role '
                         f'{THINK_TREATMENT_ROLE} when registered, else --teacher-think for every episode)')
