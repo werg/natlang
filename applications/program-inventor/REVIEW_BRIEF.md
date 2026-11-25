@@ -34,6 +34,12 @@ inline `nl`):
   nicknames, labels), including fields of records passed to it and text a TypeScript helper assembles from outside
   fields before passing it on, is typed `Untrusted<...>`. Identifiers, numbers and closed value sets need not be
   (`invented.py qualify` flags plain `string` fields as S6; you judge the rest).
+- **The expected answer is the one a careful reader gives.** When you, reading an item carefully, reject the
+  `expected` answer or a scripted reading, S4 is unmet: name the item and your reading, and mark S4 false even if the
+  rest of the program is sound.
+- **What the items say, the program can hold.** An item whose text moves state the types cannot express (a side
+  statement, an aside, a second clause that says someone learned something another way) is a defect of the program,
+  not of the item: S4 fails and the finding asks for the types and code that represent it.
 - **Every rule a scripted answer rests on is written down**: in the instruction, a doc comment of an argument type, or
   code. A scripted answer that needs a precedence or resolution rule found nowhere in what the call sees fails S4; so
   does a doc-comment rule applied to some items and not others. `qualification/reference.txt` lists which children

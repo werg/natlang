@@ -242,7 +242,11 @@ def test_admit_needs_a_review_of_this_version_then_stages_by_split(tmp_path, mon
     cases = invented.package(data, files)
     invented.save_rows(out / 'cases.jsonl', cases)
     invented.save_rows(out / 'stages.jsonl', invented.stage_cases(cases, trace_for(cases)))
-    (out / 'report.json').write_text(json.dumps({'ok': True, 'problems': []}))
+    (out / 'report.json').write_text(json.dumps({'ok': True, 'problems': [], 'bar': {'version': 'old'}, 'digest': invented.digest(sub)}))
+    monkeypatch.setattr(invented, 'qualify', lambda submission, runtime: {'ok': False, 'problems': ['F4: requalified']})
+    stale = invented.admit(sub, review_path=None, idea_path=None, root=tmp_path / 'root', runtime=tmp_path, skip_qualify=True)
+    assert stale == {'admitted': False, 'stage': 'qualify', 'problems': ['F4: requalified']}, 'a report of an older bar is redone'
+    (out / 'report.json').write_text(json.dumps({'ok': True, 'problems': [], 'bar': invented.bar(), 'digest': invented.digest(sub)}))
     (sub / 'idea.json').write_text(json.dumps(card('withdrawal-ruling', 'Rule on notes.', ['withdraws', 'supersedes', 'same_item'])))
     root = tmp_path / 'root'
     kwargs = dict(review_path=None, idea_path=None, root=root, runtime=tmp_path, skip_qualify=True)
@@ -304,6 +308,17 @@ def test_reference_report_reads_the_trace(tmp_path):
     assert 'entry 1 ["withdraws an earlier"] -> "stands": 2 call(s)' in text, text
 
 
+def test_notes_and_mistakes_quote_the_text_as_it_stands(tmp_path):
+    sub = write(tmp_path)
+    (sub / 'NOTES.md').write_text((sub / 'NOTES.md').read_text() + '\nn1 says "the ceiling stain kept spreading" and "a sentence that was removed".\n')
+    data = json.loads((sub / 'submission.json').read_text())
+    data['instances'][0]['wrong_answers'][0]['mistake'] = 'reads "nobody came to look" as a repair'
+    (sub / 'submission.json').write_text(json.dumps(data))
+    text = '\n'.join(check(sub)[0])
+    assert 'C4: NOTES.md quotes "a sentence that was removed"' in text and 'ceiling stain' not in text, text
+    assert 'F4: instance a: a wrong answer\'s mistake quotes "nobody came to look"' in text, text
+
+
 def test_reports_name_the_bar_they_were_qualified_against():
     assert invented.bar()['version'] == invented.BAR_VERSION and len(invented.bar()['requirements_sha256']) == 16
 
@@ -349,3 +364,16 @@ def test_verify_counts_mutant_wrong_answers_in_its_summary(tmp_path):
                    check=True, capture_output=True, text=True, timeout=60)
     summary = json.loads((tmp_path / 'out' / 'verification.json').read_text())['summary']
     assert (summary['kept'], summary['wrong_controls'], summary['mutants_rejected']) == (1, 1, 1), summary
+
+
+def test_c2_counts_only_calls_whose_own_entry_the_result_depends_on():
+    shared = 'the datasheet says the enzyme works from thirty seven to fifty degrees in this buffer'
+    item = lambda i: f'step {i} incubates the reaction at the stated temperature for ten minutes then cools it'  # noqa: E731
+    row = {'id': 'c', 'status': 'done', 'calls': 4,
+           'children': [{'name': 'j', 'args': {'sheet': shared, 'step': item(i)}, 'value': 'ok'} for i in range(3)],
+           'answers': [{'name': 'j', 'entry': 0, 'shown': shared + ' ' + item(0)},
+                       {'name': 'j', 'entry': 1, 'shown': shared + ' ' + item(1)},
+                       {'name': 'j', 'entry': 1, 'shown': shared + ' ' + item(2)}]}
+    counted = invented.calls_of_own_entries(row, set(invented.own_entries(row)))
+    assert [c['args']['step'] for c in counted] == [item(0)], 'a default-answered call sharing the datasheet does not count'
+    assert invented.calls_of_own_entries(row, set()) == [], 'an entry no answer depends on does not count'

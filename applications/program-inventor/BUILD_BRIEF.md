@@ -58,8 +58,8 @@ A submission is a program an expert would recognise as their own work, run on a 
   day's calls, the whole rehearsal thread, the week's letters. Every item is there because the user would meet it and a
   judgment has to read it: a caller's directions run on for 100-150 words with a false start and a correction; a
   rehearsal thread has 20-30 messages, several about other songs. The inputs hold the card's size in prose, and C2 counts
-  the prose of the items a judgment reads with a children entry of their own (at least 800 words), so size comes from
-  items that each need reading.
+  the prose of the items a judgment reads with a children entry of their own whose answer the result depends on (at
+  least 800 words), so size comes from items that each need reading and each matter.
 - **The item describes; the judgment names.** The text says what happened in the words its writer would use, and the
   judgment's answer is the name for it. "We can do the 18th instead of the 12th now, if that still suits" is a new date
   for the same visit, and `supersedes` names it `replaces`; the message itself talks about dates, not about replacing.
@@ -203,19 +203,26 @@ python3 /home/werg/natlang/scripts/memory_ledger.py run --unit pinv-qual-<slug>-
   -- /bin/bash -c '/home/werg/natlang/.venv-neuralese/bin/python scripts/rl_tasks/sources/invented.py qualify SUBMISSION > LOGS/qualify-<slug>-<n>.log 2>&1'
 ```
 
-The bar is versioned: `report.json` records `bar` (its version and the digest of `requirements.json`), and the
-checks change only between waves, so the bar you start against is the bar you finish against.
+The bar is versioned: `report.json` records `bar` (its version and the digest of `requirements.json`) and the
+submission's digest, and the checks change only between waves, so the bar you start against is the bar you finish
+against. `admit` qualifies again unless the stored report is of this submission under the current bar.
 
 `qualify` runs everything: `natlang check` (F1, after rebuilding a stale runtime), packaging, the reference replay,
 wrong answers, ablations, keyword baselines and the crisp requirements. `--print-reference` also prints, per instance,
 the value the reference returns, the prose words its judgment calls read, and for each judgment which children entry
 answered which item (the same text is in `qualification/reference.txt`). What the crisp checks read:
 - C2: the inputs hold at least the card's size in prose (alphabetic words of texts of three words or more; ids, codes,
-  timecodes and numbers do not count), and the prose of items read by an entry of their own is at least 800 words.
+  timecodes and numbers do not count), and at least 800 words are in calls answered by an entry of their own that the
+  result depends on: qualify gives each such entry another answer of its judgment, replays, and counts the entry when
+  the returned value changes. An entry no answer depends on is a warning, and its text does not count.
+- Quotes: a fragment NOTES.md or a wrong answer's `mistake` quotes (three words or more, in double quotes) occurs in
+  the instance or the program as they stand (C4, F4).
 - S6: a plain `string` a `.nl` function reads, as an argument or a record field, passes when its name says it is an
   identifier (`id`, `...Id`, `key`, `code`, `ref`, `url`, `path`, `date`, `time`, `...At`, `language`, `unit`) or its doc
   comment says so (`identifier`, `id`, `ISO`, `code`, `date`, `timestamp`, `timecode`, `URL`, `path`, `digits`, `computed`).
-- S7: a relation word of an answer (`replaces`, `cancels`, `knows`) that every call holding it in its text answers.
+- S7: a relation word of an answer (`replaces`, `cancels`, `knows`) that every call holding it in its own text answers.
+  A value naming a substance or term the text names (`dmso`, `household`) is never flagged, nor a word in a text
+  several calls share (a datasheet).
 - S8: a judgment asked about two identical values.
 - C4: each `## Hardest items` entry names an item a judgment is called on by an id that appears in that call (`m-a14`,
   `s22.2`), an item whose text leaves the reading to the reader.

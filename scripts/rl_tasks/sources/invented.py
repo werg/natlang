@@ -68,7 +68,7 @@ ORACLES = frozenset({'exact', 'normalized', 'verifier'})
 VERIFIER_ROOT = 'training/semantic_fp_tasks/verifiers/'
 # The bar a wave of builders qualifies against: BAR_VERSION and the requirements' digest go into every report.json, and
 # they change only between waves (coordinator 2026-11-25), never while builders iterate.
-BAR_VERSION = '2026-11-25.2'
+BAR_VERSION = '2026-11-25.3'
 # The bar (requirements.json; coordinator 2026-11-25 after the calibration review): size floors, code depth, notes.
 MIN_WORDS, MIN_TEXT_ITEMS, MIN_TS_LINES, MIN_HARDEST = 800, 15, 100, 3
 SUBMISSION_ENTRIES = frozenset({'program', 'submission.json', 'NOTES.md', 'qualification', 'idea.json', 'review.json'})
@@ -296,6 +296,44 @@ def untrusted_problems(files: dict[str, str]) -> list[str]:
     return problems
 
 
+# Every quoted span in turn (a short one too, so the next quote pairs its own marks); quote_problems keeps those of three
+# words or more.
+QUOTED = re.compile(r'["\u201c]([^"\u201c\u201d]{1,400}?)["\u201d]')   # a quote may wrap onto the next line
+
+
+def normalized(text: str) -> str:
+    return re.sub(r'\s+', ' ', text.replace('\u2019', "'")).strip().lower()
+
+
+def quote_problems(submission: Path, data: dict, files: dict[str, str]) -> list[str]:
+    """Fragments NOTES.md and wrong-answer `mistake` texts quote (three words or more) still occur in what they describe:
+    the instances or the program. A quote of removed text is a stale note."""
+    instances = data.get('instances') or []
+    program = normalized(' '.join(files.values()))
+    every = normalized(json.dumps([i.get('inputs') for i in instances], ensure_ascii=False)
+                       .replace('\\n', ' ').replace('\\"', '"')) + ' ' + normalized(' '.join(
+                           s for i in instances for s in string_leaves(i.get('inputs'))))
+    def missing(text: str, where: str) -> list[str]:
+        # A quote with an ellipsis ("DMSO ... makes 3%") quotes each of its parts.
+        def absent(part: str) -> bool:
+            part = normalized(part).strip(' .,;:')
+            return len(part.split()) >= 3 and part not in where and part not in program
+        return [q for q in QUOTED.findall(text) if any(absent(part) for part in re.split(r'\.\.\.|\u2026', q))]
+    problems = []
+    notes = submission / 'NOTES.md'
+    for quote in missing(notes.read_text() if notes.is_file() else '', every):
+        problems.append(f'C4: NOTES.md quotes "{quote[:80]}", which no instance or program file holds now; quote the text '
+                        'as it stands or drop the quote')
+    for inst in instances:
+        own = normalized(' '.join(string_leaves(inst.get('inputs'))))
+        for w in inst.get('wrong_answers') or []:
+            if isinstance(w, dict):
+                for quote in missing(str(w.get('mistake', '')), own):
+                    problems.append(f'F4: instance {inst.get("name")}: a wrong answer\'s mistake quotes "{quote[:80]}", which '
+                                    'the instance does not hold now; describe the mistake on the text as it stands')
+    return problems
+
+
 def hardest_items(notes: str) -> int:
     """List entries under the NOTES.md heading `Hardest items`."""
     section = re.search(r'^#+\s*Hardest items[^\n]*\n([\s\S]*?)(?=^#|\Z)', notes, re.M | re.I)
@@ -332,8 +370,13 @@ def deciding_words(calls: list[dict]) -> list[str]:
     # names a domain term the text may well use; a text saying "this replaces" states the relation the judgment reads.
     words = {w.lower() for call in calls for w in value_words(call.get('value'), call.get('args'))
              if re.fullmatch(r'[a-z]{3,}[^su\W]s', w.lower()) and not w.lower().endswith(('ous', 'ss', 'is'))}
+    # A text several calls share (a datasheet, a style guide) names its terms for all of them: a word it holds settles nothing.
+    counts = collections.Counter(t for call in calls for t in set(string_leaves(call.get('args'))))
+    shared = [t for t, n in counts.items() if n > 1]
     for word in sorted(words):
         pattern = re.compile(r'\b' + re.escape(stem(word)) + r'\w*', re.I)
+        if any(pattern.search(t) for t in shared):
+            continue
         holding = [call for call in calls if any(pattern.search(t) for t in string_leaves(call.get('args'))
                                                    if len(PROSE_WORD.findall(t)) >= 3)]
         answered = [call for call in holding if word in {w.lower() for w in value_words(call.get('value'), call.get('args'))}]
@@ -365,7 +408,56 @@ def hardest_entries(notes: str) -> list[str]:
     return re.findall(r'^\s*(?:[-*]|\d+\.)\s+(.+)$', section.group(1), re.M) if section else []
 
 
-def reference_report(data: dict, cases: list[dict], trace: dict, notes: str, declared: int | None) -> tuple[list[str], list[str], str]:
+def own_entries(row: dict) -> dict[int, dict]:
+    """The children entries that answer exactly one call of the reference run, with that call's judgment name and shown text."""
+    per_entry: dict = {}
+    for answer in row.get('answers', []):
+        per_entry.setdefault(answer['entry'], []).append(answer)
+    return {entry: answers[0] for entry, answers in per_entry.items() if entry >= 0 and len(answers) == 1}
+
+
+def calls_of_own_entries(row: dict, entries: set[int]) -> list[dict]:
+    """The trace's judgment calls answered by one of `entries`: a call is matched to the answer of the same judgment whose
+    shown arguments hold all its prose, and counts only when every such answer is one of those entries."""
+    out = []
+    for call in row.get('children', []):
+        leaves = [leaf[:30] for leaf in string_leaves(call.get('args')) if len(PROSE_WORD.findall(leaf)) >= 3]
+        if not leaves:
+            continue
+        matching = [a for a in row.get('answers', []) if a['name'] == call.get('name') and all(l in a['shown'] for l in leaves)]
+        if matching and all(a['entry'] in entries for a in matching):
+            out.append(call)
+    return out
+
+
+def dependence_probes(cases: list[dict], trace: dict) -> list[dict]:
+    """For each case, one probe per own entry with a finite value: another answer its judgment gives elsewhere."""
+    by_id = {row['id']: row for row in trace.get('results', [])}
+    probes = []
+    for case in cases:
+        row = by_id.get(case['id'], {})
+        children = case['curriculum']['reference'].get('children') or []
+        names = {a['entry']: a['name'] for a in row.get('answers', []) if a['entry'] >= 0}
+        values: dict = {}
+        for entry, name in names.items():
+            if 'value' in children[entry]:
+                values.setdefault(name, []).append(children[entry]['value'])
+        mine = []
+        for entry in own_entries(row):
+            if 'value' not in children[entry]:
+                continue
+            own = json.dumps(children[entry]['value'], sort_keys=True)
+            other = next((v for v in values.get(names[entry], []) if json.dumps(v, sort_keys=True) != own), None)
+            if other is None and isinstance(children[entry]['value'], bool):
+                other = not children[entry]['value']
+            if other is not None:
+                mine.append({'entry': entry, 'value': other})
+        probes.append({'case': case, 'probes': mine[:300]})
+    return probes
+
+
+def reference_report(data: dict, cases: list[dict], trace: dict, notes: str, declared: int | None,
+                     dependence: dict | None = None) -> tuple[list[str], list[str], str]:
     """Problems, warnings and the readable reference report (qualification/reference.txt) from the reference trace."""
     problems, warnings, lines = [], [], []
     names = {case['id']: inst.get('name') for case, inst in zip(cases, data.get('instances') or [])}
@@ -384,20 +476,26 @@ def reference_report(data: dict, cases: list[dict], trace: dict, notes: str, dec
         if row.get('error') or row.get('status') != 'done':
             problems.append(f'F3: {label}: the reference trace did not run to an answer: '
                             f'{(row.get("error") or row.get("detail") or row.get("status"))!s:.600}')
-        # C2 counts the prose of items read by an entry of their own: text a scripted reading depends on.
+        # C2 counts the prose of calls answered by an entry of their own that the result depends on (changing the entry's
+        # answer changes what the reference returns): text a scripted reading decides.
         per_entry: dict = {}
         for answer in row.get('answers', []):
             per_entry.setdefault(answer['entry'], []).append(answer['shown'])
-        own = [shown[0] for entry, shown in per_entry.items() if entry >= 0 and len(shown) == 1]
+        own = own_entries(row)
+        matters = ((dependence or {}).get(row['id']) or {})
+        decisive = {entry for entry in own if matters.get(str(entry), matters.get(entry, dependence is None))}
+        for entry in sorted(set(own) - decisive):
+            item = next(iter(ITEM_TOKEN.findall(own[entry]['shown'])), '')
+            warnings.append(f'{label}: no answer depends on children entry {entry} ({own[entry]["name"]} {item}): another '
+                            'reading of it returns the same result, so its text does not count for C2')
         judged_all = prose_words([c.get('args') for c in row.get('children', [])])
-        judged = prose_words([c.get('args') for c in row.get('children', [])
-                              if any(leaf[:30] in text for leaf in string_leaves(c.get('args'))
-                                     if len(PROSE_WORD.findall(leaf)) >= 3 for text in own)])
-        lines.append(f'prose words reaching judgment calls: {judged_all}; in items read by an entry of their own: {judged}')
+        judged = prose_words([c.get('args') for c in calls_of_own_entries(row, decisive)])
+        lines.append(f'prose words reaching judgment calls: {judged_all}; in items read by an entry of their own that the '
+                     f'result depends on: {judged}')
         if row.get('status') == 'done':
             if judged < MIN_WORDS:
                 problems.append(f'C2: {label}: {judged} words of prose in items a judgment reads with an entry of their own '
-                                f'({judged_all} reach judgment calls in all); at least {MIN_WORDS}')
+                                f'that the result depends on ({judged_all} reach judgment calls in all); at least {MIN_WORDS}')
             # An entry may be there for calls only an ablation or a mutant makes; a reference whose run takes few of its
             # entries did not run the program the entries were written for (a stale runtime, a broken fragment).
             unused = [index for index in range(len(children)) if index not in per_entry]
@@ -560,6 +658,7 @@ def static_problems(submission: Path, data: dict, files: dict[str, str], m: dict
     if m['ts_logic_lines'] < MIN_TS_LINES:
         problems.append(f'D1: {m["ts_logic_lines"]} lines of TypeScript logic in the callable folder; at least {MIN_TS_LINES}')
     problems += untrusted_problems(files)
+    problems += quote_problems(submission, data, files)
     notes = submission / 'NOTES.md'
     listed = hardest_items(notes.read_text()) if notes.is_file() else 0
     if listed < MIN_HARDEST:
@@ -786,7 +885,7 @@ def qualify(submission: Path, runtime: Path, print_reference: bool = False) -> d
     problems = static_problems(submission, data, files, m)
     out = submission / 'qualification'
     out.mkdir(exist_ok=True)
-    report: dict = {'slug': data.get('slug'), 'bar': bar(), 'metrics': m}
+    report: dict = {'slug': data.get('slug'), 'bar': bar(), 'digest': digest(submission), 'metrics': m}
     problems += runtime_problems(runtime)
     problems += natlang_check(submission / 'program')
     try:
@@ -854,7 +953,15 @@ def qualify(submission: Path, runtime: Path, print_reference: bool = False) -> d
         except ValueError:
             declared = None
         notes = submission / 'NOTES.md'
-        found, warnings, text = reference_report(data, cases, trace, notes.read_text() if notes.is_file() else '', declared)
+        (out / 'dependence-probes.json').write_text(json.dumps(dependence_probes(cases, trace), ensure_ascii=False))
+        run = run_node('entry_dependence.mjs', runtime, str(out / 'dependence-probes.json'), str(out / 'dependence.json'))
+        try:
+            dependence = {row['id']: row['entries'] for row in json.loads((out / 'dependence.json').read_text())['results']}
+        except (OSError, ValueError, KeyError):
+            dependence = {}
+            problems.append('entry_dependence.mjs did not finish: ' + (run.stderr or run.stdout)[-300:])
+        found, warnings, text = reference_report(data, cases, trace, notes.read_text() if notes.is_file() else '', declared,
+                                                 dependence)
         problems += found
         report['warnings'] = warnings
         (out / 'reference.txt').write_text(text)
@@ -917,7 +1024,10 @@ def save_rows(path: Path, rows: list[dict]) -> None:
 def admit(submission: Path, *, review_path: Path | None, idea_path: Path | None, root: Path, runtime: Path,
           skip_qualify: bool = False) -> dict:
     out = submission / 'qualification'
-    report = json.loads((out / 'report.json').read_text()) if skip_qualify else qualify(submission, runtime)
+    stored = json.loads((out / 'report.json').read_text()) if (out / 'report.json').is_file() else {}
+    # A stored report stands only for this submission under the current bar; anything else is qualified again.
+    current = skip_qualify and stored.get('bar') == bar() and stored.get('digest') == digest(submission)
+    report = stored if current else qualify(submission, runtime)
     if not report.get('ok'):
         return {'admitted': False, 'stage': 'qualify', 'problems': report.get('problems', [])}
     review_path = review_path or submission / 'review.json'
