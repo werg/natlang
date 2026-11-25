@@ -13494,3 +13494,90 @@ least we are training up some Neuralese capabilities. Please implement this."
 ## 2026-11-25 — escaped higher-order functions retain actual training decisions
 
 A zero-inference TEST-only Base capture executed creator → returned callable → later consumer → scalar ten through the official Workerd SDK and real NativeRecordsDO. Canonical Python live admission and Node disk verification/materialization retained all four original model decisions, including prompts with the consumer's live function binding and escaped lexical capture. Exact LFM3 tokenizer-only rendering confirmed prompt context and action loss masks. Keep the existing honest nonportable function snapshots; no codec or admission waiver is needed for this observed training path. Add real capture/bridge regressions, leave portable replay and training/held gains explicitly unchecked, and never register these scripted fixtures as teacher data. Details and source/evidence identities: `plans/neuralese/HIGHER_ORDER_TRAINING_PROOF_20261125.md`. Source35 collection was not gated or modified.
+
+## 2026-11-25 16:30 aei1 supply: the fills reach the campaigns, unfilled campaign episodes wait for their fill, solved own episodes leave, rounds wait for 5M new tokens, a fixed held-like validation set (ei-supply agent)
+
+**Observation (DECISIONS 14:20).** New supervision per round collapsed after r1: r1 trained 19.6M teacher-derived
+tokens, r9 2.5M, r11 1.2M (own successes 78% of r11's 6.2M).
+
+**Why the supply was small (measured on r0011's inputs: its build.json, rows.jsonl.zst and frontier, the campaign manifests and fills.jsonl).**
+- **No campaign episode was ever filled.** The standing fills list only the seed WORKs, the live WORK and the
+  `grpo-sd-teacher` role (`Cycle.fill_command`). The loop's own sources WORK (`/home/werg/data/ei-sources`, where every
+  round extracts the teacher campaigns) was never a fill source. Of the 5,294 campaign successes (teacher-r0001..r0011),
+  0 had a fill when r0011 was built.
+- **The fills spent their time on episodes that can never train.** Under `--max-prior-exposures 1` a fill and the
+  episode it stands in for share one exposure (`Exposures`, 2026-11-24). 32,515 of the build's 43,321 teacher successes
+  had already trained raw, and the seed WORKs the fills worked through are mostly those. Fill capacity is 3,942 fills in
+  the last 24 h (all generators).
+- **The Colab backlog fill was dead.** `colab-g4a-fill-backlog-polite-20261123` was OOM-killed at 10:45 (3.6 GB peak)
+  and nothing relaunched it. The Colab actor's only fill (`vibe-student-fill-*`) has 14 Vibestudio episodes left.
+- **Raw campaign episodes are small.** A raw teacher episode trains its actions only (the teacher's reasoning is
+  zero-weight context): 680-1,050 weighted tokens per episode (r5-r11). A filled unit trains 1,600-2,300. Once an
+  episode trained raw, its fill never trains. r0011 admitted 992 campaign episodes raw (1.02M tokens). 843 of them were
+  under 12 h old and not yet tried by the fill.
+- **Own successes of solved tasks.** 109 of r0011's 594 own episodes (18.4%, 0.69M target tokens) are tasks the policy
+  solves at >= 0.75 (frontier tier, else the recorded rate). The frontier tier alone missed most of them, because the
+  frontier measures only the tasks the newest collection drew.
+- **The other parts are exhausted.** operators (18,924 units over-exposed), fallow22 (7,072) and the Neuralese graphs
+  have trained once. Unseen campaign successes not yet in any build: 2,175.
+- **Caps.** The family share (0.05) dropped 2,089 unseen teacher episodes from r0011 (~2M raw tokens). It is left
+  unchanged: it is the owner-endorsed diversity rule, and a lineage-cumulative family share would change what
+  diversity means. This is listed as a lever.
+
+**Changes (default on, each with an opt-out; enter at the driver's next restart).**
+1. **The fills fill the campaigns first and skip trained episodes** (`expert_iteration.Cycle.fill_command`,
+   `filled_reasoning generate --skip-trained BUILD`). The loop's sources WORK is a `--prefer-work`: it comes after the
+   live WORKs, before the seed WORKs, and is rescanned every 30 min as rounds extract new campaign successes. Every
+   episode an earlier build trained is left out of the queue (`filled_reasoning.untrained`, `sft_sources.Exposures`).
+   The async driver passes its lineage's trained mixes and every prepared round mix (`trained_builds`). Opt-out:
+   `--no-fill-campaigns`.
+2. **New campaign episodes wait for their fill** (`sft_sources build --defer-unfilled-hours 12 --fill-out FILL
+   --campaign-work WORK...`, `FillPending`). A campaign episode younger than 12 h (its `rollouts.jsonl` mtime) that
+   the fill has not attempted is not admitted raw (funnel `fill_pending`). It trains as its fill in a later round, or
+   raw once it is older than 12 h or the fill declined it. Opt-out: `--defer-unfilled-hours 0`.
+3. **No own episodes from solved tasks** (`--anchor-per-task 0`, new `--own-solved-rate 0.75`,
+   `sft_sources.drop_solved_own`). The frontier tier decides where the frontier measured the task. Otherwise the
+   recorded rate decides, at >= 0.75 over >= 2 samples (fixed rates: the 5312e06c3 zero-call rule). Funnel:
+   `own_task_solved`. Opt-out: `--own-solved-anchor 1` (the old light anchor).
+4. **Round size: larger and fewer** (`AsyncRoundDriver.supply_wait`, `mix_supply`). The rule: a round trains once its
+   mix holds >= 5M weighted target tokens outside the own successes (`--min-new-tokens`). Every unit counted there is
+   new, because the no-repetition rule drops anything an earlier build trained. A shorter build waits 45 min
+   (`--supply-recheck-minutes`) while collection, teacher campaign and fills run on, then reruns data and build. After
+   12 h from the first short build (`--max-supply-wait-hours`) it trains anyway. Each pass is in
+   `rNNNN/stages/supply.json`, and the decision goes to round.json (`supply`) and the drive log. Opt-out:
+   `--min-new-tokens 0`.
+5. **A fixed held-like validation set** (`sft_sources build --fixed-val ROOT/val-fixed`, `FixedVal`). It holds one
+   verified success on each of up to 40 own and 40 teacher tasks from held-v3's families. These are never a held task
+   or a source-group sibling (the build's candidates already exclude the held closure) and never a task an earlier
+   build trained. The tasks are chosen once by hash and then frozen (`tasks.json`, `val-fixed-{own,teacher}.pkl`). No
+   build that names the set trains those tasks or their Neuralese variants (core candidates, and aux units through the
+   held closure). The learner scores the sets before step 1 and after its last step, beside the round's own left-over
+   sets (`sft_env`: VAL and `--val-chains`). The driver records before, after and change per set in round.json
+   (`validation`) and the drive log (`round_validation`). Opt-out: `--no-fixed-val`. This replaces the per-round
+   `val-teacher` sets. r4-r7's moved 1-4% at loss 0.003-0.03, and from r9 on they were empty, because the
+   no-repetition rule leaves no untrained left-overs.
+
+**Expected supply (from the measured rates).** The campaigns score about 150-200 successes an hour. If the fill keeps
+up, each one carries ~2K filled tokens instead of ~0.9K raw, so roughly 0.3-0.4M new tokens an hour. That is 5M in
+about 13-17 h. Rounds therefore wait up to the 12 h cap unless teacher throughput or fill capacity rises. Also, once:
+2,175 untrained campaign successes (~4M once filled) and the 28 authored programs (role `ei-authored-teacher`, extracted
+since adf901c52).
+
+**Ops actions.** The Colab fill was relaunched from the new pin (ei-sources first, `--skip-trained` with the lineage's
+builds). Also found:
+- r0011's `mix/chains.pkl`, `filled/chains.pkl` and `neuralese-graph-own/chains.pkl` were deleted at 14:23 by
+  retention (`ei_round_tier.drop_plan`: "r0011 trained"). At that time the active round was r0012 (the GRPO round the
+  14:50 entry dropped), so r0011 counted as older than the active round. r0011 never trained. Its mix has to be
+  rebuilt (`--rebuild-round r0011`) before it can train.
+- The ledger queue was stuck behind `aeirm-held-3eb3f435b14b` (40 GB; needs 55 with the reserve, 44 obtainable). The
+  aei1 teacher campaign (10 GB) and collection v0009 (70 GB) waited behind it, so neither was running.
+
+**Still supply-limited, and what would raise it.**
+- Teacher throughput (successes per hour): more Luna/Sol slots, the paid Vertex Gemini teachers (paused by the owner
+  until credits are refilled), Haiku (no Anthropic credit).
+- Fill capacity (~160 fills an hour across all generators): a dedicated fill window on the Colab actor between SFT
+  rounds, and a keeper for the Colab fill unit.
+- The one-exposure rule for fills (owner 2026-11-24, no repetition): ~30k teacher episodes trained raw. Their fills
+  would add ~1.0-1.3K new reasoning tokens each (~30-40M in all); about 0.9K of each fill's ~2K weighted tokens are
+  the actions that already trained. This is the owner's call.
+- The per-round family share: 2,089 unseen teacher episodes left out in r0011.

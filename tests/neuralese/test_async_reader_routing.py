@@ -19,7 +19,7 @@ def driver(tmp_path,monkeypatch,extra=()):
     captured={}
     monkeypatch.setattr(sys,'argv',['expert_iteration.py','async-drive','--root',str(tmp_path/'loop'),
         '--name','aei','--start','/checkpoint/start.pt','--start-sha','a'*64,'--commit','b'*40,
-        '--pin',str(tmp_path/'runtime'),'--sft-work',str(tmp_path/'work'),*map(str,extra)])
+        '--pin',str(tmp_path/'runtime'),'--sft-work',str(tmp_path/'work'),'--min-new-tokens','0',*map(str,extra)])
     monkeypatch.setattr(ei,'async_drive',lambda args:captured.setdefault('args',args) and 0)
     ei.main()
     return ei.AsyncRoundDriver(captured['args'])
