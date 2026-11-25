@@ -4,7 +4,7 @@ import { WorkspaceModules, findPackageWorkspace, packageDeclaration } from './wo
 import { packageNameFromSpecifier } from './package-specifier.js';
 import { markRaces } from './runtime/context.js';
 import type { EnvironmentMode, HostEvent } from './native/evaluator.js';
-import { RealmEnvironment, type EvalImports, type Realm } from './native/realm.js';
+import { RealmEnvironment, globalBindingNames, type EvalImports, type Realm } from './native/realm.js';
 import { evalMemoryLimitMb, evalSyncLimitSeconds, type HeapProbe } from './native/eval-memory.js';
 export { EvalFailure } from './native/evaluator.js';
 export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './native/evaluator.js';
@@ -145,7 +145,9 @@ export class TypeScriptEnvironment extends RealmEnvironment {
     };
   }
 
-  private makeContext(): Context {
+  override get globalBindings(): readonly string[] { return globalBindingNames(this.makeGlobals()); }
+
+  private makeGlobals(): Record<string, unknown> {
     // Node's host globals are available to eval code as they are to any module in the application.
     // A callback that eval code schedules may throw after its eval has finished; that is recorded as a host
     // event instead of becoming an uncaught exception that ends the application.
@@ -171,19 +173,14 @@ export class TypeScriptEnvironment extends RealmEnvironment {
       const cancel = handle && typeof handle === 'object' ? cancellers.get(handle) : undefined;
       if (cancel) { timers.delete(cancel); cancel(); } else stop(handle as never);
     };
-    const context = createContext({ console: undefined, process: evalProcess, Buffer,
+    const globals: Record<string, unknown> = { console: undefined, process: evalProcess, Buffer,
       clearTimeout: cancelling(clearTimeout), clearImmediate: cancelling(clearImmediate),
       setTimeout: (callback: unknown, ...rest: unknown[]) => scheduled(run => setTimeout(run, ...rest as [number]), clearTimeout, callback),
       setImmediate: (callback: unknown) => scheduled(run => setImmediate(run), clearImmediate, callback),
       queueMicrotask: (callback: unknown) => queueMicrotask(guarded(callback) as () => void),
       structuredClone, performance, crypto: globalThis.crypto,
-      TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, AbortSignal, Blob });
-    const realmPromise = runInContext('Promise', context) as PromiseConstructor;
-    markRaces(realmPromise);
-    this.releaseRejections ??= rejections.acquire();
-    rejections.route(realmPromise, reason => this.packageEvents.push({
-      operation: 'eval.unhandled-rejection', message: reason instanceof Error ? reason.message : String(reason) }));
-    if (this.scopeCapabilities.allowNetwork) Object.assign(context, {
+      TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, AbortSignal, Blob };
+    if (this.scopeCapabilities.allowNetwork) Object.assign(globals, {
       fetch: async (input: string | URL | Request, init?: RequestInit) => {
         const url = new URL(input instanceof Request ? input.url : String(input));
         const event = { operation: 'network.fetch', url: url.origin + url.pathname,
@@ -195,6 +192,16 @@ export class TypeScriptEnvironment extends RealmEnvironment {
         } catch (error) { this.packageEvents.push({ ...event, status: 'failed' }); throw error; }
       }, URL, URLSearchParams, Headers, Request, Response, AbortController, AbortSignal,
     });
+    return globals;
+  }
+
+  private makeContext(): Context {
+    const context = createContext(this.makeGlobals());
+    const realmPromise = runInContext('Promise', context) as PromiseConstructor;
+    markRaces(realmPromise);
+    this.releaseRejections ??= rejections.acquire();
+    rejections.route(realmPromise, reason => this.packageEvents.push({
+      operation: 'eval.unhandled-rejection', message: reason instanceof Error ? reason.message : String(reason) }));
     return context;
   }
 

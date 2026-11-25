@@ -33,6 +33,9 @@ export type EvalScopeDeclarations = {
   /** The call's return type: the type of the snippet's top-level return. */
   returns?: string;
   opaque?: string[];
+  globals?: readonly string[];
+  /** Reject unknown runtime value names before executing any effects (default true). */
+  checkUnknownBindings?: boolean;
 };
 
 /** The snippet is checked as the body of the call it runs in, so a top-level return has the call's return type. */
@@ -81,6 +84,10 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
     else lines.push(`declare const ${name}: any;`);
   }
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
+  const explicit = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
+    .concat(scope.services ?? [], scope.opaque ?? []));
+  for (const name of scope.globals ?? []) if (/^[A-Za-z_$][\w$]*$/.test(name) && !explicit.has(name) && !standardValueBindings().has(name))
+    lines.push(`declare const ${name}: any;`);
   if (iterationHelper) lines.push(`declare function ${iterationHelper}${ITERATE_ON_SIGNATURE};`);
   const named = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
     .concat(scope.services ?? [], scope.opaque ?? []));
@@ -237,10 +244,14 @@ export function checkEvalFields(source: string, scope: EvalScopeDeclarations): N
     `${node.getText(snippet)} is the decision record that decide(...) returns, not its answer: compare ${node.getText(snippet)}.value.`);
   const comparisons = new Set<ts.Node>();
   for (const diagnostic of program.getSemanticDiagnostics(snippet)) {
-    if ((diagnostic.code === 2304 || diagnostic.code === 2552) && diagnostic.start !== undefined) {
+    if ([2304, 2552, 18004, 2662, 2663, 2693, 1361, 1362].includes(diagnostic.code) && diagnostic.start !== undefined) {
       const node = innermostNode(snippet, diagnostic.start);
-      if (node && ts.isIdentifier(node) && scope.unavailableServices?.includes(node.text))
-        at(node, 'callable-scope', `${node.text} is a host service unavailable in this call's authored scope. Use the call's admitted inputs and callables instead.`);
+      if (node && ts.isIdentifier(node) && isRuntimeName(node)) {
+        if (scope.unavailableServices?.includes(node.text))
+          at(node, 'callable-scope', `${node.text} is a host service unavailable in this call's authored scope. Use the call's admitted inputs and callables instead.`);
+        else if (scope.checkUnknownBindings !== false)
+          at(node, 'unbound-name', `${node.text} is not bound in this call's eval scope. Use its admitted inputs, callables and services, or declare the value before using it.`);
+      }
     }
     if ((diagnostic.code === 2367 || diagnostic.code === 2678) && diagnostic.start !== undefined) {
       let node: ts.Node | undefined = innermostNode(snippet, diagnostic.start);
@@ -317,3 +328,37 @@ function isSnippetTopLevel(declaration: ts.Declaration): boolean {
 }
 
 export const EVAL_OPTIONS = EVAL_COMPILER_OPTIONS;
+
+/** Type names are erased; typeof an unbound identifier is a legal JavaScript existence probe. */
+function isRuntimeName(node: ts.Identifier): boolean {
+  let expression: ts.Node = node;
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (erasedTypeNode(parent)) return false;
+    if (ts.isParenthesizedExpression(parent) || ts.isAsExpression(parent) || ts.isTypeAssertionExpression(parent) ||
+        ts.isNonNullExpression(parent) || ts.isSatisfiesExpression(parent)) expression = parent;
+    else break;
+  }
+  if (ts.isTypeOfExpression(expression.parent) && expression.parent.expression === expression) return false;
+  return !ts.findAncestor(node, erasedTypeNode);
+}
+
+function erasedTypeNode(node: ts.Node): boolean {
+  if (!ts.isTypeNode(node)) return false;
+  // A class extends expression executes; interface heritage and implements clauses are erased.
+  if (ts.isExpressionWithTypeArguments(node) && ts.isHeritageClause(node.parent) &&
+      node.parent.token === ts.SyntaxKind.ExtendsKeyword &&
+      (ts.isClassDeclaration(node.parent.parent) || ts.isClassExpression(node.parent.parent))) return false;
+  return true;
+}
+
+// Keep only names, never a compiler Program/AST. Existing ES/intrinsic value declarations retain their precise types.
+let standardBindings: ReadonlySet<string> | undefined;
+function standardValueBindings(): ReadonlySet<string> {
+  if (!standardBindings) {
+    const file = '/__natlang__/eval/global-bindings.ts';
+    const program = createVirtualProgram({ [file]: '' });
+    standardBindings = new Set(program.getTypeChecker().getSymbolsInScope(program.getSourceFile(file)!,
+      ts.SymbolFlags.Value | ts.SymbolFlags.Alias).map(symbol => symbol.name));
+  }
+  return standardBindings;
+}

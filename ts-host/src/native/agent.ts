@@ -1589,9 +1589,6 @@ export class NativeToolAgent {
         `${session.runtime.declarations[name]}  // external service; its calls are recorded as effects` :
         `declare const ${name}: ${undeclaredServiceType(service, 0, name)};  // service; its calls are recorded as effects`),
       ...(lam.projectTransaction ? [...FOLDER_DECLARATIONS, 'declare const folder: Folder;  // your working copy of the input folder'] : []),
-      // A service scoped to other functions is named, with who can use it, so the call knows to ask them.
-      ...Object.keys(session.runtime.services).filter(name => !Object.hasOwn(session.availableServices(), name)).map(name =>
-        `// ${name}: only ${session.runtime.serviceScopes[name]!.map(path => path.split('/').pop()!.replace(/\.nl$/, '')).join(', ')} can use it`),
     ]);
     const params = lam.type.params.fields.map(field => field.name);
     if (params.length) {

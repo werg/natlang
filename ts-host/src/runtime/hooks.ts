@@ -20,8 +20,8 @@ export const kernelHooks: NativeRuntimeHooks = {
   finiteArrayIterator: (source, method, label) => finiteArrayIterator(source, method, label),
   finiteAsync: (source, label) => finiteAsync(source, label),
   guard: (id, fn, args) => guard(id, fn, args),
-  analyze: (session, source) => analyzeEvalSnippet(source, evalDeclarations(session)),
-  checkFields: (session, source) => checkEvalFields(source, evalDeclarations(session)),
+  analyze: (session, source, bindings) => analyzeEvalSnippet(source, evalDeclarations(session, bindings)),
+  checkFields: (session, source, bindings) => checkEvalFields(source, evalDeclarations(session, bindings)),
   lowerRefinements: (session, source) => lowerEvalRefinements(source, evalDeclarations(session)),
 };
 
@@ -48,7 +48,7 @@ function importOf(name: string, record: ItemRecord, session: NativeSession): Eva
 }
 
 /** Describe a session's typed scope for the eval checker. */
-export function evalDeclarations(session: NativeSession): EvalScopeDeclarations {
+export function evalDeclarations(session: NativeSession, bindings: readonly string[] = []): EvalScopeDeclarations {
   const lam = session.lam;
   const codebase = lam.codebase as Record<string, ItemRecord>;
   const types: Record<string, string> = { ...lam.typesSrc, ...session.analysisTypeAliases() };
@@ -84,5 +84,10 @@ export function evalDeclarations(session: NativeSession): EvalScopeDeclarations 
     unavailableServices: Object.keys(session.runtime.services).filter(name => !Object.hasOwn(session.availableServices(), name)),
     serviceDeclarations: session.availableServiceDeclarations(),
     returns: lam.type.kind === 'lambda' ? formatType(lam.type.returns) : undefined,
-    opaque: [] };
+    globals: session.runtime.environment.globalBindings,
+    checkUnknownBindings: session.runtime.options.checkEvalBindings,
+    // decide already has a typed intrinsic declaration; keep its decision-record checks.
+    opaque: bindings.filter(name => name !== 'decide' && !inputs.some(item => item.name === name) &&
+      !Object.hasOwn(lam.let, name) && !Object.values(lam.captures ?? {}).some(cell => cell.name === name) &&
+      !Object.hasOwn(codebase, name) && !Object.hasOwn(session.availableServices(), name)) };
 }

@@ -1,5 +1,5 @@
 import type { EnvironmentMode, HostEvent } from '../native/evaluator.js';
-import { RealmEnvironment, type Realm, type RealmEnvironmentOptions } from '../native/realm.js';
+import { RealmEnvironment, globalBindingNames, type Realm, type RealmEnvironmentOptions } from '../native/realm.js';
 
 /** The page's Function constructor as a realm: eval code runs in the page's global scope. */
 export const functionRealm: Realm = {
@@ -17,7 +17,7 @@ export class TypeScriptEnvironment extends RealmEnvironment {
 
   /** `bindAwait` is the platform's context slot's: eval awaits restore the natlang task through it. */
   constructor(options: { bindAwait: NonNullable<RealmEnvironmentOptions['bindAwait']>; mode?: EnvironmentMode; observe?: (event: HostEvent) => void }) {
-    super({ authority: 'shared-browser-host', mode: options.mode, observe: options.observe, realm: () => functionRealm, bindAwait: options.bindAwait,
+    super({ globalBindings: globalBindingNames(globalThis), authority: 'shared-browser-host', mode: options.mode, observe: options.observe, realm: () => functionRealm, bindAwait: options.bindAwait,
       fork: () => new TypeScriptEnvironment({ bindAwait: options.bindAwait, mode: 'fresh', observe: options.observe }) });
     this.timerBindings = this.makeTimerBindings();
   }

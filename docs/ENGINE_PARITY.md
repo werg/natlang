@@ -391,3 +391,7 @@ Managed llama-server, Python native and SGLang receive model requests from that 
 records or implement compiler emission. The five Vibe SDK vendors must stage the same Core revision. Actual compiled
 Node and Workerd tests exercise diamond dependencies, inline contexts, source edits, lexical types, cycle rejection,
 record opt-outs and exact native child lineage; an actual Node ESM import covers the separate ESM graph module.
+
+## Eval scope checks (2026-11-25)
+
+Named, inline and module-owned calls use the shared TypeScript host preflight before effects; engine backends only consume the resulting model requests. Unknown runtime value names now reject there, with actual injected/saved helper bindings preserved (`checkEvalBindings:false` opts out of ordinary-name checking). Scope priming shows admitted callables and services without advertising unavailable services' owner names. Node and Workerd plus Luna/Pi translation are checked model-free; no engine-specific authority or sampling change. Inventory and explicit unchecked areas: [eval scope binding repair](../plans/EVAL_SCOPE_BINDINGS_20261125.md).

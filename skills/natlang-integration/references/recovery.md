@@ -6,6 +6,8 @@ Portable values (records, arrays, strings, finite numbers, booleans, null) are c
 
 For `nl.with<ResultType>({ fixedContext })`, the single type argument declares the child result and the object supplies captured context; pass changing values to the returned child function. If an eval reports `missing-fresh-result`, omit `finish` or set it to false while inspecting or staging; `finish:true` needs a fresh typed final expression or explicit `return`. Treat an incorrect result type as a rejected action and revise the value; do not coerce or wrap it to bypass the declared contract.
 
+An `unbound-name` eval rejection means that name is absent from this call's actual value scope; nothing in that eval ran. Use the listed callable declarations and admitted inputs/services, or declare the value locally. For a named helper, inspect callable-folder nesting instead of retrying the same name or inventing a substitute service. Erased type references and safe `typeof` probes do not grant a callable. Hosts can set `checkEvalBindings:false` for legacy runtime-only handling, but then earlier effects can occur before an unknown-name failure; service authority stays enforced.
+
 ## What is and is not rolled back
 
 | Change | When it takes effect | On failure |
@@ -44,3 +46,5 @@ Long invocations keep one conversation; past the model's `contextTokens` budget 
 ## Traces and reproducibility
 
 Each invocation produces a trace (`trace` sink on the runtime or task): manifest, presented messages and tools, actions, observations, effects, state, outcome, and the call tree. Inspecting a trace, reconstructing its final value, and replaying effects are different operations; only the first two are implemented. Model seeds derive from invocation identity; keep world randomness in a separate seeded generator. Reproducibility needs the same source, model, template, sampling, inputs, ordering, and relevant environment, and still differs across inference backends.
+
+Custom realm hosts declare their actual additional globals with `Realm.globalBindings`; the shared preflight uses those names without running lookup code. List only values already exposed by the realm's confinement. Node and browser evaluators supply their own names; this does not grant services or bypass disabled-network policy.
