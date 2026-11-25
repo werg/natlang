@@ -48,7 +48,7 @@ export function realmPlatform(config: { name: string; contextStore: ContextStore
     callStore?: () => CallStoreLike | undefined; builtinModules?: Platform['builtinModules']; authority?: string }): Platform {
   const authority = config.authority ?? `${config.name}-realm`;
   const environment = (mode: 'fresh' | 'retained'): EvalEnvironment => new RealmEnvironment({ authority, mode,
-    realm: () => config.realm, bindAwait: config.contextStore.bindAwait?.bind(config.contextStore),
+    realm: () => config.realm, globalBindings: config.realm.globalBindings, bindAwait: config.contextStore.bindAwait?.bind(config.contextStore),
     fork: () => environment('fresh') });
   return { name: config.name, contextStore: config.contextStore, environment: () => environment('fresh'),
     moduleRealm: () => environment('retained'), callStore: config.callStore, builtinModules: config.builtinModules };

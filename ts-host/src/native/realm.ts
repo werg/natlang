@@ -16,6 +16,8 @@ export const UNAWAITED_DISPLAY = '[a Promise: not awaited yet; write await befor
 
 /** Where compiled eval code runs: a JavaScript realm's global environment. */
 export interface Realm {
+  /** Additional globals supplied by this realm, for eval preflight. */
+  readonly globalBindings?: readonly string[];
   /**
    * Run `body` as the body of a strict-mode function whose parameters are `parameters`, called with `args`, with this
    * realm's global object as its global scope (the Function constructor's contract, strict), and return what it returns.
@@ -25,6 +27,16 @@ export interface Realm {
    * context can); a realm that cannot ignores it, and the caller bounds the asynchronous result itself.
    */
   call(body: string, parameters: readonly string[], args: readonly unknown[], options?: { timeoutMs?: number }): unknown;
+}
+
+/** Global binding names without invoking any property's getter. */
+export function globalBindingNames(value: object): string[] {
+  const names = new Set<string>(), seen = new Set<object>();
+  for (let object: object | null = value; object && !seen.has(object); object = Object.getPrototypeOf(object)) {
+    seen.add(object);
+    for (const name of Object.getOwnPropertyNames(object)) names.add(name);
+  }
+  return [...names];
 }
 
 /** A realm over a host-provided function constructor: `newFunction(body, name, ...parameterNames)`. */
@@ -69,6 +81,7 @@ export function snapshot(value: unknown): unknown {
 /** Static configuration of a `RealmEnvironment`; what depends on the instance is a protected method a subclass overrides. */
 export type RealmEnvironmentOptions = {
   authority: string;
+  globalBindings?: readonly string[];
   mode?: EnvironmentMode;
   /** The realm eval code runs in: asked for each evaluation in `fresh` mode, once in `retained` mode. */
   realm?: () => Realm;
@@ -117,6 +130,8 @@ export class RealmEnvironment implements EvalEnvironment {
     const limit = options.memory?.limitMb;
     if (limit !== undefined && !(Number.isFinite(limit) && limit >= 0)) throw new RangeError('memory limitMb must be a non-negative number');
   }
+
+  get globalBindings(): readonly string[] { return this.options.globalBindings ?? []; }
 
   /** The eval memory bound in MB, or undefined when evals are unbounded. */
   get memoryLimitMb(): number | undefined { return this.options.memory?.limitMb || undefined; }

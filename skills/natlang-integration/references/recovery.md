@@ -46,3 +46,5 @@ Long invocations keep one conversation; past the model's `contextTokens` budget 
 ## Traces and reproducibility
 
 Each invocation produces a trace (`trace` sink on the runtime or task): manifest, presented messages and tools, actions, observations, effects, state, outcome, and the call tree. Inspecting a trace, reconstructing its final value, and replaying effects are different operations; only the first two are implemented. Model seeds derive from invocation identity; keep world randomness in a separate seeded generator. Reproducibility needs the same source, model, template, sampling, inputs, ordering, and relevant environment, and still differs across inference backends.
+
+Custom realm hosts declare their actual additional globals with `Realm.globalBindings`; the shared preflight uses those names without running lookup code. List only values already exposed by the realm's confinement. Node and browser evaluators supply their own names; this does not grant services or bypass disabled-network policy.

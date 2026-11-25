@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as core from '../dist/index.js';
 import { workerdPlatform } from '../dist/core/workerd.js';
-import { checkEvalFields } from '../dist/compiler/eval-check.js';
+import { checkEvalFields, analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 import { toPiContext } from '../dist/model/pi-translation.js';
 
 const scope = { types: {}, inputs: [], locals: [], captures: [], imports: [] };
@@ -98,5 +98,59 @@ test('Luna/Pi opening advertises admitted callables and ports without unavailabl
     assert.doesNotMatch(actual, /unavailableHelper|hiddenPort/);
     assert.match(actual, /availableHelper/);
     assert.match(actual, /allowedPort/);
+  } finally { rt.close(); }
+});
+
+
+test('platform globals stay usable without weakening network or unknown-name guards', async () => {
+  for (const network of [true, false]) {
+    const platform = core.nodePlatform();
+    const rt = core.createNatlangRuntime({ platform, network, calls: false, agent: async session => {
+      if (!network) {
+        const denied = await session.applyAsync('eval', { code: 'await fetch("https://example.test");', finish: false });
+        assert.equal(denied.kind, 'rejected', denied.text);
+        assert.match(denied.text, /Network access is turned off/);
+      }
+      const allowed = await session.applyAsync('eval', { code: 'const url = new URL("https://example.test/a"); const signal = new AbortController().signal; const map = new Map<string, number>(); map.set("x", 3); console.log(typeof setTimeout, signal.aborted);' + (network ? 'console.log(typeof fetch);' : '') + 'return url.hostname;', finish: true });
+      assert.equal(allowed.kind, 'completed', allowed.text);
+    } });
+    try {
+      const project = core.compileVirtualProject({ root: '/globals', files: {
+        'entry.ts': 'import judge from "./judge.nl"; export default async function entry():Promise<string>{return await judge();}',
+        'judge.nl': nl('Return the host and available fetch kind.'),
+      } }, core, { platform });
+      assert.equal(project.ok, true, JSON.stringify(project.diagnostics));
+      assert.equal(await rt.run(() => project.require('entry.ts').default()), 'example.test');
+    } finally { rt.close(); }
+  }
+  const analysis = analyzeEvalSnippet('const map = new Map<string,number>(); const result = nl<number>`Return the entry count.`(map);',
+    { ...scope, globals: Object.getOwnPropertyNames(globalThis) });
+  assert.deepEqual(analysis.diagnostics, []);
+  assert.match(analysis.plans[0].parameters[0].type.text, /Map<string, number>/, 'native ES Map keeps its declared type');
+});
+
+test('host realm exposes only its declared globals; lookup never runs a getter', async () => {
+  const { globalBindingNames } = await import('../dist/native/realm.js');
+  let reads = 0;
+  const globals = Object.create({ inheritedHostValue: 'inherited' });
+  Object.defineProperty(globals, 'hostValue', { get() { reads++; return 'host'; } });
+  const names = globalBindingNames(globals);
+  assert.equal(reads, 0);
+  assert.ok(names.includes('inheritedHostValue'));
+  const platform = workerdPlatform({ realm: { globalBindings: names,
+    call(body, params, args) { return Function('hostValue', ...params, body)('host', ...args); } } });
+  const rt = core.createNatlangRuntime({ platform, calls: false, agent: async session => {
+    const missing = await session.applyAsync('eval', { code: 'undeclaredHostValue();', finish: false });
+    assert.ok(missing.codes.includes('unbound-name'), missing.text);
+    const result = await session.applyAsync('eval', { code: 'return hostValue;', finish: true });
+    assert.equal(result.kind, 'completed', result.text);
+  } });
+  try {
+    const project = core.compileVirtualProject({ root: '/host-global', files: {
+      'entry.ts': 'import judge from "./judge.nl"; export default async function entry():Promise<string>{return await judge();}',
+      'judge.nl': nl('Return the host value.'),
+    } }, core, { platform });
+    assert.equal(project.ok, true, JSON.stringify(project.diagnostics));
+    assert.equal(await rt.run(() => project.require('entry.ts').default()), 'host');
   } finally { rt.close(); }
 });

@@ -33,6 +33,7 @@ export type EvalScopeDeclarations = {
   /** The call's return type: the type of the snippet's top-level return. */
   returns?: string;
   opaque?: string[];
+  globals?: readonly string[];
   /** Reject unknown runtime value names before executing any effects (default true). */
   checkUnknownBindings?: boolean;
 };
@@ -83,6 +84,10 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
     else lines.push(`declare const ${name}: any;`);
   }
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
+  const explicit = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
+    .concat(scope.services ?? [], scope.opaque ?? []));
+  for (const name of scope.globals ?? []) if (/^[A-Za-z_$][\w$]*$/.test(name) && !explicit.has(name) && !standardValueBindings().has(name))
+    lines.push(`declare const ${name}: any;`);
   if (iterationHelper) lines.push(`declare function ${iterationHelper}${ITERATE_ON_SIGNATURE};`);
   const named = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
     .concat(scope.services ?? [], scope.opaque ?? []));
@@ -344,4 +349,16 @@ function erasedTypeNode(node: ts.Node): boolean {
       node.parent.token === ts.SyntaxKind.ExtendsKeyword &&
       (ts.isClassDeclaration(node.parent.parent) || ts.isClassExpression(node.parent.parent))) return false;
   return true;
+}
+
+// Keep only names, never a compiler Program/AST. Existing ES/intrinsic value declarations retain their precise types.
+let standardBindings: ReadonlySet<string> | undefined;
+function standardValueBindings(): ReadonlySet<string> {
+  if (!standardBindings) {
+    const file = '/__natlang__/eval/global-bindings.ts';
+    const program = createVirtualProgram({ [file]: '' });
+    standardBindings = new Set(program.getTypeChecker().getSymbolsInScope(program.getSourceFile(file)!,
+      ts.SymbolFlags.Value | ts.SymbolFlags.Alias).map(symbol => symbol.name));
+  }
+  return standardBindings;
 }
