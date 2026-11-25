@@ -13994,3 +13994,8 @@ episode labels are weak early in an episode. Criterion (0.78) not met; diagnosis
 (DGX `cmp-t1-build-4`): 2,052 rollouts, 178 twins / 47 episodes after removing answer-verdict feedback (681 failed
 episodes have no diagnostic fact): OPSD supply from these worlds is thin; richer diagnostic facts (verifier diffs that
 name no answer) are the lever. T1 training queued on g4b (`cmp-t1-opsd`).
+
+
+### 2026-11-25 — Preserve already enriched empty adapter bindings
+
+Source39 correctly declares its nullable research adapter default, but Source38 already contained the same actual null input without provenance. Pairwise compatibility must apply the same checked declaration to those identical legacy encodings as well as to absent old enrichment. Validate all three legacy representations, retain strict non-null/different data and the opt-out, and leave immutable snapshots untouched. Actual45 ingestion/held/encoding/opt-out controls passed1.54s/448MiB. This is catalog identity metadata, not changed runtime arguments or a retroactive trajectory rewrite.
