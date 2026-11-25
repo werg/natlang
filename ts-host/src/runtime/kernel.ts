@@ -727,6 +727,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     }
   }
   const callId = task.nextCallId();
+  task.beginInvocation(callId);
+  try {
   task.registerGraphCall(callId, frame.parentCallId);
   const siblingOrdinal=task.reserveExecutionSiblingOrdinal(frame.parentCallId,definition.id);
   const parentOccurrenceEvent=frame.parentCallId?traceFor(frame.parentCallId)?.events.find(event=>event.kind==='invocation'&&
@@ -746,6 +748,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const model = task.model(definition.model);
   const store = task.runtime.callStore();
   const capture = store ? openCapture(store, task, frame, callId, definition, options, inputs, folder, model) : undefined;
+  if(capture)task.markInvocationRecorded(callId);
   let handoff: string | undefined;
   let shadows: LoadedCase[] = [];
   const attempt = options.tierAttempt;
@@ -979,6 +982,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         for (const item of shadows) { try { store!.enqueue('shadow', item.hash, callId); } catch { /* recording never fails a call */ } }
     }
   }
+  } finally { task.endInvocation(callId); }
 }
 
 /** Open the record of a call (§3.1); recording never fails the call. */

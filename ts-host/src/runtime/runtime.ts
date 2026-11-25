@@ -237,7 +237,11 @@ export class NatlangPlatformUnavailableError extends Error {
 
 // Model drivers read the current invocation's tuned stack from its frame (Node and browser alike). A finished task's
 // frame left in the browser's slot never lends its stack to later model calls.
-const liveFrame = () => { const frame = currentFrame(); return frame && !frame.task.isClosed ? frame : undefined; };
+const liveFrame = () => {
+  const frame=currentFrame(),id=frame?.parentCallId;
+  return frame&&!frame.task.isClosed&&!frame.signal?.aborted&&
+    (!id||frame.task.isInvocationActive(id)||frame.task.activeTraceParent(id))?frame:undefined;
+};
 const lexicalAdapters = new WeakMap<object, readonly NativeAdapterBinding[]>();
 setLexicalNativeAdapterSource(() => {
   const stack = liveFrame()?.weights;
@@ -319,6 +323,19 @@ export class NatlangTask {
   private callSequence = 0;
   private effectSequence = 0;
   private readonly graphChildrenByParent = new Map<string, string[]>();
+  private readonly liveInvocations = new Map<string, boolean>();
+  /** Invocation liveness is shorter than task lifetime; recorded spans additionally own durable call custody. */
+  beginInvocation(callId: string, recorded = false): void { this.liveInvocations.set(callId, recorded); }
+  markInvocationRecorded(callId: string): void { if(this.liveInvocations.has(callId))this.liveInvocations.set(callId,true); }
+  endInvocation(callId: string): void { this.liveInvocations.delete(callId); }
+  isInvocationActive(callId: string): boolean { return !this.closed&&this.liveInvocations.has(callId); }
+  isInvocationRecorded(callId: string): boolean { return this.liveInvocations.get(callId)===true; }
+  isExternalTraceParent(callId: string): boolean { return this.traceParent?.parentCallId===callId; }
+  activeTraceParent(callId: string): Frame|undefined {
+    const parent=this.traceParent;
+    return parent?.parentCallId===callId&&!parent.signal?.aborted&&parent.task.isInvocationActive(callId)?parent:undefined;
+  }
+
   /** Allocate a task-wide order at the actual service request boundary. */
   nextGraphEffectOrder(): number { return this.effectSequence++; }
   registerGraphCall(callId: string, parentId: string | null | undefined): void {
@@ -341,7 +358,7 @@ export class NatlangTask {
   private timer?: ReturnType<typeof setTimeout>;
   private appPromptSnapshot?: string;
 
-  constructor(readonly runtime: NatlangRuntime, options: TaskOptions = {}, private readonly traceParent?: Frame) {
+  constructor(readonly runtime: NatlangRuntime, options: TaskOptions = {}, private traceParent?: Frame) {
     let binding = options.adaptation === undefined ? runtime.options.adaptation : options.adaptation;
     const program = options.program ?? runtime.options.program ?? binding?.program;
     const guidanceBinding = options.nativeProgramGuidance ?? runtime.options.nativeProgramGuidance;
@@ -428,7 +445,7 @@ export class NatlangTask {
   }
 
   get frame(): Frame { return { task: this, chain: [], signal: this.signal,
-    ...(this.traceParent&&!this.traceParent.task.isClosed?{parentCallId:this.traceParent.parentCallId}:{}) }; }
+    ...(this.traceParent?.parentCallId&&this.activeTraceParent(this.traceParent.parentCallId)?{parentCallId:this.traceParent.parentCallId}:{}) }; }
   nextCallId(): string { return `${this.id}/${++this.callSequence}`; }
   reserveExecutionSiblingOrdinal(parentCallId: string | undefined, definitionId: string): number {
     if(parentCallId&&parentCallId===this.traceParent?.parentCallId)return this.traceParent.task.reserveExecutionSiblingOrdinal(parentCallId,definitionId);
@@ -518,6 +535,8 @@ export class NatlangTask {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.liveInvocations.clear();
+    this.traceParent=undefined;
     if (this.timer) clearTimeout(this.timer);
     // NatlangRuntime.run drains in-flight work before closing the task. Abort
     // its derived signal now so external-signal subscriptions for this task
@@ -594,8 +613,11 @@ export class NatlangRuntime {
     // The live local frame is causal evidence. Recorder identity prevents an edge
     // into another owner's store; no service, model, signal or budget is inherited.
     const recorder=this.callStore();
-    const traceParent=options.traceParent!==false&&caller?.parentCallId&&!caller.task.isClosed&&
-      (caller.task.runtime===this||(recorder&&recorder===caller.task.runtime.callStore()))?caller:undefined;
+    const causalCaller=caller?.parentCallId&&!caller.signal?.aborted?
+      (caller.task.isInvocationActive(caller.parentCallId)?caller:caller.task.activeTraceParent(caller.parentCallId)):undefined;
+    const traceParent=options.traceParent!==false&&causalCaller?.parentCallId&&
+      (!recorder||causalCaller.task.isInvocationRecorded(causalCaller.parentCallId))&&
+      (causalCaller.task.runtime===this||(recorder&&recorder===causalCaller.task.runtime.callStore()))?causalCaller:undefined;
     const task = new NatlangTask(this, options, traceParent);
     activeTasks.add(task);
     try { return await runInFrame(task.frame, fn); }
@@ -617,7 +639,8 @@ export class NatlangRuntime {
     return this.run(() => decideInFrame(currentFrame()!, fn, args));
   }
 
-  /** Bind a callback to the current task so it can call natlang functions when it runs later. */
+  /** Bind a callback to the current task and scope. Bind at task scope to use it after an invocation ends;
+   * an invocation-bound callback cannot retain that invocation's expired services or trace authority. */
   bind<F extends (...args: never[]) => unknown>(fn: F): F {
     const frame = currentFrame();
     if (!frame) throw new NatlangContextError('runtime.bind(fn) must be called inside runtime.run(...).');
@@ -652,12 +675,20 @@ export async function decideInFrame<A extends unknown[], T>(frame: Frame, fn: (.
 /** Resolve the frame for a natlang call: the propagated frame, the creation frame, or the only active task. */
 export function resolveFrame(created?: Frame): Frame {
   const frame = currentFrame();
-  if (frame && !frameClosed(frame)) return frame;
-  if (created && !frameClosed(created)) return created;
+  if (frame && !frameClosed(frame)) return checkedInvocationFrame(frame);
+  if (created && !frameClosed(created)) return checkedInvocationFrame(created);
   if (activeTasks.size === 1) return [...activeTasks][0]!.frame;
   throw new NatlangContextError(activeTasks.size > 1 ?
     'Several natlang tasks are active and this call cannot tell which one it belongs to. ' +
     'Wrap the callback with runtime.bind(fn) inside the task that should own it.' : undefined);
+}
+function checkedInvocationFrame(frame: Frame): Frame {
+  const id=frame.parentCallId;
+  if(!id||frame.task.isInvocationActive(id))return frame;
+  // A new task may await before entering its loaded program. Its old external
+  // causal link expires independently; its own authority and signal stay intact.
+  if(frame.task.isExternalTraceParent(id))return frame.task.activeTraceParent(id)?frame:{...frame,parentCallId:undefined};
+  throw new NatlangContextError('The invocation that owns this callback has finished; start a new runtime task.');
 }
 const frameClosed = (frame: Frame) => frame.task.isClosed;
 
