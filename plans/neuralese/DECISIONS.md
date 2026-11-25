@@ -11823,3 +11823,26 @@ existing related regressions passed, and all eight final scope/value tests
 passed on Node+Workerd (including actual allowed method calls and lexical
 shadowing). No model/inference or native full-scope claim. This correctness fix
 enters the next source pin; collection does not wait on a full reference sweep.
+
+### 2026-11-25 — reuse unchanged VibeStudio seed archives during resume
+
+Local V27 preparation completed and the full Luna collector resumed with eight
+actually overlapping teacher calls; no build or collection moved to the DGX.
+Startup inspection found that every resume retransferred and rechecksummed all
+41 admitted seed episodes. Reuse now compares the exact immutable receipt and
+content on both endpoints with the existing strict inode/size/mtime/ctime hash
+cache. One readonly SSH helper replaces redundant copy/checksum/receipt trips;
+changed content still transfers, and requested export still runs after reuse.
+`NATLANG_REUSE_SEED_ARCHIVES=0` opts out. Inventory and scope are in
+`VIBESTUDIO_ARCHIVE_REUSE_20261125.md`; raw waves and native-state retirement
+keep their existing path.
+
+The same investigation found stat-only sends could detect but fail to repair
+same-size remote corruption with restored mtime. Checksum sends now repair it
+for captures, immutable records and mutable indexes;
+`NATLANG_ARCHIVE_CHECKSUM_TRANSFER=0` restores the old sending behavior without
+disabling post-transfer capture verification. Targeted archive/campaign/retained
+state tests pass, including real rsync and remote-helper execution, warm-cache
+reuse, corruption repair, mismatched receipts, continued export and both opt-outs.
+This enters the next official collector pin at a graceful resume; current paid
+Luna work is not interrupted.

@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import time
 
+import archive_reuse
 from natlang_neuralese.common import data_registry
 from natlang_neuralese.common.code_provenance import code_provenance
 
@@ -238,14 +239,21 @@ ARCHIVE_RSYNC = ['rsync', '-a', '--protect-args', '--timeout=120',
                  '--rsh=' + shlex.join(['ssh', *ARCHIVE_SSH_OPTIONS])]
 
 
-def archive_transport(command, *, capture_output=False):
+def archive_send_flags():
+    # Every archive writer must repair same-size rewrites, including receipts
+    # and mutable status indexes. Post-transfer content verification stays on.
+    return [] if os.environ.get('NATLANG_ARCHIVE_CHECKSUM_TRANSFER', '1') == '0' else ['--checksum']
+
+
+def archive_transport(command, *, capture_output=False, input=None):
     """Retry only idempotent archive IO, never teacher calls or remote job submission."""
     attempts = int(os.environ.get('NATLANG_ARCHIVE_TRANSPORT_ATTEMPTS', '4'))
     if attempts < 1 or attempts > 20:
         raise ValueError('archive transport attempts must be between 1 and 20')
     for attempt in range(attempts):
         try:
-            return subprocess.run(command, check=True, capture_output=capture_output, text=True)
+            kwargs = {'input': input} if input is not None else {}
+            return subprocess.run(command, check=True, capture_output=capture_output, text=True, **kwargs)
         except subprocess.CalledProcessError as error:
             # 23/24 (incomplete/vanished source) and 11 (file IO) are not network failures.
             retryable = {255} if command[0] == 'ssh' else {10, 12, 30, 35, 255}
@@ -259,7 +267,8 @@ def transfer(source, remote, destination):
     target = f'{remote}:{destination}/'
     exclusions = prepare_retained_state_packs(source)
     common = [*ARCHIVE_RSYNC, *[f'--exclude={name}' for name in exclusions]]
-    flags = [*common, f'{source}/', target]
+    # Repair same-size corruption even when a remote file's mtime was restored.
+    flags = [*common, *archive_send_flags(), f'{source}/', target]
     archive_transport(flags)
     comparison = archive_transport([*common, '--dry-run', '--checksum', '--itemize-changes',
                                     '--delete', f'{source}/', target], capture_output=True).stdout
@@ -269,7 +278,6 @@ def transfer(source, remote, destination):
 
 def remote_archive(args, destination, receipt, capture, *, wave=None):
     root = args.root.resolve()
-    transfer(capture, args.archive_host, destination / 'capture')
     metadata = root / 'waves' / f'{destination.name}-archive'
     metadata.mkdir(exist_ok=True)
     publish_immutable(metadata / 'receipt.json', receipt)
@@ -277,8 +285,22 @@ def remote_archive(args, destination, receipt, capture, *, wave=None):
     if wave is not None:
         publish_immutable(metadata / 'wave.json', wave)
         records.append(metadata / 'wave.json')
-    archive_transport([*ARCHIVE_RSYNC, *map(str, records),
-                       f'{args.archive_host}:{destination}/'])
+    reused = False
+    if destination.name.startswith('seed-') and os.environ.get('NATLANG_REUSE_SEED_ARCHIVES', '1') != '0':
+        exclusions = prepare_retained_state_packs(capture)
+        request = {'destination': str(destination), 'records': {p.name: read(p) for p in records},
+                   'signature': archive_reuse.capture_signature(capture, exclusions), 'exclusions': exclusions}
+        command = [str(args.archive_repo / '.venv-neuralese/bin/python'), '-', str(args.archive_repo),
+                   json.dumps(request, separators=(',', ':'))]
+        result = archive_transport(['ssh', *ARCHIVE_SSH_OPTIONS, args.archive_host, shlex.join(command)],
+                                   capture_output=True, input=Path(archive_reuse.__file__).read_text())
+        reused = json.loads(result.stdout)
+        if not isinstance(reused, bool):
+            raise ValueError('archive reuse helper returned a non-boolean result')
+    if not reused:
+        transfer(capture, args.archive_host, destination / 'capture')
+        archive_transport([*ARCHIVE_RSYNC, *archive_send_flags(), *map(str, records),
+                           f'{args.archive_host}:{destination}/'])
     if args.defer_export:
         return
     repo = args.archive_repo
@@ -306,7 +328,7 @@ def remote_archive(args, destination, receipt, capture, *, wave=None):
 
 
 def sync_index(args, paths):
-    archive_transport([*ARCHIVE_RSYNC, *map(str, paths),
+    archive_transport([*ARCHIVE_RSYNC, *archive_send_flags(), *map(str, paths),
                        f'{args.archive_host}:{args.archive}/'])
 
 
