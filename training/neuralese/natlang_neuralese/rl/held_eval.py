@@ -34,6 +34,8 @@ import time
 from pathlib import Path
 
 from ..common.jsonio import read_jsonl, iter_jsonl_rows, write_json_durable
+# an episode's attempts: shared with collection resume (grpo Collector)
+from .episode_files import finish_of as _finish_of, lost_attempts, set_attempt_aside
 
 MANIFEST_SCHEMA = 'natlang.rl-held-eval-manifest/1'
 RESULT_SCHEMA = 'natlang.rl-held-eval-result/1'
@@ -487,14 +489,6 @@ INFRA_ATTEMPTS = 3
 RESEND_EVENT = b'collector_provider_request_retry_scheduled'
 
 
-def _finish_of(journal):
-    """The last finish row of an episode journal, or None."""
-    if not journal.exists():
-        return None
-    finishes = [row for row in read_jsonl(journal) if row.get('event') == 'finish']
-    return finishes[-1] if finishes else None
-
-
 def infra_loss(entry, finish):
     """Why a finished episode was lost to infrastructure (a reason string), or None when it measured the policy.
 
@@ -519,28 +513,6 @@ def infra_loss(entry, finish):
                 RESEND_EVENT in read_bytes(path) for path in evidence_files(jobs)):
             return 'request_budget_spent_on_resends'
     return None
-
-
-def _set_lost_attempt_aside(directory, entry):
-    """Move a lost episode's files (its sample directory and worker journal) to ``<sample>.lost-N`` so it runs again
-    from scratch; returns the number of earlier lost attempts (N)."""
-    sample_dir = Path(entry['output']).parent
-    n = len(list(sample_dir.parent.glob(sample_dir.name + '.lost-*'))) + 1
-    aside = sample_dir.with_name(f'{sample_dir.name}.lost-{n}')
-    if sample_dir.exists():
-        os.replace(sample_dir, aside)
-    else:
-        aside.mkdir(parents=True)
-    journal = Path(directory) / 'workers' / f"{entry['key']}.journal.jsonl"
-    if journal.exists():
-        os.replace(journal, aside / 'worker.journal.jsonl')
-    return n
-
-
-def lost_attempts(entry):
-    """How many earlier attempts of ``entry`` were set aside as lost to infrastructure."""
-    sample_dir = Path(entry['output']).parent
-    return len(list(sample_dir.parent.glob(sample_dir.name + '.lost-*')))
 
 
 def _finish_seconds(journal):
@@ -638,7 +610,7 @@ def _pending(directory, entries, *, log=None, rerun_lost=True):
             continue
         reason = infra_loss(entry, finish) if rerun_lost else None
         if reason and lost_attempts(entry) + 1 < INFRA_ATTEMPTS:
-            attempt = _set_lost_attempt_aside(directory, entry)
+            attempt = set_attempt_aside(directory, entry)
             if log:
                 log(json.dumps({'event': 'held eval rerun', 'key': entry['key'], 'reason': reason, 'lost_attempts': attempt}))
             todo.append(entry)

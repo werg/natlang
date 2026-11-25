@@ -537,7 +537,9 @@ def frontier_collector(base):
             return done or self.all_dead()
 
         def all_dead(self):
-            return len(self.endpoints) > 1 and len(self.dead) == len(self.endpoints) and self.outstanding == 0
+            # every endpoint dropped and nothing running: the groups still waiting for their reruns stay for a resume
+            return (len(self.endpoints) > 1 and len(self.dead) == len(self.endpoints)
+                    and (self.outstanding == 0 or self.running == 0))
 
         def live_endpoints(self):
             for url in list(self.dead):      # a dropped endpoint is retried every 2 minutes
@@ -568,11 +570,42 @@ def frontier_collector(base):
             if actor_url not in self.dead and endpoint_alive(actor_url, self.policy_sha):
                 return True
             self.mark_dead(actor_url)
-            task = info.get('task_id')
-            with self.lock:
-                if task in self.by_id and task not in self.order and not self.stop.is_set():
-                    self.order.appendleft(task)
             return False
+
+        def _abandon(self, group, key, returncode):
+            """An abandoned group's task runs again as a new group, first (its episodes ran out of reruns)."""
+            with self.lock:
+                task = (self.groups.get(group) or {}).get('task_id')
+            super()._abandon(group, key, returncode)
+            with self.lock:
+                if task in self.by_id and task not in self.order and task not in self.own and not self.stop.is_set():
+                    self.order.appendleft(task)
+
+        # one policy serves the whole collection: a killed episode's partial continues (its capture checked), and an
+        # episode a run before done markers finished (its journal's finish row) is kept
+        continue_partials = True
+        legacy_finished = True
+
+        def _resume_order(self, plans):
+            """One group per task: the one with the most accepted episodes first (the others are superseded)."""
+            return sorted(plans, key=lambda plan: (-len(plan['kept']), plan['group']))
+
+        def _resume_refusal(self, directory, task_id, scored):
+            reason = super()._resume_refusal(directory, task_id, scored)
+            if reason is not None or scored:
+                return reason
+            if task_id not in self.by_id:
+                return 'task not eligible'
+            if task_id in self.own or task_id in getattr(self, 'resuming', set()):
+                return 'superseded: task measured in another group'
+            return None
+
+        def _resumed(self, plan):
+            self.resuming = getattr(self, 'resuming', set()) | {plan['task_id']}
+            try:
+                self.order.remove(plan['task_id'])
+            except ValueError:
+                pass
     return FrontierCollector
 
 
@@ -615,7 +648,9 @@ def collect(args):
         '--no-actor-release', '--actor-overlap', 'on', '--memetic-share', str(memetic_share), '--exclude-family-regex',
         args.exclude_family_regex, '--unit-prefix', args.unit_prefix, '--seed', str(args.seed),
         '--teacher-attempts', str(teacher_attempts), '--teacher-max-successes', str(teacher_max_succ),
-        *(['--unpinned'] if args.unpinned else []), *[f'--actor-arg={a}' for a in actor_args]])
+        *(['--unpinned'] if args.unpinned else []), *[f'--actor-arg={a}' for a in actor_args],
+        *(['--no-resume-unfinished'] if getattr(args, 'no_resume_unfinished', False) else []),
+        *(['--episode-reruns', str(args.episode_reruns)] if getattr(args, 'episode_reruns', None) is not None else [])])
     g.top_p = check_top_p(g.top_p)
     g.pool = args.pool or grpo.default_pools()
     g.held_manifest = args.held_manifest or grpo.default_held()
@@ -675,9 +710,6 @@ def collect(args):
                                                  'pid': actor.pid if actor else None}) + '\n')
     (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(g.top_p, capture=True)) + '\n')
     existing = [int(d.name[1:]) for d in (work / 'groups').glob('g*') if d.name[1:].isdigit()]
-    # earlier runs' groups are never run again (this run starts after them): what their stopped episodes left raw
-    # (partial + evidence sidecars, result copies; ~10 GB/hour on aei1) is compacted beside the collection
-    threading.Thread(target=compact_leftovers, args=(work, existing), daemon=True).start()
     collector = frontier_collector(grpo.Collector)(g, tasks, work, sha, REPO / 'ts-host',
                                                    first_group=max(existing, default=-1) + 1)
     g.neuralese_variants, g.neuralese_variant_share = args.neuralese_variants, args.neuralese_variant_share
@@ -688,6 +720,15 @@ def collect(args):
                     priority_share=args.held_priority_share, verify=actor is None,
                     ledger_unit=None if actor is None else args.unit_prefix,
                     ledger_full_gb=getattr(args, 'ledger_full_gb', None))
+    # the groups earlier runs of this policy left unfinished (stops, preemptions, OOM kills) resume first
+    resumed, not_resumed = collector.resume_unfinished()
+    if resumed or not_resumed:
+        log({'event': 'resumed unfinished groups', 'groups': len(resumed), 'not_resumed': not_resumed,
+             **{k: v for k, v in collector.dynamic.items()
+                if k in ('episodes_kept', 'episodes_continued', 'episodes_restarted')}})
+    # earlier runs' other groups never run again: what their stopped episodes left raw (partial + evidence sidecars,
+    # result copies; ~10 GB/hour on aei1) is compacted beside the collection
+    threading.Thread(target=compact_leftovers, args=(work, sorted(set(existing) - set(resumed))), daemon=True).start()
     log({'event': 'collect start', 'tasks': len(collector.order), 'already_scored': len(collector.own), 'k': args.k,
          'slots': total_slots, 'actor': url, 'endpoints': endpoints})
     stop = threading.Event()
@@ -5117,6 +5158,9 @@ def main():
     c.add_argument('--held-priority-share', type=float, default=HELD_PRIORITY_SHARE,
                    help='share of the slots the collection keeps while a held measurement runs (1: no priority)')
     c.add_argument('--no-held-priority', action='store_true')
+    c.add_argument('--no-resume-unfinished', action='store_true',
+                   help="grpo's --no-resume-unfinished: abandon the groups an earlier run left unfinished")
+    c.add_argument('--episode-reruns', type=int, default=None, help="grpo's --episode-reruns")
     c.add_argument('--ledger-full-gb', type=float,
                    help='the full-size ledger claim this collection restores after a yield (one launched shrunk)')
     f = sub.add_parser('frontier')

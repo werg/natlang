@@ -217,6 +217,122 @@ def quiet_sample(sample, now, quiet_seconds, held):
     return True
 
 
+# ---- an episode's attempts (held measurement and collection resume) -------------------------------------------------
+
+def finish_of(journal):
+    """The last ``finish`` row of an episode's worker journal, or None (unfinished, or no journal)."""
+    last = None
+    try:
+        with open(journal, errors='replace') as handle:
+            for line in handle:
+                if '"finish"' not in line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:      # a line a killed writer left half written
+                    continue
+                if isinstance(row, dict) and row.get('event') == 'finish':
+                    last = row
+    except OSError:
+        return None
+    return last
+
+
+def set_attempt_aside(directory, entry, label='lost'):
+    """Move an attempt's files (its sample directory and ``directory/workers/<key>.journal.jsonl``) to
+    ``<sample>.<label>-N`` so the entry runs again from scratch; returns N (this attempt's number under ``label``).
+    ``lost``: an attempt lost to infrastructure (counted by ``lost_attempts``); ``stopped``: one a collector stop or
+    restart ended (never counted against an entry). Nothing to move: no directory is made, returns 0."""
+    sample_dir = Path(entry['output']).parent
+    journal = Path(directory) / 'workers' / f"{entry['key']}.journal.jsonl"
+    if not sample_dir.exists() and not journal.exists() and label != 'lost':
+        return 0
+    n = len(list(sample_dir.parent.glob(f'{sample_dir.name}.{label}-*'))) + 1
+    aside = sample_dir.with_name(f'{sample_dir.name}.{label}-{n}')
+    if sample_dir.exists():
+        os.replace(sample_dir, aside)
+    else:
+        aside.mkdir(parents=True)
+    if journal.exists():
+        os.replace(journal, aside / 'worker.journal.jsonl')
+    return n
+
+
+def lost_attempts(entry):
+    """How many earlier attempts of ``entry`` were set aside as lost to infrastructure."""
+    sample_dir = Path(entry['output']).parent
+    return len(list(sample_dir.parent.glob(sample_dir.name + '.lost-*')))
+
+
+POLICY_FIELD = re.compile(rb'"checkpoint_sha256":\s*"([0-9a-f]{64})"')
+
+
+def recorded_policies(sample):
+    """The policy checkpoint digests the RL captures of one sample directory name (its ``results.jsonl`` and its
+    partial jobs, raw or compacted): what a collector that kept no done marker checks before it keeps the episode."""
+    sample = Path(sample)
+    found = set()
+    paths = [sample / 'results.jsonl', *sorted((sample / 'jobs').glob('*.partial.json')),
+             *sorted((sample / 'jobs').glob('*.partial.json' + SUFFIX))] if (sample / 'jobs').is_dir() \
+        else [sample / 'results.jsonl']
+    for path in paths:
+        try:
+            data = read_bytes(path)
+        except (OSError, RuntimeError):
+            continue
+        found |= {m.decode() for m in POLICY_FIELD.findall(data)}
+    return found
+
+
+def partial_continuable(entry, policy_sha256, top_p, temperature=1.):
+    """Whether an unfinished episode's retained partial jobs (``jobs/*.partial.json``, raw or compacted) may continue
+    under ``policy_sha256``: the collector replays their recorded replies by exact request and samples the rest live
+    (``ts-host/src/teacher/collector.ts``), so the episode stays one on-policy sample only when every recorded turn
+    carries its RL capture (sampled ids and probabilities) from that policy under the run's sampling law (temperature,
+    ``top_p``, unguided) and wrote no Neuralese state (an actor store restarted since may have lost it). A compacted
+    partial is restored raw. Returns (ok, reason)."""
+    jobs = Path(entry.get('jobs') or '')
+    if not entry.get('jobs') or not jobs.is_dir():
+        return False, 'no partial'
+    names = sorted({p.name[:-len(SUFFIX)] if p.name.endswith(SUFFIX) else p.name
+                    for p in [*jobs.glob('*.partial.json'), *jobs.glob('*.partial.json' + SUFFIX)]})
+    if not names:
+        return False, 'no partial'
+    if any(jobs.glob('*.result.json')) or any(jobs.glob('*.error.json')):
+        return False, 'a job has ended'
+    documents = []
+    for name in names:
+        try:
+            documents.append((name, json.loads(read_bytes(jobs / name))))
+        except (OSError, ValueError, RuntimeError) as error:
+            return False, f'unreadable partial ({type(error).__name__})'
+    turns = 0
+    for _, document in documents:
+        for turn in document.get('turns') or ():
+            raw = ((turn or {}).get('response') or {}).get('raw_response') or {}
+            capture = raw.get('x_natlang_rl_capture') if isinstance(raw, dict) else None
+            if not isinstance(capture, dict) or not capture.get('samples'):
+                return False, 'a turn without its sampling capture'
+            if (capture.get('policy') or {}).get('checkpoint_sha256') != policy_sha256:
+                return False, 'a turn of another policy'
+            law = capture.get('sampling_law') or {}
+            if (law.get('guidance') or law.get('temperature') not in (temperature, float(temperature))
+                    or abs(float(law.get('top_p', 1.)) - float(top_p)) > 1e-9):
+                return False, 'a turn of another sampling law'
+            native = raw.get('native_state') if isinstance(raw.get('native_state'), dict) else {}
+            if capture.get('writes') or native.get('blocks') or native.get('imports'):
+                return False, 'a turn wrote or read Neuralese state'
+            turns += 1
+    for name, _ in documents:     # the collector reads the raw partial only
+        if not (jobs / name).exists():
+            data = read_bytes(jobs / name)
+            tmp = jobs / f'{name}.restore-{os.getpid()}'
+            tmp.write_bytes(data)
+            os.replace(tmp, jobs / name)
+            (jobs / (name + SUFFIX)).unlink(missing_ok=True)
+    return True, f'{turns} recorded turns'
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='command', required=True)

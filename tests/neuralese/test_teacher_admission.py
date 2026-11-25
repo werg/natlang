@@ -307,3 +307,25 @@ def test_replay_resume_ignores_added_admission_links_and_same_sha_checkout_paths
     draft = json.loads(args.out.read_text())['records'][0]['receipt']['samples'][0]
     assert draft['replay']['verified'] is True
     assert draft['result']['sha256'] == a.file_sha(tmp_path / 'result.jsonl')
+
+
+def test_a_stopped_teacher_attempt_resumes_only_for_the_same_teacher_and_task(tmp_path, monkeypatch):
+    """teacher_gen.run_task: the same teacher's stopped attempt keeps its directory (finished episodes, partial jobs
+    the collector continues; DECISIONS 2026-11-25 "collectors resume their unfinished groups"); another teacher's, a
+    scored one, or with NATLANG_RESUME_UNFINISHED=0 is redone whole."""
+    d = tmp_path / 't000001'
+    d.mkdir()
+    row = {'id': 'task-one'}
+    identity = json.dumps({'model_id': 'luna'}, sort_keys=True)
+    (d / 'cases.jsonl').write_text(json.dumps(row) + '\n')
+    (d / 'queue.jsonl').write_text('{}\n')
+    assert not generation.resumable_attempt(d, identity, row)          # no teacher.json: an attempt before it existed
+    (d / 'teacher.json').write_text(identity + '\n')
+    assert generation.resumable_attempt(d, identity, row)
+    assert not generation.resumable_attempt(d, json.dumps({'model_id': 'haiku'}), row)
+    assert not generation.resumable_attempt(d, identity, {'id': 'task-two'})
+    monkeypatch.setenv('NATLANG_RESUME_UNFINISHED', '0')
+    assert not generation.resumable_attempt(d, identity, row)
+    monkeypatch.delenv('NATLANG_RESUME_UNFINISHED')
+    (d / 'rollouts.jsonl').write_text('')
+    assert not generation.resumable_attempt(d, identity, row)

@@ -318,6 +318,29 @@ def test_a_memetic_group_its_preparation_drops_is_not_admitted_or_a_failure(tmp_
     assert [(t['task_id'], t['state']) for t in agg['no_episodes']] == [('memetic:b', 'memetic_preparation_failed')]
 
 
+def test_resumed_groups_and_rerun_episodes_are_telemetry_never_infrastructure_losses(tmp_path):
+    """grpo Collector.resume_unfinished: a resumed group scores its full k; its stopped and lost attempts are set aside
+    (``sample-NN.stopped-N``, ``.lost-N``) and never enter the rate. A group a restart left as superseded (its task was
+    measured in another group) is no loss; one left because its policy changed is abandoned."""
+    now = _collection(tmp_path / 'v1', _healthy(n=2))
+    g = now / 'groups' / 'g000000'
+    (g / 'row-000' / 'sample-01.stopped-1').mkdir()
+    (g / 'row-000' / 'sample-02.lost-1').mkdir()
+    (g / 'resumed.jsonl').write_text(json.dumps({'kept': ['a', 'b'], 'continued': ['c'], 'rerun': ['d']}) + '\n')
+    for index, reason in ((2, 'superseded: task measured in another group'), (3, 'policy changed')):
+        d = now / 'groups' / f'g{index:06d}'
+        d.mkdir()
+        (d / 'cases.jsonl').write_text(json.dumps({'id': f'auth_merges:{index}', 'family': 'auth_merges'}) + '\n')
+        (d / 'lost.json').write_text(json.dumps({'reason': reason}))
+    agg = ch.aggregate([ch.collection_summary(now)])
+    infra = agg['infrastructure']
+    assert infra['resumed_groups'] == 1 and infra['resumed_kept_episodes'] == 2 and infra['resumed_continued_episodes'] == 1
+    assert infra['resumed_restarted_episodes'] == 1 and infra['rerun_lost_episodes'] == 1
+    assert infra['superseded_groups'] == 1 and infra['abandoned_groups'] == 1 and agg['pending_groups'] == 0
+    assert infra['rate'] == round(1 / 9, 4)               # 8 scored episodes + the abandoned group; nothing else
+    assert [t['state'] for t in agg['no_episodes']] == ['abandoned']
+
+
 def test_earlier_collections_come_only_from_caches_and_a_finished_collection_closes_its_cache(tmp_path):
     """2026-11-24: the report read every earlier collection's groups, v0000's 45k files tiered to the HDD at ~350 ms,
     and held the driver 25 min. Earlier collections now come from their caches only (a closed whole summary, else the

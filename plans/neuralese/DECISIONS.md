@@ -12383,3 +12383,69 @@ which the per-part shape quota now holds to 2% each (the part underfills its sha
 threshold was read on the largest merges, not calibrated against audited counts; the subagent->Neuralese rebuild,
 operator and fallow22 builders unchanged (the mix enforces on their output); no unit test of `Collector._pick`'s cycle
 (it reuses tested `cap_shapes`); held effect of any of this: enters with the next held measurement.
+
+## 2026-11-25 05:30 Collectors resume their unfinished groups instead of abandoning them (default on)
+
+**Observed.** aei1 r0009 health (`ops/ei/aei1/r0009/health.json`): infrastructure rate 0.38, 39 abandoned groups,
+`outcome:unresolved` 0.04 -> 0.37, while scored episodes stayed healthy. The collectors were stopped and restarted many
+times on 2026-11-24/25 (driver restarts, ledger preemptions, remote0's move onto the VM, OOM kills).
+
+**Mechanism (HEAD before this entry).** A stop kills each running episode and returns (`grpo.py` `Collector.slot`
+l. 875-882: no verdict, no record); a restarted `expert_iteration collect` starts after the last group number
+(`expert_iteration.py` l. 682) and only filters tasks with scored groups out of its order (l. 462), so a dead group's
+task ran again as a new group with new seeds (`seed_base + 100 * group`, `grpo.py` l. 558) and every episode of the dead
+group, finished or partial, was thrown away (and compacted at the next start, l. 680). `grpo.py train --resume` offers
+only scored groups again (`reuse_scored`, l. 1063). The same restart casualty showed in-run: an episode killed by a
+signal or whose remote actor stopped serving the policy abandoned its whole group (`_abandon`; Pop and remote0's 71
+abandon events). `teacher_gen` redid a stopped task whole (l. 609, `rmtree`). Not affected: `held_eval collect` already
+skips finished entries and restarts unfinished ones in place (`held_eval.py` `_pending`, l. 601-616; `journal.unlink`
+l. 672), the runtime continuing their partial jobs; the ReplayCollector runs no episodes.
+
+**Tonight's losses** (v0001 collections of policy 8e634a0f, groups created since 2026-11-24 18:00, DGX + -hdd0, Pop +
+-pop-hdd0, remote0 + -remote0-hdd0): 565 dead groups (71 with an abandon event, 10 memetic) over only 233 tasks (137
+tasks died in 2+ groups: each restart took the same front of the order again; 57 tasks never got a verdict). Their
+episodes: 638 finished, 1,416 killed in flight (holding 11,778 recorded model turns), 156 unstarted. **What this fix
+recovers** of them: all 638 finished episodes kept; 1,238 killed episodes continue from their partials (all 11,778 turns
+replayed, not resampled); 178 rerun from scratch (122 had read or written Neuralese state, 54 unreadable partials, 12
+without partial or capture); one group per task instead of up to 6. **Health correction:** of the 1,198 unscored
+episodes in r0009's report, 686 are unresolved episodes of `v0001-...-hdd0` scored 2026-11-24 02:00-05:00 (565 of them
+`OSError: [Errno 24] Too many open files` from the actor, 84 URLError): that collection is part of r0009's "current"
+because it served the same policy. Restart losses were invisible to health (dead groups stayed `pending`, skipped).
+
+**Done** (default on; `NATLANG_RESUME_UNFINISHED=0` or `--no-resume-unfinished` opts out; `--episode-reruns 0` keeps the
+in-run abandon):
+- `grpo.Collector`: an accepted episode writes `workers/<key>.done.json` (start version, policy, endpoint). A stop no
+  longer abandons. `resume_unfinished()` (EI collect after `setup`, grpo train after `reuse_scored`) takes every
+  unfinished, unretired group of WORK whose `preparation.json` names the served policy: accepted episodes stay (EI: also
+  pre-marker finishes whose journal finish row has no signal exit and whose captures all name the policy;
+  grpo: only markers within `--max-staleness` of the resumed step, since versions change in a run), a killed EI episode
+  continues from its partial only if `episode_files.partial_continuable` (every recorded turn carries its RL capture
+  of this policy and sampling law, no Neuralese reads or writes, no ended job; a compacted partial is restored raw;
+  the collector replays recorded replies by exact request, `collector.ts` l. 1312-1411, as its shared-server failover
+  does), every other episode is set aside (`<sample>.stopped-N`) and rerun from scratch under its queue entry (task,
+  seed, budget). Memetic groups, other policies, and (EI) tasks measured in another group or no longer eligible are
+  left with `lost.json` (EI keeps one group per task, the one with most accepted episodes, and drops its task from the
+  order). A scored group with stopped JOLT+ teacher attempts resumes them; one with every episode finished is scored.
+- In a run, an episode killed by a signal (after a 5 s grace for a unit stop) or whose remote actor no longer serves the
+  policy is set aside (`.lost-N`) and runs again first, up to `--episode-reruns` (2) times; then its group is abandoned
+  (`lost.json`; EI puts the task first again). EI `all_dead` also ends with nothing running.
+- `episode_files`: `finish_of`, `set_attempt_aside` (labels `lost`/`stopped`), `lost_attempts` moved from `held_eval`
+  (one implementation), `partial_continuable`, `recorded_policies`. EI's start-time compaction skips resumed groups.
+- `collection_health`: `lost.json` groups are `superseded` (no loss) or `abandoned`; `infrastructure` reports
+  `resumed_groups`, `resumed_kept/continued/restarted_episodes`, `rerun_lost_episodes`, `superseded_groups` as telemetry,
+  never in the rate (set-aside attempts never enter rewards).
+- `teacher_gen`: a stopped attempt of the same teacher and task (`teacher.json`) keeps its directory: finished episodes
+  stay, a stopped one continues from its partial (its provenance names the teacher); otherwise redone whole.
+- `remote_collect` needs no change: a fresh VM gets no `row-*/` workspaces (PUSH_EXCLUDE), so its kept check finds no
+  sample and those episodes rerun; on the same VM the work directory and its partials persist.
+
+**Tests:** `tests/neuralese/test_grpo_collector.py` (reruns, stop, resume, versions, policy/memetic, teachers, EI
+continuation/legacy/one-per-task, partial checks, set-aside labels), `test_colab_and_profiles.py` (dead and replaced
+remote endpoints rerun), `test_collection_health.py`, `test_teacher_admission.py`.
+**Restart needs:** none beyond the round-boundary restart: each collector takes it at its next start on a pin with this
+commit, and that first start resumes every dead group the earlier runs of the same policy left (tonight's v0001 groups
+included, if v0001 is still the collected policy). The canonical-checkout `remote_collect.py` is unchanged.
+**Not checked:** a live restart end to end (the next round-boundary restart is the check: its `resumed unfinished
+groups` event and the health telemetry); whether a continued episode's 3600 s wall clock should count the stopped time
+(it restarts, as the shared-server failover's does); grpo train keeps no partials (versions are not in the capture's
+policy digest).

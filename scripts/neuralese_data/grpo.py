@@ -134,6 +134,20 @@ def default_pools():
 
 
 MEMETIC_PREPARE = 'memetic_prepare'   # a staged memetic group's preparation item on a slot (Collector._prepare_memetic)
+# Collection resume (DECISIONS 2026-11-25 "collectors resume their unfinished groups"): an episode the collector accepted
+# leaves ``workers/<key>.done.json`` (its start version, policy, endpoint); a restarted collector serving the same
+# policy resumes every unfinished group of its WORK (``Collector.resume_unfinished``) instead of leaving it dead, and an
+# episode lost in a run (killed by a signal, an actor that stopped serving the policy) runs again up to
+# ``--episode-reruns`` times before its group is abandoned. NATLANG_RESUME_UNFINISHED=0 or --no-resume-unfinished opts out.
+DONE_SUFFIX = '.done.json'
+GROUP_LOST = 'lost.json'        # an unfinished group a restart did not resume (policy changed, memetic, superseded)
+GROUP_RESUMED = 'resumed.jsonl'  # one record per resume of a group: its kept, continued and rerun episodes
+EPISODE_RERUNS = 2
+
+
+def resume_enabled(args):
+    """Whether collectors resume unfinished groups (default) rather than abandon them."""
+    return os.environ.get('NATLANG_RESUME_UNFINISHED', '1') != '0' and getattr(args, 'resume_unfinished', True)
 
 
 def default_memetic_tasks():
@@ -857,7 +871,7 @@ class Collector:
                     self.pending.appendleft(item)
                 time.sleep(5)
                 continue
-            entry = {**entry, 'rl_endpoint': actor_url}
+            queued, entry = entry, {**entry, 'rl_endpoint': actor_url}
             queue_file, journal = workers / f'{key}.queue.jsonl', workers / f'{key}.journal.jsonl'
             queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
             started = self.served_version(actor_url)     # the version this episode's actor serves at its start
@@ -879,13 +893,16 @@ class Collector:
                 finally:
                     with self.lock:
                         self.running -= 1
-            if process.returncode < 0 or self.stop.is_set():
-                self._abandon(group, key, process.returncode)
-                if self.stop.is_set():
-                    return
+            if self.stop.is_set():
+                # the collection stops under it: a restart of the same policy resumes the group (resume_unfinished)
+                if not resume_enabled(self.args):
+                    self._abandon(group, key, process.returncode)
+                return
+            if process.returncode < 0:      # killed by a signal (the OOM killer, a stop racing this check): no verdict
+                self._episode_lost(group, queued, process.returncode, 'signal')
                 continue
-            if not self.episode_valid(actor_url, info):   # no verdict: its group is dropped, never scored
-                self._abandon(group, key, process.returncode)
+            if not self.episode_valid(actor_url, info):   # no verdict on its task
+                self._episode_lost(group, queued, process.returncode, 'endpoint')
                 continue
             with self.lock:
                 if info.get('abandoned'):   # a sibling was interrupted: this group is never scored
@@ -894,6 +911,7 @@ class Collector:
                 info['versions'].append(started)
                 wave_done = bool(info.get('held_back')) and info['done'] == info['wave']
                 complete = info['done'] == info['size'] and not info.get('held_back')
+            self._mark_done(info['dir'], key, started, actor_url, process.returncode)
             if wave_done:
                 complete = self._after_wave(group)
             if complete:
@@ -982,13 +1000,194 @@ class Collector:
         except (OSError, ValueError):
             return None
 
+    def _mark_done(self, directory, key, version, endpoint, returncode):
+        """``workers/<key>.done.json``: the episode is accepted (its verdict counts) under the policy version it started
+        at; what a resumed collection keeps of an unfinished group (``resume_unfinished``)."""
+        try:
+            path = Path(directory) / 'workers' / f'{key}{DONE_SUFFIX}'
+            tmp = path.with_name(path.name + f'.tmp-{os.getpid()}')
+            tmp.write_text(json.dumps({'key': key, 'version': version, 'policy_sha256': getattr(self, 'policy_sha', None),
+                                       'endpoint': endpoint, 'returncode': returncode,
+                                       'time': round(time.time(), 1)}) + '\n')
+            os.replace(tmp, path)
+        except OSError as error:   # without it a resume runs the episode again: never a lost verdict
+            print(json.dumps({'event': 'done marker failed', 'key': key, 'error': repr(error)[:200]}), flush=True)
+
+    def _episode_lost(self, group, entry, returncode, reason):
+        """An episode without a verdict (``reason``: 'signal', 'endpoint'): its files are set aside
+        (``episode_files.set_attempt_aside``, ``<sample>.lost-N``) and it runs again from scratch, ahead of other
+        work, up to ``--episode-reruns`` times; then (or with reruns off) its group is abandoned."""
+        from natlang_neuralese.rl import episode_files
+        reruns = getattr(self.args, 'episode_reruns', EPISODE_RERUNS) if resume_enabled(self.args) else 0
+        if reruns > 0 and reason == 'signal' and self.stop.wait(getattr(self, 'STOP_GRACE', 5)):
+            return   # a unit stop signals the episodes first: the group stays for the restart's resume
+        with self.lock:
+            info = self.groups.get(group)
+            live = info is not None and not info.get('abandoned')
+        if live and reruns > 0 and not self.stop.is_set() and episode_files.lost_attempts(entry) < reruns:
+            try:
+                attempt = episode_files.set_attempt_aside(info['dir'], entry, 'lost')
+            except OSError as error:
+                print(json.dumps({'event': 'episode rerun failed', 'group': group, 'episode': entry['key'],
+                                  'error': repr(error)[:200]}), flush=True)
+            else:
+                with self.lock:
+                    self.pending.appendleft((group, entry))
+                    self.dynamic['episodes_rerun'] += 1
+                print(json.dumps({'event': 'episode rerun', 'group': group, 'episode': entry['key'], 'reason': reason,
+                                  'returncode': returncode, 'attempt': attempt}), flush=True)
+                return
+        self._abandon(group, entry['key'], returncode)
+
+    # ---- resume ------------------------------------------------------------------------------------------------------
+    continue_partials = False   # a killed episode's partial continues (one policy for the whole collection: EI)
+    legacy_finished = False     # an episode with a finish row but no done marker (written before markers) counts
+
+    def _version_ok(self, version):
+        """Whether an episode that started at policy ``version`` may stay in a group this run trains: a version this
+        run serves or served (<= ``version``) within ``--max-staleness`` (as ``reuse_scored``)."""
+        return (isinstance(version, int) and version <= self.version
+                and self.version - version <= getattr(self.args, 'max_staleness', 2))
+
+    def _episode_kept(self, directory, entry):
+        """The version of an unfinished group's episode this run keeps as finished, or None: its done marker names this
+        policy at an acceptable version (``legacy_finished``: or its journal has a finish row), and its sample's files
+        are there (a work directory pushed to a new remote host has no episode workspaces)."""
+        from natlang_neuralese.rl.episode_files import finish_of
+        sample = Path(entry['output']).parent
+        if not sample.is_dir() or not any(sample.iterdir()):
+            return None
+        workers = Path(directory) / 'workers'
+        try:
+            done = json.loads((workers / f"{entry['key']}{DONE_SUFFIX}").read_text())
+        except (OSError, ValueError):
+            done = None
+        if done is not None:
+            ok = done.get('policy_sha256') == self.policy_sha and self._version_ok(done.get('version'))
+            return done['version'] if ok else None
+        finish = finish_of(workers / f"{entry['key']}.journal.jsonl") if self.legacy_finished else None
+        if finish is not None and not (isinstance(finish.get('exit_code'), int) and finish['exit_code'] < 0):
+            # finished before done markers: kept when every capture it recorded names this policy (an episode against
+            # an actor that came back serving another policy is not)
+            from natlang_neuralese.rl.episode_files import recorded_policies
+            return self.version if recorded_policies(sample) <= {self.policy_sha} else None
+        return None
+
+    def _resume_refusal(self, directory, task_id, scored):
+        """Why an unfinished group is not resumed (a reason string), or None. Base: a memetic group (its preparation
+        and nested supervisors are not resumable) and a group of another policy are not."""
+        if (Path(directory) / 'memetic-spec.json').exists():
+            return 'memetic'
+        try:
+            prepared = json.loads((Path(directory) / 'preparation.json').read_text()).get('policy_checkpoint_sha256')
+        except (OSError, ValueError):
+            prepared = None
+        if prepared != self.policy_sha:
+            return 'policy changed'
+        return None
+
+    def _resume_order(self, plans):
+        """The resumable plans in the order they are taken (base: all, by group number)."""
+        return plans
+
+    def _resumed(self, plan):
+        """Hook: ``plan``'s group was resumed."""
+
+    def resume_unfinished(self):
+        """Resume every unfinished group of WORK that an earlier run of this collector left (stopped, preempted,
+        OOM-killed: DECISIONS 2026-11-25 "collectors resume their unfinished groups"). Its accepted episodes stay
+        (``_episode_kept``); each other episode continues from its partial jobs when ``continue_partials`` and
+        ``episode_files.partial_continuable`` (same policy, same sampling law, every recorded reply with its capture),
+        else its files are set aside (``<sample>.stopped-N``) and it runs again from scratch under its queue entry
+        (task, seed, budget). Groups whose policy changed, memetic groups and those ``_resume_refusal`` names are
+        left (``lost.json`` with the reason) as before. A scored group whose JOLT+ teacher attempts were stopped
+        resumes them. Returns (resumed group numbers, {reason: groups left})."""
+        from natlang_neuralese.common.jsonio import read_jsonl
+        from natlang_neuralese.rl import episode_files
+        if not resume_enabled(self.args) or self.work is None:
+            return [], {}
+        plans, left = [], collections.Counter()
+        for directory in sorted((Path(self.work) / 'groups').glob('g*')):
+            if not directory.name[1:].isdigit() or int(directory.name[1:]) in self.groups:
+                continue
+            if any((directory / name).exists() for name in (RETIRED, GROUP_LOST)):
+                continue
+            try:
+                entries = list(read_jsonl(directory / 'queue.jsonl'))
+                task_id = json.loads((directory / 'cases.jsonl').read_text().splitlines()[0])['id']
+            except (OSError, ValueError, KeyError, IndexError):
+                continue
+            scored = (directory / 'rewards.jsonl').exists()
+            kept = {e['key']: self._episode_kept(directory, e) for e in entries}
+            todo = [e for e in entries if kept[e['key']] is None]
+            if not todo and scored:
+                continue                                 # complete
+            if scored and any(e.get('jolt_role', 'student') == 'student' for e in todo):
+                continue                                 # scored without them (dynamic sampling): complete
+            plans.append({'group': int(directory.name[1:]), 'dir': directory, 'task_id': task_id, 'entries': entries,
+                          'kept': {k: v for k, v in kept.items() if v is not None}, 'todo': todo, 'scored': scored})
+        resumed = []
+        for plan in self._resume_order(plans):
+            directory = plan['dir']
+            reason = self._resume_refusal(directory, plan['task_id'], plan['scored'])
+            if reason is not None:
+                (directory / GROUP_LOST).write_text(json.dumps({'reason': reason, 'time': round(time.time(), 1),
+                                                                'policy_sha256': self.policy_sha}) + '\n')
+                left[reason] += 1
+                continue
+            continued, rerun, unstarted = [], [], []
+            for entry in plan['todo']:
+                finished = episode_files.finish_of(directory / 'workers' / f"{entry['key']}.journal.jsonl")
+                ok = False
+                if self.continue_partials and finished is None:
+                    ok, _ = episode_files.partial_continuable(entry, self.policy_sha, getattr(self.args, 'top_p', 1.))
+                if ok:
+                    continued.append(entry['key'])
+                elif episode_files.set_attempt_aside(directory, entry, 'stopped'):
+                    (directory / 'workers' / f"{entry['key']}{DONE_SUFFIX}").unlink(missing_ok=True)
+                    rerun.append(entry['key'])
+                else:
+                    unstarted.append(entry['key'])
+            group = plan['group']
+            teachers = sum(e.get('jolt_role', 'student') != 'student' for e in plan['entries'])
+            with self.lock:
+                self.groups[group] = {'dir': directory, 'size': len(plan['entries']), 'done': len(plan['kept']),
+                                      'versions': [plan['kept'][e['key']] for e in plan['entries'] if e['key'] in plan['kept']],
+                                      'task_id': plan['task_id'], 'created': (directory / 'cases.jsonl').stat().st_mtime,
+                                      'wave': None, 'held_back': [], 'resumed': True,
+                                      **({'teachers': teachers} if teachers or plan['scored'] else {})}
+                self.outstanding += 1
+                self.pending.extend((group, e) for e in plan['todo'])
+                self.next_group = max(self.next_group, group + 1)
+                self.dynamic['groups_resumed'] += 1
+                self.dynamic['episodes_kept'] += len(plan['kept'])
+                self.dynamic['episodes_continued'] += len(continued)
+                self.dynamic['episodes_restarted'] += len(rerun)
+            with (directory / GROUP_RESUMED).open('a') as handle:
+                handle.write(json.dumps({'time': round(time.time(), 1), 'policy_sha256': self.policy_sha,
+                                         'version': self.version, 'kept': sorted(plan['kept']), 'continued': continued,
+                                         'rerun': rerun, 'unstarted': unstarted}) + '\n')
+            self._resumed(plan)
+            resumed.append(group)
+            if not plan['todo']:          # every episode had finished: only its scoring was stopped
+                try:
+                    self._score(group)
+                except Exception as error:
+                    print(json.dumps({'event': 'group scoring failed', 'group': group, 'error': repr(error)[:300]}),
+                          flush=True)
+                    with self.lock:
+                        self.outstanding -= 1
+                        self.groups.pop(group, None)
+        return resumed, dict(left)
+
     def _abandon(self, group, key, returncode):
         """An episode killed by a signal (a unit stop signals every process of the cgroup, so the episodes die before this
         process's SIGTERM handler runs while the learner holds the main thread; or the kernel's OOM killer) has no verdict.
         Counting it as done scored its group with the killed episodes as ``unresolved`` and the finished ones as the group:
         a subset biased to short episodes that the stopping learner could still train on and that fed the pass band
         (127 of run2's 131 unresolved episodes were such restart casualties; none had reached the wall clock). Its group
-        is dropped whole: never scored, its unstarted entries withdrawn, running siblings discarded when they end."""
+        is dropped whole once ``_episode_lost``'s reruns are spent (or off): never scored, its unstarted entries
+        withdrawn, running siblings discarded when they end, and never resumed (``lost.json``)."""
         with self.lock:
             info = self.groups.get(group)
             if info is None or info.get('abandoned'):
@@ -997,6 +1196,12 @@ class Collector:
             self.pending = collections.deque(item for item in self.pending if item[0] != group)
             self.groups.pop(group, None)
             self.outstanding -= 1
+        try:      # never resumed by a restart (resume_unfinished)
+            if info.get('dir') is not None:
+                (Path(info['dir']) / GROUP_LOST).write_text(json.dumps({
+                    'reason': 'abandoned', 'episode': key, 'returncode': returncode, 'time': round(time.time(), 1)}) + '\n')
+        except OSError:
+            pass
         print(json.dumps({'event': 'group abandoned', 'group': group, 'episode': key, 'returncode': returncode,
                           'stopping': self.stop.is_set()}), flush=True)
 
@@ -4421,6 +4626,13 @@ def train(args):
         if reused or left_out:
             log_line(log, {'event': 'reused groups', 'reused': len(reused), 'left_out': left_out[:50],
                            'left_out_count': len(left_out)})
+        # the groups the stopped run left unfinished: their accepted episodes of versions this run serves stay, the
+        # rest run again from scratch (versions change in a run: a partial never continues here)
+        resumed_groups, not_resumed = collector.resume_unfinished()
+        if resumed_groups or not_resumed:
+            log_line(log, {'event': 'resumed unfinished groups', 'groups': len(resumed_groups),
+                           'not_resumed': not_resumed, **{k: v for k, v in collector.dynamic.items()
+                                                          if k in ('episodes_kept', 'episodes_restarted')}})
     from natlang_neuralese.common.sampling import rl_sampling_controls
     (work / 'sampling-config.json').write_text(json.dumps(rl_sampling_controls(args.top_p, capture=True)) + '\n')
     versions_live = {'actor': step}
@@ -5781,6 +5993,12 @@ def build_parser():
                    help='groups per step at most: about 27k forward tokens per episode (smoke), so 48 groups is ~60-90 min of learner')
     t.add_argument('--max-outstanding', type=int, default=0, help='groups in flight or waiting (default max-groups + slots/group)')
     t.add_argument('--max-staleness', type=int, default=2)
+    t.add_argument('--no-resume-unfinished', dest='resume_unfinished', action='store_false',
+                   help='abandon the groups a stopped run left unfinished, and every group an episode of is lost, instead '
+                   'of resuming them (Collector.resume_unfinished; also NATLANG_RESUME_UNFINISHED=0)')
+    t.add_argument('--episode-reruns', type=int, default=EPISODE_RERUNS,
+                   help='times an episode without a verdict (killed by a signal, its actor stopped serving the policy) runs '
+                   'again from scratch before its group is abandoned (0: abandoned at once)')
     t.add_argument('--case-seconds', type=int, default=7200,
                    help='wall-clock safety net only (a wall stop is unscored); it includes the time an episode waits in a '
                         'released actor during learner phases (--actor-release: up to ~40 min per step), hence 2 h')
