@@ -12254,3 +12254,17 @@ program-tuning tenants through admission).
 report shows it); node-side episode reads of files outside the scanned set (no audit there); the L4's capacity for an
 actor alone plus a 64-slot collector; behaviour when a session is replaced mid-collection beyond the code path (push of
 small files) — not exercised; memetic family seconds seed only from the collection's own groups on the VM.
+
+### 2026-11-25 — fix remote-collector path roots exposed by the merge push gate
+
+Normal integration of newer origin/main exposed a failing machine-path ratchet
+in the new `remote_collect.py`. The shared mechanism was the hardcoded mirror
+root set, its independently hardcoded byte regex, and the standalone VM audit
+using those roots. Resolve coordinator home and logical data/model roots through
+`common.paths`, derive the regex from that set, and pass the exact coordinator
+roots into the VM wrapper through `NATLANG_COLLECT_MIRROR_ROOTS` (also the explicit
+operator override). The standalone wrapper therefore needs no machine-config
+import, and a VM's different home/storage cannot silently change its audit scope.
+Directory scanning, canonical pin placement and symlink replication are unchanged;
+no VibeStudio build or collection moved. Existing mirror/VM/driver tests and the
+machine-path ratchet cover the change.

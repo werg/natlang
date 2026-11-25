@@ -55,7 +55,19 @@ if (REPO / 'training' / 'neuralese').is_dir():     # not the VM wrapper's copy i
 
 REMOTE_SYNC_GB = 3          # the DGX unit: this process and its rsyncs (file lists of ~100k files), no episodes
 SYNC_SECONDS = 60
-MIRROR_ROOTS = ('/home/werg/', '/mnt/external/')   # data the VM mirrors at the same absolute path
+def mirror_roots():
+    configured = os.environ.get('NATLANG_COLLECT_MIRROR_ROOTS')
+    if configured is not None:
+        roots = json.loads(configured)
+        if not isinstance(roots, list) or not roots or any(not isinstance(p, str) or not Path(p).is_absolute() for p in roots):
+            raise ValueError('NATLANG_COLLECT_MIRROR_ROOTS must be a nonempty JSON list of absolute paths')
+    else:
+        from natlang_neuralese.common import paths
+        roots = [Path.home(), *(paths.root(name) for name in ('data_nvme', 'data_hdd', 'models'))]
+    return tuple(sorted({str(root).rstrip('/') + '/' for root in roots}))
+
+
+MIRROR_ROOTS = mirror_roots()   # coordinator paths, also passed to the standalone VM wrapper
 # a group's scoring outputs: a DGX reader takes a group's outcome from these, so they arrive after its content
 MARKERS = ('rollouts.jsonl', 'rewards.jsonl', 'score.json', 'versions.json')
 # pin outputs never mirrored: aarch64 native modules of an application the collector does not run
@@ -66,8 +78,9 @@ PUSH_EXCLUDE = ('rollouts.jsonl', 'journal.jsonl', 'row-*/', '*.log', 'actor/', 
 MISSING_RELAUNCHES = 3
 LOST_SECONDS = 1800         # a VM that answers no ssh this long is gone: the unit ends (rc 75) and the driver restarts it
 SESSION_LOST_RC = 75
-PATH_RE = re.compile(rb'(?:/home/werg|/mnt/external)/[A-Za-z0-9._+\-/]+')
-MIN_DIR_DEPTH = 5           # a scanned directory reference this shallow (e.g. /home/werg/natlang/runs) is never mirrored
+PATH_RE = re.compile(rb'(?:' + b'|'.join(re.escape(root.rstrip('/').encode()) for root in MIRROR_ROOTS) +
+                     rb')/[A-Za-z0-9._+\-/]+')
+MIN_DIR_DEPTH = 5           # a scanned directory reference this shallow is never mirrored
 
 
 def log(**event):
@@ -82,7 +95,7 @@ def mirrored(path):
 def mirror_plan(paths):
     """(links, files): every symlink on the way to each of ``paths`` (``[(link path, its target as written)]``, outermost
     first) and the real files or directories to copy, so the VM resolves each lexical path as the DGX does (a registry
-    role path ``data_nvme:x`` reaches /mnt/external/... through a link; a pin's ``runs`` is a link to the checkout's)."""
+    role path ``data_nvme:x`` reaches the archive through a link; a pin's ``runs`` is a link to the checkout's)."""
     links, files = {}, set()
 
     def walk(path, depth=0):
@@ -304,7 +317,7 @@ def pin_outputs(pin):
 
 def ensure_remote_pin(host, cfg, pin, commit, scratch):
     """The DGX pin at the same path on ``host``: a detached worktree at ``commit`` (verified clean) of a checkout at the
-    DGX pin's canonical checkout path (``data_registry.canonical_checkout_repo``: /home/werg/natlang; a VM checkout
+    DGX pin's canonical checkout path (``data_registry.canonical_checkout_repo``; a VM checkout
     sharing the session clone's objects), so checkout-relative registry paths (``runs/...``) resolve where the DGX
     resolves them; the pin's build outputs rsynced over it, its venv the session's and its data links as on the DGX."""
     from natlang_neuralese.common.data_registry import canonical_checkout_repo
@@ -414,6 +427,7 @@ def vm_command(cfg, pin, work, collect_argv, slots):
     admitted = [cfg['python'], cfg['admission'], 'run', '--vram-gib', '0', '--host-ram-gib', str(claim),
                 '--label', f'collect-{Path(work).name}', '--wait', '86400', '--workdir', str(pin), '--',
                 '/usr/bin/env', f'NATLANG_REPO={pin}', f'PYTHONPATH={pin}/training/neuralese:{pin}',
+                'NATLANG_COLLECT_MIRROR_ROOTS=' + json.dumps(MIRROR_ROOTS),
                 'HF_HUB_OFFLINE=1', 'OMP_NUM_THREADS=2', 'MKL_NUM_THREADS=1', *inner]
     body = (f'{shlex.join(admitted)} >> {q(str(work) + "/collect.log")} 2>&1; '
             f'echo $? > {q(str(work) + "/remote-collect.exit")}')
