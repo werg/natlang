@@ -53,7 +53,7 @@ export function materializeObservedWorkspace(row: ObservedRow, digest: string): 
         throw new Error('invalid partial observed invocation scope');
       selected.set(invocation.call_id, indexes == null ? null : new Set(indexes as number[]));
     }
-  } else if (row.outcome.task_completed === false || row.outcome.training_scope != null) {
+  } else if (typeof row.outcome.task_completed !== 'boolean' || row.outcome.training_scope != null) {
     throw new Error('completed observed outcome contradicts partial scope');
   }
   const excludedReturns = new Set<string>();
@@ -77,6 +77,8 @@ export function materializeObservedWorkspace(row: ObservedRow, digest: string): 
       throw new Error('observed decision differs from its capture ledger');
     ordinals.set(invocationId, Number(exchange.ordinal) + 1);
     if (object(decision.training_admission).approved !== true) continue;
+    // A reasoned readout's free generation supplies context, never an action target.
+    if (decision.phase === 'decision_reasoning') continue;
     const assistant = object(decision.assistant);
     const gateway = object(exchange.gateway);
     const observed = new Map<string, Fields[]>();
@@ -93,11 +95,12 @@ export function materializeObservedWorkspace(row: ObservedRow, digest: string): 
     if (row.outcome.status === 'partial' && !scoped || excludedReturns.has(`${invocationId}:${exchange.ordinal}`))
       throw new Error('observed decision is outside independent admission scope');
     if (decision.phase !== 'action' || decision.error ||
-        call.outcome !== 'done' && !(scoped && selectedOrdinals !== null) ||
+        call.outcome !== 'done' && row.outcome.task_completed !== true && !(scoped && selectedOrdinals !== null) ||
         object(call.executor).kind === 'crisp' || !Array.isArray(decision.context) ||
         !Array.isArray(decision.tools_offered) || !Array.isArray(rawCalls) ||
         typeof assistant.content !== 'string' || typeof assistant.reasoning !== 'string' ||
-        (!assistant.content && !rawCalls.length) || !gateway.model || exchange.student_sampling_claimed !== false) {
+        (!assistant.content && !rawCalls.length) ||
+        call.outcome !== 'done' && !scoped && !rawCalls.length || !gateway.model || exchange.student_sampling_claimed !== false) {
       throw new Error('observed workspace decision is ineligible for supervision');
     }
     const actionReceipts = rawCalls.map(value => {

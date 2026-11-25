@@ -12560,3 +12560,22 @@ model answers merely quoting network errors. This policy does not claim the
 underlying provider/network cause is resolved. Inventory and scope are recorded
 in `VIBESTUDIO_TRANSPORT_ACCOUNTING_20261124.md`; no engine/Host/SST changes or
 new paid inference are involved.
+
+## 2026-11-25 — actual observed-IR reader parity before training materialization
+
+Offline0056 recovery produced26 native-success captures/393 decisions accepted
+by the Python reader; the Node disk verifier accepted23. Actual field comparison
+identified a reasoned readout mislabeled by the verifier as an action, and two
+root-error records rejected despite independently completed user goals. The
+final TS row converter repeated the stale executor-exit gate. Fixed the shared
+reader/converter mechanism: recheck the same scope-bound semantic goal proof,
+review requirements and required outcome dimensions as Python; preserve actual
+root identity and exact inputs; allow completed-goal executed actions despite a
+later executor error; retain partial scopes, failed-action masks, return masks
+and decision review exclusions. Unfinished prose without an executed action is
+never a target. Reasoned-readout free generation is context rather than an action
+target, and redacted thinking placeholders are excluded from normalized reasoning
+while historical captured bytes remain bound and unchanged. Void declarations
+remain typed contracts; an errored executor cannot fabricate an actual return
+witness. No teacher was rerun and no original packet/manifest/IR was rewritten.
+Inventory and remaining scope are in `plans/OBSERVED_DECISION_PARITY_20261125.md`.

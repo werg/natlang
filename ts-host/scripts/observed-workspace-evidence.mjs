@@ -1,3 +1,4 @@
+import {semanticGoalCompleted} from './observed-goal-completion.mjs';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -225,6 +226,8 @@ export function verifyEntry(interaction, record, partial) {
   }
   if(entry.program.endsWith('.ts') && (record.executor?.kind!=='crisp' || record.definition?.id!==`ts:${record.definition?.source}#default`))
     throw new Error('observed application entry does not bind its actual TS default export');
+  if (entry.resultType === 'void' && record.definition?.returns !== 'void')
+    throw new Error('void application entry differs from its declared return contract');
   for (const [name, value] of Object.entries(entry.arguments)) {
     const text = interaction.entry ? entry.argumentJson[name] : JSON.stringify(value);
     if (typeof text !== 'string' || !isDeepStrictEqual(JSON.parse(text), value))
@@ -335,7 +338,7 @@ export function reviewedDecisionOrdinals(selectors, record, artifact, matched) {
   return excluded;
 }
 
-function decisionEligibility(record, detail, selected, incorrectReturn, reviewed) {
+function decisionEligibility(record, detail, selected, incorrectReturn, reviewed, completedGoal) {
   const actual = record.model_turns ?? [];
   const events = detail.events ?? [];
   const failed = new Set();
@@ -350,7 +353,7 @@ function decisionEligibility(record, detail, selected, incorrectReturn, reviewed
   if (selected?.has(record.call_id) && ((ordinals === null && record.outcome !== 'done') ||
       (ordinals !== null && [...ordinals].some(index => actual[index]?.kind !== 'generation'))))
     throw new Error('partial scope names an invalid invocation or generation');
-  const executor = Boolean(record.executor?.kind !== 'crisp' && (record.outcome === 'done' ||
+  const executor = Boolean(record.executor?.kind !== 'crisp' && (record.outcome === 'done' || completedGoal ||
     selected?.has(record.call_id) && ordinals !== null));
   return actual.map((exchange, index) => {
     if (exchange.schema !== 'natlang.model-exchange/1') throw new Error('unsupported captured model exchange');
@@ -368,10 +371,12 @@ function decisionEligibility(record, detail, selected, incorrectReturn, reviewed
         !isDeepStrictEqual(JSON.parse(raw.function?.arguments ?? 'null'), call.arguments);
     }) || !isDeepStrictEqual(reply.calls ?? [], originalCalls.map(call => [call.name, call.arguments])) ||
         (reply.text ?? '') !== content.filter(block => block.type === 'text').map(block => block.text).join('') ||
-        (reply.reasoning ?? '') !== content.filter(block => block.type === 'thinking').map(block => block.thinking).join('\n'))
+        ![content.filter(block => block.type === 'thinking').map(block => block.thinking).join('\n'),
+          content.filter(block => block.type === 'thinking' && !block.redacted).map(block => block.thinking).join('\n')].includes(reply.reasoning ?? ''))
       throw new Error('observed normalized model reply differs from original gateway response');
     return (!selected || selected.has(record.call_id) && (ordinals === null || ordinals.has(index))) &&
       !reviewed.has(index) && index !== incorrectReturn && executor && !failed.has(index) &&
+      (record.outcome === 'done' || selected !== null || originalCalls.length > 0) &&
       originalCalls.every(call => actionEvents.get(call.id)?.length === 1 &&
         ['ok', 'completed'].includes(actionEvents.get(call.id)[0].outcome)) &&
       Boolean(reply.text || originalCalls.length);
@@ -392,7 +397,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
       !equal(attestation, row.provenance.verification) || receipt.task_id !== row.task.id ||
       (receipt.split ?? manifest.split) !== manifest.split ||
       receipt.run_id !== row.outcome.world.run_id || !['passed', 'partial'].includes(receipt.status) ||
-      receipt.status !== row.outcome.status || (receipt.status === 'partial' ? row.outcome.task_completed !== false : row.outcome.task_completed === false) ||
+      receipt.status !== row.outcome.status || receipt.status === 'partial' && row.outcome.task_completed !== false ||
       !receipt.checks || !Object.keys(receipt.checks).length || Object.values(receipt.checks).some(value => value !== true) ||
       !['id', 'family', 'split', 'source_namespace', 'source_ids', 'source_groups', 'source_revisions', 'interaction'].every(
         key => equal(manifest[key], row.task[key])) ||
@@ -402,6 +407,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
       !equal(manifest.code, row.provenance.code) || manifest.code?.dirty !== false)
     throw new Error('observed workspace trajectory differs from the independently verified manifest');
   const evidenceKinds = new Set();
+  const workspaceEvidence = [];
   let incorrectOptionalReturn = false;
   const returnSelectors=[];
   const decisionSelectors=[];
@@ -413,6 +419,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
     evidenceKinds.add(evidence.kind);
     if (evidence.kind === 'workspace') {
       const payload=JSON.parse(evidenceBytes);
+      workspaceEvidence.push(payload);
       if(Object.hasOwn(payload,"applicationReturn"))applicationReturns.push(payload.applicationReturn);
       const proof=payload.proof??{};
       returnSelectors.push(...declaredReturnSelectors(proof));
@@ -430,6 +437,9 @@ export async function verifyObservedWorkspaceEvidence(row) {
   await readBound(receipt.validator, root);
 
   await completedReassessment(receipt, manifest, row, root);
+  const completedGoal = semanticGoalCompleted(row.task.interaction, workspaceEvidence.map(item => item.proof ?? {}),
+    receipt, workspaceEvidence, receipt.reassessment != null);
+  if (row.outcome.task_completed !== completedGoal) throw new Error('observed task completion differs from bound whole-goal evidence');
   const selected = await trainingScope(receipt, row, root);
   const decisions = Map.groupBy(row.trajectory, item => item.invocation_id);
   const returnExclusions = [];
@@ -473,7 +483,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
       throw new Error('observed invocation differs from its captured call or verified scope');
     if (record.parent_call_id === null) {
       if (!roots.delete(call.call_id)) throw new Error('observed root was not independently attested');
-      verifyEntry(row.task.interaction, record, selected !== null);
+      verifyEntry(row.task.interaction, record, selected !== null || completedGoal);
     }
 
     const actual = record.model_turns ?? [];
@@ -487,7 +497,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
       ? actual.findLastIndex(exchange => exchange.kind === 'generation') : -1;
     if (lastGeneration >= 0) returnExclusions.push({invocation_id: call.call_id, ordinal: lastGeneration});
     const reviewed=reviewedDecisionOrdinals(decisionSelectors,record,call.artifact,matchedDecisionSelectors);
-    const eligible = decisionEligibility(record, original, selected, lastGeneration, reviewed);
+    const eligible = decisionEligibility(record, original, selected, lastGeneration, reviewed, completedGoal);
     if (projected.length !== actual.length)
       throw new Error('observed trajectory omitted captured exchanges');
     for (const [index, decision] of projected.entries()) {
@@ -500,14 +510,16 @@ export async function verifyObservedWorkspaceEvidence(row) {
           !equal(decision.context, exchange.request?.messages ?? null) ||
           !equal(decision.tools_offered, exchange.request?.tools ?? []) ||
           !equal(decision.live_exchange.gateway, exchange.reply?.raw_response?.vibestudio ?? null) ||
-          decision.phase !== (exchange.kind === 'generation' ? 'action' : exchange.kind) ||
+          decision.phase !== (exchange.request?.decision_reasoning !== null && typeof exchange.request?.decision_reasoning === 'object' && !Array.isArray(exchange.request.decision_reasoning)
+            ? 'decision_reasoning' : exchange.kind === 'generation' ? 'action' : exchange.kind) ||
           !equal(decision.error, exchange.error ?? null))
         throw new Error('observed decision differs from the recorded model exchange');
       if (exchange.kind === 'generation' && !exchange.error &&
           (!decision.assistant || !Array.isArray(exchange.reply?.raw_calls) ||
            !equal(decision.assistant.raw_calls, exchange.reply.raw_calls) ||
            decision.assistant.content !== (exchange.reply.text ?? '') ||
-           decision.assistant.reasoning !== (exchange.reply.reasoning ?? '') ||
+           decision.assistant.reasoning !== exchange.reply.raw_response.vibestudio.response.content
+             .filter(block => block.type === 'thinking' && !block.redacted).map(block => block.thinking).join('\n') ||
            !equal(decision.assistant.calls, exchange.reply.raw_response.vibestudio.response.content
              .filter(block => block.type === 'toolCall')
              .map(call => ({id: call.id, source_tool: call.name, arguments: call.arguments})))))
@@ -525,7 +537,9 @@ export async function verifyObservedWorkspaceEvidence(row) {
       row.outcome.excluded_return_decisions !== undefined && !equal(row.outcome.excluded_return_decisions, returnExclusions))
     throw new Error('observed decision admission differs from independent training scope or return evidence');
   const applicationEntry=row.task.interaction?.entry;
-  if(applicationEntry?.resultType==='void' && (applicationReturns.length!==1 || applicationReturns[0].kind!=='void'))
+  if(applicationEntry?.resultType==='void' &&
+      (capturedRecords.get(receipt.root_call_ids[0])?.outcome === 'done' || applicationReturns.length > 0) &&
+      (applicationReturns.length!==1 || applicationReturns[0].kind!=='void'))
     throw new Error('void application entry needs its explicit actual return witness');
   for(const binding of applicationReturns)verifyApplicationReturn(binding,capturedRecords,receipt.root_call_ids,applicationEntry);
   verifyObservedCallTree(records, receipt.root_call_ids[0]);
