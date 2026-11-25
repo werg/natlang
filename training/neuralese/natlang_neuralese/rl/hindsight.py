@@ -17,6 +17,8 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
+from ..common.jsonio import json_line
+
 PROMPT_CHARS = 20000
 OUTPUT_CHARS = 4000
 CODE_CHARS = 8000
@@ -220,7 +222,7 @@ def main(argv=None):
     partial = out.with_suffix(out.suffix + '.partial')
     with partial.open('w') as handle:
         for task_id in sorted(records):
-            handle.write(json.dumps(records[task_id], ensure_ascii=False) + '\n')
+            handle.write(json_line(records[task_id]))
     partial.replace(out)
     from ..common import data_registry
     data_registry.record_dataset(data_registry.dataset_id(out.parent, 'hindsight-index') if out.parent.name.startswith(

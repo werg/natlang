@@ -18,7 +18,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO)]
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex as file_sha, sha256_hex
-from natlang_neuralese.common.jsonio import canonical_json_str
+from natlang_neuralese.common.jsonio import canonical_json_str, json_line
 
 SCHEMA = 'natlang.teacher-admission/1'
 SHA = re.compile(r'^[0-9a-f]{64}$')
@@ -306,7 +306,7 @@ def replay_pool(args):
                                                for turn in rollout['turns']], 'record': binding(path)}
     result = {'schema': 'natlang.teacher-admission-drafts/1', 'records': drafts}
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(json.dumps(result, indent=2, ensure_ascii=False) + '\n')
+    Path(args.out).write_text(json_line(result, indent=2), encoding='utf-8')
     print(json.dumps({'drafts': str(Path(args.out).resolve()), 'samples': len(episodes)}))
 
 

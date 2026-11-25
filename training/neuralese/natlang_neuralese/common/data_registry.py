@@ -34,6 +34,7 @@ import sys
 import time
 from pathlib import Path
 
+from .jsonio import json_line, utf8
 from .paths import root
 
 RECORD_SCHEMA = 'natlang.data-registry-record/1'
@@ -296,7 +297,7 @@ def file_digest(path) -> dict:
 
 def _append_line(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = (json.dumps(value, sort_keys=True, ensure_ascii=False) + '\n').encode()
+    data = utf8(json_line(value, sort_keys=True))
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
@@ -329,7 +330,7 @@ def _append(record: dict) -> dict:
 
 
 def _store_manifest(manifest: dict) -> str:
-    data = json.dumps(manifest, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()
+    data = utf8(json.dumps(manifest, sort_keys=True, ensure_ascii=False, separators=(',', ':')))
     sha = hashlib.sha256(data).hexdigest()
     path = registry_dir() / 'manifests' / f'{sha}.json'
     if not path.exists():

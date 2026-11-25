@@ -27,6 +27,7 @@ from ..eval.task_packet import classify_case, classification_binding, read_jsonl
 from .rollout_math import (DEFAULT_EXECUTION_EFFICIENCY_WEIGHT, group_advantages,
                            execution_efficiency_cost, execution_efficiency_counters, grounded_failure_report_credit, reporting_spread)
 from ..common.code_provenance import code_provenance
+from ..common.jsonio import json_line
 from ..common.task_roots import student_root_row, authored_root_row
 
 UNSCORED_OUTCOMES = {"infrastructure_error", "unresolved"}
@@ -870,7 +871,7 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     transform = authored_root_row if root_mode == "authored" else (lambda row: student_root_row(row, held=held))
     selected = [transform(row) for row in source[args.offset:args.offset + args.rows]]
     packet = out / "packet.jsonl"
-    packet.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in selected), encoding="utf-8")
+    packet.write_text("".join(json_line(row) for row in selected), encoding="utf-8")
     entries = build_queue(packet, len(selected), args.group, out, temperature=args.temperature,
                           case_seconds=args.case_seconds, max_model_requests=args.max_model_requests,
                           max_turns=args.max_turns, seed_base=args.seed_base)
@@ -1069,7 +1070,7 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
               "execution_efficiency": efficiency_metrics(rollouts, efficiency_weight), "groups": groups}
     (run_dir / "rewards.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rollouts), encoding="utf-8")
     if emit is not None:
-        emit.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in emitted), encoding="utf-8")
+        emit.write_text("".join(json_line(r) for r in emitted), encoding="utf-8")
         report["emitted_rollouts"] = str(emit)
     (run_dir / "score.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report

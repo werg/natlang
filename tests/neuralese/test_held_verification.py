@@ -44,3 +44,14 @@ def test_changed_held_cases_are_rejected(tmp_path):
     cases.write_text(cases.read_text() + '\n')
     with pytest.raises(ValueError, match='held cases changed'):
         h.verify(manifest, set(), pool_path=pool)
+
+
+def test_avoid_cases_checks_a_new_sources_own_groups_not_only_its_ids(tmp_path):
+    pool, _, manifest = artifacts(tmp_path)
+    new = tmp_path / 'new-source.jsonl'
+    new.write_text(json.dumps({'id': 'new-row', 'split_group': 'unit-9', 'source_groups': ['same-world']}) + '\n')
+    # by id alone the new row is not in the held pool, so no group is resolved
+    assert h.verify(manifest, {'new-row'}, pool_path=pool)['overlap_groups'] == []
+    groups = h.avoided_case_groups(new)
+    assert 'same-world' in groups
+    assert h.verify(manifest, {'new-row'}, groups, pool_path=pool)['overlap_groups'] == ['held']

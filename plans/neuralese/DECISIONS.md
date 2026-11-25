@@ -12622,3 +12622,113 @@ identity, preserving every other native check. It requires an independently
 captured accepted meaning review and leaves uncaptured final DOM absent. No
 teacher rerun or raw packet/manifest rewrite is involved. Default preparation
 without a review cannot emit a completed-outcome assessment.
+
+## 2026-11-25 07:40 Broad-external real datasets admitted: `natlang-rl-broad-external-real-20261125` (21,098 rows) in grpo-pool; the per-generator pool cap and the SFT wrapper-share cap retired (task-supply agent)
+
+**What kept them out.** `natlang-rl-broad-external-20261031-v2` (32,947 checked train rows, 24 sources) never had a
+registry role; its rows reached training only through the composed selection pool (`memetic-program-source-20261105`,
+now `-typed`, grpo-pool order 0), which `scripts/rl_tasks/assemble_selection_pool.py` built on 2026-11-04 from
+`/mnt/external/natlang-rl-composed-20261103/pool-spec.json` with `max_generator_share: 0.225`. The cap is the
+water-filling `caps()` (l. 129-142 before this commit), applied per generator class in `select()` (l. 196, 205);
+`measure_repetition.program_features` (l. 207-211) puts every one-template dataset wrapper of the broad builder in one
+class `natlang.broad_external_rl_tasks/1:dataset`. Receipt of `selection-pool-20261104T1000Z-r7`: that class had 44,232
+rows available and kept 6,493 (codebase 14,606 -> 6,493, composed 7,886 -> 6,493). 6,484 v2 ids are in the pool
+(reasoning-gym 1,770, inline curriculum 1,390, math 763, babi 653, databench 321, the rest 33-129 per source).
+
+**Admitted.** v2 rows not in any grpo-pool member, bird/spider at their successor version (887 rows: the
+ordered-result-set SQL oracle correction in `broad-rl-tasks-20261031/full-core-effects-20261102`, the version the pool
+already uses). Funnel (`runs/natlang-rl-broad-external-real-20261125/funnel.json`):
+- already in pool 6,484;
+- procedurally generated upstream 4,503: reasoning-gym 1,750, Knights and Knaves 1,100, bAbI 747 (incl. 37 guided),
+  CLUTRR 902 (incl. 305 guided), inline curriculum 4;
+- held separation: `training_exclusion_ids` (held-v3, held-v4 + reservations, held-inv) 101 (bird 55, musique 24,
+  quality 14, spider 4, squad 2, tatqa 2); protected-world custody 1 (xlam); held content (`subagent_neuralese.held_texts`
+  exact text or half the 10-word shingles, every input text including documents) 639 (2wikimultihopqa 497, musique 110,
+  finqa 14, tatqa 13, squad 4, triviaqa 1). Document hits are kept out on purpose: 2Wiki and MuSiQue compose
+  multi-hop questions from shared entity paragraphs, so a shared paragraph can be a shared hop;
+- requalified on pin `30d164222fd8` (contains fb11b6359, hedge-aware QA containment) with the pin's own `verify.mjs`
+  (reference replay, other-item golds, generic perturbation, alias probes; one runtime digest across 10 shards):
+  21,219 -> 21,098. All 121 drops are the perturbation `"<gold> and something else entirely"` still accepted (golds
+  containing "and", span F1 >= 0.8): hotpotqa 29, squad 28, hybridqa 28, tatqa 19, 2wiki 8, triviaqa 5, drop 4.
+Per source: wikitablequestions 1,435, drop 1,432, hybridqa 1,406, gsm8k 1,403, hotpotqa 1,389, xlam 1,343, tatqa 1,331,
+finqa 1,322, bird 1,316, triviaqa 1,128, databench 1,124, quality 1,120, logiqa2 1,097, musique 1,050, spider 1,023,
+2wikimultihopqa 896, squad 529, math 437, mbpp 317. Checks on the admitted rows: `training_exclusion_ids` 0; held-v3,
+held-v4 and held-inv ids, split groups, source groups and `excluded_split_groups` 0 (`held-checks.json`, the
+`held_eval.verify` rule on each set's own rows; the `verify` CLI itself needs a `cases` key held-v3's manifest lacks);
+held-v4 reservations 0. Registry: promoted with `--role grpo-pool` (order 26, 3b3947eaa).
+
+**Repetition** (`measure_repetition --against` the 41,363-row pool; `diversity.task_shapes` over the eligible pool):
+the new rows are 58 programs / 52 merged shapes, every one already in the pool (`new_shapes_not_in_pool` 0); top shape
+3.5% of the source. Eligible pool 39,023 -> 60,121 rows; shapes 3,853 -> 3,853; effective shapes 604 -> 415; top shape
+8.3% (searchswarm's one program) -> 5.4%; top 10 19.5% -> 17.3%. What the rows add is items, not templates: these 19 sources
+had 27-760 rows each in the pool and now have 344-1,500, so the 1% collection shape cap (`grpo.SHAPE_CAP`) and
+the mix build's 2% shape share stop repeating the same items round after round. Sources after: bgkit 12.0%, composed
+10.7%, haiku-authored 7.0%, searchswarm 5.4%, then 19 dataset sources at 0.6-2.5% each (full table:
+`/home/werg/data/natlang-rl-broad-external-real-20261125/composition.json`).
+
+**Retired: per-generator caps where the shape cap does the job** (owner: as much real data as possible; repetition is
+bounded per program shape at every selection stage since 2026-11-25 02:50 / 04:30).
+- `assemble_selection_pool.py --max-generator-share` default 0.2 -> 0 (no class cap; `caps(sizes, 0)` keeps every class
+  whole). Opt-in: pass a share or set `max_generator_share` in a spec. The live pool is the registry role union, so this
+  changes no current input; it stops the next assembled pool from repeating the cut.
+- `sft_sources build --wrapper-share` default 0.15 -> 1 (no cap). It held dataset-wrapper episodes to 15% of the own and
+  teacher selection as one class; `--max-shape-share` (0.02) now bounds each wrapper template. Opt-in:
+  `--build-args "--wrapper-share 0.15"`. Enters aei1 at its next driver pin (not restarted).
+- Kept: GRPO's `--explore-wrapper-share 0.15` (`ExploreWalk`). It weights exploration toward the held set's construct mix
+  (held-v3 has 9% wrappers), not repetition control, and GRPO is the polish phase.
+
+**Pool rows already in grpo-pool, QA checker.** The v2-origin dataset rows of the composed pool were qualified on
+2026-10-31, before fb11b6359. Requalified on the same pin (2,473 dataset rows, 19 sources): 2,470 pass; 3 accept the
+generic perturbation (hotpotqa 2, hybridqa 1) and are now pool errata
+(`ops/pool-errata/broad-external-qa-hedge-20261125.jsonl`, read by `grpo.load_tasks` by default). The same run also
+replayed 1,236 inline-curriculum and 154 authored-decision rows that the extraction took by mistake; 48 inline rows fail
+verify.mjs (reference not admitted, or no negatives); those rows are qualified by their own builder, not verify.mjs, so
+this is recorded and not acted on.
+
+**Enters:** EI collections that read the grpo-pool role after this commit; teacher campaigns and the mix build see the
+new tasks once collected. Opt-out: drop the role from `training/corpora/natlang-rl-broad-external-real-20261125.json`.
+
+**Not checked:** the policy's pass rates on these sources (no collection yet); whether the 1% shape cap now leaves these
+52 shapes under-collected relative to their item count (they share shapes with rows already in the pool, so a shape's
+quota is spread over more items, not raised); xlam is APIGen output (LLM-generated, execution-verified calls) and was
+kept as a real dataset, LogiQA 2.0 and MATH as human-written exams; the composed rows (`external-rl:composed`, 6,414)
+that wrap these datasets' items were not requalified on fb11b6359; the 9,600 further real-dataset rows of the
+successor build that v2 lacks (tabfact, toolace, msr-sqa, wikisql, nestful, convfinqa, multihiertt, databench 381, bird
+23) are not in this admission; the procedural rows already in the pool (reasoning-gym 1,770, inline curriculum 1,324,
+babi 650, knights-knaves 100, clutrr 98, countdown/rg-* 253) were left in place.
+
+## 2026-11-25 09:10 Broad-external follow-up: successor-build datasets admitted (`natlang-rl-broad-external-real-20261125b`, 8,809 rows); composed rows requalified; `held_eval verify --avoid-cases` (task-supply agent)
+
+**Correction to the 07:40 entry.** "`held_eval verify` needs a `cases` key held-v3's manifest lacks" was wrong: the
+manifest has it (I listed only its first 14 keys). `held_eval verify --manifest ops/held-v3/manifest.json` runs. Its real
+gap: `verify` resolves split/source groups only for avoided ids that are rows of the held set's pinned pool, so
+`--avoid-ids` on a new source checked ids alone (on the 07:40 rows: `avoid_groups` 0). New `--avoid-cases FILE` avoids
+the rows' ids and their own groups (`avoided_case_groups`; test in `tests/neuralese/test_held_verification.py`; 99f6536e8).
+Rerun on `natlang-rl-broad-external-real-20261125` (21,098 rows, 33,706 groups): held-v3, held-v4, held-inv overlap 0/0.
+
+**Successor-build rows.** `broad-rl-tasks-20261031/full-core-effects-20261102` (the verified successor build) holds
+real-dataset train rows v2 lacks. Same rules as the 07:40 admission (`funnel2.py`, `admit2.py` in
+`/home/werg/data/natlang-rl-broad-external-real-20261125/tools/`):
+- 9,720 rows of tabfact, toolace, msr-sqa, wikisql, nestful, convfinqa, multihiertt, databench, bird; already in pool 837;
+- held: `training_exclusion_ids` 5 (convfinqa 3, multihiertt 1, bird 1); content (`held_texts`) 68 (multihiertt 52,
+  convfinqa 16); custody 0; the successor build's own dev/confirmation packets (11,554 rows) 0 by id, group or upstream id;
+- requalified on pin b053651cdc5f (fb11b6359 in) with its own verify.mjs: 8,810 -> 8,809 (1 multihiertt accepts a
+  wrong answer);
+- left out as not real datasets or generated upstream: codebase-py/natlang/codebase-natlang (project code questions),
+  countdown and rg-* (generated), design-brief-gates (project-authored), inline curriculum.
+Per source: tabfact 1,434, msr-sqa 1,404, toolace 1,373, wikisql 1,209, nestful 1,169, convfinqa 997, multihiertt 824,
+databench 380, bird 19. `held_eval verify --avoid-cases` on held-v3/v4/inv: 0/0 (20,514 groups). Promoted to grpo-pool
+(order 27, 84434d16d). ToolACE is LLM-synthesized (like xLAM) and kept as a real dataset.
+**Repetition:** 28 shapes, all already in the pool. Eligible pool 60,078 -> 68,887 rows; shapes 3,853 -> 3,853;
+effective 415 -> 383; top shape 5.4% -> 4.7%; these sources go from 62-288 rows to 886-1,499
+(`composition-b.json` in the work dir).
+
+**Composed rows requalified.** All 6,493 grpo-pool `external-rl:composed` rows replayed on the same pin: 41 accept a wrong
+answer (all the "<gold> and something else entirely" perturbation on golds containing "and": neuralese_typed 20, fanin
+12, iterate 4, multihop_deep 3, relay 2). They are pool errata (`ops/pool-errata/composed-requal-20261125.jsonl`, read by
+`grpo.load_tasks` by default); eligible composed rows 6,414 -> 6,374.
+
+**Not checked:** pass rates on the new sources; teacher campaigns and the mix build do not yet hold these tasks; the
+other source kinds in grpo-pool (bgkit, decisions, codebase, authored, searchswarm) were not requalified on fb11b6359 in
+this pass (only composed and v2-origin dataset rows); AGENTS.md's `collect_exposure.py` flow (exposure of past training
+and collection) was not rerun for these sources: the rows are new to the pool, so they have no exposure yet.

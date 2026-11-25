@@ -44,6 +44,7 @@ sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE), str(REPO
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
 from natlang_neuralese.common import data_registry  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
+from natlang_neuralese.common.jsonio import json_line, utf8  # noqa: E402
 import recorded_turns  # noqa: E402
 
 SUCCESS = 'task_success'
@@ -86,7 +87,7 @@ class ZstdWriter:
         self.rows = 0
 
     def write(self, row):
-        self.writer.write((json.dumps(row, ensure_ascii=False) + '\n').encode())
+        self.writer.write(utf8(json_line(row)))
         self.rows += 1
 
     def close(self, *, publish=True):
@@ -4067,8 +4068,10 @@ def main():
                    help='episodes of a task the start policy never solves; a task it always solves keeps 1')
     b.add_argument('--rich-max-per-task', type=int, default=8,
                    help='the per-task cap for tasks whose program declares a held construct (HELD_CONSTRUCTS)')
-    b.add_argument('--wrapper-share', type=float, default=0.15,
-                   help='dataset-wrapper episodes kept to at most this share of the GRPO-pool selection (1 = no cap)')
+    b.add_argument('--wrapper-share', type=float, default=1.0,
+                   help='opt-in: dataset-wrapper episodes kept to at most this share of the GRPO-pool selection (default '
+                        '1 = no cap since 2026-11-25: --max-shape-share bounds each wrapper template; 0.15 was the old '
+                        'class cap)')
     b.add_argument('--max-family-share', type=float, default=0.05)
     b.add_argument('--dup-threshold', type=float, default=0.8)
     b.add_argument('--max-shape-share', type=float, default=None,

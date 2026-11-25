@@ -2640,10 +2640,63 @@ def test_a_remote_actor_serving_the_newest_policy_gets_a_collector_whenever_it_c
     assert started == ['-remote0'] and rebinds == [d.controller.current['sha256']]
     d.colab_sft_hosts.add('colab-g4')
     d.remote_collect_check()
-    assert started == ['-remote0'] * 2 and len(rebinds) == 1
+    assert started == ['-remote0'] and len(rebinds) == 1        # the SFT session's actor yielded: no collector there
+    d.colab_sft_hosts.clear()
     monkeypatch.setattr(d.controller, 'state', {**d.controller.state, 'phase': 'grpo'})
     d.remote_collect_check()
-    assert len(started) == 2
+    assert len(started) == 1
+
+
+def test_no_remote_collector_starts_on_the_session_a_rounds_sft_holds_even_after_a_driver_restart(tmp_path, monkeypatch):
+    """2026-11-25 06:23: a driver restarted mid-SFT (its in-memory ``colab_sft_hosts`` empty) started
+    ``collect-v0008-remote0`` on the A100 whose actor had yielded to round r0010's SFT; the collector's actor wait then
+    failed. The round's ``colab-placement.json`` (while its profile is colab and no factors exist) keeps the session
+    off every start path; the start, the rebind and the standing check all skip it."""
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--rebind-actor', 'colab-g4@http://127.0.0.1:8570=64'])
+    cur = d.controller.current
+    rid = d.controller.begin_round(cur['sha256'])
+    rd = d.round_dir(rid)
+    (rd / 'sft').mkdir(parents=True)
+    (rd / 'round.json').write_text(json.dumps({'profile': 'colab'}))
+    (rd / 'sft' / 'colab-placement.json').write_text(json.dumps({'host': 'colab-g4', 'gpu': 'A100'}))
+    assert d.colab_sft_busy_hosts() == {'colab-g4'}
+    ledgered = []
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: True)
+    monkeypatch.setattr(d.c, 'present', lambda u: False)
+    monkeypatch.setattr(d.c, 'ledger', lambda u, *a, **kw: ledgered.append(u))
+    monkeypatch.setattr(d, 'ensure_remote_policy', lambda policy: None)
+    d.ensure_remote_collection(cur)
+    d.start_remote_collector(cur, d.remote_targets()[0])
+    assert ledgered == []
+    # the round fell back to the DGX (or finished): the session collects again
+    ei.record_profile_change(rd, from_profile='colab', to_profile='dgx', reason='test')
+    assert d.colab_sft_busy_hosts() == set()
+    d.start_remote_collector(cur, d.remote_targets()[0])
+    assert [u for u in ledgered if u.endswith('-remote0')] == [d.collection_unit(cur) + '-remote0']
+    # a published round's factors end the hold
+    (rd / 'round.json').write_text(json.dumps({'profile': 'colab'}))
+    assert d.colab_sft_busy_hosts() == {'colab-g4'}
+    (rd / 'sft' / 'factors').mkdir()
+    (rd / 'sft' / 'factors' / 'policy_manifest.json').write_text('{}')
+    assert d.colab_sft_busy_hosts() == set()
+
+
+def test_a_remote_collectors_select_creates_the_dgx_collection_dir_and_wait_actor_names_its_timeout(tmp_path, monkeypatch):
+    """2026-11-25 06:23: the ``-remote0-select`` unit failed writing ``collect/v0008-.../tasks.json`` (the DGX
+    collection's directory did not exist yet), and the collector's 60 s actor wait raised "did not come up in an hour"."""
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--rebind-actor', 'colab-g4@http://127.0.0.1:8570=64'])
+    cur = d.controller.current
+    work = d.collect_dir(cur, '-remote0')
+    assert not d.collect_dir(cur).exists()
+    tasks = d.prepare_collection_dir(cur, work, 'u')
+    assert tasks.parent.is_dir() and work.is_dir()
+    import pytest
+    monkeypatch.setattr(ei.urllib.request, 'urlopen', lambda *a, **kw: (_ for _ in ()).throw(OSError('refused')))
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: None)
+    clock = iter([0, 0, 100])
+    monkeypatch.setattr(ei.time, 'time', lambda: next(clock))
+    with pytest.raises(TimeoutError, match=r'within 60 s'):
+        ei.wait_actor('http://127.0.0.1:18731', 'a' * 64, None, None, timeout=60)
 
 
 def test_the_health_report_runs_beside_the_main_loop(tmp_path, monkeypatch):

@@ -6,6 +6,7 @@ trailing newline, ASCII escaping) are deliberately NOT provided here.
 """
 from __future__ import annotations
 
+import codecs
 import json
 import re
 import os
@@ -17,9 +18,56 @@ from typing import Any
 from pathlib import Path
 
 
+# ---- lone UTF-16 surrogates ------------------------------------------------------------------------------------------
+# JavaScript strings may hold half of a surrogate pair (code that slices '🙂' by UTF-16 unit); JSON.stringify writes
+# it as a `\ud83d` escape and `json.loads` turns that back into a lone surrogate code point, which UTF-8 cannot encode.
+# Every UTF-8 writer of trajectory, episode and teacher text encodes with SURROGATE_ERRORS: a split pair is joined, a
+# lone surrogate becomes U+FFFD. NATLANG_KEEP_LONE_SURROGATES=1 opts out (strict: the write raises as before).
+SURROGATE_ERRORS = 'natlang-replace-surrogates'
+_SURROGATE = re.compile('[\ud800-\udfff]')
+
+
+def _replace_surrogates(error):
+    if not isinstance(error, UnicodeEncodeError) or os.environ.get('NATLANG_KEEP_LONE_SURROGATES') == '1':
+        raise error
+    text, start, end, out = error.object, error.start, error.end, []
+    while start < end:
+        high, low = text[start], text[start + 1] if start + 1 < len(text) else ''
+        if '\ud800' <= high <= '\udbff' and '\udc00' <= low <= '\udfff':
+            out.append(chr(0x10000 + ((ord(high) - 0xd800) << 10) + (ord(low) - 0xdc00)))
+            start += 2
+        else:
+            out.append('�' if '\ud800' <= high <= '\udfff' else high)
+            start += 1
+    # CPython's UTF-8 encoder accepts only ASCII str replacements; bytes go in verbatim (UTF-8 writers only).
+    return ''.join(out).encode('utf-8'), start
+
+
+codecs.register_error(SURROGATE_ERRORS, _replace_surrogates)
+
+
+def scrub_surrogates(text: str) -> str:
+    """`text` with split surrogate pairs joined and lone surrogates replaced by U+FFFD (unchanged when it has none)."""
+    if not _SURROGATE.search(text) or os.environ.get('NATLANG_KEEP_LONE_SURROGATES') == '1':
+        return text
+    return text.encode('utf-8', SURROGATE_ERRORS).decode('utf-8')
+
+
+def utf8(text: str) -> bytes:
+    """UTF-8 bytes of `text` under SURROGATE_ERRORS."""
+    return text.encode('utf-8', SURROGATE_ERRORS)
+
+
+def json_line(value: Any, **kwargs) -> str:
+    """`json.dumps(value, ensure_ascii=False, **kwargs)` + newline, with lone surrogates scrubbed."""
+    return scrub_surrogates(json.dumps(value, ensure_ascii=False, **kwargs)) + '\n'
+
+
 def canonical_json_str(value: Any, *, allow_nan: bool = True) -> str:
-    """Canonical text; strict artifact boundaries can reject nonfinite numbers."""
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=allow_nan)
+    """Canonical text; strict artifact boundaries can reject nonfinite numbers. Lone surrogates become U+FFFD
+    (`scrub_surrogates`), so the text always encodes as UTF-8; text without them is unchanged."""
+    return scrub_surrogates(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+                                       allow_nan=allow_nan))
 
 
 def canonical_json_bytes(value: Any, *, allow_nan: bool = True) -> bytes:
@@ -35,7 +83,7 @@ def write_canonical_jsonl(path, rows) -> int:
     """Write rows as canonical JSON lines (one `canonical_json_str` per line) to a new file; refuses to overwrite,
     because published outputs are immutable. Returns the row count."""
     count = 0
-    with open(path, "x", encoding="utf-8") as stream:
+    with open(path, "x", encoding="utf-8", errors=SURROGATE_ERRORS) as stream:
         for row in rows:
             stream.write(canonical_json_str(row) + "\n")
             count += 1
@@ -73,14 +121,14 @@ def write_jsonl_text(path: str | Path):
     """Write exact UTF-8/LF text, compressing zstd incrementally and checking its exit."""
     path = Path(path)
     if path.suffix != '.zst':
-        with path.open('w', encoding='utf-8', newline='\n') as stream:
+        with path.open('w', encoding='utf-8', errors=SURROGATE_ERRORS, newline='\n') as stream:
             yield stream
         return
     with path.open('wb') as raw:
         proc = subprocess.Popen(['zstd', '-q', '-3', '--long=27', '-T1', '-c'],
                                 stdin=subprocess.PIPE, stdout=raw)
         try:
-            with io.TextIOWrapper(proc.stdin, encoding='utf-8', newline='\n') as stream:
+            with io.TextIOWrapper(proc.stdin, encoding='utf-8', errors=SURROGATE_ERRORS, newline='\n') as stream:
                 yield stream
         except BaseException:
             if proc.poll() is None:
