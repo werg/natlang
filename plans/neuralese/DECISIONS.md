@@ -12491,9 +12491,14 @@ SOURCES `searchswarm`; 0e6a11cbe). One real SearchSwarm item per task, no templa
   its length, including "X and Y" and "not X". Words outside the span that are QA hedges (and/or/not/maybe…) absent from
   the gold now reject. Opt-out `NATLANG_QA_CONTAINMENT_HEDGES=0`, tests in `ts-host/test/oracle.test.mjs`. This is a
   scoring change for every QA family: a pin with it is a new held scoring series. The 435 cases whose only failure was the
-  perturbation (`build/searchswarm/requalify-ids.json`) are requalified on a runtime with the fix as a second supply. They
-  are not admitted before then, because older pins score them leniently.
-- **Enters:** EI collections that draw the grpo-pool role after this commit (order 24). Opt-out: drop the role.
+  perturbation (`build/searchswarm/requalify-ids.json`) were requalified on a pin with the fix (0834b9013b4d, its own
+  verify.mjs). 381 passed; 54 still passed the perturbation through span F1 >= 0.8 on long golds (8+ tokens) or golds
+  that contain "and". Supply `natlang-rl-web-research-20261125b` holds 355 train rows (latin short 336, phrase 19) and is
+  in grpo-pool (order 25). Its held packets are `natlang-rl-web-research-{dev,confirmation}-20261125b` (10 + 16).
+  held-v3/v4 verify, custody and exclusion are 0. Collection pins older than fb11b6359 still accept "X and Y" for
+  these rows. Exposure is bounded because they share the source's single program shape (1% cap).
+- **Enters:** EI collections that draw the grpo-pool role after this commit (orders 24 and 25). Opt-out: drop the
+  role.
 - **Not checked:** the policy's pass rate (the questions are BrowseComp-style chains; the teacher used a median of 169
   search/visit calls including its sub-agents, and only 310 train items kept every sub-agent's evidence); episode length
   against the 40-call budget; visits with a goal other than the recorded one (they return the closest recorded reading);
