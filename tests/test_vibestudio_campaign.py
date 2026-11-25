@@ -1032,3 +1032,62 @@ def test_archive_reconnect_clears_previous_owner_network_wait(tmp_path):
     owner = SimpleNamespace(requested=False, run=lambda argv, **_: subprocess.CompletedProcess(argv, 0))
     vibestudio_campaign.archive_transport(['ssh'], checkpoint=owner, health_path=health)
     assert vibestudio_campaign.read(health)['phase'] == 'archive-connected'
+
+
+def test_one_invalid_capture_preserves_other_wave_results_and_raw_artifacts(tmp_path, monkeypatch):
+    for name in ['bad', 'good']:
+        path = tmp_path/'cases'/name/'verified/manifest.json'
+        path.parent.mkdir(parents=True)
+        path.write_text('{}')
+    before = {str(p): p.read_bytes() for p in tmp_path.rglob('*.json')}
+    def load(path):
+        if path.parent.parent.name == 'bad':
+            raise ValueError('observed workspace call graph differs from recorded child inventory')
+        return {'task_id': 'good-id', 'task': {'id': 'good-id', 'interaction': {'goal': 'owned'},
+                'source_ids': [], 'source_groups': []}, 'teacher': {'model_id': vibestudio_campaign.LUNA},
+                'turns': [1], 'trajectory_ir': {'outcome': {'task_completed': True}}}
+    monkeypatch.setattr(vibestudio_campaign, 'load_episode', load)
+    monkeypatch.setattr(vibestudio_campaign, 'held_hit', lambda *_: False)
+    monkeypatch.setattr(vibestudio_campaign, 'require_registered_open_goal', lambda *_: None)
+    cases = {'bad': {'taskId': 'bad-id'}, 'good': {'taskId': 'good-id'}}
+    rows = vibestudio_campaign.outcomes(tmp_path, ['bad', 'good'], None, {}, cases)
+    assert rows['bad']['status'] == 'export-rejected'
+    assert rows['bad']['rejected_manifest'] == 'cases/bad/verified/manifest.json'
+    assert vibestudio_campaign.infrastructure_failure(rows['bad'], {})
+    assert not vibestudio_campaign.has_training_manifest(rows['bad'])
+    assert rows['good']['status'] == 'verified'
+    assert all(Path(path).read_bytes() == content for path, content in before.items())
+
+
+def test_capture_isolation_does_not_hide_held_policy_or_task_identity_errors(tmp_path, monkeypatch):
+    path = tmp_path/'verified/manifest.json'
+    path.parent.mkdir(); path.write_text('{}')
+    episode = {'task_id': 'actual', 'task': {'id': 'actual', 'interaction': {'goal': 'owned'},
+        'source_ids': [], 'source_groups': []}, 'teacher': {'model_id': vibestudio_campaign.LUNA}}
+    monkeypatch.setattr(vibestudio_campaign, 'load_episode', lambda *_: episode)
+    monkeypatch.setattr(vibestudio_campaign, 'held_hit', lambda *_: True)
+    with pytest.raises(ValueError, match='held closure'):
+        vibestudio_campaign.outcomes(tmp_path, ['goal'], None, {}, {'goal': {'taskId': 'other'}})
+    monkeypatch.setattr(vibestudio_campaign, 'held_hit', lambda *_: False)
+    monkeypatch.setattr(vibestudio_campaign, 'require_registered_open_goal', lambda *_: None)
+    with pytest.raises(ValueError, match='another task'):
+        vibestudio_campaign.outcomes(tmp_path, ['goal'], None, {}, {'goal': {'taskId': 'other'}})
+    episode['teacher']['model_id'] = 'disallowed-other-teacher'
+    with pytest.raises(ValueError, match='actual Luna'):
+        vibestudio_campaign.outcomes(tmp_path, ['goal'], None, {}, {'goal': {'taskId': 'actual'}})
+
+
+def test_unreadable_raw_capture_is_preserved_and_does_not_erase_other_results(tmp_path):
+    directory = tmp_path/'cases'/'bad'/'st_example'
+    directory.mkdir(parents=True)
+    raw = directory/'trajectory-bad-full.json.gz'
+    raw.write_bytes(b'original incomplete gzip')
+    rows = vibestudio_campaign.outcomes(tmp_path, ['bad', 'unstarted'], None, {}, {'bad': {}, 'unstarted': {}})
+    assert rows['bad']['status'] == 'export-rejected'
+    assert rows['bad']['capture_errors']
+    assert rows['unstarted']['status'] == 'no-capture'
+    assert raw.read_bytes() == b'original incomplete gzip'
+    vibestudio_campaign.publish(tmp_path/'collection-interruption.json', {'interruptedCases': ['bad', 'unstarted']})
+    rows = vibestudio_campaign.outcomes(tmp_path, ['bad', 'unstarted'], None, {}, {'bad': {}, 'unstarted': {}})
+    assert rows['bad']['interrupted']
+    assert vibestudio_campaign.wave_infrastructure_hold(rows, {}, 1) is None

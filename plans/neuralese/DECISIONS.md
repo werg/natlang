@@ -13815,3 +13815,11 @@ about 3-12/h, ERNIE (OpenRouter free) at most about 26 episodes/day, Gemini 3.5 
 
 `teacher_free_models.py signups` prints the exact steps. Once a key file exists, the next 6-hourly run lists the
 provider, probes it, qualifies its models and admits the ones that pass.
+
+## 2026-11-25 — Preserve completed collection across individual capture parser failures
+
+Source35 produced 24 locally verified captures before host memory pressure checkpointed collection. Its automatic resume then failed in `outcomes`: a truthful independently scoped nested task met a stale same-task child predicate. Python and Node now accept authenticated cross-task causal children while retaining exact declared membership, own-task custody and digest/owner/run checks; the original untouched 21-call capture materialized all 26 decisions. No teacher rerun or invented graph edge is needed.
+
+The controller must also retain other completed cases if an individual artifact is genuinely malformed. Canonical parser errors now produce the existing structural `export-rejected` receipt with original artifact paths preserved; model/held/registered-task identity errors still stop the campaign. Corrupt raw gzip/JSON is isolated similarly, and interrupted incomplete packets do not manufacture a hold. All 103 campaign controls passed, including per-case corruption and fail-closed policy negatives. The independent native graph/read-side fix remains required; this containment does not relax verification.
+
+Resume the captured wave from a fresh official driver/reader pin and archive its existing successes before further collection. Keep workspace builds and teacher execution local, Luna only with no fallback, and preserve all 1748 training goals. The native cold-build watcher path remains under repair (39 focused coordinator/schema controls passed); do not call that quota attribution closed or activate the diagnostics-only Source36 as if it solved cold watcher admission. The broader native-bound goal-meaning review and unrequested report/length/route gate removal proceed in parallel on separate coherent sources.

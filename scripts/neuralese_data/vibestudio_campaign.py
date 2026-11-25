@@ -29,6 +29,10 @@ LUNA = 'openai-codex:gpt-6-luna'
 DEFAULT_TEACHER_TIMEOUT_MS = 3_600_000
 
 
+class CaptureValidationError(ValueError):
+    """One preserved capture cannot be admitted; other captures stay reviewable."""
+
+
 def collection_limits(args, selected_cases):
     """Bound process lifetime separately from archival waves and nested hub slots."""
     concurrency = args.concurrency
@@ -58,7 +62,12 @@ def publish_immutable(path, value):
 
 
 def verified_episode(path, held, training):
-    episode = load_episode(path)
+    try:
+        episode = load_episode(path)
+    except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
+        raise CaptureValidationError(str(error)) from error
+    # Policy, held separation and task identity remain fail-closed for the
+    # campaign. Only the individual artifact parser is isolated above.
     task = episode['task']
     interaction = task.get('interaction')
     if episode['teacher']['model_id'] != LUNA or not interaction:
@@ -105,12 +114,38 @@ def outcomes(capture, names, held, training, cases):
         teacher = {}
         capture_errors = None
         if raw:
-            with gzip.open(raw, 'rt') as stream:
-                packet = json.load(stream)
+            try:
+                with gzip.open(raw, 'rt') as stream:
+                    packet = json.load(stream)
+            except (OSError, ValueError, EOFError) as error:
+                results[name] = {
+                    'status': 'interrupted' if name in interrupted else 'export-rejected',
+                    'raw': str(raw.relative_to(capture)), 'reason': str(error),
+                    'capture_errors': [f'Raw capture decoding: {error}'],
+                    'teacher_started': None, 'teacher_model_sampled': None,
+                    **({'interrupted': True} if name in interrupted else {}),
+                    **({'rejected_manifest': str(manifest.relative_to(capture))} if manifest.is_file() else {}),
+                }
+                continue
             teacher = (((packet.get('execution') or {}).get('diagnostics') or {}).get('natlangTeacher') or {})
             capture_errors = teacher.get('captureErrors')
         if manifest.is_file():
-            episode = verified_episode(manifest, held, training)
+            try:
+                episode = verified_episode(manifest, held, training)
+            except CaptureValidationError as error:
+                results[name] = {
+                    'status': 'interrupted' if name in interrupted else 'export-rejected', 'reason': str(error),
+                    'rejected_manifest': str(manifest.relative_to(capture)),
+                    'capture_errors': [f'Canonical capture validation: {error}'],
+                    'teacher_started': True if teacher.get('calls') else None,
+                    'teacher_model_sampled': True if any(
+                        any(turn.get('kind') == 'generation' and turn.get('reply')
+                            for turn in (call.get('record') or {}).get('model_turns') or [])
+                        for call in teacher.get('calls') or []) else None,
+                    **({'raw': str(raw.relative_to(capture))} if raw else {}),
+                    **({'interrupted': True} if name in interrupted else {}),
+                }
+                continue
             if episode['task_id'] != cases[name]['taskId']:
                 raise ValueError(f'verified capture identifies another task: {manifest}')
             completed = episode['trajectory_ir']['outcome'].get('task_completed') is True
