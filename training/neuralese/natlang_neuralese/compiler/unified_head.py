@@ -9,18 +9,15 @@ one 256-dim semantic slot interface. Supports:
 from __future__ import annotations
 
 from dataclasses import dataclass
-import sys
-from pathlib import Path
 import torch
 from torch import nn
 import torch.nn.functional as F
 
-_HKB_SRC = Path("/home/werg/hindsight-kb/src")
-if _HKB_SRC.exists() and str(_HKB_SRC) not in sys.path:
-    sys.path.insert(0, str(_HKB_SRC))
+from .hkb_dependency import require as _require_hkb
 
-from hindsight_kb.models.readers import AdapterReader, MemoryKVBank
-from hindsight_kb.retrieval import BlockMemoryRecords
+_require_hkb()
+from hindsight_kb.models.readers import AdapterReader, MemoryKVBank  # noqa: E402
+from hindsight_kb.retrieval import BlockMemoryRecords  # noqa: E402
 
 
 @dataclass

@@ -13,10 +13,13 @@ import json
 from pathlib import Path
 import sys
 
-ROOT = Path("/home/werg/natlang")
-HKB_ROOT = Path("/home/werg/hindsight-kb")
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "training/neuralese") not in sys.path:
     sys.path.insert(0, str(ROOT / "training/neuralese"))
+
+from natlang_neuralese.compiler.hkb_dependency import checkout as _hkb_checkout  # noqa: E402
+
+HKB_ROOT = _hkb_checkout()
 
 from natlang_neuralese.compiler.train_compiler import CompilerTrainConfig
 from natlang_neuralese.model.lfm3_port import DEFAULT_BASE, DEFAULT_REVISION
@@ -25,7 +28,7 @@ from natlang_neuralese.train.step_verifier import VerifierTrainConfig
 
 def build_prep_bundle(out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
-    seed_dir = Path.home() / "hindsight-kb-recovery/2026-10-21"
+    seed_dir = HKB_ROOT.parent / "hindsight-kb-recovery/2026-10-21"
     seed_ckpt = seed_dir / "model-checkpoint-000000002.tar.zst"
     lfm3_cache = (
         Path.home()

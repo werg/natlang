@@ -8,11 +8,17 @@ from pathlib import Path
 import pytest
 import torch
 
-ROOT = Path("/home/werg/natlang")
-HKB_SRC = Path("/home/werg/hindsight-kb/src")
-for p in (ROOT / "training/neuralese", ROOT / "scripts/neuralese_data", HKB_SRC):
+ROOT = Path(__file__).resolve().parents[2]
+for p in (ROOT / "training/neuralese", ROOT / "scripts/neuralese_data"):
     if p.exists() and str(p) not in sys.path:
         sys.path.insert(0, str(p))
+
+from natlang_neuralese.compiler import hkb_dependency
+
+try:
+    hkb_dependency.require()
+except ModuleNotFoundError as error:  # the declared dependency is absent on this machine
+    pytest.skip(str(error), allow_module_level=True)
 
 from hindsight_kb.config import ModelConfig
 from hindsight_kb.integrations.native_lfm import NativeLFMDecoder
@@ -381,7 +387,7 @@ def test_call_level_engine_extraction_and_held_exclusion(tmp_path: Path):
 def test_hkb_bridge_warmstart_extractor_and_prep_bundle(tmp_path: Path):
     from natlang_neuralese.compiler.hkb_bridge import ExperienceEntry, ScopedExperienceKB
     import run_compiler_prep
-    sys.path.insert(0, str(Path("/home/werg/hindsight-kb/scripts")))
+    sys.path.insert(0, str(hkb_dependency.checkout() / "scripts"))
     import extract_lfm3_warmstart
 
     kb = ScopedExperienceKB(key_dim=4, value_dim=8, excluded_held_ids={"held-x"})

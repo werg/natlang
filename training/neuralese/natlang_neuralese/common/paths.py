@@ -21,6 +21,8 @@ DEFAULTS: dict[str, str] = {
     "data_hdd": "/mnt/external",
     "archive": "/mnt/external/sdkb-archive",
     "llama_cpp": "/home/werg/llama.cpp-neuralese",
+    # the hindsight-kb checkout (its own repository) the natlang compiler imports (`compiler/hkb_dependency.py`)
+    "hindsight_kb": "/home/werg/hindsight-kb",
 }
 
 PROFILE_ENV = "NATLANG_MACHINE_TOML"
