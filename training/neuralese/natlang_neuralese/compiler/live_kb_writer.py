@@ -152,7 +152,11 @@ class PplxWarmstartWriter(nn.Module):
         key_dim: int = 128,
         device: str = 'cuda',
         dtype: torch.dtype = torch.bfloat16,
+        use_hf_kernels: bool | None = None,
     ) -> 'PplxWarmstartWriter':
+        """``use_hf_kernels`` (default: on for CUDA): hindsight-kb's differentiable FLA / causal-conv / Liger kernels for
+        the Qwen3.5 backbone, the configuration 000000002 was trained with (configs/joint-colab.json); without them
+        transformers runs its reference PyTorch linear attention. ``False`` opts out."""
         if warmstart_dir is not None:
             root = Path(warmstart_dir)
             writer_path = root / 'writer_H.pt'
@@ -167,11 +171,15 @@ class PplxWarmstartWriter(nn.Module):
         hkb_dependency.require()
         from hindsight_kb.integrations.pplx import PPLXBlockEncoder
 
+        if use_hf_kernels is None:
+            use_hf_kernels = str(device).startswith('cuda')
         writer_enc = PPLXBlockEncoder.from_pretrained(
             revision=revision, model_id=model_id, writer=True, value_dim=value_dim, device=device, dtype=dtype,
+            use_hf_kernels=use_hf_kernels,
         )
         query_enc = PPLXBlockEncoder.from_pretrained(
             revision=revision, model_id=model_id, writer=False, value_dim=value_dim, device=device, dtype=dtype,
+            use_hf_kernels=use_hf_kernels,
         )
         writer_enc.checkpoint_views = True
         query_enc.checkpoint_views = True

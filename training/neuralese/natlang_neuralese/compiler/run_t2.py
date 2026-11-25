@@ -525,6 +525,7 @@ def train(args):
                 key_dim=config.key_dim,
                 device=args.device,
                 dtype=getattr(torch, args.dtype),
+                use_hf_kernels=getattr(args, 'pplx_hf_kernels', None),
             )
         else:
             # owner 2026-11-26: Stage C never trains on the embedding stand-in; it exists for CPU unit tests
@@ -751,6 +752,8 @@ def main(argv=None):
                    help='pplx: hindsight-kb PPLXBlockEncoder H/Q warm-started from 000000002 (Stage C); embed: CPU unit-test stand-in')
     t.add_argument('--warmstart-dir', type=Path, default=None, help='directory containing writer_H.pt and query_Q.pt from extract_lfm3_warmstart.py')
     t.add_argument('--pplx-revision', default=None, help='pinned HF commit SHA for perplexity-ai/pplx-embed-v2-late-0.6b')
+    t.add_argument('--pplx-hf-kernels', action=argparse.BooleanOptionalAction, default=None,
+                   help="the pplx backbone's FLA/causal-conv/Liger kernels (default: on for CUDA, as 000000002 trained)")
     t.add_argument('--kb-pos', type=int, default=2)
     t.add_argument('--kb-neg', type=int, default=2)
     t.add_argument('--null-kb-prob', type=float, default=0.2, help='rows that see distractors only (plan: 20%%)')
