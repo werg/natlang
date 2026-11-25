@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import sys
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -248,10 +249,12 @@ def test_open_goal_binds_the_full_recorded_child_inventory(tmp_path):
     custody = {'schema': 'natlang.call-graph-chronology/1', 'task_id': 'internal-task',
                'sha256': '1' * 64, 'child_call_ids': ['missing-crisp-attempt']}
     detail['record']['graph_custody'] = custody
+    custody['sha256'] = live.observed_graph_custody_digest(detail['record'], custody['child_call_ids'])
     rewrite(tmp_path, spec, detail, verification)
     with pytest.raises(ValueError, match='recorded child inventory'):
         live.load_episode(path)
     custody['child_call_ids'] = []
+    custody['sha256'] = live.observed_graph_custody_digest(detail['record'], [])
     rewrite(tmp_path, spec, detail, verification)
     assert live.load_episode(path)['trajectory_ir']['outcome']['invocation_ledger'][0]['graph_custody'] == custody
 
@@ -1248,8 +1251,10 @@ def test_observed_child_inventory_preserves_fresh_task_causal_children():
                     'graph_custody': {'schema': 'natlang.call-graph-chronology/1', 'task_id': 'child',
                                       'sha256': '2' * 64, 'child_call_ids': []}},
     }
+    for record in records.values():
+        record['graph_custody']['sha256'] = live.observed_graph_custody_digest(record, record['graph_custody']['child_call_ids'])
     live.verify_observed_child_inventory(records)
-    for mutation in ['own-task', 'missing', 'foreign-parent', 'duplicate-declared']:
+    for mutation in ['own-task', 'missing', 'foreign-parent', 'duplicate-declared', 'corrupt-digest']:
         changed = copy.deepcopy(records)
         if mutation == 'own-task':
             changed['child/1']['task_id'] = 'unattested-task'
@@ -1257,7 +1262,27 @@ def test_observed_child_inventory_preserves_fresh_task_causal_children():
             del changed['child/1']
         elif mutation == 'foreign-parent':
             changed['child/1']['parent_call_id'] = 'foreign/1'
-        else:
+        elif mutation == 'duplicate-declared':
             changed['parent/1']['graph_custody']['child_call_ids'].append('child/1')
+        else:
+            changed['child/1']['graph_custody']['sha256'] = '0' * 64
         with pytest.raises(ValueError, match='recorded child inventory'):
             live.verify_observed_child_inventory(changed)
+
+
+def test_graph_custody_digest_matches_actual_node_protocol_for_unicode_and_effect_refs():
+    records = [
+        {'task_id': 'parent', 'call_id': 'parent/1', 'parent_call_id': None, 'effects': []},
+        {'task_id': 'tâche🎶', 'call_id': 'child/1', 'parent_call_id': 'parent/1', 'effects': [
+            {'order': 0, 'graph_order': 2, 'service': 'native', 'method': 'read', 'async': True, 'by': 'crisp',
+             'args': {'complete': True, 'hash': 'a' * 64, 'bytes': 17},
+             'result': {'complete': False, 'reason': 'nonportable', 'preview': '\ud800'}, 'error': 'évidence\nretained'}]},
+        {'task_id': 'task', 'call_id': 'task/1', 'parent_call_id': None},
+    ]
+    script = """import {graphCustodyDigest} from './dist/calls/graph-custody.js';
+let text='';for await(const chunk of process.stdin)text+=chunk;
+console.log(JSON.stringify(JSON.parse(text).map(r=>graphCustodyDigest(r.task_id,r.call_id,r.parent_call_id,['nested/1'],r.effects))));"""
+    expected = json.loads(subprocess.run(['node', '--input-type=module', '-e', script],
+        input=json.dumps(records), text=True, capture_output=True, check=True,
+        cwd=Path(__file__).resolve().parents[2] / 'ts-host').stdout)
+    assert [live.observed_graph_custody_digest(record, ['nested/1']) for record in records] == expected
