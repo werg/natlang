@@ -1,8 +1,8 @@
 [Unit]
-Description=Re-list the free LLM APIs' models daily (new promotional teacher candidates)
+Description=Free-teacher run every 6 h: list, probe, qualify and admit free LLM API teachers
 
 [Timer]
-OnCalendar=*-*-* 07:30:00
+OnCalendar=*-*-* 01,07,13,19:30:00
 Persistent=true
 AccuracySec=10min
 Unit=natlang-teacher-free-models.service

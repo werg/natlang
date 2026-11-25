@@ -127,3 +127,22 @@ def test_slots_follow_provider_limits():
     assert t.slots_for('ai-studio', 150) == 1
     assert t.slots_for('openrouter', 120) == 1 and t.slots_for('openrouter', 120, group_slots_used=1) == 0
     assert t.slots_for('nvidia-nim', 600) == 3 and t.slots_for('nvidia-nim', 600, group_slots_used=2) == 1
+
+
+def test_a_free_tier_of_a_few_requests_a_day_is_rejected_and_its_qualification_stopped(tmp_path, monkeypatch):
+    monkeypatch.setattr(t, 'env_key', lambda name, file: 'k')
+    out = tmp_path / 'free'
+    t.add('ai-studio', 'gemini-3.6-flash', out=out, now='T')
+    work = tmp_path / 'qual'
+    qual_manifest(work, ['task_success'])
+    (work / 'episodes' / 't000001').mkdir(parents=True)
+    (work / 'episodes' / 't000001' / 's7.log').write_text(
+        'generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash, description: Generate content requests '
+        'per day limit exceeded on Free Tier.\n generate_content_free_tier_requests, limit: 5, model: gemini-3.6-flash, '
+        'description: Generate content requests per minute limit exceeded on Free Tier.')
+    assert t.daily_request_limit(work) == 20
+    t.update_candidates(out, lambda row: row.update(status='qualifying', work=str(work), unit='tq-x'))
+    stopped = []
+    decided = t.adopt_all(out, tmp_path / 'teachers.json', active=lambda unit: True, stop=stopped.append)
+    assert stopped == ['tq-x'] and decided[0]['status'] == 'rejected' and '20 requests/day' in decided[0]['note']
+    assert not (tmp_path / 'teachers.json').exists()

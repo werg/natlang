@@ -600,6 +600,29 @@ def qualification_result(work):
             'deferred': deferred, 'yield': round(successes / max(verdicts, 1), 3)}
 
 
+# a free tier that serves fewer requests a day than MIN_DAILY_EPISODES episodes cannot pay for its qualification (AI
+# Studio's Gemini 3.x Flash: 20 requests/day per model on 2026-11-25, half an episode)
+MIN_DAILY_EPISODES = 4
+DAILY_LIMIT = re.compile(r'limit: (\d+), model: [^,]+, description: [^.]*per day')
+
+
+def daily_request_limit(work):
+    """The smallest requests-per-day limit a provider named in a qualification's episode logs (AI Studio's free-tier
+    429), or None."""
+    limits = []   # the episode logs, and a running episode's per-call evidence (the 429 bodies)
+    for path in [*Path(work).glob('episodes/*/*.log'), *Path(work).glob('episodes/*/row-*/sample-*/jobs/*evidence*.jsonl')]:
+        try:
+            limits += [int(n) for n in DAILY_LIMIT.findall(path.read_text(errors='replace'))]
+        except OSError:
+            continue
+    return min(limits) if limits else None
+
+
+def stop_unit(unit):
+    for name in (unit + '-waiter', unit):
+        subprocess.run(['systemctl', '--user', 'stop', f'{name}.service'], capture_output=True)
+
+
 def verdict(result):
     """(qualified, reason) of a finished qualification."""
     if result['verdicts'] < MIN_VERDICTS:
@@ -629,7 +652,7 @@ def expected_successes_per_hour(provider, result, slots):
     """slots x episodes per slot-hour x qualification yield, capped by the daily request limit (an upper bound: the
     campaign's queue is harder than the qualification set)."""
     per_hour = slots * 3600 / max(result['mean_s'], 1)
-    rpd = PROVIDER_SPECS[provider].get('rpd')
+    rpd = result.get('requests_per_day') or PROVIDER_SPECS[provider].get('rpd')
     if rpd:
         per_hour = min(per_hour, rpd / REQUESTS_PER_EPISODE / 24)
     return round(per_hour * result['yield'], 1)
@@ -647,7 +670,7 @@ def group_slots(teachers):
     return used
 
 
-def adopt_all(out=OUT, teachers_file=TEACHERS_FILE, active=unit_active, now=None):
+def adopt_all(out=OUT, teachers_file=TEACHERS_FILE, active=unit_active, now=None, stop=stop_unit):
     """Decide every finished qualification; write each qualified model into teachers.json with slots sized to its
     provider's limits and its quota group's remaining slots (a full group: ``qualified``, not admitted)."""
     teachers_file = Path(teachers_file)
@@ -658,9 +681,16 @@ def adopt_all(out=OUT, teachers_file=TEACHERS_FILE, active=unit_active, now=None
         if row.get('status') != 'qualifying':
             return
         result = qualification_result(row['work'])
-        if result['verdicts'] < QUAL_TASKS and active(row['unit']):
+        rpd = daily_request_limit(row['work'])
+        if rpd is not None:
+            result['requests_per_day'] = rpd
+        if rpd is not None and rpd < MIN_DAILY_EPISODES * REQUESTS_PER_EPISODE:
+            stop(row['unit'])
+            ok, reason = False, f'free tier {rpd} requests/day (~{rpd / REQUESTS_PER_EPISODE:.1f} episodes a day)'
+        elif result['verdicts'] < QUAL_TASKS and active(row['unit']):
             return
-        ok, reason = verdict(result)
+        else:
+            ok, reason = verdict(result)
         row['qualification'] = result
         if not ok:
             row['status'], row['note'] = 'rejected', reason

@@ -13742,3 +13742,77 @@ once the engine change is on main.
 
 Also: `test_async_driver_retention_pass_and_opt_out` failed when run after another driver test whose background
 retention pass still held the class-wide lock. The test now waits for the lock.
+
+## 2026-11-25 16:30 Free teacher providers, round 2: the free check qualifies and admits on its own; a free-tier quota window no longer retires a teacher (teacher-providers agent)
+
+Owner (2026-11-25): "are we running with open code and other free API providers? It's always worth checking for free
+API models."
+
+**Built (3d6825385 and follow-up).**
+- `scripts/teacher_free_models.py daily` (timer `natlang-teacher-free-models`, now every 6 h at 01/07/13/19:30)
+  runs four steps:
+  1. **List** the providers in `PROVIDER_SPECS`.
+  2. **Probe** each new candidate after a name screen. The screen keeps chat models of at least 30B when the name gives
+     a size, and only free tiers whose TPM holds one request. The probe sends one tool-call request.
+  3. **Adopt** finished qualifications into `ops/ei/teachers.json`. A model qualifies with yield >= 25% over at least
+     12 verdicts, at most 900 s per episode and at most half its attempts deferred. Slots are sized from the
+     provider's RPM and its quota group's cap: NIM 3 for the account, OpenRouter free 1 for its 1,000 requests a day,
+     AI Studio 1 per model. A full group leaves the model `qualified`, and the dashboard lists it as a swap decision.
+     A model that is already a teacher through another gateway is not added twice, which covers the Kilo/OpenRouter
+     overlap. A free tier that names a daily limit under 4 episodes (152 requests) stops its qualification
+     immediately and is rejected.
+  4. **Qualify** probed candidates. Each runs `teacher_gen` with one slot on the 20-task set
+     (`ops/ei/teacher-qual-20261124/qual-tasks.jsonl`), at the campaign's pin, as low-priority ledger units `tq-*`
+     (1.5 GB), in `ops/ei/teacher-qual/<provider>--<model>`. At most 6 run at once, one per quota group.
+
+  Other commands: `add PROVIDER MODEL` enqueues a model that was in a baseline listing, and `signups` prints the
+  owner's steps.
+- `teacher_gen`:
+  - AI Studio's free-tier 429 uses OpenAI's spent-account text ("You exceeded your current quota"). When it carries a
+    nonzero free-tier limit, it is now a temporary limit (`provider_limit`: cooldown, no verdict) instead of a refusal
+    that retires the teacher for the whole launch. Gemini 3.5 Flash-Lite was retired that way in r0011's 08:02 launch;
+    the measured limits are 15 RPM and 500 RPD. "limit: 0" still retires the teacher.
+  - An `api_key_env` that the launch script did not source is read from `~/.config/natlang/*.env`
+    (`config_env_key`).
+  - Both reach production at the driver's next pin. Until then `teacher_spec` gives every provider whose key file
+    `TEACHER_ENV_FILES` does not source an `api_key_command` that reads the file; this works at every pin.
+
+**Providers checked today (keys from `~/.config/natlang`).**
+
+| Provider | Result |
+|---|---|
+| OpenCode Zen | Our key lists 11 free models (`deepseek-v4.1-flash-free`, `big-pickle`, `mimo-v2.6-flash-free`, `beam-free`, `nemotron-3.5-super-vl-free`, ...). Every direct request answers 429 `FreeUsageLimitError` "Free models work in OpenCode": they are free only through the official client (plans/OPENCODE_GENERATION.md; the client is never spoofed). All 11 rejected. |
+| AI Studio Gemini 3.5 Flash, 3.6 Flash, 3 Flash preview | Answer tool calls, but the free tier allows **20 requests/day and 5 RPM per model** (about half an episode a day). Rejected after 1 verdict each. |
+| AI Studio Gemini 3.7 Flash, 3.8 Flash | 503 "high demand"; qualifications running (presumably the same 20/day). |
+| AI Studio Gemma 4 31B | Probed ok; qualification running (the 26B ran 2/14 at 1,446 s per episode). |
+| AI Studio Gemini 3.1 Flash-Lite, 4 Hydrogen | 503 today; probed again every 6 h. 3.1 Flash-Lite would be a second independent ~500 RPD quota. |
+| AI Studio 3.1 Pro, 4.x, Omni | limit 0 on the free tier. Rejected. |
+| Z.ai GLM-5.3 Flash/FlashX | 1113 "Insufficient balance". Rejected. |
+| Groq | gpt-oss-120b and Qwen 3.8 27B, still 8k TPM: below one request. Screened out. |
+| LLM7 | Now needs a key; free tier is MiMo-V2.6-Pro plus small models (needs-key). |
+| Mistral | Our key: 401. Mistral's Free mode has no API access. |
+| Cerebras | One-time $5 trial that needs a verified payment method (gpt-oss-120b 5 RPM, 30k TPM, 1M TPD). No permanent free tier. |
+| SambaNova, Chutes, Hugging Face (free users) | No free API tier (their pricing pages). Public listings are watched for zero-priced models (0 today). |
+| GitHub Models | Retired 2026-07-30. Dropped from the check. |
+| Cloudflare Workers AI | Confirmed free: 10,000 neurons/day, about 2-13 episodes a day (gpt-oss-120b, GLM-4.7 Flash, Kimi K2.5). Needs a signup. |
+| ModelScope | Reported: 2,000 calls/day, 500 per model, about 13 episodes/day per model (DeepSeek V4, GLM-5.x, Qwen3.5). Needs a signup (unconfirmed). |
+| Kilo | A free account lifts the keyless allowance (Beam, Nemotron, ERNIE, GLM; account limits unpublished). |
+| Others (Together, Fireworks, DeepInfra, Nebius, Novita, SiliconFlow, OVH, Vercel, Moonshot, Alibaba intl) | No usable free API for 100k-token episodes (research agent, sources in its report). |
+
+**Added to `teachers.json` today:** nothing new. No model with our keys passed: the strong new free models are either
+client-only (OpenCode) or capped at 20 requests/day (AI Studio Flash). The running qualifications (Gemma 4 31B,
+Gemini 3.7/3.8 Flash) and the 6-hourly probes of 3.1 Flash-Lite and Hydrogen are admitted automatically if they
+qualify.
+
+**Free-teacher supply in production** (r0010/r0011): Nemotron 3.5 Super about 3-6 successes/h, Nemotron 3 Ultra
+about 3-12/h, ERNIE (OpenRouter free) at most about 26 episodes/day, Gemini 3.5 Flash-Lite about 13 episodes/day
+(500 RPD). Luna and Sol carry about 140-600 successes/h.
+
+**Signups that would add the most (owner):**
+1. ModelScope token: about 13 episodes/day per model across several strong open models.
+2. Kilo account: unknown, possibly tens a day.
+3. LLM7 token: MiMo-V2.6-Pro.
+4. Cloudflare account and token: 2-13 a day.
+
+`teacher_free_models.py signups` prints the exact steps. Once a key file exists, the next 6-hourly run lists the
+provider, probes it, qualifies its models and admits the ones that pass.
