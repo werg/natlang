@@ -730,6 +730,11 @@ def observed_graph(details, ancestry, scopes, exclusions):
 
 
 def verify_observed_child_inventory(records):
+    """Bind causal edges, including fresh tasks, to each call's own recorded inventory.
+
+    Task identity scopes execution authority and effect ordering, not causal parentage.
+    Call artifacts and the independent capture scope authenticate owner/run membership.
+    """
     if not any(record.get('graph_custody') is not None for record in records.values()):
         return
     children = defaultdict(set)
@@ -742,8 +747,7 @@ def verify_observed_child_inventory(records):
                 custody.get('schema') != 'natlang.call-graph-chronology/1' or
                 not record.get('task_id') or custody.get('task_id') != record['task_id'] or
                 not isinstance(custody.get('sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', custody['sha256']) or
-                len(declared) != len(children[call_id]) or set(declared) != children[call_id] or
-                any(records[child].get('task_id') != record['task_id'] for child in children[call_id])):
+                len(declared) != len(children[call_id]) or set(declared) != children[call_id]):
             raise ValueError('observed workspace call graph differs from recorded child inventory')
 
 

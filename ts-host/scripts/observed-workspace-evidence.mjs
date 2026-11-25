@@ -194,8 +194,9 @@ export function verifyObservedCallTree(records, root) {
     const ids = children.get(id) ?? [];
     if (!call || seen.has(id) || (id === root && call.parent_call_id !== null))
       throw new Error('observed call graph has invalid parent links');
-    if (hasCustody && (!graphCustodyMatches(call, ids) ||
-        ids.some(child => byId.get(child).task_id !== call.task_id)))
+    // A fresh task may be a recorded causal child without inheriting execution authority.
+    // graphCustodyMatches binds each call to its own task and exact child inventory.
+    if (hasCustody && !graphCustodyMatches(call, ids))
       throw new Error('observed call graph differs from recorded child inventory');
     seen.add(id);
     pending.push(...ids);

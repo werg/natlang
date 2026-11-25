@@ -1237,3 +1237,27 @@ def test_artifact_observer_records_actual_bound_reads_and_resets_after_error(tmp
     with observed_artifacts() as later:
         pass
     assert later == set() and failed == {str(path.resolve())}
+
+
+def test_observed_child_inventory_preserves_fresh_task_causal_children():
+    records = {
+        'parent/1': {'call_id': 'parent/1', 'parent_call_id': None, 'task_id': 'parent',
+                     'graph_custody': {'schema': 'natlang.call-graph-chronology/1', 'task_id': 'parent',
+                                       'sha256': '1' * 64, 'child_call_ids': ['child/1']}},
+        'child/1': {'call_id': 'child/1', 'parent_call_id': 'parent/1', 'task_id': 'child',
+                    'graph_custody': {'schema': 'natlang.call-graph-chronology/1', 'task_id': 'child',
+                                      'sha256': '2' * 64, 'child_call_ids': []}},
+    }
+    live.verify_observed_child_inventory(records)
+    for mutation in ['own-task', 'missing', 'foreign-parent', 'duplicate-declared']:
+        changed = copy.deepcopy(records)
+        if mutation == 'own-task':
+            changed['child/1']['task_id'] = 'unattested-task'
+        elif mutation == 'missing':
+            del changed['child/1']
+        elif mutation == 'foreign-parent':
+            changed['child/1']['parent_call_id'] = 'foreign/1'
+        else:
+            changed['parent/1']['graph_custody']['child_call_ids'].append('child/1')
+        with pytest.raises(ValueError, match='recorded child inventory'):
+            live.verify_observed_child_inventory(changed)
