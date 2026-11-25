@@ -250,22 +250,26 @@ def test_admit_needs_a_review_of_this_version_then_stages_by_split(tmp_path, mon
     (sub / 'idea.json').write_text(json.dumps(card('withdrawal-ruling', 'Rule on notes.', ['withdraws', 'supersedes', 'same_item'])))
     root = tmp_path / 'root'
     kwargs = dict(review_path=None, idea_path=None, root=root, runtime=tmp_path, skip_qualify=True)
-    assert invented.admit(sub, **kwargs)['stage'] == 'review'
     review = {'schema': invented.REVIEW_SCHEMA, 'reviewer': 'claude-opus-5-5', 'digest': invented.digest(sub),
               'requirements': {r: {'met': True, 'findings': []} for r in invented.JUDGED}}
     review['requirements']['S4'] = {'met': False, 'findings': ['note text reaches withdraws as plain string']}
+    review['wrong_expected'] = ['n2: the note withdraws n1, so the expected "stands" is wrong']
     (sub / 'review.json').write_text(json.dumps(review))
     result = invented.admit(sub, **kwargs)
-    assert not result['admitted'] and 'S4' in result['problems'][0]
-    review['requirements']['S4'] = {'met': True, 'findings': []}
+    assert not result['admitted'] and 'wrong expected' in result['problems'][0], 'a wrong expected answer blocks'
+    monkeypatch.setenv('NATLANG_INVENTED_STRICT_REVIEW', '1')
+    del review['wrong_expected']
+    (sub / 'review.json').write_text(json.dumps(review))
+    assert 'S4' in invented.admit(sub, **kwargs)['problems'][0], 'strict mode: an unmet requirement blocks'
+    monkeypatch.delenv('NATLANG_INVENTED_STRICT_REVIEW')
+    review['wrong_expected'] = ['stale finding']
     review['digest'] = 'stale'
     (sub / 'review.json').write_text(json.dumps(review))
-    assert 'digest' in invented.admit(sub, **kwargs)['problems'][0]
-    review['digest'] = invented.digest(sub)
-    (sub / 'review.json').write_text(json.dumps(review))
+    assert invented.review_problems(review, sub) == [], 'a review of another version neither blocks nor stands'
+    (sub / 'review.json').unlink()
     assert invented.static_problems(sub, data, files, invented.metrics(data, files)) == []   # review/idea are allowed
     result = invented.admit(sub, **kwargs)
-    assert result['admitted'] and result['split'] == invented.split_of(data)
+    assert result['admitted'] and result['split'] == invented.split_of(data) and result['reviewed'] is False, 'qualification alone admits'
     assert result['cases'] == 2 and result['stages'] == 4
     assert (root / 'admitted' / 'withdrawal-ruling' / 'stages.jsonl').exists()
     ledger = invented.rows_of(root / 'accepted.jsonl')

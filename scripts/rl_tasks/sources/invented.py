@@ -996,17 +996,22 @@ def digest(submission: Path) -> str:
 
 
 def review_problems(review: dict, submission: Path) -> list[str]:
+    """What in a review keeps a qualified submission out (owner 2026-11-25: volume over per-program perfection;
+    reviews sample quality and feed the brief and skill). Only an expected answer the reviewer shows is wrong
+    (``wrong_expected``: item, why) blocks, and only a review of this version; judged requirements are recorded,
+    not gates. ``NATLANG_INVENTED_STRICT_REVIEW=1`` restores the all-requirements-met gate."""
     if review.get('schema') != REVIEW_SCHEMA:
         return [f'review: schema must be {REVIEW_SCHEMA}']
-    problems = []
     if review.get('digest') != digest(submission):
-        problems.append('review: it names another version of the submission (digest); review the current one')
-    if not review.get('reviewer'):
-        problems.append('review: reviewer (model id) is missing')
-    for rid in JUDGED:
-        verdict = (review.get('requirements') or {}).get(rid) or {}
-        if verdict.get('met') is not True:
-            problems.append(f'{rid}: judged unmet: {"; ".join(map(str, verdict.get("findings") or ["no verdict"]))[:400]}')
+        return []   # a review of an older version neither blocks nor stands for this one
+    problems = [f'wrong expected answer: {str(item)[:400]}' for item in review.get('wrong_expected') or []]
+    if os.environ.get('NATLANG_INVENTED_STRICT_REVIEW') == '1':
+        if not review.get('reviewer'):
+            problems.append('review: reviewer (model id) is missing')
+        for rid in JUDGED:
+            verdict = (review.get('requirements') or {}).get(rid) or {}
+            if verdict.get('met') is not True:
+                problems.append(f'{rid}: judged unmet: {"; ".join(map(str, verdict.get("findings") or ["no verdict"]))[:400]}')
     return problems
 
 
@@ -1031,9 +1036,11 @@ def admit(submission: Path, *, review_path: Path | None, idea_path: Path | None,
     if not report.get('ok'):
         return {'admitted': False, 'stage': 'qualify', 'problems': report.get('problems', [])}
     review_path = review_path or submission / 'review.json'
-    if not review_path.exists():
+    # A review is optional: qualification admits; a sampled review blocks only on a wrong expected answer.
+    review = json.loads(review_path.read_text()) if review_path.exists() else None
+    if review is None and os.environ.get('NATLANG_INVENTED_STRICT_REVIEW') == '1':
         return {'admitted': False, 'stage': 'review', 'problems': [f'no review at {review_path} (REVIEW_BRIEF.md)']}
-    problems = review_problems(json.loads(review_path.read_text()), submission)
+    problems = review_problems(review, submission) if review is not None else []
     if problems:
         return {'admitted': False, 'stage': 'review', 'problems': problems}
     data, _ = load(submission)
@@ -1052,9 +1059,11 @@ def admit(submission: Path, *, review_path: Path | None, idea_path: Path | None,
     home = root / 'admitted' / data['slug']
     save_rows(home / 'cases.jsonl', cases)
     save_rows(home / 'stages.jsonl', stages)
-    shutil.copy2(review_path, home / 'review.json')
+    if review is not None:
+        shutil.copy2(review_path, home / 'review.json')
     admission = {'slug': data['slug'], 'split': split, 'submission': str(submission), 'digest': digest(submission),
                  'cases': len(cases), 'stages': len(stages), 'reference_calls': report.get('reference_calls'),
+                 'reviewed': review is not None and review.get('digest') == digest(submission),
                  'at': time.time(), 'published': None}
     (home / 'admission.json').write_text(json.dumps(admission, indent=1) + '\n')
     ledger = root / 'accepted.jsonl'
