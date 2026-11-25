@@ -27,8 +27,12 @@ trained rounds' learner states, chains pickles (mix with trained-units.json, fil
 superseded exports, and the checkpoint of a policy that left the lineage unprotected; teacher campaigns' quiet episodes
 are compacted. The async driver runs the same deletions itself at each publication (``retain``).
 
-Each item is skipped while any process (cwd, exe, fds, maps, command line, environment) or an active or
-timer-triggered unit names it, or a ``.keep-on-nvme`` marker covers it. A move copies (hashing), syncs, re-reads the
+Each item is skipped while any process (cwd, exe, fds, maps, command line, environment) or an active, failed or
+timer-triggered unit names it, or a ``.keep-on-nvme`` marker covers it. A deletion is also skipped while a configured
+consumer names it (``prune_stale_checkouts.configured_consumers``: the current policy pointer, the watchdog roster,
+``ops/consumers.d`` registrations and the config files they list, the data registry, config and script files named in
+unit command lines), so a periodic consumer that is between runs keeps its inputs; ``--no-consumer-configs`` opts out
+(DECISIONS 2026-11-25 "configured consumers"). A move copies (hashing), syncs, re-reads the
 copy from disk and compares every file's size and SHA-256, checks the source did not change and that no process
 holds it, then swaps in the symlink; it never runs the HDD below ``--hdd-floor-gb``. Every action is one JSON line
 (``~/.local/state/natlang/ei-round-tier.jsonl``).
@@ -52,7 +56,8 @@ sys.path[:0] = [str(REPO / 'training' / 'neuralese'), str(REPO)]
 from natlang_neuralese.common.paths import resolve  # noqa: E402
 from natlang_neuralese.rl import episode_files  # noqa: E402
 from natlang_neuralese.train.checkpoint_offload import replace_with_link, verified_copy  # noqa: E402
-from scripts.prune_stale_checkouts import process_references, references, unit_commands  # noqa: E402
+from scripts.prune_stale_checkouts import (configured_consumers, process_references, references,  # noqa: E402
+                                           unit_commands)
 
 GIB = 2**30
 OPS = Path(os.environ.get('NATLANG_OPS_ROOT', Path.home() / 'data' / 'lfm3-rl-dgx-20261029' / 'ops'))
@@ -115,7 +120,8 @@ def _round_sha(r: Path) -> str | None:
 def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[dict]:
     """Retention (DECISIONS 2026-11-25 "EI retention"): what no consumer reads once a round is trained or a collection
     is closed is deleted, on the NVMe or through an earlier move's link on the HDD. Every action is a 'delete'; an
-    action's 'guard' paths must be unreferenced too.
+    action's 'guard' paths must be unreferenced by processes and units too, and its 'alias' paths (the same item
+    through the driver's link) by configured consumers.
 
     - Collections of every policy but the lineage head: ``actor/sglang-hf`` (``serve_native_checkpoint`` re-exports it
       from the checkpoint when the policy is served again) and ``actor/blocks`` (an episode imports only states its own
@@ -151,6 +157,7 @@ def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[di
                 path = base / 'actor' / name
                 if path.is_dir() and not path.is_symlink():
                     actions.append({'op': 'delete', 'path': str(path), 'guard': [str(d / 'actor'), str(base / 'actor')],
+                                    'alias': [str(d / 'actor' / name)],
                                     'why': f'closed collection of {m.group(2)} (not the lineage head): actor {name}'})
     for r in sorted((p for p in driver.iterdir() if ROUND.match(p.name) and p.is_dir()), key=lambda p: p.name):
         if r.name == active:
@@ -552,6 +559,7 @@ def run(args) -> dict:
     deadline = time.time() + args.max_minutes * 60
     current = current_policy()
     procs, units = process_references(), unit_commands()
+    configured = configured_consumers(units, ops=OPS) if getattr(args, 'consumer_configs', True) else []
     summary = new_summary(args.apply)
     for state_path in sorted(OPS.glob('ei/*/phase-state.json')):
         driver = state_path.parent
@@ -563,7 +571,7 @@ def run(args) -> dict:
             log(event='state unreadable: driver skipped', driver=str(driver), error=repr(error)[:200])
             continue
         actions = plan(driver, state, current, drop=getattr(args, 'drop', True))
-        if not apply_plan(driver, actions, args, procs, units, summary, deadline):
+        if not apply_plan(driver, actions, args, procs, units, summary, deadline, configured):
             break
     return summary
 
@@ -579,21 +587,23 @@ def new_summary(apply: bool) -> dict:
     return {'deleted_bytes': 0, 'moved_bytes': 0, 'actions': 0, 'skipped': 0, 'errors': 0, 'applied': apply}
 
 
-def retain(driver: Path, *, apply: bool = True, ops=('delete', 'compact'), max_minutes: float = 30.) -> dict:
+def retain(driver: Path, *, apply: bool = True, ops=('delete', 'compact'), max_minutes: float = 30.,
+           consumer_configs: bool = True) -> dict:
     """The retention of one driver directory, run by the driver itself (``expert_iteration.py async-drive`` at each
     publication and when a collection closes; ``--no-retention`` opts out): ``plan``'s ``ops`` actions (deletions and
     the teacher compaction by default; the HDD moves stay with the sweep) under the same reference checks."""
     state = json.loads((Path(driver) / 'phase-state.json').read_text())
     summary = new_summary(apply)
     actions = [a for a in plan(Path(driver), state, current_policy()) if a['op'] in ops]
-    apply_plan(Path(driver), actions, SimpleNamespace(apply=apply, hdd_floor_gb=100.), process_references(),
-               unit_commands(), summary, time.time() + max_minutes * 60)
+    procs, units = process_references(), unit_commands()
+    apply_plan(Path(driver), actions, SimpleNamespace(apply=apply, hdd_floor_gb=100.), procs, units, summary,
+               time.time() + max_minutes * 60, configured_consumers(units, ops=OPS) if consumer_configs else [])
     return summary
 
 
-def apply_plan(driver, actions, args, procs, units, summary, deadline) -> bool:
-    """Run ``actions`` of one driver (each skipped while referenced, its guards included, or under a keep marker);
-    False once the time budget ran out."""
+def apply_plan(driver, actions, args, procs, units, summary, deadline, configured=()) -> bool:
+    """Run ``actions`` of one driver (each skipped while referenced, its guards included, or under a keep marker; a
+    deletion also while a ``configured`` consumer file names it or a guard); False once the time budget ran out."""
     for action in actions:
         if time.time() > deadline:
             log(event='time budget reached', driver=str(driver))
@@ -603,6 +613,8 @@ def apply_plan(driver, actions, args, procs, units, summary, deadline) -> bool:
         # command line (--covered-by) without reading their job files, so only open files and working dirs count
         refs = ([r for r in procs if r[1] not in ('cmdline', 'environ')], []) if action['op'] == 'compact' else (procs, units)
         why = [w for p in [str(path), *action.get('guard', ())] for w in references(p, *refs, [])]
+        if action['op'] == 'delete':        # a consumer's config names what it reads (path or its link alias)
+            why += [w for p in [str(path), *action.get('alias', ())] for w in references(p, [], [], list(configured))]
         if why or keep_marker(path, driver):
             summary['skipped'] += 1
             log(event='kept', path=str(path), reason=(why or ['marker .keep-on-nvme'])[:3])
@@ -697,6 +709,9 @@ def main(argv=None):
     parser.add_argument('--hdd-floor-gb', type=float, default=100.0)
     parser.add_argument('--no-drop', dest='drop', action='store_false',
                         help='opt out of the retention deletions and teacher compaction (drop_plan): moves only')
+    parser.add_argument('--no-consumer-configs', dest='consumer_configs', action='store_false',
+                        help='opt out of the configured consumers (ops/consumers.d registrations, data registry, '
+                             'current policy, watchdog, unit config files) as references of a deletion')
     parser.add_argument('--trim', action='append', default=[], metavar='COLLECTION',
                         help='trim only these closed collections (e.g. an earlier cycle\'s, outside any driver state); '
                              'no other action runs')
@@ -704,7 +719,8 @@ def main(argv=None):
                         'deletions and teacher compaction, no moves); a dry run lists the paths unless --apply')
     args = parser.parse_args(argv)
     if args.retain:
-        summary = retain(Path(args.retain), apply=args.apply, max_minutes=args.max_minutes)
+        summary = retain(Path(args.retain), apply=args.apply, max_minutes=args.max_minutes,
+                         consumer_configs=args.consumer_configs)
         log(event='retain summary', driver=args.retain, **summary,
             deleted_gb=round(summary['deleted_bytes'] / GIB, 2),
             compacted_gb=round(summary.get('compacted_bytes', 0) / GIB, 2), root_free_gb=round(shutil.disk_usage('/').free / GIB, 1))

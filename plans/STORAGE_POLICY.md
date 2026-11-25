@@ -112,6 +112,11 @@ from apparent size. Long scans run outside publication/retention locks.
   learner states, chains pickles and superseded exports, and off-lineage unprotected checkpoints (factors stay);
   teacher campaigns' quiet episodes are compacted. The async driver runs the same deletions at each publication and
   collection stop (`expert_iteration.py async-drive`, `--no-retention` opts out).
+  A deletion is skipped while a configured consumer names the item, also when none of its processes runs
+  (`prune_stale_checkouts.configured_consumers`: `ops/current-policy.json`, `ops/watchdog.json`, failed units'
+  command lines, `.json`/`.sh` files named in unit command lines, the data registry, and `ops/consumers.d/*.json`
+  registrations with the config files they list). A periodic consumer whose launcher reads a config file (a keeper)
+  registers that file in `ops/consumers.d/`. `--no-consumer-configs` opts out. Pin pruning uses the same sources.
 - `scripts/recall_to_nvme.py LINK --cold GLOB ...` is the inverse of an archive
   move: an archived directory that is a hot input again comes back onto the NVMe at
   its path (hot files copied and SHA-256 verified, cold paths left on the HDD as

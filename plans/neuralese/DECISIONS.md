@@ -13009,3 +13009,41 @@ Mechanism inventory before recovery: the SST image verifier emits captured origi
 Wave0063 had three review-only rejections despite positive native checks. Read-only source/effect audit established: original worker objectKey and participantId survived detach/rejoin (membership revisions 1→ended2→active3 do not create a replacement); an accurate private diagnostic need not repair a transcript when repair was not requested; exact-room explicit recipient lookup owner:null/maySend:false prohibits a conditional send. Base `3ccb70d7` adds requested query/diagnostic/proposal/conditional-execute/execute interpretation to the shared review rubric while retaining real requested actions/answers. SST `10ce248a` binds derived worker identity facts inside its existing native evidence field and explains native recipient/receipt semantics. All shared synchronous/asynchronous Base consumers inherit guidance; Host's existing exact projection binds nested facts, so no Host schema or permission change is needed. Fifteen actual Base/SST tests passed, including replacement/inactive/missing-worker negatives and real proof-to-review nested binding; scoped lint has no errors.
 
 `reassess_native_review.mjs` inventories/reuses the canonical Host entry+review binders, original source hashes, exact actor service effect bytes (both agent-owned and crisp calls), completed root bytes, all original native checks and rejected review input. It changes no native verdict or return mask. Existing generic bound-review validation, Python recovery and Node materialization remain mandatory; no teacher is rerun. Thirty-four custody tests passed. Genuine independent reviews accepted both Chat originals with corrected source-bound semantics. The owned-task review correctly dropped its unconditional-send objection but still rejected the literal requested measurements: only accepted artifact metadata, no file/numeric contents, were observed. Preserve that rejection. The current fixture exposes receipt/board APIs but no artifact-content reader. Whether a normal caller can resolve the metadata to a backed first-class artifact remains under independent Base/taskRecovery audit; do not infer success or impossibility from reviewer wording, or rewrite the goal.
+
+## 2026-11-25 11:45 Configured consumers: retention and pin pruning honour consumers between their runs (storage agent)
+
+**Breakage.** The 10:18 storage sweep (`ei_round_tier.drop_plan`, e10f6b0b7) deleted
+`aei1/collect/v0000-e15b20a86f1c/actor/sglang-hf` (HDD copy under `/mnt/external/dgx-moved-20261124/`), and the vibe
+student fill failed 6 times (10:30-11:09) at `filled_reasoning.py:809` (`Tokenizer.from_file(export/'tokenizer.json')`).
+The fill is launched by `vibe-student-fill-keeper-67b-20261124` (`semantic-fill-consumer.py keep`, in the campaign
+archive on `/mnt/external`), which relaunches `vibe-student-fill-<ns>` from `semantic-fill-consumer-config.json` every
+60 s with a failure backoff. The reference check saw only processes and active/timer-triggered units; between attempts
+nothing named the export (the keeper's own command line names only its script).
+**Restore.** `natlang_neuralese.export.native_hf` (`export_loaded`, the code `serve_native_checkpoint --hf-export-dir`
+uses) rebuilt the export from `ops/ei/sft-v9/sft/checkpoint.pt` (sha e15b20a86f1c7f3d, manifest
+`natlang.native-hf-export/5`; tokenizer.json identical to `ei-sources/tokenizer`; manifest equal to sft-v9's but for the
+checkpoint fields) into the same HDD path (the driver path's link resolves to it); `sglang-hf.restored.json` replaces
+the removal note. The keeper's backoff was cleared; `vibe-student-fill-1795602986396948170` passed line 809 and
+rescans. The fill reads only `tokenizer.json` and `natlang-export.json` (banned ids) from the export; the Colab actor it
+calls now serves 4dec7ca9c301 (aei1 rebinds it), not e15b as the config's `policy_at_switch` note says.
+**Mechanism (default; `--no-consumer-configs` opts out in `ei_round_tier.py` and `prune_stale_checkouts.py`).**
+`prune_stale_checkouts.configured_consumers` lists files whose text names what a consumer reads while none of its
+processes runs: `ops/current-policy.json`, `ops/watchdog.json`, `ops/consumers.d/*.json` registrations and the config
+files (or globs) their `configs` list, the data registry entries (`training/corpora/*.json`), and `.json`/`.sh` files
+named in unit command lines. `unit_commands` now also counts failed units (a keeper's last attempt). Every retention
+deletion (driver `retain` and sweep) is skipped while one of these names the item or its link alias; pin pruning reads
+the same sources (the fill's pin `natlang-pins/vibestudio-reader-929cda1ad` was exposed the same way).
+`ops/consumers.d/vibe-student-fill.json` registers the keeper's config. Rule: a periodic consumer whose launcher reads
+a config file registers it there.
+**Inventory** (consumers of the dropped kinds, `git grep`): collect `actor/sglang-hf`: `filled_reasoning generate/
+measure --export` (vibe keeper config; aei1's own fill names the head's export, protected), `grpo.py --actor-export`
+(replays: process argv), `check_sglang_release --export` (manual), `expert_iteration` actor.json records (history, not
+read for serving); `actor/blocks`: own collection and grpo learner store (guarded by `--store-dir`); round
+`policy/sglang-hf|gguf`: `publish-round`, `rebind_remote` (head only, kept); `sft/learner-state*`: `--resume`,
+`recap_for_dgx`, `sft_handback`, `rebuild_round` (active/unpublished rounds only, never dropped); `mix/*.pkl`,
+`filled/chains.pkl`, `neuralese-graph-own/chains.pkl`: the round's own build and registry entries (now references);
+`policy/checkpoint.pt`: current-policy pointer, held/Pop actors (process argv), registry. Left out: Pop and Colab
+hosts' own configs (they hold their own exports and receive checkpoints by transfer, nothing on the DGX names them),
+historical ops records (`ops/*-1101.json` etc.: receipts, not consumers; scanning them would keep everything).
+Tests: `tests/test_ei_round_tier.py::test_retain_keeps_what_a_configured_consumer_names_between_its_runs`,
+`tests/test_prune_stale_checkouts.py::test_configured_consumers_and_failed_units_reference`.
