@@ -130,3 +130,122 @@ def refine_site_latents(
         z_best=z_best if accepted else z_ref,
         history=history,
     )
+
+
+def refine_compiled_site(
+    engine,
+    head,
+    *,
+    adapter_id: str,
+    init_block,
+    site_examples: list[dict],
+    out_dir=None,
+    site_id: str = 'site',
+    basis_module=None,
+    z_kb=None,
+    k_kb=None,
+    w_kb=None,
+    kb_valid=None,
+    cfg: LatentTTTConfig = LatentTTTConfig(),
+    query_fraction: float = 0.25,
+    provenance: dict | None = None,
+) -> tuple[LatentTTTResult, dict | None]:
+    """End-to-end Tier-1.5 refinement wired to Mode-P ``CompiledSiteHead`` + ``native_graph_gradient`` + release export.
+
+    Each item in ``site_examples`` is ``{'graph', 'state_id', optional 'group'}`` (calls of one site, all importing
+    ``init_block``'s header state).
+    Freezes ``LFM3``, ``CompiledSiteHead``, and ``LearnedBankBasis``; optimizes ONLY ``z_site`` (4,096 floats) in FP32
+    with proximal L2 pull toward ``z_site^(0)`` and mandatory group-aware held-out query selection.
+    When ``out_dir`` is given, writes the selected ``tune.build`` release (Tier 1.5 if accepted, else Tier 1).
+    """
+    from ..compiler.compiled_site import compile_release, init_block_values, site_loss
+
+    support_rows, query_rows = split_support_and_query(site_examples, query_fraction=query_fraction)
+    was_training = head.training
+    head.eval()
+    try:
+        with torch.no_grad():
+            z0, k0, w0, _ = head.encode(init_block_values(init_block))
+
+        kb_kwargs = dict(z_kb=z_kb, k_kb=k_kb, w_kb=w_kb, kb_valid=kb_valid)
+
+        def _query_loss(z_in) -> float:
+            vals = [
+                site_loss(
+                    engine, head, row, adapter_id=adapter_id, init_block=init_block,
+                    z_slots=z_in, basis_module=basis_module, apply_dropout=False,
+                    **kb_kwargs,
+                )
+                for row in query_rows
+            ]
+            return float(sum(vals) / float(len(vals)))
+
+        # Freeze head/basis grads while optimizing only z_site (4,096 floats) inside active native_graph_gradient scopes
+        saved_req = [(p, p.requires_grad) for p in head.parameters()]
+        if basis_module is not None:
+            saved_req.extend((p, p.requires_grad) for p in basis_module.parameters())
+        for p, _ in saved_req:
+            p.requires_grad_(False)
+        try:
+            z_ref = z0.detach().float().clone()
+            z = z_ref.clone().requires_grad_(True)
+            optimizer = torch.optim.AdamW([z], lr=cfg.lr, weight_decay=0.0)
+            tier1_q = _query_loss(z_ref)
+            best_q, best_step, z_best = tier1_q, 0, z_ref.clone()
+            history: list[dict[str, float]] = [{'step': 0.0, 'query_loss': tier1_q, 'prox_dist': 0.0}]
+            last_support = float('nan')
+            inv_n = 1.0 / float(len(support_rows))
+            for step in range(1, cfg.steps + 1):
+                optimizer.zero_grad(set_to_none=True)
+                sup_vals = [
+                    site_loss(
+                        engine, head, row, adapter_id=adapter_id, init_block=init_block,
+                        z_slots=z, basis_module=basis_module, apply_dropout=False,
+                        backward=True, scale=inv_n, **kb_kwargs,
+                    )
+                    for row in support_rows
+                ]
+                if cfg.prox_lambda > 0.0:
+                    (0.5 * float(cfg.prox_lambda) * (z - z_ref).pow(2).mean()).backward()
+                if cfg.clip_norm > 0:
+                    torch.nn.utils.clip_grad_norm_([z], cfg.clip_norm)
+                optimizer.step()
+                last_support = float(sum(sup_vals) * inv_n)
+                if step % cfg.eval_every == 0 or step == cfg.steps:
+                    q_loss = _query_loss(z.detach())
+                    dist = float((z.detach() - z_ref).norm().item())
+                    history.append({'step': float(step), 'support_loss': last_support, 'query_loss': q_loss, 'prox_dist': dist})
+                    if q_loss < best_q - cfg.min_query_gain:
+                        best_q, best_step, z_best = q_loss, step, z.detach().clone()
+            accepted = best_step > 0 and (tier1_q - best_q) >= cfg.min_query_gain
+            result = LatentTTTResult(
+                accepted=accepted,
+                best_step=best_step if accepted else 0,
+                tier1_query_loss=tier1_q,
+                best_query_loss=best_q if accepted else tier1_q,
+                final_support_loss=last_support,
+                z_best=z_best if accepted else z_ref,
+                history=history,
+            )
+        finally:
+            for p, flag in saved_req:
+                p.requires_grad_(flag)
+
+        release = None
+        if out_dir is not None:
+            release = compile_release(
+                engine, head, adapter_id=adapter_id, init_block=init_block,
+                z_slots=result.z_best, basis_module=basis_module,
+                out=out_dir, site_id=site_id,
+                provenance={
+                    **(provenance or {}),
+                    'tier': '1.5' if result.accepted else '1',
+                    'tier1_query_loss': result.tier1_query_loss,
+                    'best_query_loss': result.best_query_loss,
+                    'best_step': result.best_step,
+                },
+                **kb_kwargs,
+            )
+        return result, release
+    finally:
+        head.train(was_training)

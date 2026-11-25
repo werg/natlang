@@ -35,7 +35,7 @@ class CompilerTrainConfig:
     meta_inner_lr: float = 0.05
     meta_prox_lambda: float = 0.01
     reptile_weight: float = 0.1
-    memory_mode: str = "positioned"    # "positioned" (Mode P) or "window_exempt" (Mode W)
+    memory_mode: str = "window_exempt"  # Mode W (hindsight-kb); Mode P runs in compiled_site.py
 
 
 def gate_floor_for_step(step: int, cfg: CompilerTrainConfig) -> float:
@@ -177,7 +177,7 @@ def evaluate_reader_and_shuffle_ablations(
     z_slots: torch.Tensor,
     k_slots: torch.Tensor,
     weights: torch.Tensor,
-    memory_mode: str = "positioned",
+    memory_mode: str = "window_exempt",
 ) -> dict[str, float]:
     """Mandatory AGENTS.md shuffled-memory + reader-attribution diagnostic on a paired batch.
 
