@@ -326,3 +326,171 @@ def test_actor_block_gc_cuts_at_the_oldest_running_episode(tmp_path, monkeypatch
     del collector.groups[3]
     ei.collect_actor_blocks(collector, store, 600)                     # cutoff: oldest running episode - grace
     assert not before.exists() and during.exists()
+
+
+# ---- a scored group's rollouts.jsonl compacted (DECISIONS 2026-11-26 "rollouts compacted") ---------------------------
+
+def rollouts_group(collection, n=1, age=7200, policy='p' * 64):
+    """A scored, quiet group of ``collection`` with a compressible rollouts.jsonl (two episodes)."""
+    group, s = scored_group(collection / f'tmp{n}', age)
+    target = collection / 'groups' / f'g{n:06d}'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    group.rename(target)
+    turn = {'invocation_id': 'root', 'messages': [{'role': 'user', 'content': 'x' * 3000}], 'tools': [],
+            'sampling': {'prompt': [{'token_ids': list(range(300))}]}}
+    rows = [{'task_id': 't1', 'sample': i, 'policy': {'checkpoint_sha256': policy}, 'outcome': 'task_failure',
+             'reward': {'quality': 0.0}, 'turns': [turn]} for i in range(2)]
+    data = ''.join(json.dumps(r) + '\n' for r in rows).encode()
+    (target / 'rollouts.jsonl').write_bytes(data)
+    (target / 'rewards.jsonl').write_text(json.dumps({'task_id': 't1', 'reward': 0.0}) + '\n')
+    (target / 'versions.json').write_text('[3, 3]\n')
+    (target / 'cases.jsonl').write_text(json.dumps({'id': 't1'}) + '\n')
+    old = time.time() - age
+    for path in [target, *target.rglob('*')]:
+        os.utime(path, (old, old), follow_symlinks=False)
+    return target, data, rows
+
+
+def test_the_retention_pass_compacts_a_quiet_scored_groups_rollouts_and_records_it(tmp_path, monkeypatch):
+    import ei_round_tier as tier
+    collection = tmp_path / 'collect' / 'v0011-401be1c55949'
+    group, data, _ = rollouts_group(collection)
+    recent, _, _ = rollouts_group(collection, 2)
+    os.utime(recent / 'rewards.jsonl')                       # its scoring wrote a moment ago: not quiet
+    recorded = []
+    monkeypatch.setattr(tier, 'record_packed', lambda c, packed: recorded.append((c, packed)))
+    stats = tier.compact_groups(collection)
+    packed = group / 'rollouts.jsonl.zst'
+    assert stats['rollouts_files'] == 1 and stats['freed'] > 0
+    assert not (group / 'rollouts.jsonl').exists() and ef.read_bytes(packed) == data
+    assert (group / ef.ROLLOUTS_MARKER).exists() and (group / tier.GROUP_COMPACTED).exists()
+    assert (recent / 'rollouts.jsonl').exists() and not (recent / ef.ROLLOUTS_MARKER).exists()
+    import hashlib
+    assert recorded == [(collection, [(str(packed), hashlib.sha256(data).hexdigest(), len(data))])]
+    # a later pass skips the done group; once the other one is quiet it follows
+    os.utime(recent / 'rewards.jsonl', (1000, 1000))
+    assert tier.compact_groups(collection)['rollouts_files'] == 1 and ef.group_rollouts(recent).name.endswith('.zst')
+    # a rescore (JOLT+ attempts, an old pin) writes rollouts.jsonl again: the stale .zst and the marker go
+    from natlang_neuralese.rl.task_rollouts import score  # noqa: F401  (the writer calls drop_stale_packed)
+    (group / 'rollouts.jsonl').write_bytes(data + data)
+    ef.drop_stale_packed(group / 'rollouts.jsonl')
+    assert not packed.exists() and not (group / ef.ROLLOUTS_MARKER).exists()
+    assert ef.group_rollouts(group) == group / 'rollouts.jsonl'
+    # opt-outs: NATLANG_ROLLOUTS_COMPACT=0, or a puller without the compacted-rollouts excludes (rollouts=False)
+    other = tmp_path / 'other' / 'v0012-401be1c55949'
+    g3, _, _ = rollouts_group(other, 3)
+    monkeypatch.setenv('NATLANG_ROLLOUTS_COMPACT', '0')
+    assert not tier.compact_groups(other).get('rollouts_files') and (g3 / 'rollouts.jsonl').exists()
+    monkeypatch.delenv('NATLANG_ROLLOUTS_COMPACT')
+    assert not tier.compact_groups(other, rollouts=False).get('rollouts_files') and (g3 / 'rollouts.jsonl').exists()
+    old = tmp_path / 'old' / 'remote_collect.py'
+    old.parent.mkdir()
+    old.write_text('COMPACTED_RESULTS_EXCLUDED = True\n')
+    procs = [('1', 'cmdline', f'python {old} run --work {other} -- python collect')]
+    assert tier.remote_puller_blocks(other, procs, []) is None
+    assert tier.remote_puller_blocks(other, procs, [], 'COMPACTED_ROLLOUTS_EXCLUDED')
+    current = REPO / 'scripts' / 'neuralese_data' / 'remote_collect.py'
+    assert tier.remote_puller_blocks(other, [('1', 'cmdline', f'python {current} run --work {other} ')], [],
+                                     'COMPACTED_ROLLOUTS_EXCLUDED') is None
+
+
+def test_the_registry_records_a_compacted_rollouts_file_with_its_raw_digest(tmp_path, monkeypatch):
+    for name in ('data_nvme', 'data_hdd', 'data_drive', 'repo_runs'):
+        monkeypatch.setenv(f'NATLANG_{name.upper()}', str(tmp_path / name))
+    monkeypatch.setenv('NATLANG_DATA_REGISTRY', str(tmp_path / 'registry'))
+    monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path / 'hash-cache.jsonl'))
+    import ei_round_tier as tier
+    import expert_iteration
+    from natlang_neuralese.common import data_registry as dr
+    collection = tmp_path / 'data_nvme' / 'collect' / 'v0011-401be1c55949'
+    group, data, _ = rollouts_group(collection)
+    (collection / 'collect.json').write_text('{}\n')
+    expert_iteration.record_collection(collection, closed=False)
+    identity = dr.dataset_id(collection, 'grpo-rollouts')
+    assert [f['path'] for f in dr.load(fresh=True).files(identity)].count('groups/g000001/rollouts.jsonl') == 1
+    tier.compact_groups(collection)
+    import hashlib
+    extra = [f for f in dr.load(fresh=True).files(identity) if f.get('compacted_from')]
+    assert extra and extra[0]['path'] == 'groups/g000001/rollouts.jsonl.zst'
+    assert extra[0]['compacted_from'] == {'path': 'groups/g000001/rollouts.jsonl',
+                                          'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
+    assert hashlib.sha256(ef.read_bytes(collection / extra[0]['path'])).hexdigest() == extra[0]['compacted_from']['sha256']
+    assert dr.load(fresh=True).find(group / 'rollouts.jsonl.zst')['id'] == identity     # owned: readers may read it
+    expert_iteration.record_collection(collection, closed=False)                         # the next snapshot names it
+    assert 'groups/g000001/rollouts.jsonl.zst' in [f['path'] for f in dr.load(fresh=True).files(identity)]
+
+
+def test_every_reader_class_reads_a_compacted_group(tmp_path, monkeypatch):
+    import queue
+    import threading
+    import grpo
+    import prompt_cache_map
+    import sft_sources
+    collection = tmp_path / 'collect' / 'v0011-401be1c55949'
+    group, data, rows = rollouts_group(collection)
+    ef.compact_rollouts(group)
+    assert not (group / 'rollouts.jsonl').exists() and ef.group_rollouts(group) == group / 'rollouts.jsonl.zst'
+    # the shared opener: text, bytes and rows from the raw name
+    with ef.open_lines(group / 'rollouts.jsonl') as handle:
+        assert [json.loads(line) for line in handle] == rows
+    with ef.open_lines(group / 'rollouts.jsonl', binary=True) as handle:
+        assert b''.join(handle) == data
+    assert ef.read_rows(group / 'rollouts.jsonl.zst') == rows
+    # existence as the "group scored" marker: a resumed collector reuses it
+    c = grpo.Collector.__new__(grpo.Collector)
+    c.work, c.lock, c.groups, c.outstanding, c.ready = collection, threading.Lock(), {}, 0, queue.Queue()
+    assert c.reuse_scored(3, 2) == (['g000001'], [])
+    # the learner's content reader (load_group) takes its rows through the shared opener
+    read = []
+    real = ef.read_rows
+    monkeypatch.setattr(ef, 'read_rows', lambda path: read.append(real(path)) or read[-1])
+    try:
+        grpo.load_group(SimpleNamespace(groups={1: {'dir': group, 'versions': [3, 3]}}, args=SimpleNamespace(),
+                                        generated=0, episodes=0, states=None), 1, __import__('collections').Counter())
+    except Exception:       # the minimal rows lack the learner's capture fields; what it read is what counts here
+        pass
+    assert read == [rows]
+    monkeypatch.setattr(ef, 'read_rows', real)
+    # the SFT extraction (listing and its race fallback) and the call-level engine's units
+    listed = list(sft_sources.rl_rollout_files(collection, tmp_path / 'no-archive'))
+    assert listed == [('g000001', group / 'rollouts.jsonl.zst', group)]
+    _, _, counts, _ = sft_sources._extract_rl_group('rl', 'g000001', group / 'rollouts.jsonl', group,
+                                                    tmp_path / 'no-archive')
+    assert counts['episodes'] == 2
+    # the prompt cache map's glob
+    assert len(list(prompt_cache_map.collect_calls(collection, 0))) == 2
+    # the step verifier's and twin builder's group walk
+    from natlang_neuralese.rl import held_eval
+    from natlang_neuralese.train import step_verifier
+    monkeypatch.setattr(held_eval, 'training_exclusion_ids', lambda cases, manifest=None: set())
+    funnel = step_verifier.build_t0_sequences([collection], tmp_path / 't0.jsonl.zst', policy_sha256='q' * 64)
+    assert funnel['groups'] == 1 and funnel['rollouts'] == 2 and funnel['other_policy'] == 2
+    # an archived (pruned) group: the compacted file is copied as it is
+    archive = tmp_path / 'archive'
+    monkeypatch.setattr(grpo, 'registry_files', lambda *a: None)
+    stats = __import__('collections').Counter()
+    c.groups[1] = {'dir': group}
+    grpo.prune_group(c, 1, keep=False, archive=archive, stats=stats)
+    assert ef.read_bytes(archive / 'g000001.rollouts.jsonl.zst') == data and stats['rollouts_archived'] == 1
+    assert not (group / 'rollouts.jsonl.zst').exists()
+
+
+def test_the_remote_pull_never_pulls_a_compacted_rollouts_file_again(tmp_path, monkeypatch):
+    import remote_collect as rc
+    vm, work = tmp_path / 'vm', tmp_path / 'W'
+
+    def fake(*args, timeout=3600, check=True):
+        argv = [str(vm) + str(a)[len('vm:'):] if str(a).startswith('vm:') else str(a) for a in args]
+        return subprocess.run(['rsync', '-a', *argv], check=check, capture_output=True, text=True)
+    monkeypatch.setattr(rc, 'rsync', fake)
+    remote = Path(str(vm) + str(work))
+    group, data, _ = rollouts_group(remote)
+    work.mkdir(parents=True)
+    rc.pull('vm', work)
+    local = work / group.relative_to(remote)
+    assert (local / 'rollouts.jsonl').read_bytes() == data
+    ef.compact_rollouts(local)
+    os.utime(group / 'score.json')                  # a changed marker on the VM: the marker pass runs again
+    assert rc.pull('vm', work) >= 1
+    assert not (local / 'rollouts.jsonl').exists() and ef.read_bytes(local / 'rollouts.jsonl') == data
+    assert 'rollouts.jsonl.zst' in rc.PUSH_EXCLUDE and rc.COMPACTED_ROLLOUTS_EXCLUDED

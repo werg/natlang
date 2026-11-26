@@ -241,13 +241,14 @@ def build_t0_sequences(collections, out, *, policy_sha256, max_tokens=32768, max
     with partial.open('wb') as raw, zstandard.ZstdCompressor(level=6).stream_writer(raw) as writer:
         for collection in collections:
             for group in sorted(glob.glob(str(Path(collection) / 'groups' / 'g*'))):
-                rollouts_path, cases_path = Path(group) / 'rollouts.jsonl', Path(group) / 'cases.jsonl'
-                if not rollouts_path.exists() or not cases_path.exists():
-                    continue
+                from ..rl.episode_files import group_rollouts, open_lines
+                rollouts_path, cases_path = group_rollouts(group), Path(group) / 'cases.jsonl'
+                if rollouts_path is None or not cases_path.exists():
+                    continue        # unscored (rollouts raw or compacted: episode_files)
                 funnel['groups'] += 1
                 cases = list(read_jsonl(cases_path))
                 excluded = training_exclusion_ids(cases, held_manifest)
-                with rollouts_path.open(encoding='utf-8') as handle:
+                with open_lines(rollouts_path) as handle:
                     for line in handle:
                         if not line.strip():
                             continue

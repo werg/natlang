@@ -1306,7 +1306,8 @@ class Collector:
             return 0   # a memetic episode's reward is graded against its anchor: no privileged attempts of it
         info['teachers'] = 0
         directory = info['dir']
-        students = [row for row in read_jsonl(directory / 'rollouts.jsonl') if row.get('jolt_role', 'student') == 'student']
+        from natlang_neuralese.rl.episode_files import read_rows
+        students = [row for row in read_rows(directory / 'rollouts.jsonl') if row.get('jolt_role', 'student') == 'student']
         scored = [row for row in students if row.get('reward') is not None and not row.get('unscored')]
         if not scored or sum(row['reward']['quality'] == 1.0 for row in scored) > a.teacher_max_successes:
             return 0
@@ -1340,12 +1341,14 @@ class Collector:
         the learner accepts. A group sampled by a version past the saved state (a policy that is gone) or too stale is
         retired, so a later resume whose own steps reach that version number never takes it for its own.
         Returns (reused, left out)."""
+        from natlang_neuralese.rl import episode_files
         reused, skipped = [], []
         for directory in sorted((self.work / 'groups').glob('g*')):
             if not directory.name[1:].isdigit() or (directory / RETIRED).exists():
                 continue
-            if not all((directory / name).exists() for name in ('rollouts.jsonl', 'versions.json', 'score.json')):
-                continue
+            if episode_files.group_rollouts(directory) is None or not all(
+                    (directory / name).exists() for name in ('versions.json', 'score.json')):
+                continue        # unscored (its rollouts raw or compacted by a retention pass: episode_files)
             try:
                 versions = json.loads((directory / 'versions.json').read_text())
                 task_id = json.loads((directory / 'rewards.jsonl').read_text().splitlines()[0])['task_id']
@@ -1511,13 +1514,13 @@ def think_close_id(collector):
 
 def load_group(collector, group, stats):
     """(task_id, [episode dicts with 'reward', 'rows'], versions) of one scored group."""
-    from natlang_neuralese.common.jsonio import read_jsonl
+    from natlang_neuralese.rl.episode_files import read_rows
     from lower_rollout_turns import decision_reasoning_turns, decision_turns, episode_turns
     from natlang_neuralese.rl.jolt import student_episode
     from natlang_neuralese.rl.rollout_math import budget_stopped_rollout, truncated_rollout
     info = collector.groups[group]
     episodes = []
-    for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
+    for row in read_rows(info['dir'] / 'rollouts.jsonl'):
         role = row.get('jolt_role', 'student')
         if role == 'teacher':   # JOLT+: the guided run's actions under the unguided prompt (rl/jolt.py student_episode)
             leak = teacher_guidance_leak(collector, info, row)
@@ -1678,14 +1681,19 @@ def collect_blocks(store_dir, cutoff):
 def archive_rollouts(directory, archive):
     """``directory/rollouts.jsonl`` (every episode the learner lowered: turns with their exact sampling captures, decision
     receipts with option ids and actor scores) zstd-compressed to ``archive/<group>.rollouts.jsonl.zst`` (temp file renamed).
+    A group whose rollouts a retention pass already compacted (``rollouts.jsonl.zst``) is copied as it is.
     Returns the compressed bytes."""
     import zstandard
-    source = directory / 'rollouts.jsonl'
+    from natlang_neuralese.rl import episode_files
+    source = episode_files.group_rollouts(directory)
     archive.mkdir(parents=True, exist_ok=True)
     target = archive / f'{directory.name}.rollouts.jsonl.zst'
     partial = target.with_suffix('.zst.partial')
-    with source.open('rb') as reader, partial.open('wb') as writer:
-        zstandard.ZstdCompressor(level=6).copy_stream(reader, writer)
+    if source.name.endswith(episode_files.SUFFIX):
+        shutil.copyfile(source, partial)
+    else:
+        with source.open('rb') as reader, partial.open('wb') as writer:
+            zstandard.ZstdCompressor(level=6).copy_stream(reader, writer)
     os.replace(partial, target)
     registry_files(archive, [target])
     return target.stat().st_size
@@ -1755,7 +1763,8 @@ def prune_group(collector, group, keep, archive=None, stats=None):
     (directory / RETIRED).touch()     # handed to the learner: a resume never offers it again (reuse_scored)
     if keep:
         return
-    if archive is not None and (directory / 'rollouts.jsonl').exists():
+    from natlang_neuralese.rl import episode_files
+    if archive is not None and episode_files.group_rollouts(directory) is not None:
         try:
             size = archive_rollouts(directory, archive)
         except Exception as error:

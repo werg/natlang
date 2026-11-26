@@ -301,7 +301,9 @@ def rollout_unit(unit, kinds):
     label, name, path, group_dir, archive_dir = unit
     counts, rows = collections.Counter(), []
     cases = S.group_cases(group_dir)
-    path = Path(path) if Path(path).exists() else Path(archive_dir) / f'{name}.rollouts.jsonl.zst'
+    # a live group compacted (rollouts.jsonl.zst) or archived since the listing
+    path = Path(path) if Path(path).exists() else (
+        S.group_rollouts(group_dir) or Path(archive_dir) / f'{name}.rollouts.jsonl.zst')
     for line in S.zstd_lines(path):
         if not line.strip():
             continue

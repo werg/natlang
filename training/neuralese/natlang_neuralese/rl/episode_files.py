@@ -27,6 +27,13 @@ smaller compacted: 16 GB of aei1's v9 collections on 2026-11-25), and only once 
 the file with ``present`` (``task_rollouts`` scoring, ``collection_health``, ``recorded_policies``; ``jsonio.read_jsonl``
 reads the ``.zst``). ``NATLANG_RESULTS_COMPACT=0`` opts out of this step alone.
 
+``compact_rollouts`` does the same for a scored group's ``rollouts.jsonl`` (``task_rollouts.score``'s emitted
+episodes, the learner's and the SFT extraction's input: 28 GB in one aei1 collection, ~10x smaller compacted;
+DECISIONS 2026-11-26 "rollouts compacted"), once the group is scored and every file of it is quiet. Its readers find
+it with ``group_rollouts`` (the group's rollouts file, raw or compacted, or None: the "group scored" test) and read
+it with ``open_lines`` / ``read_rows``; a rescore that writes ``rollouts.jsonl`` again drops the stale ``.zst``
+(``drop_stale_packed``). ``NATLANG_ROLLOUTS_COMPACT=0`` opts out of this step alone.
+
     python -m natlang_neuralese.rl.episode_files compact DIR [--apply] [--quiet-minutes 30]
 
 compacts every sample under DIR (a collection, a group, a teacher campaign, a held measurement) whose files are all
@@ -36,6 +43,8 @@ from __future__ import annotations
 
 import argparse
 import collections
+import contextlib
+import hashlib
 import json
 import os
 import re
@@ -56,12 +65,21 @@ RESULTS = 'results.jsonl'
 RESULTS_ENV = 'NATLANG_RESULTS_COMPACT'
 
 
+ROLLOUTS = 'rollouts.jsonl'
+ROLLOUTS_ENV = 'NATLANG_ROLLOUTS_COMPACT'
+ROLLOUTS_MARKER = '.rollouts-compacted'     # a group whose rollouts.jsonl a retention pass compacted
+
+
 def enabled():
     return os.environ.get(ENV, '1') != '0'
 
 
 def results_enabled():
     return enabled() and os.environ.get(RESULTS_ENV, '1') != '0'
+
+
+def rollouts_enabled():
+    return enabled() and os.environ.get(ROLLOUTS_ENV, '1') != '0'
 
 
 def present(path):
@@ -71,6 +89,47 @@ def present(path):
         return path
     packed = path.with_name(path.name + SUFFIX)
     return packed if packed.is_file() else None
+
+
+def group_rollouts(group):
+    """A scored group's rollouts file (``rollouts.jsonl``, else its compacted ``rollouts.jsonl.zst``), or None: what
+    every reader tests instead of the raw file's existence."""
+    return present(Path(group) / ROLLOUTS)
+
+
+@contextlib.contextmanager
+def open_lines(path, binary=False):
+    """The lines of ``path`` or of its compacted ``<path>.zst`` (``path`` may name either), streamed as text (or
+    bytes): the shared opener of compacted JSONL. A ``.zst`` frame's content checksum is verified as it is read.
+    FileNotFoundError when neither exists."""
+    path = Path(path)
+    found = path if path.name.endswith(SUFFIX) and path.is_file() else present(path)
+    if found is None:
+        raise FileNotFoundError(f'{path} (nor {path.name + SUFFIX})')
+    if not found.name.endswith(SUFFIX):
+        with open(found, 'rb' if binary else 'r', **({} if binary else {'encoding': 'utf-8'})) as handle:
+            yield handle
+        return
+    import io
+    import zstandard
+    with open(found, 'rb') as raw, zstandard.ZstdDecompressor().stream_reader(raw) as reader:
+        stream = io.BufferedReader(reader, 1 << 20)
+        yield stream if binary else io.TextIOWrapper(stream, encoding='utf-8')
+
+
+def read_rows(path):
+    """The JSON rows of a JSONL file, raw or compacted (``open_lines``)."""
+    with open_lines(path) as handle:
+        return [json.loads(line) for line in handle if line.strip()]
+
+
+def drop_stale_packed(path):
+    """A writer that wrote ``path`` afresh (a group scored again) removes its now stale compacted copy (and, for a
+    group's rollouts, the marker that keeps later retention passes off it)."""
+    path = Path(path)
+    path.with_name(path.name + SUFFIX).unlink(missing_ok=True)
+    if path.name == ROLLOUTS:
+        (path.parent / ROLLOUTS_MARKER).unlink(missing_ok=True)
 
 
 def _pid_alive(pid):
@@ -236,6 +295,31 @@ def compact_results(sample):
         print(json.dumps({'event': 'results compaction error', 'path': str(path), 'error': repr(error)[:300]}),
               file=sys.stderr, flush=True)
     return stats
+
+
+def compact_rollouts(group):
+    """A scored group's ``rollouts.jsonl`` replaced by ``rollouts.jsonl.zst`` (verified round trip, mtime kept; call
+    only once the group is scored and quiet: see the module doc). Returns (a Counter like ``compact_sample``'s, and
+    ``(zst path, raw sha256, raw bytes)`` of the compacted file for the data registry, or None)."""
+    stats, done = collections.Counter(), None
+    path = Path(group) / ROLLOUTS
+    if not rollouts_enabled():
+        return stats, done
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size < MIN_BYTES:
+            return stats, done
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        raw, packed = compress_file(path)
+        stats['compressed_files'] += 1
+        stats['compressed_raw_bytes'] += raw
+        stats['compressed_bytes'] += packed
+        stats['rollouts_files'] += 1
+        done = (str(path.with_name(path.name + SUFFIX)), digest, raw)
+    except Exception as error:      # the file stays as it was
+        stats['errors'] += 1
+        print(json.dumps({'event': 'rollouts compaction error', 'path': str(path), 'error': repr(error)[:300]}),
+              file=sys.stderr, flush=True)
+    return stats, done
 
 
 def samples_of(directory):

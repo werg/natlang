@@ -224,9 +224,10 @@ def build_t1_twins(collections, out, *, policy_sha256, tokenizer, max_tokens=163
     with partial.open('wb') as raw, zstandard.ZstdCompressor(level=6).stream_writer(raw) as writer:
         for collection in collections:
             for group in sorted(glob.glob(str(Path(collection) / 'groups' / 'g*'))):
-                rollouts_path, cases_path = Path(group) / 'rollouts.jsonl', Path(group) / 'cases.jsonl'
-                if not rollouts_path.exists() or not cases_path.exists():
-                    continue
+                from .episode_files import group_rollouts, open_lines
+                rollouts_path, cases_path = group_rollouts(group), Path(group) / 'cases.jsonl'
+                if rollouts_path is None or not cases_path.exists():
+                    continue        # unscored (rollouts raw or compacted: episode_files)
                 cases = list(read_jsonl(cases_path))
                 by_id = {case['id']: case for case in cases}
                 excluded = training_exclusion_ids(cases, held_manifest)
@@ -234,13 +235,14 @@ def build_t1_twins(collections, out, *, policy_sha256, tokenizer, max_tokens=163
                 rewards = Path(group) / 'rewards.jsonl'
                 for row in (read_jsonl(rewards) if rewards.exists() else ()):
                     details[(row.get('task_id'), row.get('group'), row.get('sample'))] = row.get('detail')
-                group_rollouts = [json.loads(line) for line in rollouts_path.open(encoding='utf-8') if line.strip()]
+                with open_lines(rollouts_path) as handle:
+                    rows_of_group = [json.loads(line) for line in handle if line.strip()]
                 passing_by_task = {}
                 if use_contrast_feedback:
-                    for r in group_rollouts:
+                    for r in rows_of_group:
                         if not r.get('unscored') and r.get('outcome') in SUCCESS_OUTCOMES and r.get('task_id'):
                             passing_by_task.setdefault(r['task_id'], r)
-                for rollout in group_rollouts:
+                for rollout in rows_of_group:
                     funnel['rollouts'] += 1
                     if (rollout.get('policy') or {}).get('checkpoint_sha256') != policy_sha256:
                         funnel['other_policy'] += 1

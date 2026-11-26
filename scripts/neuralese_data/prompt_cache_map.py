@@ -57,7 +57,9 @@ def jsonl(path):
 
 # ---- sources: (episode, invocation, messages, tools, exact ids or None) per call, in record order -------------------
 def collect_calls(directory, max_groups):
-    groups = sorted(glob.glob(str(Path(directory) / 'groups' / 'g*' / 'rollouts.jsonl')))
+    from natlang_neuralese.rl.episode_files import group_rollouts
+    groups = [str(path) for path in (group_rollouts(g) for g in sorted(glob.glob(str(Path(directory) / 'groups' / 'g*'))))
+              if path is not None]     # raw or compacted (rollouts.jsonl.zst)
     for path in groups[:max_groups] if max_groups else groups:
         for row in jsonl(path):
             episode = f"{Path(path).parent.name}/{row.get('sample')}"

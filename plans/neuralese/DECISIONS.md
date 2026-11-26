@@ -14734,3 +14734,38 @@ Wave83 Launch read the exact active snapshot but returned null after a missing-a
 A legacy manual partial recovery selected a completed private invocation from unrelated passing whole-goal checks. A passing native read/write check does not establish correctness of an internal semantic classification. The baseline synthetic regression admitted that unsupported scope/1 decision. Require the existing source-bound native certificate protocol (scope/2) in Python, Node disk verification and Node materialization; stop the old manual scope/1 writer before derivative publication. Completed-goal reassessment remains separate and supported. Retain all original failed raw graphs, useful independently certified decisions and honest partial completion status. No arbitrary successful-call filtering, new model generation or certificate fabrication.
 
 Inventory: meta/CERTIFIED_PARTIAL_ADMISSION.md. Bounded durable registry inventory found zero registered scope/1 cohorts, one genuine GAD scope/2. Actual tests:164 Python and59 Node controls passed; full69 immutable completed manifests materialized1089 eligible decisions/0reject; original GAD scope/2 materialized1eligible with task_completed=false. Upstream filled_reasoning added empty_think_first; existing target-mask test mocks were updated to accept that argument. Final code cleanup and required quick recorded in the accompanying proof receipt. This does not certify broader private semantic returns/effectful prefixes; they need independent evidence before admission. No live controller/learner/actor change or new sample registration.
+
+## 2026-11-26 16:10 Storage: scored groups' rollouts.jsonl compacted in the retention pass (rollouts compacted)
+
+- **Why.** Root 53 GB free (floor 40) falling ~10 GB/h, HDD 63 GB (floor 50). The aei1 collections hold 128 GB of
+  raw `groups/*/rollouts.jsonl` (NVMe 36 GB in v0008, v0010*, v0011*; HDD 92 GB), ~10x compressible. The 2026-11-26
+  00:10 entry left them raw because readers took the file's existence as the "group scored" marker.
+- **Mechanism.** One shared resolver and opener in `episode_files`: `group_rollouts(group)` (raw, else
+  `rollouts.jsonl.zst`, else None: the scored test), `open_lines` (text or bytes, zstd frame checksum verified on
+  read), `read_rows`, `compact_rollouts` (verified round trip before the raw file goes, mtime kept), and
+  `drop_stale_packed` (a rescore that writes `rollouts.jsonl` again removes the stale `.zst` and the group's
+  `.rollouts-compacted` marker; `task_rollouts.score` calls it). `ei_round_tier.compact_groups` compacts a scored
+  group's rollouts once every sample is compacted and the group's own files (rollouts, rewards, score, queue, journals,
+  worker journals) are 30 min quiet and unheld: open and closed collections, NVMe and HDD, same pass as `results`.
+  Default on; opt-outs `NATLANG_ROLLOUTS_COMPACT=0`, `--no-group-compaction`.
+- **Readers (inventory, `git grep rollouts.jsonl`).** Content: `grpo.load_group`, `grpo.Collector._teachers`,
+  `grpo.archive_rollouts` (copies a `.zst` as is), `sft_sources.rl_rollout_files`/`_extract_rl_group` (with the
+  compacted-since-listing fallback), `call_level_engine.rollout_unit`, `prompt_cache_map.collect_calls`,
+  `run_t2.prepare`, `opsd_privileged.build_t1_twins`, `step_verifier.build_t0_sequences`, `lower_rollout_turns`.
+  Existence: `grpo.Collector.reuse_scored`, `grpo.prune_group`, the readers above. All now use the shared resolver.
+  Not applicable (they never see a compacted group file): teacher campaigns' `episodes/t*/rollouts.jsonl`
+  (`teacher_gen`, `teacher_admission` receipts, `sft_sources` teacher records, `recall_to_nvme`, dashboard
+  `data_items` teacher view; `compact_campaign` compacts only samples), WORK `replay/*/rollouts.jsonl` (sft_sources'
+  own), GRPO archives (already `g*.rollouts.jsonl.zst`), `ReplayCollector` (writes its own raw copy), exp1_*/
+  program_tune/authored_trajectories (own run dirs), `teacher_gen --student-groups` and `frontier` (rewards.jsonl,
+  runs.jsonl), `collection_health`, `held_eval` (results only), ts-host (no reader; `tune/schedule.ts` writes its own
+  round file).
+- **Registry.** `record_collection` includes `groups/*/rollouts.jsonl.zst`; a pass records each compacted file in the
+  collection's entry (`data_registry.record_files(..., compacted_from=)`: zst digest plus the raw path, sha256 and bytes
+  the manifest named). Ownership is by `groups/*` prefix, so `require_registered` accepts the `.zst`.
+- **Remote.** `remote_collect.pull` excludes compacted groups' `rollouts.jsonl` from content and marker passes
+  (the exclude precedes the marker includes); `PUSH_EXCLUDE` names the `.zst`. The tier compacts a pulled collection's
+  rollouts only while its live or failed puller's `remote_collect.py` names `COMPACTED_ROLLOUTS_EXCLUDED`; the
+  running pullers (older pins) keep their collections' rollouts raw until the driver moves to this commit.
+- Tests: `test_episode_files.py` (pass and markers, quiet rule, rescore, opt-outs, puller gate, registry record,
+  every reader class on a compacted group, remote pull).

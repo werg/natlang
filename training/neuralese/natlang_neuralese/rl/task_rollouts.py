@@ -1080,6 +1080,8 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0,
     (run_dir / "rewards.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rollouts), encoding="utf-8")
     if emit is not None:
         emit.write_text("".join(json_line(r) for r in emitted), encoding="utf-8")
+        from .episode_files import drop_stale_packed
+        drop_stale_packed(emit)     # a group scored again: its compacted rollouts (a retention pass's) are stale
         report["emitted_rollouts"] = str(emit)
     (run_dir / "score.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report

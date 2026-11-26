@@ -125,8 +125,9 @@ def prepare(args):
     by_site: dict[str, list[dict]] = {}
 
     for group in groups:
-        path = Path(group) / 'rollouts.jsonl'
-        if not path.exists():
+        from ..rl.episode_files import group_rollouts
+        path = group_rollouts(group)       # raw or compacted (rollouts.jsonl.zst)
+        if path is None:
             continue
         for rollout in _jsonl(path):
             funnel['rollouts'] += 1

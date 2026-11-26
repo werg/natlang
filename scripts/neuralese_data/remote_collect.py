@@ -76,7 +76,7 @@ MARKERS = ('rollouts.jsonl', 'rewards.jsonl', 'score.json', 'versions.json')
 # pin outputs never mirrored: aarch64 native modules of an application the collector does not run
 PIN_EXCLUDE = ('applications/pi/',)
 # a work directory pushed to a fresh VM: what the collector resumes from (rewards, journals, queues), not the bulk
-PUSH_EXCLUDE = ('rollouts.jsonl', 'journal.jsonl', 'row-*/', '*.log', 'actor/', 'missing-paths.jsonl',
+PUSH_EXCLUDE = ('rollouts.jsonl', 'rollouts.jsonl.zst', 'journal.jsonl', 'row-*/', '*.log', 'actor/', 'missing-paths.jsonl',
                 'remote-collect.exit')
 # never pulled: an episode's raw job files (the ts-host collector rewrites its partial and appends its evidence while the
 # episode runs and removes both when it ends; a pull without --delete kept every in-flight copy on the DGX: 2-3 GB/hour
@@ -88,6 +88,10 @@ PULL_EXCLUDE = ('/groups/*/row-*/*/jobs/*.partial.json', '/groups/*/row-*/*/jobs
 # scored) is never pulled raw again: each pull excludes them by path. ``ei_round_tier`` compacts a pulled collection
 # only while its live puller's code names this constant.
 COMPACTED_RESULTS_EXCLUDED = True
+# a group's rollouts.jsonl the DGX holds compacted (``episode_files.compact_rollouts``, ``ei_round_tier``: once the group
+# is scored and quiet) is never pulled raw again, neither as content nor as a marker: each pull excludes it by path.
+# ``ei_round_tier`` compacts a pulled collection's rollouts only while its live puller's code names this constant.
+COMPACTED_ROLLOUTS_EXCLUDED = True
 MISSING_RELAUNCHES = 3
 LOST_SECONDS = 1800         # a VM that answers no ssh this long is gone: the unit ends (rc 75) and the driver restarts it
 SESSION_LOST_RC = 75
@@ -406,10 +410,12 @@ def pull_job_excludes():
 
 
 def compacted_results_excludes(work, stage):
-    """``--exclude-from`` for the samples whose results.jsonl the DGX holds as ``results.jsonl.zst`` (none: [])."""
+    """``--exclude-from`` for the files the DGX holds compacted (``.zst``), never pulled raw again: a sample's
+    ``results.jsonl`` and a group's ``rollouts.jsonl`` (none: [])."""
     work = Path(work)
     paths = sorted('/' + str(p.relative_to(work))[:-len('.zst')]
-                   for p in work.glob('groups/*/row-*/*/results.jsonl.zst') if p.is_file())
+                   for pattern in ('groups/*/row-*/*/results.jsonl.zst', 'groups/*/rollouts.jsonl.zst')
+                   for p in work.glob(pattern) if p.is_file())
     if not paths:
         return []
     listing = Path(stage) / 'compacted-results.exclude'
@@ -424,13 +430,14 @@ def pull(host, work, *, timeout=1800):
     work = Path(work)
     stage = work / '.remote-stage'
     stage.mkdir(parents=True, exist_ok=True)
+    compacted = compacted_results_excludes(work, stage)
     content = ['--exclude=/.remote-stage', '--exclude=/.remote-scratch', '--exclude=/.remote-vm',
                '--exclude=/.remote-collect.lock', '--exclude=/remote-collector.json', '--exclude=/collector.json',
-               *[f'--exclude=/groups/*/{m}' for m in MARKERS], *pull_job_excludes(),
-               *compacted_results_excludes(work, stage)]
+               *[f'--exclude=/groups/*/{m}' for m in MARKERS], *pull_job_excludes(), *compacted]
     rsync(*content, f'{host}:{work}/', f'{work}/', timeout=timeout)
     # only new or changed markers land in the stage (--compare-dest: one identical in WORK is not transferred)
-    rsync('--include=/groups/', '--include=/groups/*/', *[f'--include=/groups/*/{m}' for m in MARKERS],
+    # a compacted group's rollouts.jsonl marker stays out (its exclude precedes the includes: first match wins)
+    rsync(*compacted, '--include=/groups/', '--include=/groups/*/', *[f'--include=/groups/*/{m}' for m in MARKERS],
           '--exclude=*', f'--compare-dest={work.resolve()}/', f'{host}:{work}/', f'{stage}/', timeout=timeout)
     staged = [p for p in sorted(stage.glob('groups/*/*')) if p.name in MARKERS and p.is_file()]
     if staged:

@@ -43,6 +43,7 @@ REPO = HERE.parents[1]
 sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(HERE), str(REPO / 'scripts/rl_tasks')]
 
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
+from natlang_neuralese.rl.episode_files import group_rollouts  # noqa: E402
 from natlang_neuralese.common import data_registry  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 from natlang_neuralese.common.jsonio import json_line, utf8  # noqa: E402
@@ -137,15 +138,17 @@ def group_cases(directory):
 
 
 def rl_rollout_files(run_dir, archive_dir):
-    """(group name, rollouts file, group dir) of every group of one GRPO run: archived (zst) or still live."""
+    """(group name, rollouts file, group dir) of every group of one GRPO run: archived (zst) or still live (its
+    ``rollouts.jsonl``, or ``rollouts.jsonl.zst`` once a retention pass compacted it: ``episode_files.group_rollouts``)."""
     seen = set()
     for path in sorted(Path(archive_dir).glob('g*.rollouts.jsonl.zst')):
         name = path.name.split('.')[0]
         seen.add(name)
         yield name, path, Path(run_dir) / 'groups' / name
     for directory in sorted(Path(run_dir, 'groups').glob('g*')):
-        if directory.name not in seen and (directory / 'rollouts.jsonl').exists() and (directory / 'score.json').exists():
-            yield directory.name, directory / 'rollouts.jsonl', directory
+        rollouts = group_rollouts(directory) if directory.name not in seen else None
+        if rollouts is not None and (directory / 'score.json').exists():
+            yield directory.name, rollouts, directory
 
 
 # Every output is recorded in the data registry when it is written (natlang_neuralese.common.data_registry): a WORK after
@@ -314,8 +317,8 @@ def _extract_rl_group(label, name, path, group_dir, archive_dir):
     path, c, lines, rates = Path(path), collections.Counter(), [], {}
     cases = group_cases(group_dir)
     c['groups'] += 1
-    if not path.exists():   # a live group the run archived since the listing
-        path = Path(archive_dir) / f'{name}.rollouts.jsonl.zst'
+    if not path.exists():   # a live group compacted (rollouts.jsonl.zst) or archived since the listing
+        path = group_rollouts(group_dir) or Path(archive_dir) / f'{name}.rollouts.jsonl.zst'
     for line in zstd_lines(path):
         if not line.strip():
             continue

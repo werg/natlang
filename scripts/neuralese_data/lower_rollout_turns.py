@@ -336,9 +336,10 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--role', default='student', help="episode role to lower ('teacher': JOLT+ privileged attempts)")
     args = parser.parse_args()
+    from natlang_neuralese.rl.episode_files import open_lines
     stats, episodes, seen = collections.Counter(), [], set()
     for directory in args.rounds:
-        with (directory / 'rollouts.jsonl').open('rb') as handle:
+        with open_lines(directory / 'rollouts.jsonl', binary=True) as handle:     # raw or compacted (.zst)
             for line in handle:
                 if b'"quality": 1.0' not in line:
                     continue

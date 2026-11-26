@@ -26,9 +26,10 @@ what no consumer reads: closed collections' actor exports and native-state block
 trained rounds' learner states, chains pickles (mix with trained-units.json, filled, own Neuralese graph) and
 superseded exports, and the checkpoint of a policy that left the lineage unprotected; teacher campaigns' quiet episodes
 are compacted, and so are the scored groups of every collection, running ones included (``compact_groups``: a quiet,
-unheld sample's raw job files and its ``results.jsonl``, ``episode_files.compact_sample`` and ``compact_results``;
-``--no-group-compaction`` or ``NATLANG_RESULTS_COMPACT=0`` / ``NATLANG_EPISODE_COMPACT=0`` opt out; DECISIONS
-2026-11-25 "open collections compacted"). The async driver runs the same deletions itself at each publication (``retain``).
+unheld sample's raw job files and its ``results.jsonl``, ``episode_files.compact_sample`` and ``compact_results``,
+then a quiet group's ``rollouts.jsonl``, ``compact_rollouts``; ``--no-group-compaction`` or
+``NATLANG_RESULTS_COMPACT=0`` / ``NATLANG_ROLLOUTS_COMPACT=0`` / ``NATLANG_EPISODE_COMPACT=0`` opt out; DECISIONS
+2026-11-25 "open collections compacted", 2026-11-26 "rollouts compacted"). The async driver runs the same deletions itself at each publication (``retain``).
 
 Each item is skipped while any process (cwd, exe, fds, maps, command line, environment) or an active, failed or
 timer-triggered unit names it, or a ``.keep-on-nvme`` marker covers it. A deletion is also skipped while a configured
@@ -490,10 +491,11 @@ GROUP_COMPACTED = '.episodes-compacted'
 GROUP_QUIET_SECONDS = 1800
 
 
-def remote_puller_blocks(collection: Path, procs, units) -> str | None:
+def remote_puller_blocks(collection: Path, procs, units, needle_constant='COMPACTED_RESULTS_EXCLUDED') -> str | None:
     """Why a collection pulled from a remote VM (``remote_collect.py run --work COLLECTION``) is not compacted: a live
-    or failed (restartable) puller whose ``remote_collect.py`` predates ``COMPACTED_RESULTS_EXCLUDED`` would pull every
-    compacted results.jsonl raw again. None when no such puller exists."""
+    or failed (restartable) puller whose ``remote_collect.py`` predates ``needle_constant`` would pull every compacted
+    file raw again (``COMPACTED_RESULTS_EXCLUDED``: a sample's results.jsonl; ``COMPACTED_ROLLOUTS_EXCLUDED``: a
+    group's rollouts.jsonl). None when no such puller exists."""
     needle = f'--work {collection} '
     texts = [t for _, kind, t in procs if kind == 'cmdline'] + [t for _, t in units]
     for text in texts:
@@ -501,53 +503,103 @@ def remote_puller_blocks(collection: Path, procs, units) -> str | None:
             continue
         script = next((w for w in text.split() if w.endswith('remote_collect.py')), None)
         try:
-            if script and 'COMPACTED_RESULTS_EXCLUDED' in Path(script).read_text():
+            if script and needle_constant in Path(script).read_text():
                 continue
         except OSError:
             pass
-        return f'remote puller without compacted-results excludes: {script}'
+        return f'remote puller without {needle_constant}: {script}'
     return None
 
 
 GROUP_PASS_SECONDS = 300      # one collection's share of a pass: the moves after it keep their time
 
 
+def group_quiet(group: Path, now: float, quiet_seconds: float, held: set) -> bool:
+    """A group's own files (rollouts, rewards, score, queue, merged and worker journals) unchanged ``quiet_seconds``
+    and none held open: no scoring writes it any more."""
+    for path in [*group.glob('*'), *group.glob('workers/*')]:
+        if path.name.startswith(('row-', '.')) or path.is_dir():
+            continue        # the samples (checked one by one: episode_files.quiet_sample), the passes' own markers
+        try:
+            if now - path.lstat().st_mtime < quiet_seconds:
+                return False
+        except FileNotFoundError:
+            continue
+        if str(path.resolve()) in held:
+            return False
+    return True
+
+
 def compact_groups(collection: Path, quiet_seconds: int = GROUP_QUIET_SECONDS, deadline: float | None = None,
-                   max_seconds: float = GROUP_PASS_SECONDS) -> dict:
+                   max_seconds: float = GROUP_PASS_SECONDS, rollouts: bool = True) -> dict:
     """The scored groups (``score.json``) of one collection, open or closed: each top-level sample (``row-*/*``) that
     is quiet ``quiet_seconds`` and that no process holds open loses its raw job files and its ``results.jsonl`` to
-    ``.zst`` (``episode_files.compact_sample``, ``compact_results``). A scored group is reused as scored and never scored
-    again (``grpo.Collector.reuse_scored``); its readers resolve the compacted file (``episode_files.present``). A group
-    whose samples were all compacted gets ``GROUP_COMPACTED`` (later passes skip it). Returns counters with 'freed',
-    'groups' and 'skipped' (samples still live)."""
-    total, groups, skipped = collections.Counter(), 0, 0
+    ``.zst`` (``episode_files.compact_sample``, ``compact_results``); once every sample is compacted and the group's
+    own files are quiet too, its ``rollouts.jsonl`` follows (``episode_files.compact_rollouts``; ``rollouts`` False or
+    ``NATLANG_ROLLOUTS_COMPACT=0``: not). A scored group is reused as scored and never scored again
+    (``grpo.Collector.reuse_scored``; a JOLT+ rescore drops the stale ``.zst``); its readers resolve the compacted
+    files (``episode_files.present``, ``group_rollouts``). A group whose samples were all compacted gets
+    ``GROUP_COMPACTED``, one whose rollouts were ``episode_files.ROLLOUTS_MARKER`` (later passes skip what is done).
+    Each compacted rollouts file is recorded in the collection's data-registry entry with the raw file's digest.
+    Returns counters with 'freed', 'groups' and 'skipped' (samples still live)."""
+    total, groups, skipped, packed = collections.Counter(), 0, 0, []
     if not episode_files.enabled():
         return {'freed': 0, 'groups': 0, 'skipped': 0}
+    rollouts = rollouts and episode_files.rollouts_enabled()
     held = episode_files.open_paths(collection / 'groups')
     stop = time.time() + max_seconds if deadline is None else min(deadline, time.time() + max_seconds)
     for group in sorted((collection / 'groups').glob('g*')):
         if time.time() > stop:
             break
-        if group.is_symlink() or not group.is_dir() or (group / GROUP_COMPACTED).exists() \
-                or not (group / 'score.json').is_file():
+        if group.is_symlink() or not group.is_dir() or not (group / 'score.json').is_file():
+            continue
+        episodes_done = (group / GROUP_COMPACTED).exists()
+        rollouts_done = not rollouts or (group / episode_files.ROLLOUTS_MARKER).exists()
+        if episodes_done and rollouts_done:
             continue
         now, live, stats = time.time(), 0, collections.Counter()
-        for sample in sorted(p for p in group.glob('row-*/*') if p.is_dir() and not p.is_symlink()):
-            if not episode_files.quiet_sample(sample, now, quiet_seconds, held):
-                live += 1
-                continue
-            stats.update(episode_files.compact_sample(sample))
-            stats.update(episode_files.compact_results(sample))
+        if not episodes_done:
+            for sample in sorted(p for p in group.glob('row-*/*') if p.is_dir() and not p.is_symlink()):
+                if not episode_files.quiet_sample(sample, now, quiet_seconds, held):
+                    live += 1
+                    continue
+                stats.update(episode_files.compact_sample(sample))
+                stats.update(episode_files.compact_results(sample))
+            if not live and not stats.get('errors') and episode_files.results_enabled():
+                (group / GROUP_COMPACTED).write_text(json.dumps({'at': time.time(), **dict(stats)}) + '\n')
+        if not rollouts_done and not live and not stats.get('errors') and group_quiet(group, now, quiet_seconds, held):
+            more, done = episode_files.compact_rollouts(group)
+            stats.update(more)
+            if done:
+                packed.append(done)
+            if not more.get('errors'):
+                (group / episode_files.ROLLOUTS_MARKER).write_text(json.dumps({'at': time.time(), **dict(more)}) + '\n')
         total.update(stats)
         skipped += live
-        if not live and not stats.get('errors') and episode_files.results_enabled():
-            (group / GROUP_COMPACTED).write_text(json.dumps({'at': time.time(), **dict(stats)}) + '\n')
         groups += 1
+    if packed:
+        record_packed(collection, packed)
     return {**dict(total), 'freed': episode_files.freed(total), 'groups': groups, 'skipped': skipped}
 
 
+def record_packed(collection: Path, packed: list) -> None:
+    """Compacted rollouts files into the collection's data-registry entry (``data_registry.record_files`` with the raw
+    file each replaces), when it has one; bookkeeping never fails the pass."""
+    try:
+        from natlang_neuralese.common import data_registry as dr
+        identity = dr.dataset_id(collection, 'grpo-rollouts')
+        if identity not in dr.load().datasets:
+            return
+        base = Path(collection).resolve()
+        dr.record_files(identity, [p for p, _, _ in packed], base, compacted_from=[
+            {'path': str(Path(p).resolve().relative_to(base))[:-len(episode_files.SUFFIX)], 'sha256': sha,
+             'bytes': size} for p, sha, size in packed])
+    except Exception as error:
+        log(event='data registry error', path=str(collection), error=repr(error)[:300])
+
+
 # ---------- collection trim ----------
-# What a closed collection keeps: the episodes (results.jsonl, rollouts.jsonl, rewards, journals, partial episodes and
+# What a closed collection keeps: the episodes (results.jsonl, rollouts.jsonl (raw or .zst), rewards, journals, partial episodes and
 # their evidence, compacted to .zst by natlang_neuralese.rl.episode_files, error records), memetic evaluations, task and
 # rate files, collect.log. What goes once its policy has left the last two lineage entries (reproducible or diagnostic
 # only; readers checked 2026-11-24, DECISIONS):
@@ -727,10 +779,14 @@ def apply_plan(driver, actions, args, procs, units, summary, deadline, configure
                 summary['skipped'] += 1
                 log(event='kept', path=str(path), reason=[blocked or 'marker .keep-on-nvme'])
                 continue
+            # a puller that would fetch a compacted rollouts.jsonl again leaves the group's rollouts raw
+            rollouts_blocked = remote_puller_blocks(path, procs, units, 'COMPACTED_ROLLOUTS_EXCLUDED')
+            if rollouts_blocked:
+                log(event='rollouts kept raw', path=str(path), reason=[rollouts_blocked])
             if not args.apply:
                 continue
             try:
-                stats = compact_groups(path, deadline=deadline)
+                stats = compact_groups(path, deadline=deadline, rollouts=not rollouts_blocked)
             except Exception as error:
                 summary['errors'] += 1
                 log(event='error: kept', path=str(path), error=repr(error)[:300])

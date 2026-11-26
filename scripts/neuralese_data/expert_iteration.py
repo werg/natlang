@@ -1007,10 +1007,12 @@ def record_collection(work, closed=True):
     snapshot of a collection that keeps growing (the async driver's standing collection)."""
     from natlang_neuralese.common import data_registry as dr
     dr.record_dataset(dr.dataset_id(work, 'grpo-rollouts'), work, kind='rollouts',
-                      include=['groups/*/rollouts.jsonl', 'groups/*/rewards.jsonl', 'groups/*/score.json',
+                      include=['groups/*/rollouts.jsonl', 'groups/*/rollouts.jsonl.zst', 'groups/*/rewards.jsonl',
+                               'groups/*/score.json',
                                'groups/*/cases.jsonl', 'groups/*/versions.json', '*.json', 'runs.jsonl'],
                       license='project-generated (own LFM3 policy samples)',
-                      format='expert_iteration collect WORK: groups/gNNNNNN/{rollouts,rewards}.jsonl (grpo group format)',
+                      format='expert_iteration collect WORK: groups/gNNNNNN/{rollouts,rewards}.jsonl (grpo group format; '
+                             'rollouts.jsonl.zst once a retention pass compacted it: episode_files.group_rollouts)',
                       producer={'script': 'scripts/neuralese_data/expert_iteration.py collect'}, closed=closed)
 
 

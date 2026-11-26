@@ -521,11 +521,15 @@ def declare_dataset(identity: str, path, *, kind: str, format: str, **fields) ->
                     'closed': False, 'growing': 'files', **fields, 'producer': _producer(fields.pop('producer', None))})
 
 
-def record_files(identity: str, paths, base) -> dict | None:
+def record_files(identity: str, paths, base, compacted_from=None) -> dict | None:
     """Append-only directories: record new files of dataset IDENTITY rooted at BASE (declared by ``declare_dataset``).
-    Reads no registry, so it is cheap enough for a per-group hot path."""
+    Reads no registry, so it is cheap enough for a per-group hot path. ``compacted_from`` (aligned with ``paths``):
+    the ``{path, sha256, bytes}`` of the raw file each compacted ``.zst`` replaced (``episode_files``), so a consumer
+    checks the decompressed bytes against the digest the dataset's manifest recorded."""
     base = Path(base).resolve()
     files = [{'path': str(Path(p).resolve().relative_to(base)), **file_digest(p)} for p in paths]
+    for file, raw in zip(files, compacted_from or ()):
+        file['compacted_from'] = raw
     if not files:
         return None
     return _append({'op': 'files', 'id': identity, 'files': files})
