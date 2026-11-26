@@ -37,6 +37,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
     // Calls this one makes run in the task, so the task holds what they are shown of the services too.
     const taskFrame = options.frame ?? new NatlangTask(new NatlangRuntime({ platform: nodePlatform(), services: options.services, agent: options.agent,
       checkEvalBindings: options.checkEvalBindings,
+      checkAwaitedFields: options.checkAwaitedFields,
       ...(options.agentDriver ? { agentDriver: options.agentDriver } : {}),
       exactHostTraceCapture: options.exactHostTraceCapture, neuralese: options.neuralese,
       ...(options.traceStepStates ? { traceStepStates: true } : {}),

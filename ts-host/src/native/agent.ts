@@ -5,7 +5,7 @@ import { SECOND_THINK_CLOSE } from './tool-markup.js';
 import { renderAuthoredTextGuidance } from '../guidance/program.js';
 import { fingerprint } from '../adaptation/identity.js';
 import { guidanceForCall, type AuthoredTextGuidance, type NativeProgramGuidance, type ProgramGuidance } from '../guidance/program.js';
-import { formatType } from './types.js';
+import { formatType, formatTypeScript, parseTypeCached } from './types.js';
 import type { Type, TypeEnv } from './types.js';
 import { MISSING, Reject, coerce, isLive, liveId, liveLabel, problems } from './values.js';
 import type { Value } from './values.js';
@@ -218,7 +218,7 @@ export function inputsListing(session: NativeSession, views: Readonly<Record<str
       try { return `\n  // File contents:\n${JSON.stringify(new TextDecoder('utf-8', { fatal: true }).decode(root!.readBytesSync(value.path)))}`; }
       catch { return '  // Binary file: use file.readBytes() before answering.'; }
     })() : '';
-    return listingLine(field.name, formatType(field.type) + (field.optional ? ' | undefined' : ''), shown) + opening;
+    return listingLine(field.name, formatTypeScript(field.type) + (field.optional ? ' | undefined' : ''), shown) + opening;
   }).join('\n');
 }
 
@@ -372,6 +372,15 @@ function pythonJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/** Model-visible TypeScript for a semantic alias; retain its authored documentation and unsupported host syntax. */
+function modelTypeSource(text: string): string {
+  if (!text.includes('=>')) return text;
+  try {
+    const doc = /^(\/\*\*[^]*?\*\/)\s*/.exec(text);
+    return (doc?.[0] ?? '') + formatTypeScript(parseTypeCached(text));
+  } catch { return text; }
+}
+
 function referencedTypeAliases(signatures: string[], definitions: Record<string, string>,
   declarations: Record<string, string> = {}, transitive = true): string[] {
   const found = new Set<string>();
@@ -385,7 +394,7 @@ function referencedTypeAliases(signatures: string[], definitions: Record<string,
   for (const signature of signatures) visit(signature);
   // A class or method-bearing interface is shown as its TypeScript declaration, not its live-value alias. An alias's own
   // doc comment (type-aliases.ts keeps it at the head of the definition) goes above it, as it is written in types.ts.
-  return [...found].map(name => declarations[name] ?? aliasDeclaration(name, definitions[name]!));
+  return [...found].map(name => declarations[name] ?? aliasDeclaration(name, modelTypeSource(definitions[name]!)));
 }
 
 /** A wide or deeply composed scope can exhaust the model context before its first action. */
@@ -1480,7 +1489,7 @@ export class NativeToolAgent {
       ...lam.type.params.fields.map(field => formatType(field.type)), formatType(lam.type.returns), ...(writes ? [writes] : [])
     ], lam.typesSrc, {}, !this.compactCallableScope(session));
     const signature = `${lam.functionName || 'run'}(` +
-      lam.type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ${formatType(field.type)}`).join(', ') +
+      lam.type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ${formatTypeScript(field.type)}`).join(', ') +
       `): ${formatType(lam.type.returns)}`;
     return { signature, scopeTypes, program, ...(writes ? { writes } : {}) };
   }
@@ -1656,7 +1665,7 @@ export class NativeToolAgent {
     if (params.length) {
       names.push(...params);
       section('// This call\'s arguments, as its caller gave them:', ['const inputs = read_inputs();', ...lam.type.params.fields.map(field =>
-        `const ${field.name}: ${formatType(field.type)}${field.optional ? ' | undefined' : ''} = inputs.${field.name};`)]);
+        `const ${field.name}: ${formatTypeScript(field.type)}${field.optional ? ' | undefined' : ''} = inputs.${field.name};`)]);
     }
     section('// Variables of the calling code, captured by this call:', Object.values(lam.captures ?? {}).filter(cell => !cell.skill && !isAdapterValue(capturedValue(cell))).flatMap(cell => {
       let value: Value;

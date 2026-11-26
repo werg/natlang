@@ -38,6 +38,8 @@ export type EvalScopeDeclarations = {
   globals?: readonly string[];
   /** Reject unknown runtime value names before executing any effects (default true). */
   checkUnknownBindings?: boolean;
+  /** Reject unresolved Promise field reads before any effects (default true). */
+  checkAwaitedFields?: boolean;
 };
 
 /** The snippet is checked as the body of the call it runs in, so a top-level return has the call's return type. */
@@ -237,6 +239,25 @@ export function checkEvalFields(source: string, scope: EvalScopeDeclarations): N
     found.push({ code, severity: 'error', file: 'eval', start: start - prefix.length, end: node.getEnd() - prefix.length,
       line: Math.max(1, location.line), column: location.character + 1, message });
   };
+  // Promise is declared by the standard library, not the program's scope file. Excluding it below once
+  // silently admitted `const row = readSlot(id); row.panelId`, then executed the read and branched on undefined.
+  // Detect the actual checker-known awaitable without changing semantic callable types or ordinary sync values.
+  const unawaited = new Set<ts.Node>();
+  const visitAwaited = (node: ts.Node): void => {
+    if (scope.checkAwaitedFields !== false && (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))) {
+      const receiver = checker.getNonNullableType(checker.getTypeAtLocation(node.expression));
+      const awaited = checker.getAwaitedType(receiver);
+      const name = ts.isPropertyAccessExpression(node) ? node.name.text :
+        node.argumentExpression && (ts.isStringLiteral(node.argumentExpression) || ts.isNumericLiteral(node.argumentExpression)) ? node.argumentExpression.text : undefined;
+      if (awaited && awaited !== receiver && !(receiver.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) &&
+          name !== undefined && !checker.getPropertyOfType(receiver, name)) {
+        unawaited.add(node);
+        at(node, 'undeclared-field', `${node.expression.getText(snippet)} is an unresolved Promise; await it before reading ${name === undefined ? 'a result field' : name}.`);
+      }
+    }
+    ts.forEachChild(node, visitAwaited);
+  };
+  visitAwaited(snippet);
   // decide(fn, ...) answers a decision record; its answer is .value. Comparing the record itself with an answer
   // (`verb === "create_booking"`, `switch (verb) { case "create_booking": ... }`) is never true, so every branch is
   // silently skipped (held-v2 row 91: task text wrote `const verb = await decide(...)` and branched on verb).
@@ -271,7 +292,7 @@ export function checkEvalFields(source: string, scope: EvalScopeDeclarations): N
     if ((diagnostic.code !== 2339 && diagnostic.code !== 2551) || diagnostic.start === undefined) continue;
     const name = findNode(snippet, diagnostic.start);
     const access = name?.parent;
-    if (!name || !access || !ts.isPropertyAccessExpression(access) || access.name !== name) continue;
+    if (!name || !access || !ts.isPropertyAccessExpression(access) || access.name !== name || unawaited.has(access)) continue;
     if (ts.isBinaryExpression(access.parent) && access.parent.left === access &&
         access.parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && access.parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment) continue;
     const receiver = checker.getNonNullableType(checker.getTypeAtLocation(access.expression));

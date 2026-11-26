@@ -86,6 +86,7 @@ export function evalDeclarations(session: NativeSession, bindings: readonly stri
     returns: lam.type.kind === 'lambda' ? formatType(lam.type.returns) : undefined,
     globals: session.runtime.environment.globalBindings,
     checkUnknownBindings: session.runtime.options.checkEvalBindings,
+    checkAwaitedFields: session.runtime.options.checkAwaitedFields,
     std: session.evalStdBindings.filter(name => !bindings.includes(name)),
     // decide already has a typed intrinsic declaration; keep its decision-record checks.
     opaque: bindings.filter(name => name !== 'decide' && !inputs.some(item => item.name === name) &&

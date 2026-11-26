@@ -14625,3 +14625,8 @@ retained in `/home/werg/vibe-native-review-premise-audit-ops`. Source49 paid sta
 remains with its owner until the corrected operational driver is pinned. The two
 new accepted Source48 originals remain unregistered while actual DGX consumers
 are reconciled; actor/learner/checkpoint state was never reset.
+
+
+## 2026-11-26: typed asynchronous callback fields reject before effects
+
+Wave83 Launch read the exact active snapshot but returned null after a missing-await property comparison. Fix the common eval checker, which already had Promise-correct ambient types but skipped standard-library Promise receivers, and show asynchronous typed callback signatures in the model opening. Preserve semantic type/hash normalization and ordinary synchronous locals; opt-out `checkAwaitedFields:false`. Official Node/Core builds and 22 actual Node/Workerd/field/binding controls passed under the local ledger (53.4s/1.3GiB). No old outcome is promoted and Source51 stays unchanged. Inventory and limits: `plans/neuralese/ASYNC_CALLABLE_EVAL_CONTRACT_20261126.md`.
