@@ -233,3 +233,28 @@ def test_the_candidate_walk_stops_at_the_pass_deadline(tmp_path, monkeypatch):
     kw = dict(min_mb=0, min_age_days=-1, exclude=[], links=set(), held=set())
     assert len(list(m.candidates(['natlang-grpo-v1'], **kw))) == 3
     assert list(m.candidates(['natlang-grpo-v1'], until=time.time() - 1, **kw)) == []
+
+
+def test_the_pass_clock_starts_before_the_symlink_scan(tmp_path, monkeypatch):
+    """A slow symlink scan counts against the pass's deadline (2026-11-26: an ~8 min scan put the deadline past the
+    unit's timeout)."""
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    monkeypatch.setattr(m, 'MANIFEST', tmp_path / 'state' / 'manifest.jsonl')
+    monkeypatch.setattr(m, 'registered', lambda path: False)
+    monkeypatch.setattr(m, 'held_paths', lambda: set())
+    monkeypatch.setattr(m, 'mirror_manifest', lambda drive: None)
+    monkeypatch.setattr(m, 'colab_transfer_active', lambda: False)
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, 'time', lambda: clock[0])
+
+    def slow_scan(*a, **k):
+        clock[0] += 120          # two minutes of scanning
+        return []
+    monkeypatch.setattr(m, 'symlink_targets', slow_scan)
+    f = old_file(hdd / 'natlang-grpo-v1' / 'a' / 'f.bin', b'x' * 10)
+    args = SimpleNamespace(apply=True, root=['natlang-grpo-v1'], budget_gb=1, max_minutes=1, hard_minutes=3,
+                           rate_mb=0, min_mb=0, min_age_days=-1, links=None)
+    assert m.archive(args, FakeDrive()) == 0
+    assert f.exists()            # the 1-minute deadline passed during the scan: nothing starts
