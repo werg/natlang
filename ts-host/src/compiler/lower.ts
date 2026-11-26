@@ -223,7 +223,7 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
   return context => file => {
     const f = context.factory;
     const runtime = (name: string) => f.createPropertyAccessExpression(f.createIdentifier(options.runtime), name);
-    const authored = options.constrained ? authoredCallables(file, options.guardPrefix) : [];
+    const authored = authoredCallables(file, options.guardPrefix);
     const guardIds = new Map(authored.map(callable => [callable.node, callable.id]));
     const siteCounts = new Map<string, number>();
     const siteId = (node: ts.Node) => {
@@ -616,6 +616,7 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       const guardId = guardIds.get(source);
       if (guardId && (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) ||
           ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) && node.body &&
+          !('asteriskToken' in node && node.asteriskToken) &&
           makesCalls(source as ts.SignatureDeclaration)) {
         const visited = ts.visitEachChild(node, visit, context) as typeof node;
         const isAsync = !!visited.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
@@ -625,7 +626,8 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
           undefined, undefined, ts.isBlock(body) ? body : f.createParenthesizedExpression(body as ts.Expression));
         const args = f.createArrayLiteralExpression(guardArguments(source as ts.SignatureDeclaration)
           .map(name => name === 'this' ? f.createThis() : f.createIdentifier(name)));
-        const guarded = f.createCallExpression(runtime('guard'), undefined, [f.createStringLiteral(guardId), inner, args]);
+        const guarded = options.constrained ? f.createCallExpression(runtime('guard'), undefined, [f.createStringLiteral(guardId), inner, args]) :
+          f.createCallExpression(runtime('own'), undefined, [inner]);
         const block = f.createBlock([f.createReturnStatement(guarded)], true);
         if (ts.isFunctionDeclaration(visited)) return f.updateFunctionDeclaration(visited, visited.modifiers, visited.asteriskToken,
           visited.name, visited.typeParameters, visited.parameters, visited.type, block);

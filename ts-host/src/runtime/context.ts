@@ -22,6 +22,8 @@ export type DecisionReadout = { options: string[]; probabilities: number[]; fiel
 
 export type Frame = Readonly<{
   task: NatlangTask;
+  /** Accepted Native RPCs owned by this logical invocation, independently of recording. */
+  nativeEffects?: import('../native/effects.js').NativeEffectOwner;
   /** Type aliases visible in this invocation's authored program, inherited by runtime-created typed readers. */
   typeAliases?: Readonly<Record<string, string>>;
   /** Call identities of the natural-language definitions that are currently active above this point. */
@@ -238,6 +240,17 @@ export const noSmallerArgument = (name: string): string => `\`${name}\` called i
 /** The readable name in an authored callable's guard ID (`prefix#name@position`). */
 export const guardName = (id: string): string => /#([^#@]+)@\d+$/.exec(id)?.[1] ?? id;
 
+/** Retain an authored async helper's full lifetime without adding a trace call. */
+export function own<T>(fn: () => T): T {
+  const frame=currentFrame(), owner=frame?.nativeEffects;
+  owner?.assertLive();
+  const value=fn();
+  if(owner?.enabled && value!==null && (typeof value==='object'||typeof value==='function') && typeof (value as {then?:unknown}).then==='function') {
+    const pending=Promise.resolve(value);owner.track(pending);frame!.task.track(pending);
+  }
+  return value;
+}
+
 /**
  * Enter an authored function. A function already active in its own call chain may run again only on a smaller
  * argument: a part of the argument it had (reachable through its properties or elements), a shorter array or string,
@@ -258,7 +271,7 @@ export function guard<T>(id: string, fn: () => T, args: readonly unknown[] = [],
       throw new NatlangRecursionError(id, frame.chain, name, noSmallerArgument(name));
     }
   }
-  return runInFrame({ ...frame, active: { id, args, parent: frame.active, same, descent } }, fn);
+  return own(()=>runInFrame({ ...frame, active: { id, args, parent: frame.active, same, descent } }, fn));
 }
 
 /** The argument positions on which a re-entry is smaller than `previous`, among those still decreasing. */

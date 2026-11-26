@@ -7,6 +7,28 @@ import { hostCopy } from './values.js';
 import { currentFrame, NatlangContextError } from '../runtime/context.js';
 import type { NatlangTask } from '../runtime/runtime.js';
 
+/** Logical invocation ownership exists even when call recording is disabled. */
+export class NativeEffectOwner {
+  private readonly pending = new Set<Promise<unknown>>();
+  private closed = false;
+  constructor(readonly enabled = true, readonly allowsAsync = true) {}
+  assertLive(): void {
+    if (this.enabled && this.closed) throw new NatlangContextError('The invocation that owns this native operation has finished.');
+  }
+  track<T>(promise: Promise<T>): Promise<T> {
+    if (!this.enabled) return promise;
+    this.assertLive();
+    this.pending.add(promise);
+    promise.finally(() => this.pending.delete(promise)).catch(() => {});
+    return promise;
+  }
+  get hasPending(): boolean { return this.pending.size > 0; }
+  async drain(): Promise<void> {
+    while (this.pending.size) await Promise.allSettled([...this.pending]);
+  }
+  close(): void { this.closed = true; }
+}
+
 /** One service call, as recorded: requested, then completed or failed. */
 export type EffectEvent = { phase: 'requested' | 'completed' | 'failed'; service: string; method: string;
   args?: unknown; result?: unknown; error?: string;
@@ -115,7 +137,7 @@ function argumentsKey(method: string, args: unknown[]): string | undefined {
  */
 export function recordingServices<T extends Record<string, unknown>>(services: T,
   emit: (event: EffectEvent) => unknown,
-  authority?: T, scope?: EffectScope): T {
+  authority?: T, scope?: EffectScope, owner?: NativeEffectOwner): T {
   // Checked service-result wrappers belong to this invocation. Its descendants
   // reapply their own checks to the same lexical ports, rather than executing
   // through an ancestor's checker and observer.
@@ -145,6 +167,15 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
       if (typeof value === 'function') {
         const recorded = (...given: unknown[]) => {
         const observe = currentObserver(scope, emit);
+        const frame = currentFrame();
+        const authenticated = scope && frame && (frame.task === scope.task ||
+          (scope.task.runtime.callStore() && scope.task.runtime.callStore() === frame.task.runtime.callStore()));
+        const effects = authenticated ? frame.nativeEffects ?? owner : owner;
+        effects?.assertLive();
+        const kind = Object.getOwnPropertyDescriptor(value, Symbol.for('natlang.native-call-kind'))?.value ??
+          (Object.getPrototypeOf(value)?.constructor?.name === 'AsyncFunction' ? 'promise' : undefined);
+        if(effects?.enabled && !effects.allowsAsync && kind === 'promise')
+          throw new NatlangContextError('A synchronous native entry cannot start asynchronous Native I/O; return and await an async entry.');
         const args = given.map(item => hostCopy(item));
         const sink = observe ?? emit;
         const seq = observerSequences.get(sink) ?? 0;
@@ -152,10 +183,14 @@ export function recordingServices<T extends Record<string, unknown>>(services: T
         observe?.({ phase: 'requested', service: label, method: property, args: preview(args), seq, exact: { args } });
         try {
           const result = invokeServiceMethod(object, property, value, args);
-          if (result && typeof (result as PromiseLike<unknown>).then === 'function')
-            return Promise.resolve(result).then(async resolved => { await observe?.({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
+          if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+            const pending = Promise.resolve(result).then(async resolved => { await observe?.({ phase: 'completed', service: label, method: property, result: preview(resolved), seq,
               exact: { result: resolved, async: true } }); return resolved; },
               async error => { await observe?.({ phase: 'failed', service: label, method: property, error: String(error?.message ?? error), seq, exact:{async:true} }); throw error; });
+            effects?.track(pending);
+            if (scope && effects?.enabled) scope.task.track(pending);
+            return pending;
+          }
           observe?.({ phase: 'completed', service: label, method: property, result: preview(result), seq, exact: { result, async: false } });
           return result;
         } catch (error) {

@@ -849,7 +849,7 @@ function compileProjectInSession(options: BuildOptions, files: SourceFiles): Bui
     };
     const rewriteGate = options.rewriteGate ?? loadRewriteGate(fs, root);
     const emit = (fileName: string, text: string) => {
-      if ((options.constrained || /\b__natlang\.(?:fuseSite|instantiate)\(/.test(text)) && /\.js$/.test(fileName) && !/(?:\b(?:const|let|var)\s+__natlang\b|\bimport\s*\{[^}]*\b__natlang\b)/.test(text)) {
+      if ((options.constrained || /\b__natlang\.(?:fuseSite|instantiate|own)\(/.test(text)) && /\.js$/.test(fileName) && !/(?:\b(?:const|let|var)\s+__natlang\b|\bimport\s*\{[^}]*\b__natlang\b)/.test(text)) {
         const commonjs = compilerOptions.module === ts.ModuleKind.CommonJS || /Object\.defineProperty\(exports/.test(text);
         text = (commonjs ? `const __natlang = require(${JSON.stringify(specifierFor(true))}).__natlang;\n` :
           `import { __natlang } from ${JSON.stringify(specifierFor(false))};\n`) + text;

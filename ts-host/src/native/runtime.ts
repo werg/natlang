@@ -12,7 +12,7 @@ import { COMPACTED_RESULT, PROMPT_EXAMPLE_SOURCE, PROMPT_EXAMPLE_TEXTS } from '.
 import { arrayToStringNeuralese, concatNeuralese, instantiate, invokeWithReceiver, joinNeuralese, mapNeuraleseReadout, readNeuraleseIfReference, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
-import { isRecording, recordingServices, type EffectEvent } from './effects.js';
+import { NativeEffectOwner, isRecording, recordingServices, type EffectEvent } from './effects.js';
 import { DEFAULT_DIALECT, TypeEnv, TypeSyntaxError, containsRefinement, formatType, parseType, parseTypeCached, typeAliasNames, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, hostCopy, mapCopiedParts, withSourceIdentity, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
@@ -31,7 +31,7 @@ import { dialectBinding, isNeuraleseRef, isNoNeuraleseWriterFault, isTeacherText
   type NeuraleseRuntimeOptions } from './neuralese.js';
 import { bindTraceScope, blockInput, FILE_CONTEXT, graphNode, invocationNodeId, producerScopeForTrace, valueInputs } from './graph.js';
 import { producingCall } from './operator-frames.js';
-import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
+import { canGenerateNl, currentFrame, racedCalls, startedCalls, runInFrame, type Frame } from '../runtime/context.js';
 import { SAME_QUESTION_REFUSAL } from '../runtime/kernel.js';
 import { isNatlangCallable } from '../runtime/callable.js';
 import { withSelectedCaptureAccessors } from '../runtime/selected-captures.js';
@@ -181,6 +181,8 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
   checkEvalBindings?: boolean;
   /** Check unresolved asynchronous values before reading their result fields (default true). */
   checkAwaitedFields?: boolean;
+  /** Join accepted Native operations at the eval boundary (default true). */
+  settleNativeEffects?: boolean;
   /**
    * The root call's ID: unique per run (it keys the call record, its children's parent link and the trace). Without one a
    * fresh `native-run:<uuid>` is used. `runLabel` is the logical name shared by runs of one kind (`curriculum-reference`),
@@ -1080,6 +1082,7 @@ export const runSeedKey = (options: { runId: string; runLabel?: string; seedId?:
 
 export class NativeRuntime {
   readonly events: HostEvent[] = [];
+  readonly nativeEffects: NativeEffectOwner;
   readonly trace: NativeTraceRecorder;
   readonly options: { checkEvalBindings?: boolean; checkAwaitedFields?: boolean; maxActions?: number; maxToolCalls?: number; runId: string; runLabel?: string; seedId?: string; parentCallId?: string; returnErrorText?: ReturnErrorText };
   readonly seedPolicy: { mode: 'derived' | 'backend'; root?: number };
@@ -1103,6 +1106,7 @@ export class NativeRuntime {
   private readonly exactHostTraceCapture?: NativeRuntimeOptions['exactHostTraceCapture'];
 
   constructor(options: NativeRuntimeOptions) {
+    this.nativeEffects = options.frame?.nativeEffects ?? new NativeEffectOwner(options.settleNativeEffects !== false);
     this.displayLiveId = options.frame ? scopedLiveIdentity(options.frame.task) : createLiveIdentity();
     this.untrusted = options.frame ? scopedUntrusted(options.frame.task) : new UntrustedRegistry(hostUntrusted);
     const run = runIdentity(options);
@@ -1141,10 +1145,10 @@ export class NativeRuntime {
       if(event.phase === 'requested') this.trace.emit('effect', {call_id:this.currentCallId??null,capability:`${event.service}.${event.method}`,...event});
       else graphNode(this.trace,'effect',{call_id:this.currentCallId??null,capability:`${event.service}.${event.method}`,...event},[{node:invocationNodeId(this.options.runId),port:'caller'}]);
       return persisted;
-    }, undefined, options.frame ? {task:options.frame.task,callId:options.frame.parentCallId} : undefined);
+    }, undefined, options.frame ? {task:options.frame.task,callId:options.frame.parentCallId} : undefined, this.nativeEffects);
     // TS native imports and eval share this invocation's checked, journaled ports.
     // Copy the frame: callers and concurrent siblings may share the supplied one.
-    this.frame = options.frame ? { ...options.frame, services: this.services } : undefined;
+    this.frame = options.frame ? { ...options.frame, nativeEffects:this.nativeEffects, services: this.services } : undefined;
     this.declarations = options.declarations ?? {};
     this.neuralese = options.neuralese;
     this.serviceScopes = options.serviceScopes ?? {};
@@ -2902,7 +2906,14 @@ export class NativeSession {
           { sourceTemplateSpan: { start, end: start + literal.length } } : {};
       })() } : undefined;
     this.activeScopeLocals = new Map();
-    const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
+    const live = { own: (value: Promise<unknown>) => {
+      // NL calls already have their own cancellation/drain protocol. Keep a TS
+      // helper's entire execution, including gaps between successive RPCs.
+      if (!startedCalls.has(value) && this.runtime.nativeEffects.enabled) {
+        this.runtime.nativeEffects.track(Promise.resolve(value));
+        this.runtime.frame?.task.track(Promise.resolve(value));
+      }
+    }, inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
       readNeuralese: readNeuraleseForCurrentTask,
       readNeuraleseIfReference,
@@ -3045,6 +3056,8 @@ export class NativeSession {
           `${dropped === 1 ? 'was' : 'were'} still running; ${dropped === 1 ? 'it was' : 'they were'} stopped. Await every call ` +
           '(for example with Promise.all(...)) before the eval ends.');
       }
+      await this.runtime.nativeEffects.drain();
+      if(this.runtime.nativeEffects.enabled) this.runtime.checkInterruption();
       const raw = finished as { result?: unknown; returned?: boolean; valueless?: boolean;
         bindings?: Record<string, unknown>; captures?: Record<string, unknown> } | undefined;
       if (!raw || typeof raw !== 'object' || !raw.bindings || typeof raw.bindings !== 'object')
@@ -3272,6 +3285,7 @@ export class NativeSession {
       const frame = this.runtime.frame;
       const parentCallId = frame?.parentCallId;
       if (parentCallId) await frame!.task.drainChildren(parentCallId);
+      await this.runtime.nativeEffects.drain();
       this.activeScopeLocals = undefined;
     }
   }

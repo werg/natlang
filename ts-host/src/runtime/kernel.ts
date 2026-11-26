@@ -1,3 +1,4 @@
+import { NativeEffectOwner } from '../native/effects.js';
 import { unrecordedServices } from '../native/effects.js';
 import {openCrispTrace} from './crisp-trace.js';
 /**
@@ -735,6 +736,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     }
   }
   const callId = task.nextCallId();
+  const nativeEffects = new NativeEffectOwner(task.runtime.options.settleNativeEffects !== false);
   task.beginInvocation(callId);
   try {
   task.registerGraphCall(callId, frame.parentCallId);
@@ -745,7 +747,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   // A file-backed call owns the files from its own companion folder. Inline calls inherit their
   // caller's bound skill set unless one is explicitly supplied for that inline definition.
   const invocationSkillFiles = options.manifest?.inline ? (options.skillFiles ?? frame.skillFiles) : options.skillFiles;
-  const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], serviceChain: [...(frame.serviceChain ?? frame.chain), definition.id], parentCallId: callId, adHocDepth, adHocQuestions, programOwner: owner,
+  const childFrame: Frame = { nativeEffects, task, chain: [...frame.chain, callIdentity], serviceChain: [...(frame.serviceChain ?? frame.chain), definition.id], parentCallId: callId, adHocDepth, adHocQuestions, programOwner: owner,
     ...(nlActive ? { nlActive } : {}),
     typeAliases: definition.types,
     ...(frame.services ? { services: frame.services } : {}),
@@ -877,6 +879,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     checkEvalBindings: task.runtime.options.checkEvalBindings,
       checkAwaitedFields: task.runtime.options.checkAwaitedFields,
+      settleNativeEffects: task.runtime.options.settleNativeEffects,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,
     sharedEpisodeBudget: task.episodeBudget,
@@ -1031,6 +1034,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       cancelled ? 'cancelled' : 'error', { cause: error });
   } finally {
     await task.drainChildren(callId);
+    await childFrame.nativeEffects?.drain();
     releaseTrace(callId);
     if (liveCall) task.live!({ type: 'call_end', ...liveCall, outcome, detail });
     task.record({ callId, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id,
@@ -1043,7 +1047,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         for (const item of shadows) { try { store!.enqueue('shadow', item.hash, callId); } catch { /* recording never fails a call */ } }
     }
   }
-  } finally { task.endInvocation(callId); }
+  } finally { nativeEffects.close(); task.endInvocation(callId); }
 }
 
 /** Open the record of a call (§3.1); recording never fails the call. */
@@ -1142,6 +1146,7 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
     capture.watch(()=>nativeTrace!.trace.events);
     const raw = await runInFrame({ ...childFrame, services }, () => item.run(args));
     await task.drainChildren(callId);
+    await childFrame.nativeEffects?.drain();
     if (node.type.kind !== 'lambda') throw new Error('not a function');
     const env = new TypeEnv(node.types);
     env.classes = options.classes;
@@ -1186,6 +1191,7 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
     return { served: true, value };
   } catch (caught) { error = caught; }
   await task.drainChildren(callId);
+    await childFrame.nativeEffects?.drain();
   nativeTrace?.finish('error');
   const effects = capture.completedEffects('crisp');
   const files = folder?.transaction.open ? folder.transaction.folder.diffSync().changes.map(change => ({ path: change.path, kind: change.kind })) : [];

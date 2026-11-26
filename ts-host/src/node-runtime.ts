@@ -38,6 +38,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
     const taskFrame = options.frame ?? new NatlangTask(new NatlangRuntime({ platform: nodePlatform(), services: options.services, agent: options.agent,
       checkEvalBindings: options.checkEvalBindings,
       checkAwaitedFields: options.checkAwaitedFields,
+      settleNativeEffects: options.settleNativeEffects,
       ...(options.agentDriver ? { agentDriver: options.agentDriver } : {}),
       exactHostTraceCapture: options.exactHostTraceCapture, neuralese: options.neuralese,
       ...(options.traceStepStates ? { traceStepStates: true } : {}),
@@ -76,6 +77,7 @@ export class NodeNativeRuntime extends PlatformRuntime {
       detail = error instanceof Error ? error.message : String(error);
       throw error;
     } finally {
+      await this.nativeEffects.drain();
       if(!this.rootOptions.frame){releaseTrace(this.options.runId);this.frame!.task.endInvocation(this.options.runId);}
       this.recording.capture = undefined;
       capture?.finish({ outcome, detail, output, hasOutput, events: this.trace.events as Record<string, unknown>[] });

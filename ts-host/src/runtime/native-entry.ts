@@ -1,7 +1,7 @@
 /** Trace an authored TypeScript entry as native execution, with its actual NL descendants. */
 import {CallCapture,definitionKey,interfaceHash,reportStoreFailure} from '../calls/recorder.js';
 import type {DefinitionIdentity} from '../calls/types.js';
-import {recordingServices} from '../native/effects.js';
+import {NativeEffectOwner,recordingServices} from '../native/effects.js';
 import {currentFrame,runInFrame} from './context.js';
 import {resolveFrame} from './runtime.js';
 import {traceFor} from '../native/graph.js';
@@ -16,12 +16,34 @@ export function invokeNativeEntry<T>(record:ModuleRecord, exportName:string, arg
   if(!frame)return invoke();
   // Scope ancestry follows actual TS invocation even without recording. NL
   // recursion and model-depth accounting continue to use frame.chain only.
-  const scopedFrame={...frame,serviceChain:[...(frame.serviceChain??frame.chain),record.id]};
-  const scopedInvoke=()=>runInFrame(scopedFrame,invoke);
-  if(frame.parentCallId&&frame.task.isInvocationActive(frame.parentCallId) || frame.task.runtime.options.recording?.nativeRoots===false)return scopedInvoke();
+  const declared=record.exports[exportName];
+  const owned = !frame.nativeEffects && !(frame.parentCallId && frame.task.isInvocationActive(frame.parentCallId));
+  const nativeEffects = owned ? new NativeEffectOwner(frame.task.runtime.options.settleNativeEffects !== false, declared?.kind!=='function'||declared.async) : frame.nativeEffects;
+  const scopedFrame={...frame,...(nativeEffects ? {nativeEffects} : {}),serviceChain:[...(frame.serviceChain??frame.chain),record.id]};
+  const settle = (run:()=>T):T => {
+    if (!nativeEffects) return run();
+    if (!owned) {
+      const value=run();
+      if(nativeEffects.enabled && value!==null && (typeof value==='object'||typeof value==='function') && typeof (value as {then?:unknown}).then==='function') {
+        const pending=Promise.resolve(value);nativeEffects.track(pending);frame.task.track(pending);
+      }
+      return value;
+    }
+    try {
+      const value=run();
+      if(value!==null && (typeof value==='object'||typeof value==='function') && typeof (value as {then?:unknown}).then==='function')
+        return Promise.resolve(value).then(async result=>{await nativeEffects.drain();
+          return result;},async error=>{await nativeEffects.drain();throw error;}).finally(()=>nativeEffects.close()) as T;
+      if(nativeEffects.hasPending) throw new Error('A synchronous native entry started asynchronous Native I/O without returning its promise.');
+      nativeEffects.close();return value;
+    } catch(error) { nativeEffects.close();throw error; }
+  };
+  // Suppressing a trace root never suppresses logical effect ownership.
+  const scopedInvoke=()=>settle(()=>runInFrame({...scopedFrame,services:owned ?
+    recordingServices(frame.services??frame.task.services,()=>{},undefined,{task:frame.task},nativeEffects) : scopedFrame.services},invoke));
+  if(!owned || frame.task.runtime.options.recording?.nativeRoots===false)return scopedInvoke();
   const task=frame.task,store=task.runtime.callStore();
   if(!store)return scopedInvoke();
-  const declared=record.exports[exportName];
   const spec=declared?.kind==='function'?declared:{args:Object.fromEntries(args.map((_,index)=>[`arg${index}`,'unknown'])),returns:'unknown'};
   const callId=task.nextCallId(),name=exportName==='default'?record.name:exportName;
   const params=Object.entries(spec.args).map(([name,type])=>({name:name.replace(/\?$/,''),type,...(name.endsWith('?')?{optional:true}:{}),
@@ -57,9 +79,9 @@ export function invokeNativeEntry<T>(record:ModuleRecord, exportName:string, arg
     finally { task.endInvocation(callId); }
   };
   try {
-    const value=runInFrame({...scopedFrame,parentCallId:callId,services},invoke);
+    const value=settle(()=>runInFrame({...scopedFrame,parentCallId:callId,services},invoke));
     if(value!==null && (typeof value==='object'||typeof value==='function') && typeof (value as {then?:unknown}).then==='function')
       return Promise.resolve(value).then(result=>{finish('done',result);return result;},error=>{finish('error',undefined,error);throw error;}) as T;
     finish('done',value);return value;
-  }catch(error){finish('error',undefined,error);throw error;}
+  }catch(error){if(owned) nativeEffects?.close();finish('error',undefined,error);throw error;}
 }

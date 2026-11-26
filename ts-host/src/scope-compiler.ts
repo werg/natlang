@@ -142,12 +142,11 @@ const read = __live.readNeuralese;
 const __natlang_output = (value: unknown) => { __live.finish(value); return null; };
 const __natlang_thenable = (value: any) => !!value && (typeof value === 'object' || typeof value === 'function') &&
   typeof value.then === 'function';
-// Eval owns async work started by its code. Attach a rejection observer without replacing the
-// promise: callers that await it still receive the original rejection and identity checks keep
-// working, while a deliberately dropped authored async call cannot become a process-level
-// unhandled rejection (notably when a later guarded recursive call rejects).
-const __natlang_own = <T>(value: T): T => {
-  if (value instanceof Promise) void value.catch(() => {});
+// Eval owns async function calls started by its code. Preserve promise identity and
+// observe rejection; the host joins logical child work before committing the action.
+// Merely constructing an unresolved Promise does not start work and is not joined.
+const __natlang_own = <T>(value: T, started = true): T => {
+  if (value instanceof Promise) { void value.catch(() => {}); if (started) __live.own?.(value); }
   return value;
 };
 const __natlang_pending = (value: any, depth = 0): boolean => __natlang_thenable(value) || depth < 4 &&
@@ -1530,7 +1529,7 @@ function compileScopeSnippetUnhinted(source: string, options: ScopeCompileOption
     if ((ts.isCallExpression(node) && !instance && !chainedMethodCall && !iterateOnCall && !inIterateOnChain(node)) || promiseConstruction) {
       const at = rel(node);
       primitive.push({ start: at.start, end: at.start, text: '__natlang_own((', owner: at },
-        { start: at.end, end: at.end, text: '))', owner: at });
+        { start: at.end, end: at.end, text: promiseConstruction ? '), false)' : '))', owner: at });
     }
     // A call of a function with a representation-generic result runs the instance its expected type picked.
     if (instance && ts.isCallExpression(node)) {

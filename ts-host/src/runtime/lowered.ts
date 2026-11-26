@@ -25,6 +25,7 @@ import { isNeuraleseRef, neuraleseRef } from '../native/neuralese.js';
 import { withSelectedCaptureAccessors } from './selected-captures.js';
 
 export { guard };
+export { own } from './context.js';
 
 /**
  * Compiler target for a call the compiler marked as part of a possible hand-off between named functions (compiler/call-flow.ts
