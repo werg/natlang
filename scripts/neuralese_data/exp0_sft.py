@@ -1424,6 +1424,8 @@ def train(args):
                 tree_batch_tokens=args.tree_batch_tokens, retained_gb=args.prefix_retained_gb,
                 student_top_p=student_top_p, ambient=ambient,
             )
+            if ambient is not None:
+                ambient['decision_nll'] = decided[0]      # the additive log line adds it to the SFT part
             return total_nll_val + decided[0], computed_val + decided[1], ambient, decided[2]
 
         total_nll, computed, ambient, decided = run_step_with_oom_retry(run_step_body, learner, oom_plan)
@@ -1442,7 +1444,9 @@ def train(args):
             loss_kind = 'sft'
             ambient_fields = {}
         elif ambient.get('mode') == 'additive':
-            logged_loss = (ambient.get('sft_nll', 0.) + decided[0]) / denominator
+            # ``decided`` is the decision report dict here (run_step_body's 4th value): ``decided[0]`` raised KeyError
+            # on the first non-clean step of every additive round (aei1 r0014 2026-11-26)
+            logged_loss = (ambient.get('sft_nll', 0.) + ambient.get('decision_nll', 0.)) / denominator
             loss_kind = 'sft+tm'
             ambient_fields = {'tm_kl': ambient.get('kl', 0.) / max(1e-9, chain_denom),
                               'tm_loss': ambient.get('tm_nll', 0.) / max(1e-9, chain_denom)}
