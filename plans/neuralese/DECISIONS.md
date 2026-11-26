@@ -14559,3 +14559,29 @@ holds a stage outside the ledger queue while `wait_for_room` waits, so the clien
   0.18M/h, waits ~1 h instead of rebuilding every 45 min. r0012 rebuilt 7 times for 0.9M. Each data + build pass is
   ~1.5 h of 21-24 GB steps beside the collection. Opt-out: `--no-supply-rate-wait`.
 - Not done: shrinking the KV pool (SGLang's pool is static, so it needs an engine restart and kills the episodes).
+
+## 2026-11-26 09:45 Compiler T1/T2 survive Colab evictions and session replacements (integration agent)
+
+**Observation.** T1 (g4b, step ~100 of 404) went with the L4 session replaced around 07:55 UTC. T2 (g4a) had already
+died at step 14 (00:22): aei1's round SFT (77 GiB, normal claim) evicted the preemptible tenant before its first save
+(every 100 steps, ~75 min), and the VM-side keeper counted the next attempt's one-hour admission timeout as a second
+failure and stopped. T2 had been idle since.
+
+**Change.** `scripts/colab/remote_run_keeper.py` (c3f37e9d3 and two fixes), one DGX ledger unit per run: every 15 min
+it mirrors the run directory to the DGX (hardlink snapshot on the VM, rsync; `--drive-file` state through Drive, which
+is also the off-VM copy); when the run is not running it ships the inputs, refreshes the VM's Drive token, runs the
+setup (checkout at the pinned commit, hindsight-kb bundle, warm start from Drive) and, on a VM without the run's state,
+restores the newest mirror before restarting under admission; attempts that end without a traceback (eviction,
+admission timeout, lost session) restart indefinitely, three tracebacks stop it. Saves made denser so a lost session
+costs at most one interval: T1 `--state-every 4` (~16 min; new `opsd_privileged train --state-every`), T2
+`--state-every 25` (~19 min) and ablations every 250 steps (22 min each). The 000000002 warm start is on Drive
+(`compiler/warmstart-000000002`) and the DGX (`/home/werg/data/compiler-t2-20261126/warmstart-000000002`).
+
+**Limit.** T2's state is ~17 GB (BF16 pplx encoders plus FP32 masters and moments for 1.2B parameters). It reaches
+Drive within minutes of each save, but the DGX download runs at ~10.6 MB/s (measured), so the DGX copy of T2 trails by
+~30 min; a fresh VM restores T2 from Drive inside Google's network. T1's state goes over the tunnel each sync.
+
+**Runs (restarted from step 0; the old attempts saved nothing that survived).** T1: unit `cmp-t1-keeper-2`, g4b
+normal claim 20/24 GiB (program-tuning tenants yield), mirror `/home/werg/data/compiler-t1-20261126/run1`. T2: unit
+`cmp-t2-keeper-2`, g4a preemptible 36/40 GiB (waits for aei1's round SFT), mirror
+`/home/werg/data/compiler-t2-20261126/t2-pplx-run1`. Launch scripts and keeper logs in each `launch/`.
