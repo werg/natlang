@@ -11,14 +11,15 @@ import {pathToFileURL,fileURLToPath} from 'node:url';
 import {validateWorkflowReview} from './reassess_local_presentation.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const matches=(ref,value)=>ref?.complete===true&&ref.bytes===Buffer.byteLength(JSON.stringify(value))&&ref.hash===sha(JSON.stringify(value));
-const fields={"chat-continuity":[['index','frames','evidence'],['artifact']],"owned-task":[['effects','current','original','delivery','nativeDeliveryError','raceInjected'],[]],"route-authority":[['offer','snapshots','authority','choice','readback'],['artifact']]};
-export function reassessNativeReview(packet,pins,task,originalReview,source,kind,checker,entryBinding,bindInput){
+const fields={"chat-continuity":[['index','frames','evidence'],['artifact']],"owned-task":[['effects','current','original','delivery','nativeDeliveryError','raceInjected'],[]],"route-authority":[['offer','snapshots','authority','choice','readback'],['artifact']],"regency-briefing":[['index','frontiers','forecasts','witnesses','advance','nativeFacts'],['artifact']],"grimoire-scene":[['docket','view','current','scope','gate','readback','journal','nativeFacts'],['body']]};
+export function reassessNativeReview(packet,pins,task,originalReview,source,kind,checker,entryBinding,bindInput,originalBindInput=bindInput){
  const prior=packet.execution?.diagnostics?.openGoalVerification,native=packet.execution?.diagnostics?.natlangTeacher;
  if(!fields[kind]||!task||task.scenario!==packet.test?.name||task.split!=='train'||packet.result?.passed!==true||!prior||!native||native.executionError||native.captureErrors?.length||pins.teacher!=='openai-codex:gpt-6-luna'||Object.values(pins.repositories??{}).some(row=>row.dirty!==false)||!same(entryBinding(task.entry),native.entry)||native.entry?.arguments?.goal!==prior.goal||task.interaction!=='open-user-goal'||task.goalSha256!==sha(JSON.stringify(prior.goal))||pins.validator_sha256!==sha(source))throw Error('requires exact original clean native-passed training capture');
  if(!prior.caseId?.startsWith(kind+'-')||!prior.checks||!Object.keys(prior.checks).length||Object.values(prior.checks).some(value=>value!==true)||prior.semanticReviewRequired!==true||!same(prior.actualResult,native.report))throw Error('native or required answer failures remain unresolved');
  const roots=(native.calls??[]).filter(call=>native.rootCallIds?.includes(call.callId));
  if(roots.length!==1||roots[0].record.outcome!=='done'||!matches(roots[0].record.output,native.report))throw Error('actual root completion or output differs');
- const oldInput=bindInput(prior,{kind,goal:prior.goal});
+ const worldKind=kind==='grimoire-scene'?'grimoireScene':kind;
+ const oldInput=originalBindInput(prior,{kind:worldKind,goal:prior.goal});
  if(originalReview?.schema!=='natlang.live-workflow-review/1'||originalReview.verdict?.accepted!==false||!originalReview.exchange?.request||!originalReview.exchange?.reply||!same(originalReview.input,oldInput))throw Error('requires the exact captured rejected original review');
  const effects=native.calls.flatMap(call=>call.record.effects??[]);
  const witness=(service,method,args,result)=>effects.some(effect=>['agent','crisp'].includes(effect.by)&&effect.service===service&&effect.method===method&&matches(effect.args,args)&&matches(effect.result,result));
@@ -35,6 +36,29 @@ export function reassessNativeReview(packet,pins,task,originalReview,source,kind
   if(new Set(prior.snapshots.map(row=>row.operationId)).size!==prior.snapshots.length)throw Error('duplicate native preflight observation');
   for(const observation of prior.snapshots)if(!operationIds.includes(observation.operationId)||!witness('assignedAuthorityRead','preflight',[observation.operationId],observation))throw Error('unbound original native preflight');
   if(!same(checker.observedRouteAuthority(prior.snapshots,prior.offer.request.ceiling),prior.authority))throw Error('reported authority differs from exact native preflights');
+ }else if(kind==='regency-briefing'){
+  for(const guard of ['Regency forecast basis changed during observation','verifiedRegencyAdvance:','verifiedPrivateRegencyNote:','preservedRegencyWorkspace:'])if(!source.toString().includes(guard))throw Error('original source lacks native Regency authority and persistence checks');
+  if(!witness('regencyAssignment','list',[],prior.index)||!Array.isArray(prior.frontiers)||!prior.frontiers.length||!Array.isArray(prior.forecasts))throw Error('missing actual native council observations');
+  for(const scope of prior.frontiers)if(scope.realm!==prior.index.realm||!witness('regencySaved','read',[prior.index.realm],scope))throw Error('unbound saved council observation');
+  for(const row of prior.forecasts)if(row.realm!==prior.index.realm||!prior.frontiers.some(scope=>scope.revision===row.basis)||!witness('regencyForecast','preview',[row.realm,row.basis,row.months],row))throw Error('unbound council forecast');
+  let current=prior.frontiers.at(-1);
+  if(prior.advance){
+   const a=prior.advance;
+   if(a.realm!==prior.index.realm||!prior.frontiers.some(scope=>scope.revision===a.basis)||!witness('regencyAdvance','commit',[a.realm,a.basis,a.months],a))throw Error('unbound actual council advance');
+   current=a.committed;
+  }
+  if(prior.note){
+   if(typeof prior.artifact!=='string'||prior.note.digest!==sha(prior.artifact)||prior.note.realm!==prior.index.realm||prior.note.revision!==current.revision||!effects.some(effect=>effect.service==='regencyNote'&&effect.method==='stage'&&['agent','crisp'].includes(effect.by)&&matches(effect.result,prior.note)))throw Error('unbound retained council note or bytes');
+   const body=JSON.parse(prior.artifact);
+   if(body.realm!==prior.index.realm||!same(body.advance,prior.advance)||!prior.frontiers.some(scope=>same(scope,body.opening))||!prior.frontiers.some(scope=>same(scope,body.current)))throw Error('retained note has foreign observations or committed ledger');
+  }else if(prior.artifact!==null)throw Error('council artifact has no retained receipt');
+  projected.nativeFacts=checker.observedRegencyEvidence(current,prior.note,prior.artifact);
+ }else if(kind==='grimoire-scene'){
+  for(const guard of ['boundOwnedScene:','keptCurrentAnchor:','independentlyReadPrivateDraft:','preservedNativeWorld:'])if(!source.toString().includes(guard))throw Error('original source lacks native caretaker authority and persistence checks');
+  if(!Array.isArray(prior.journal)||!prior.journal.length||prior.journal.some(row=>!witness(row.service,row.method,row.args,row.result)))throw Error('unbound native caretaker journal');
+  if(!witness('grimoireScene','readScope',[prior.docket.id],prior.scope)||!witness('grimoireScene','view',[prior.docket.id],prior.view)||!prior.current||prior.scope.ownerId!==prior.current.ownerId||prior.receipt!==null||prior.body!==null)throw Error('requires actual scope-bound caretaker hold without fabricated artifacts');
+  if(prior.gate&&!prior.journal.some(row=>row.service==='grimoireScene'&&row.method==='confirm'&&same(row.result,prior.gate)))throw Error('unbound caretaker confirmation');
+  projected.nativeFacts=checker.observedGrimoireAuthority(prior.scope,prior.view,prior.current,prior.gate);
  }else{
   for(const guard of ['owner: view.resolution?.kind === "ref" ? view.resolution.ref : null','lane.lane.maySend && lane.owner'])if(!source.toString().includes(guard))throw Error('original source lacks exact recipient lookup and send authorization guarantees');
   if(!Array.isArray(prior.effects)||!prior.effects.length||!prior.effects.some(row=>row.service==='ownedTaskAttempts'&&row.method==='inspect'))throw Error('missing actual recipient and task observations');
@@ -43,10 +67,10 @@ export function reassessNativeReview(packet,pins,task,originalReview,source,kind
  const [observations,artifacts]=fields[kind];
  const review=checker.observedContentReview(projected,prior.outcomeContract,native.report,observations,artifacts);
  if(review.semanticReviewRequired!==true)throw Error('cannot waive required meaning review');
- const guidance={"chat-continuity":checker.chatContinuityReviewGuidance,"owned-task":checker.ownedTaskReviewGuidance,"route-authority":checker.routeAuthorityReviewGuidance}[kind];
+ const guidance={"chat-continuity":checker.chatContinuityReviewGuidance,"owned-task":checker.ownedTaskReviewGuidance,"route-authority":checker.routeAuthorityReviewGuidance,"regency-briefing":checker.regencyReviewGuidance,"grimoire-scene":checker.grimoireReviewGuidance}[kind];
  if(typeof guidance!=='string'||!guidance.trim())throw Error('missing source-derived domain guidance');
  review.semanticReviewInput.rubric+=guidance;
- projected={...projected,...review};bindInput(projected,{kind,goal:prior.goal});
+ projected={...projected,...review};bindInput(projected,{kind:worldKind,goal:prior.goal});
  return {prior,native,projected,reviewInput:review.semanticReviewInput};
 }
 async function main(){
@@ -55,7 +79,7 @@ async function main(){
  const raw=await readFile(args.packet),packet=JSON.parse(args.packet.endsWith('.gz')?gunzipSync(raw):raw),pins=JSON.parse(await readFile(args.pins,'utf8'));
  const originalReviewBytes=await readFile(args['original-review']),originalReview=JSON.parse(originalReviewBytes);
  const task=(await readFile(args.catalog,'utf8')).trim().split('\n').map(JSON.parse).find(row=>row.scenario===packet.test.name);
- const relative='skills/system-testing/open-goal-'+args.kind+'-managed.ts';
+ const relative='skills/system-testing/open-goal-'+(args.kind==='regency-briefing'?'regency':args.kind)+'-managed.ts';
  const source=execFileSync('git',['-C',args['system-testing'],'show',`${pins.repositories['system-testing'].git_commit}:${relative}`]);
  const host=resolve(args.host),sst=resolve(args['system-testing']),base=resolve(args.base),out=resolve(args.out);
  const require=createRequire(join(host,'package.json')),{build}=require('esbuild');
@@ -64,7 +88,8 @@ async function main(){
  const bundle=await store('checker.bundle.mjs',bundled.outputFiles[0].contents),checker=await import(pathToFileURL(join(out,bundle.path)));
  const {applicationEntryBinding}=await import(pathToFileURL(join(host,'scripts/export-live-workflow-teacher.mjs')));
  const {observedContentReviewInput}=await import(pathToFileURL(join(host,'scripts/lib/observed-content-admission.mjs')));
- const result=reassessNativeReview(packet,pins,task,originalReview,source,args.kind,checker,applicationEntryBinding,observedContentReviewInput);
+ const {observedContentReviewInput:originalBindInput}=await import(pathToFileURL(join(resolve(args['original-host']??host),'scripts/lib/observed-content-admission.mjs')));
+ const result=reassessNativeReview(packet,pins,task,originalReview,source,args.kind,checker,applicationEntryBinding,observedContentReviewInput,originalBindInput);
  await store('review-input.json',JSON.stringify(result.reviewInput,null,2)+'\n');
  if(!args.review){console.log(JSON.stringify({pending_independent_review:true,review_input:join(out,'review-input.json'),teacher_rerun:false}));return;}
  const {modelOracleJudge}=await import(new URL('../../ts-host/dist/teacher/model-judge.js',import.meta.url));
