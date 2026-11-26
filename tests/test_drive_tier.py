@@ -1,3 +1,4 @@
+import pytest
 import hashlib
 import importlib.util
 import json
@@ -258,3 +259,19 @@ def test_the_pass_clock_starts_before_the_symlink_scan(tmp_path, monkeypatch):
                            rate_mb=0, min_mb=0, min_age_days=-1, links=None)
     assert m.archive(args, FakeDrive()) == 0
     assert f.exists()            # the 1-minute deadline passed during the scan: nothing starts
+
+
+def test_symlink_targets_resolves_lexically_and_stops_at_the_deadline(tmp_path, monkeypatch):
+    """Link targets resolve by readlink (no stat on a saturated HDD, 2026-11-26 22:20); a scan past the pass's
+    deadline raises, and the pass then archives nothing."""
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    root = tmp_path / 'root'
+    (root / 'a').mkdir(parents=True)
+    os.symlink(str(hdd / 'gone' / 'x'), root / 'a' / 'abs')       # its target does not exist: no stat needed
+    os.symlink('../../hdd/rel/y', root / 'a' / 'rel')
+    monkeypatch.setattr(m.os.path, 'realpath', lambda *a, **k: (_ for _ in ()).throw(AssertionError('stat')))
+    assert m.symlink_targets(roots=(root,)) == sorted([str(hdd / 'gone' / 'x'), str(hdd / 'rel' / 'y')])
+    with pytest.raises(m.ScanDeadline):
+        m.symlink_targets(roots=(root,), until=0)

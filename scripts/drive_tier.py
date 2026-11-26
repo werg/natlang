@@ -385,13 +385,28 @@ def _colab_transfer(argv, pulls=False) -> bool:
     return bool(remote) and (pulls or remote[-1] == len(argv) - 1)
 
 
-def symlink_targets(roots=(Path.home() / 'data', Path.home() / 'natlang' / 'runs', Path.home())) -> list[str]:  # noqa
+class ScanDeadline(Exception):
+    """The symlink scan ran past the pass's deadline: archiving without the full link set is unsafe."""
+
+
+def _link_target(path: str) -> str:
+    """PATH's target, resolved lexically (``readlink`` + ``normpath``): no I/O on the target's filesystem.
+    ``realpath`` stats every component on the HDD, and on a saturated HDD 57k of them hung a pass for its whole
+    55 min (2026-11-26 22:20). A link to a link is resolved one level, which is enough for HDD tiering's links."""
+    target = os.readlink(path)
+    return os.path.normpath(target if os.path.isabs(target) else os.path.join(os.path.dirname(path), target))
+
+
+def symlink_targets(roots=(Path.home() / 'data', Path.home() / 'natlang' / 'runs', Path.home()),  # noqa
+                    until=None) -> list[str]:
     """Where symlinks on the root filesystem point into the HDD: such targets are live paths (archived files with a
-    link back, recalled trees' cold parts) and stay on the HDD."""
+    link back, recalled trees' cold parts) and stay on the HDD. UNTIL (a time) raises ScanDeadline past it."""
     found, root_dev = set(), os.stat('/').st_dev
     for root in roots:
         depth = 0 if root == Path.home() else None
         for directory, children, names in os.walk(root):
+            if until is not None and time.time() > until:
+                raise ScanDeadline(str(directory))
             try:
                 if os.stat(directory).st_dev != root_dev:
                     children[:] = []
@@ -403,7 +418,10 @@ def symlink_targets(roots=(Path.home() / 'data', Path.home() / 'natlang' / 'runs
             for name in children + names:
                 path = os.path.join(directory, name)
                 if os.path.islink(path):
-                    target = os.path.realpath(path)
+                    try:
+                        target = _link_target(path)
+                    except OSError:
+                        continue
                     if target.startswith(str(HDD) + '/'):
                         found.add(target)
     return sorted(found)
@@ -495,10 +513,17 @@ def archive(args, drive=None) -> int:
     began = time.time()
     drive = drive or Drive()
     exclude = [os.path.expanduser(line.strip()) for line in _lines(Path.home() / '.config/natlang/archive-exclude.txt')]
-    links, held = set(symlink_targets() if args.links is None else args.links), held_paths()
+    deadline = began + args.max_minutes * 60
+    try:
+        links = set(symlink_targets(until=deadline) if args.links is None else args.links)
+    except ScanDeadline as stop:
+        log(event='symlink scan passed the deadline: nothing archived', at=str(stop),
+            minutes=round((time.time() - began) / 60, 1))
+        return 0
+    log(event='symlink scan', links=len(links), minutes=round((time.time() - began) / 60, 1))
+    held = held_paths()
     rate = args.rate_mb * 2**20 if args.rate_mb else None
     budget, moved, n, skipped_registry = args.budget_gb * GIB, 0, 0, 0
-    deadline = began + args.max_minutes * 60
     # The unit's timeout kills a pass at the hard stop; a file starts only when it can finish by then at a
     # conservative rate, else smaller ones fill the pass (a killed upload is wasted uplink).
     hard = began + (getattr(args, 'hard_minutes', None) or args.max_minutes + 4) * 60
