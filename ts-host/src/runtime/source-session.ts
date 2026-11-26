@@ -1,3 +1,4 @@
+import type {SourceTypeExports} from './source-type-context.js';
 /** Reuse immutable-source load products only within one synchronous load/build.
  * No parsed record or lexical types escape into a later source revision's cache.
  */
@@ -18,4 +19,11 @@ export function sourceLoadMemo<T>(files: SourceOwner, key: string, run: () => T)
   const value = run();
   memo.set(key, value);
   return value;
+}
+
+/** Copy only pure linked aliases while the validated source session still exists. */
+export function sourceTypeExports(files:SourceOwner):SourceTypeExports {
+  const memo=sessions.get(files);
+  return Object.fromEntries([...(memo??[])].filter(([key])=>key.startsWith('types:')).map(([key,value])=>
+    [key.slice('types:'.length),{...(value as Record<string,string>)}]));
 }

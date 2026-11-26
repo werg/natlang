@@ -42,3 +42,6 @@ export { ONCE_EFFECTS } from '../native/effects.js';
 // Static workspace linking uses the same parser and explicit export selection as the compiler.
 export { rewriteTypeModuleSpecifiers } from '../compiler/type-module-links.js';
 export { packageExportTarget } from '../runtime/loader.js';
+
+export {sourceTypeContextMatches} from '../runtime/source-type-context.js';
+export type {SourceTypeContext} from '../runtime/source-type-context.js';

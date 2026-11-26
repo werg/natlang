@@ -1,12 +1,14 @@
 import ts from 'typescript';
 import {sourceLoadMemo} from './source-session.js';
+import {sourceTypeReuseEnabled} from './source-type-context.js';
 import { hexDigest } from '../native/hash.js';
 import { readTypeAliases } from '../native/type-aliases.js';
 import type { SourceFiles } from './loader.js';
 
 /** Resolve portable types in their declaring module before flattening them for Natlang's type environment. */
 export function readTypesFile(path: string, files: SourceFiles): Record<string, string> {
-  return {...sourceLoadMemo(files,'types:'+path,()=>readTypesFileInSession(path,files))};
+  const prior=files.sourceGraphReuse!==false&&sourceTypeReuseEnabled()?files.linkedTypes?.[path]:undefined;
+  return {...(prior??sourceLoadMemo(files,'types:'+path,()=>readTypesFileInSession(path,files)))};
 }
 function readTypesFileInSession(path: string, files: SourceFiles): Record<string, string> {
   type Alias = { module: TypeModule; name: string; body: string };
