@@ -14206,3 +14206,77 @@ The verified manifest was atomically appended to the existing campaign seed list
 Source41 local full Luna collection continues (four active workers; no Sol). The current wave has 48 completed native cases, 38 pass / 9 fail / 1 error; archived/indexed counts are separate. Corrected a future Tendril startup gate requiring About-page text after native panel boot readiness (23 runner/route controls passed). Future Base827197 combines actual model-owned capability planning and content-project hierarchies, native qualification projection and state/phase field guidance; public joint-loader component control and final registry/binder controls passed. These controls use scripted model responses/native-port mocks and are not teacher trajectories or whole native qualification.
 
 Source40 approval-state capture passed all native checks but its meaning reviewer rejected an accurate acquirable/needs-approval answer to a no-visit query. The shared reassessor now authenticates original discover/preflight effects and recomputes exact authority before presenting actual evidence to an independent bound meaning reviewer. Eighteen custody controls and exact original packet preparation passed (1.17s, 57.2 MiB); no teacher rerun, grant invention or raw rewriting. Source/readers/engine scope inventory is VIBE_NATIVE_APPROVAL_REVIEW_20261126.md. Completion recovery remains contingent on an actual independent acceptance and canonical materialization, not this diagnostic finding.
+
+## 2026-11-26 01:10 Natlang compiler: Stage C on the 000000002 pplx writer; restored ts-host hooks; T1/T0 reruns (integration agent)
+
+Owner (2026-11-26, relayed from the Stage C agent) reverses parts of the 2026-11-25 21:30 integration: no core
+component is downgraded or deferred. Stage C trains on hindsight-kb's pplx `H`/`Q` warm-started from 000000002, the
+ts-host compiler hooks stay, T1 and T0 rerun with the new defaults, the fork's `LLAMA_POS_MEMORY` patch is tested and
+real-weights parity decides whether Mode-W serving is green.
+
+**Committed (Stage C agent's work plus review fixes).**
+- 016902afb step-verifier progress weighting (default) and latent TTT's proximal sum. dd8f1c9d7, f763a2d5e,
+  772a4303f, a later kernels commit: `PplxWarmstartWriter` is the default T2 writer (`--writer-backend pplx`); a
+  fresh run refuses to start without `--warmstart-dir`, the embedding stand-in refuses a GPU run (CPU tests only).
+  Fixes: `value_head` cast to FP32 alone fed it BF16 hidden states (dtype error on the first encode); parameters stay
+  BF16 with hindsight-kb's `MasterAdamW` (FP32 masters and moments; plain AdamW rounded the 2e-5 encoder updates
+  away); encoders stay in eval mode while training (as hindsight-kb's experience trainer runs its writer); key
+  projection must equal `key_dim`; the receipt records the warm-start files' SHA-256, checked against the extractor
+  manifest; hindsight-kb's FLA/causal-conv/Liger kernels on by default on CUDA (000000002 trained with them; 3.6x
+  faster encode+backward on the A100, outputs within 0.3-1.1% of the reference in BF16; `--no-pplx-hf-kernels`).
+  `prepare --cases` unwraps authored-pool rows (`authored.jsonl`'s `task`) for the held check (the wrapper has no
+  `source_groups`, so siblings would have gone unexcluded) and fails on a missing file. `per_call_hkb` writes scope
+  states in the call where they occur (as training does) and records `scope_writes` (`alone` is untrained).
+- 2a2c086d5 ts-host: `compiler.jit` (adapter + soft instruction state), `compiler.hoistContracts`, partial bindings
+  in the JIT key, `buildCompiledCasesModule` for `runCrispCase`. Fix: the JIT stack was set on a copy of the call frame
+  while `NativeRuntime` keeps its own copy (the agent's driver calls run in `session.runtime.frame`), so neither the
+  adapter nor the state reached any model request; it now binds on both, and the manifest `weight_stack` and the
+  adaptation provenance record it. A malformed compiled state id is a `jit_compile_error` (call runs uncompiled); a
+  contract-hoist failure is a `contract_hoist_error` event. Test: adapter and state reach the request, the state
+  replaces its text, cache hit, failures recorded. 8dcb86834 (subagent) fixed a failure found on the way:
+  `db4aa4b4e` bound a shared callable-folder module's top-level `nl` value to the first task that loaded it
+  (`adaptation-runtime` "retained callable-folder inline reference" failed; cross-task authority leak).
+- 575366040 (Stage C agent, already on main): OPSD contrast feedback (structural tool-sequence contrast against a
+  verified run of the same task; no arguments, no return values) and the T1 head's differentiable FP32 matmul.
+- hindsight-kb `review/live-kb-hardening` 561dea1 (extractor reads the salvaged model directory, `targets.<i>.writer/
+  query`, refuses targets that disagree) and 5d16c58 (`FunctionalEncoderCache` accessors transformers 5.22 reads;
+  block-incremental query encoding raised AttributeError on the Colab VM).
+
+**Warm start (g4a, admission).** `extract_lfm3_warmstart.py` on the verified salvaged 000000002 model directory
+(training/inference.safetensors SHA a0d543c1.../f551ad8c..., matching `model-only-verification.json`):
+`writer_H.pt` 155 tensors (0506ba92...), `query_Q.pt` 153 tensors (19163bc9...), decoders/readers dropped. Strict load
+into `PPLXBlockEncoder` at pplx revision 8fc2de24534aa3610d85fa59c463313a5f096455 passes; encodings finite, shapes
+256/128. The weights sit a median 5.5% (relative norm) from base pplx (a fine-tune, so the mapping is right). Finding:
+the 000000002 key space no longer separates related from unrelated natlang call texts the way base pplx does
+(token MaxSim related vs unrelated on 3 probes: base 0.94/0.88, 0.94/0.86, 0.94/0.88; 000000002 0.40/0.41,
+0.46/0.45, 0.52/0.50). T2's pooled keys and learned pool vectors train on top; the shuffled-KB arm says whether the
+retrieved slots carry anything. Paths: g4a `/content/natlang-work/cmp/warmstart-000000002/` (+ `verify*.json`).
+
+**T2 launched** (g4a, preemptible admission tenant under `/content/natlang-work/cmp/t2_keeper.sh`, resumes from
+`learner-state.pt` every 100 steps after an eviction by aei1): rows `rows-v0009-cl.jsonl` (DGX
+`/home/werg/data/compiler-t2-20261126/`): 736 rows, 194 of them call-level teacher rows (349 kept of 408, 59
+unverified, 0 unknown case, 0 held-excluded; cases from the authored pool and v0008/v0001 groups), 586 train / 117
+dev-seen / 33 dev-unseen. `--writer-backend pplx --warmstart-dir .../warmstart-000000002 --pplx-revision 8fc2de2...
+--lr 2e-4 --warm-lr 2e-5 --steps 5000`, ablation arms (base, joint, kv-only, adapter-only, shuffled site, shuffled KB)
+every 50 steps. Out: `/content/natlang-work/cmp/t2-pplx-run1/`. A first attempt without the kernels was stopped at
+its step-0 ablation and discarded.
+
+**T1 rebuilt** (DGX `cmp-t1-build-contrast-2`, code bdfad6040): 5,022 rollouts (the collections grew since the
+178-twin build), `contrast_feedback` 1,248, `structural_feedback` 380, `no_facts` 860 (was 681 of 2,052), 946
+episodes, 3,740 twins (508 validation), 1,277 too long. Answer-leak audit over every twin (`answer_leaves`/`carries`,
+plus the raw expected JSON): 0 leaking twins (3,445 twins have answer leaves to check). Out:
+`/home/werg/data/compiler-t1-20261126/` (`leak-audit.json`). **T1 retrain launched** on g4b
+(`/content/natlang-work/compiler-t1/v2-contrast/keeper.sh`, one epoch, 404 steps of 8 twins, resumable).
+
+**T0** (DGX `cmp-t0-train-pw-1`, the 5-shard features from g4b, 18,022 boundaries, 16,457 train / 1,565 validation):
+progress weighting validation AUROC 0.641 (episode mean 0.658, permuted control 0.487, train 0.738); without it
+0.653 (0.668, 0.482, 0.751). Criterion 0.78 not met; branch@N is not gated on this head. By episode progress the
+validation AUROC is flat: first boundary 0.63, last boundary 0.64, quartiles 0.65/0.67/0.65/0.65 (no weighting).
+The last boundary of an episode predicts its outcome no better than the first, so label dilution over early
+boundaries (the hypothesis behind progress weighting) is not what limits it; the head reads something available at
+turn 0 (with 150 validation episodes over 19 tasks, plausibly task difficulty). Progress weighting stays the default
+(no significant difference at this size); what the features carry about step correctness is the open question.
+
+**Fork / parity:** a separate stream (subagent) tests and commits the `LLAMA_POS_MEMORY = -2` patch, moves the pin
+through `update_llama_runtime.mjs --fork` and runs `check_compiled_site_parity.py` on real weights; Mode-W serving is
+not called green before that reports. Found while reviewing: no producer in the fork writes cells at pos -2.
