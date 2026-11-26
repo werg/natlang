@@ -14528,3 +14528,30 @@ Extended the existing native-review reassessor to Regency and Grimoire rather th
 
 
 The same investigation caught a validation setup defect: `check-main.sh` ignored refusal of an unrelated worktree dependency symlink, then printed a passing quick summary. Fail immediately on canonical workspace-dependency setup failure, before result checks. The public-shell regression creates a real isolated Git worktree with a foreign dependency owner and verifies that no checks or passing summary run; direct helper ownership tests remain. This correction does not relax workspace identity or replace another strand's dependency tree.
+
+## 2026-11-26 08:45 aei1: a preparation step fits beside the DGX collection (collection-fit agent)
+
+**Where the collection's memory goes** (`aei1-collect-v0010`, anon RSS by process group plus CUDA; sampler
+`memsample-collect-1`). Fixed part ~29 GB: SGLang CUDA 19.4-20.3 GB (12 GB KV pool, weights, graphs), scheduler host
+2.2-5.4, main collector 3.0-5.4, front 1.0-1.4, launcher 0.8-1.1, detokenizer 0.7-1.0. Per-slot part ~0.12 GB:
+episode processes ~33-44 MB each, shared node episode servers ~0.7 GB per 8 slots. At 192 slots ~52-55 GB, so halving
+the slots frees ~11 GB at most. The fixed part cannot shrink without restarting the engine, which would kill the episodes.
+
+**What happened at 08:04.** At 06:38 r0013's prep yield and eviction worked: claim 70 -> 57 -> 47.8, and the data step was
+admitted after 181 s. During its 72 minutes the 96-slot collection grew from ~43.5 to 49.1 GB (above its yielded claim,
+which never rises). When the data step ended, the Pop client, queued in the ledger, took the freed room. The driver
+holds a stage outside the ledger queue while `wait_for_room` waits, so the client went first. The build then waited
+601 s and preempted the collection.
+
+**Changes (default on).**
+- While a stage waits for room (`hold_clients`): DGX-side collection clients queued in the ledger are withdrawn, and
+  none starts until the stage is admitted; the standing checks restart them afterwards. Running DGX-side clients
+  (`collect --prep-priority-only`) yield and evict on round-preparation claims, and they still ignore held
+  measurements. Opt-out: `--no-hold-clients`.
+- The data and build steps claim the newest three rounds' learned peak x 1.1, at most 24 GB: about 21.8 and 21.2
+  today. Opt-out: `--no-measured-stage-budget`.
+- A short round rebuilds when its measured supply rate (first to last build) projects the minimum: at least
+  `--supply-recheck-minutes`, twice that when nothing grew, never past the supply wait's end. r0013, short by 0.18M at
+  0.18M/h, waits ~1 h instead of rebuilding every 45 min. r0012 rebuilt 7 times for 0.9M. Each data + build pass is
+  ~1.5 h of 21-24 GB steps beside the collection. Opt-out: `--no-supply-rate-wait`.
+- Not done: shrinking the KV pool (SGLang's pool is static, so it needs an engine restart and kills the episodes).

@@ -3093,6 +3093,68 @@ def test_a_waiting_dgx_side_collection_client_is_requeued_at_the_slots_that_fit(
     assert d.requeue_client_to_fit(cur, target) is False and len(stopped) == 1
 
 
+def test_preparation_steps_claim_their_measured_peaks_and_a_short_round_rebuilds_at_its_supply_rate(tmp_path,
+                                                                                                    monkeypatch):
+    """r0011-r0013 data/build peaked 12.1-19.8 GiB against 24 claimed: a step claims its newest three rounds' peak x 1.1
+    (at most the fixed budget). r0013 grew 0.18M new tokens/h and was rebuilt every 45 min: the next build waits until
+    the measured rate projects the minimum (at least the recheck; twice it when nothing grew; never past the wait)."""
+    import expert_iteration as ei
+    G = 2**30
+    peaks = {'aei-r0011-data': 12.1 * G, 'aei-r0012-data': 18.7 * G, 'aei-r0013-data': 19.8 * G, 'aei-r0010-data': 30 * G,
+             'aei-r0013-build': 19.3 * G, 'aei-r0013-build-select': 40 * G}
+    assert ei.measured_stage_gb('aei', 'data', 24, peaks) == round(19.8 * 1.1, 1)
+    assert ei.measured_stage_gb('aei', 'build', 24, peaks) == round(19.3 * 1.1, 1)
+    assert ei.measured_stage_gb('aei', 'frontier', 4, peaks) == 4
+    assert ei.measured_stage_gb('aei', 'data', 24, {'aei-r0013-data': 30 * G}) == 24
+    h = 3600.
+    builds = [{'at': 0., 'new_weighted_target_tokens': 4_275_019}, {'at': 3 * h, 'new_weighted_target_tokens': 4_815_455}]
+    wait = ei.supply_wait_seconds(builds, 5_000_000, 45 * 60, 9 * h)
+    assert 3500 < wait < 3800                                   # 0.185M short at 0.18M/h: ~1 h, not 45 min
+    assert ei.supply_wait_seconds(builds, 9_000_000, 45 * 60, 9 * h) == 9 * h     # never past the wait's end
+    flat = [{'at': 0., 'new_weighted_target_tokens': 4_939_072}, {'at': h, 'new_weighted_target_tokens': 4_939_072}]
+    assert ei.supply_wait_seconds(flat, 5_000_000, 45 * 60, 9 * h) == 90 * 60
+    assert ei.supply_wait_seconds(builds[:1], 5_000_000, 45 * 60, 9 * h) == 90 * 60
+    assert ei.supply_wait_seconds(builds, 4_900_000, 45 * 60, 9 * h) == 45 * 60    # at least the recheck
+    ei_, d = _driver(tmp_path, monkeypatch)
+    monkeypatch.setattr(ei_, 'ledger_family_peaks', lambda: peaks)
+    assert d.stage_gb('data', 24) == round(19.8 * 1.1, 1)
+    d.a.measured_stage_budget = False
+    assert d.stage_gb('data', 24) == 24
+
+
+def test_a_stage_waiting_for_room_withdraws_and_holds_the_dgx_side_clients(tmp_path, monkeypatch):
+    """2026-11-26 07:53: r0013's data step ended, the waiting Pop client took its room and the build preempted the DGX
+    collection at 08:04. While a stage waits for room, a queued DGX-side client is withdrawn and none starts; a running
+    one is launched to yield to prep claims (--prep-priority-only). --no-hold-clients opts out."""
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'POP', 'pop-host')
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port, bind_host=None: 'http://100.1.2.3:18531')
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--rebind-actor', 'pop-host@http://100.1.2.3:18531=64'])
+    cur = d.controller.current
+    unit = d.collection_unit(cur) + '-pop'
+    queued = {unit}
+    monkeypatch.setattr(ei, 'ledger_queued', lambda u: u in queued)
+    monkeypatch.setattr(d.c, 'active', lambda u: False)
+    monkeypatch.setattr(d.c, 'present', lambda u: u in queued)
+    stopped, launched = [], []
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), queued.discard(u)))
+    monkeypatch.setattr(d.c, 'ledger', lambda u, budget, prio, argv, log, **kw: launched.append((u, argv)))
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda endpoint, sha: True)
+    seen = []
+    monkeypatch.setattr(ei, 'ledger_admissible', lambda gb: seen.append(d.clients_held) or len(seen) > 1)
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: d.start_remote_collector(cur, d.dgx_clients()[0]))
+    assert d.c.wait_for_room('aei-r0001-build', 21) is True
+    assert stopped == [unit] and seen == [True, True] and not launched and d.clients_held is False
+    (d.collect_dir(cur)).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    d.start_remote_collector(cur, d.dgx_clients()[0])
+    assert launched and '--prep-priority-only' in launched[-1][1]
+    d.a.no_hold_clients = True
+    queued.add(unit)
+    d.hold_clients(True)
+    assert d.clients_held is False and unit in queued
+
+
 def test_async_driver_retention_pass_and_opt_out(tmp_path, monkeypatch):
     """The driver runs ei_round_tier.retain on its root in the background (each publication, each collection stop,
     its start), one pass at a time, and records what it freed; --no-retention opts out (DECISIONS 2026-11-25)."""

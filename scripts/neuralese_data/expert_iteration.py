@@ -176,6 +176,32 @@ def measured_collection_gb(name, peaks, recent=MEASURED_COLLECT_RECENT, margin=M
     return round(max(peak for _, peak in rows[-recent:]) / 2**30 * margin)
 
 
+def measured_stage_gb(name, stage, default, peaks, recent=3, margin=MEASURED_COLLECT_MARGIN):
+    """GB to claim for a round-preparation step: the largest learned peak of this driver's newest ``recent`` rounds'
+    ``<name>-rNNNN-<stage>`` units x ``margin``, at most ``default``; ``default`` without one."""
+    pattern = re.compile(rf'{re.escape(name)}-r(\d+)-{re.escape(stage)}')
+    rows = sorted((int(m.group(1)), peak) for family, peak in peaks.items() if (m := pattern.fullmatch(family)) and peak)
+    if not rows:
+        return default
+    return min(default, round(max(peak for _, peak in rows[-recent:]) / 2**30 * margin, 1))
+
+
+def supply_wait_seconds(builds, minimum, recheck_seconds, remaining_seconds):
+    """How long a short round waits before its next data + build (~1.5 h of the 24 GB steps beside the collection):
+    until its new supervision, growing at the rate measured between its first and last build, is projected to reach
+    ``minimum`` (at least ``recheck_seconds``; twice that when nothing grew), never past ``remaining_seconds`` (the
+    end of the supply wait, when it trains anyway). r0013 2026-11-26: 4.28M -> 4.82M tokens in 3 h (0.18M/h) was
+    rebuilt every 45 min, each pass shrinking or preempting the DGX collection."""
+    grown = [b for b in builds if b.get('new_weighted_target_tokens') is not None]
+    wait = 2 * recheck_seconds
+    if len(grown) >= 2 and grown[-1]['at'] > grown[0]['at']:
+        rate = (grown[-1]['new_weighted_target_tokens'] - grown[0]['new_weighted_target_tokens']) / (
+            grown[-1]['at'] - grown[0]['at'])
+        if rate > 0:
+            wait = (minimum - grown[-1]['new_weighted_target_tokens']) / rate
+    return max(recheck_seconds, min(wait, max(recheck_seconds, remaining_seconds)))
+
+
 def ledger_room_gb(unit=None, priority='medium'):
     """GB a job could be admitted with now: the ledger's headroom (MemAvailable less what running claims still
     reserve) less the reserve and the budgets of waiting jobs of at least ``priority`` queued ahead of ``unit`` (all
@@ -558,7 +584,7 @@ def frontier_collector(base):
         ``priority_share``."""
 
         def setup(self, order, deadline, endpoints=None, priority_dir=None, priority_share=HELD_PRIORITY_SHARE,
-                  verify=None, ledger_unit=None, ledger_full_gb=None, room_slots=None):
+                  verify=None, ledger_unit=None, ledger_full_gb=None, room_slots=None, prep_only=False):
             self.order = collections.deque(t for t in order if t in self.by_id and t not in self.own)
             self.deadline = deadline
             self.endpoints = list(endpoints) if endpoints else [(getattr(self.args, 'actor', None),
@@ -576,6 +602,7 @@ def frontier_collector(base):
             # launch budget already matches them, so the first check does not yield
             self.room_slots = int(room_slots) if room_slots and int(room_slots) < self.full_slots else None
             self.evict_at, self.yield_refreshed = None, 0.
+            self.prep_only = bool(prep_only)    # a remote actor's DGX-side client: round preparation only, never held
             if self.room_slots:
                 self.active_slots = min(getattr(self, 'active_slots', self.full_slots), self.room_slots)
             self._learnable()
@@ -586,6 +613,8 @@ def frontier_collector(base):
                 return
             self.priority_read = time.time()
             claims = held_priority_claims(self.priority_dir) if self.priority_dir else []
+            if self.prep_only:
+                claims = [c for c in claims if 'share' in c]
             active = priority_slots(self.full_slots, claims, self.priority_share)
             if self.room_slots:
                 if self._room_returned():
@@ -868,10 +897,13 @@ def collect(args):
     collector.variants = grpo.load_variants(g, tasks, work)
     # a DGX held measurement takes slots of the DGX actor; a remote actor's collection keeps its own
     collector.setup(order, time.time() + args.hours * 3600, endpoints=endpoints,
-                    priority_dir=None if args.no_held_priority or actor is None else Path(args.held_priority_dir),
+                    priority_dir=(None if args.no_held_priority or (actor is None and not args.prep_priority_only)
+                                  else Path(args.held_priority_dir)),
+                    prep_only=actor is None and args.prep_priority_only,
                     priority_share=args.held_priority_share, verify=actor is None,
                     # a remote actor's DGX-side client resizes its claim only to restore after a room-fitted start
-                    ledger_unit=args.unit_prefix if actor is not None or getattr(args, 'room_slots', None) else None,
+                    ledger_unit=(args.unit_prefix if actor is not None or getattr(args, 'room_slots', None)
+                                 or args.prep_priority_only else None),
                     ledger_full_gb=getattr(args, 'ledger_full_gb', None),
                     room_slots=getattr(args, 'room_slots', None))
     # the groups earlier runs of this policy left unfinished (stops, preemptions, OOM kills) resume first
@@ -1680,6 +1712,7 @@ class Cycle:
         return plan['budget'], plan['full']
 
     collection_pending = staticmethod(lambda: False)   # the async driver's: its standing collection waits in the ledger
+    hold_clients = staticmethod(lambda on: None)       # the async driver's: its DGX-side clients wait for a stage
 
     def wait_for_room(self, unit, budget, seconds=PREP_YIELD_WAIT, poll=20):
         """Before launching a stage beside a yielding collection: until the ledger would admit ``budget`` GB (the
@@ -1688,12 +1721,20 @@ class Cycle:
         if self.present(unit) or float(getattr(self.a, 'prep_yield_share', PREP_YIELD_SHARE)) >= 1:
             return True
         deadline, started = time.time() + seconds, time.time()
-        # the driver's own (re)launched collection goes first: a step queued at high priority would hold it out
-        while self.collection_pending() or not ledger_admissible(budget):
-            if time.time() >= deadline:
-                self.note(stage='prep yield', unit=unit, budget_gb=budget, room=False, waited=round(time.time() - started))
-                return False
-            time.sleep(poll)
+        # the cheaper units yield first: the driver's DGX-side collection clients waiting in the ledger are withdrawn
+        # and none starts until the stage is admitted (2026-11-26 07:53: the waiting Pop client took the room r0013's
+        # data step left and the build preempted the DGX collection at 08:04)
+        self.hold_clients(True)
+        try:
+            # the driver's own (re)launched collection goes first: a step queued at high priority would hold it out
+            while self.collection_pending() or not ledger_admissible(budget):
+                if time.time() >= deadline:
+                    self.note(stage='prep yield', unit=unit, budget_gb=budget, room=False,
+                              waited=round(time.time() - started))
+                    return False
+                time.sleep(poll)
+        finally:
+            self.hold_clients(False)
         if time.time() - started > 1:
             self.note(stage='prep yield', unit=unit, budget_gb=budget, room=True, waited=round(time.time() - started))
         return True
@@ -3104,6 +3145,7 @@ def write_round_manifest(round_dir, *, round_id, base_policy_sha, previous_polic
 # peak follows the pool and episode volume (68,887 eligible rows after the broad-external admissions), and a
 # learned budget cannot grow past a cap the unit was killed at.
 DATA_STAGE_GB = float(os.environ.get('NATLANG_EI_DATA_GB', '24'))
+BUILD_STAGE_GB = 24
 PREPARE_STEPS = ('frontier', 'data', 'build')
 
 
@@ -3526,6 +3568,8 @@ class AsyncRoundDriver:
             held_every=args.held_every, held_every_max=args.held_every_max, prefer_unseen=args.prefer_unseen)
         self.c = Cycle(self.cycle_args())
         self.c.collection_pending = self.collection_pending
+        self.c.hold_clients = self.hold_clients
+        self.clients_held = False
         if self.argument_changes:
             self.note(arguments_reconciled=self.argument_changes)
         self.lock = threading.RLock()
@@ -4040,6 +4084,27 @@ class AsyncRoundDriver:
         """The remote targets whose collection client runs on the DGX (Pop, ``--collect-on-dgx`` remotes)."""
         return [t for t in self.remote_targets() if t['host'] and not t.get('on_host')]
 
+    def hold_clients(self, on):
+        """While a preparation stage waits for room (``Cycle.wait_for_room``), the DGX-side collection clients are the
+        cheaper units: one waiting in the ledger is withdrawn (it would take the room first: it is queued, the stage is
+        not) and none is started (``start_remote_collector``, ``requeue_client_to_fit``); the standing checks start them
+        again afterwards. Running clients yield through the prep claim (``collect --prep-priority-only``).
+        ``--no-hold-clients`` opts out."""
+        if getattr(self.a, 'no_hold_clients', False):
+            return
+        self.clients_held = bool(on)
+        if not on:
+            return
+        try:
+            policy = self.controller.current
+            for target in self.dgx_clients():
+                unit = self.collection_unit(policy) + target['suffix']
+                if ledger_queued(unit) and not self.c.active(unit):
+                    self.c.stop_unit(unit)
+                    self.note(client_withdrawn=unit, why='a preparation stage waits for room')
+        except Exception as error:
+            self.note(hold_clients_failed=repr(error)[:300])
+
     def requeue_client_to_fit(self, policy, target):
         """A DGX-side collection client waiting in the ledger at more than ``client_plan`` asks now is cancelled and
         started again at that budget (``start_remote_collector``; its collector restores its slots and claim once room
@@ -4048,7 +4113,7 @@ class AsyncRoundDriver:
         import pop_rl_actor
         unit = self.collection_unit(policy) + target['suffix']
         with self.COLLECT_LOCK:
-            if not ledger_queued(unit) or self.c.active(unit):
+            if getattr(self, 'clients_held', False) or not ledger_queued(unit) or self.c.active(unit):
                 return False
             queued = ledger_waiting_gb(unit)
             if queued is None:
@@ -4071,6 +4136,8 @@ class AsyncRoundDriver:
         session a round's SFT holds (every start path ends here)."""
         if target['host'] in self.colab_sft_busy_hosts():
             return
+        if getattr(self, 'clients_held', False) and not target.get('on_host'):
+            return                          # a preparation stage waits for the room first (hold_clients)
         endpoint = self.target_endpoint(target)
         unit = self.collection_unit(policy) + target['suffix']
         if self.c.present(unit) and self.collector_on_old_dir(unit, policy, target['suffix']):
@@ -4087,7 +4154,8 @@ class AsyncRoundDriver:
         if not target.get('on_host'):      # a DGX-side client: fitted to the room, restored when room returns
             plan = self.client_plan(target, budget, self.collection_room_gb(unit))
             budget, full, slots = plan['budget'], plan['full'], plan['slots']
-            argv += ['--ledger-full-gb', str(full), *(['--room-slots', str(slots)] if plan['room_slots'] else [])]
+            argv += ['--ledger-full-gb', str(full), *(['--room-slots', str(slots)] if plan['room_slots'] else []),
+                     *([] if getattr(self.a, 'no_hold_clients', False) else ['--prep-priority-only'])]
         self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True,
                       **({'shrunk': True, 'host_max_gb': full} if budget < full else {}))
         self.note(remote_collection=unit, host=target['host'], endpoint=endpoint, slots=target['slots'],
@@ -4701,11 +4769,11 @@ class AsyncRoundDriver:
                     tmp = script.with_name(script.name + '.tmp')
                     tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
                     os.replace(tmp, script)
-                step('data', DATA_STAGE_GB, ['/bin/sh', str(script)], repo=self.c.data_repo())
+                step('data', self.stage_gb('data', DATA_STAGE_GB), ['/bin/sh', str(script)], repo=self.c.data_repo())
                 # 24 GB: r0004-r0007 peaked at 17.0-17.5 GiB (18.7 GB) with the aux parts loaded before the teacher
                 # admission and --prefer-unseen reading older mixes (the 32 GB of 2026-11-24 morning anticipated them);
                 # r0001's 21.2 GB was before. The guard raises an over-budget unit while memory is plentiful.
-                step('build', 24, build, repo=self.c.data_repo())
+                step('build', self.stage_gb('build', BUILD_STAGE_GB), build, repo=self.c.data_repo())
             report = json.loads((round_dir / 'mix' / 'build.json').read_text())
             if not self.supply_wait(round_dir, report):
                 break
@@ -4720,6 +4788,14 @@ class AsyncRoundDriver:
         (round_dir / 'stages' / 'prepared.done').write_text(json.dumps({'time': time.time()}) + '\n')
         self.ensure_teacher(round_dir)
         return manifest
+
+    def stage_gb(self, stage, default):
+        """A preparation step's ledger GB: its recent rounds' measured peak x 1.1, at most ``default``
+        (``measured_stage_gb``; r0011-r0013 data 12.1-19.8, build 17.5-19.3 GiB against 24 claimed);
+        --no-measured-stage-budget claims ``default``."""
+        if not getattr(self.a, 'measured_stage_budget', True):
+            return default
+        return measured_stage_gb(self.a.name, stage, default, ledger_family_peaks())
 
     def supply_wait(self, round_dir, report):
         """Whether a round waits for more new supervision before it trains (the data and build steps then run again):
@@ -4747,7 +4823,12 @@ class AsyncRoundDriver:
                   decision=record['decision'])
         if not wait:
             return False
-        deadline = time.time() + 60 * getattr(self.a, 'supply_recheck_minutes', SUPPLY_RECHECK_MINUTES)
+        recheck = 60 * getattr(self.a, 'supply_recheck_minutes', SUPPLY_RECHECK_MINUTES)
+        if getattr(self.a, 'supply_rate_wait', True):
+            remaining = 3600 * getattr(self.a, 'max_supply_wait_hours', MAX_SUPPLY_WAIT_HOURS) - waited
+            recheck = supply_wait_seconds(record['builds'], minimum, recheck, remaining)
+            self.note(round=round_dir.name, supply_next_build_in_minutes=round(recheck / 60))
+        deadline = time.time() + recheck
         while time.time() < deadline:
             self.standing_teacher()
             time.sleep(60)
@@ -5838,6 +5919,9 @@ def main():
     c.add_argument('--held-priority-share', type=float, default=HELD_PRIORITY_SHARE,
                    help='share of the slots the collection keeps while a held measurement runs (1: no priority)')
     c.add_argument('--no-held-priority', action='store_true')
+    c.add_argument('--prep-priority-only', action='store_true',
+                   help='a remote actor\'s DGX-side client: yield (and evict) for round-preparation claims in '
+                        '--held-priority-dir, never for held measurements')
     c.add_argument('--no-resume-unfinished', action='store_true',
                    help="grpo's --no-resume-unfinished: abandon the groups an earlier run left unfinished")
     c.add_argument('--episode-reruns', type=int, default=None, help="grpo's --episode-reruns")
@@ -6117,6 +6201,13 @@ def main():
     ad.add_argument('--prep-yield-share', type=float, default=PREP_YIELD_SHARE,
                    help='share of its slots a DGX collection keeps while a round prepares beside it (it also lowers its ledger '
                         'claim instead of being preempted; 1 opts out; env NATLANG_EI_PREP_YIELD_SHARE)')
+    ad.add_argument('--no-hold-clients', action='store_true',
+                    help='DGX-side collection clients neither wait for a preparation stage\'s room nor yield to it')
+    ad.add_argument('--no-measured-stage-budget', dest='measured_stage_budget', action='store_false', default=True,
+                    help='claim the fixed data/build budgets, not the recent rounds\' learned peaks x 1.1')
+    ad.add_argument('--no-supply-rate-wait', dest='supply_rate_wait', action='store_false', default=True,
+                    help='rebuild a short round every --supply-recheck-minutes, not when its supply rate projects '
+                         'the minimum')
     ad.add_argument('--prep-evict-seconds', type=int, default=PREP_EVICT_SECONDS,
                     help='while a round prepares, the DGX collection stops (and requeues in place) the episodes of its '
                          'yielded slots after this many seconds, so the step fits beside it instead of preempting it '
