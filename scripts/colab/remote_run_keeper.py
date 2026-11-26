@@ -119,7 +119,9 @@ def start(args):
     log_file = f'{run}/.keeper-attempts.log'
     inner = (f'echo "=== attempt $(date -Is)" >> {q(log_file)}; {shlex.join(claim)} >> {q(log_file)} 2>&1; '
              f'echo $? > {q(run)}/.keeper.rc.tmp && mv {q(run)}/.keeper.rc.tmp {q(run)}/.keeper.rc')
-    remote(args.host, f'mkdir -p {q(run)} && rm -f {q(run)}/.keeper.rc && '
+    # separate statements: `a && setsid ... &` backgrounds the whole list in a subshell that holds the SSH channel
+    # open until the run ends (pop_rl_actor.run_detached)
+    remote(args.host, f'mkdir -p {q(run)}; rm -f {q(run)}/.keeper.rc; '
                       f'setsid nohup bash -c {q(inner)} > /dev/null 2>&1 < /dev/null & echo $! > {q(run)}/.keeper.pid')
     log(event='attempt started', host=args.host, run=run)
 
