@@ -14412,3 +14412,42 @@ Not applicable: clients on their remote host (`remote_collect.py run`, fixed REM
 DGX) and the fills (FILL_GB / COLAB_FILL_GB claim for the source listings, not slots: `expert_iteration.py` FILL_GB
 comment). With today's 17.5 GB headroom (room ~2.5 GB after the reserve) even 16 Pop slots do not fit; the client starts
 as soon as room for its minimum appears instead of waiting for 22 GB.
+
+
+### 2026-11-26: separate finite guest execution from EvalDO preparation
+
+Actual wave0074 Regency fixture failures reported `eval timed out after 3000ms` before teacher entry.
+The admitted `timeoutMs` is a whole-run wall deadline: durable queueing, engine/runtime setup, transformation,
+compilation, guest execution and async settlement all consume it. Source41 and Source42 share the same relevant
+EvalDO/sandbox blobs. The original inspected failure SHA is
+`6f7545f888fc5988237387a59582a05d74d2373bc60adc3e9c1168c20abdd7b6`; it does not identify guest CPU versus setup.
+The historical cause and an exact replay of those failed policy inputs remain unchecked; no original verdict changed.
+
+Ship the shared explicit `executionTimeoutMs` API. Its clock starts at the first untrusted module initializer or
+entry invocation after initial trusted preparation/compilation, and includes later imports and async settlement.
+It requires the independent whole-run bound. The three finite, capability-free policy producers (Regency,
+Adventure, Living Canvas) retain the 3000ms guest limit and use a separate 30000ms whole-run infrastructure bound;
+`legacyWholeRunOnly` restores their previous whole-only behavior. Native requests remain empty, read-only and
+pregranted-only. Expiry aborts the exact run owner and joins canonical cleanup. A real detached-rejection defect
+exposed by synchronous guest expiry was fixed by observing the returned promise even when already aborted.
+Source-bound phase diagnostics retain the original typed failure through scope disposal, renderer JSON and SST.
+
+Clean pushed successor sources: Host `b0b64ffa708217b1e8d013e0ee5f591e59520797`,
+Base `b61caea43e40789b50ff8848983df8bf3557ea7f`, Examples `28f6f93bd0563105a47c26c27855b751fd9a4881`,
+SST `1630f7638b6fe9cb6b1d7c1635c9b06ee6e9b64e`. The source inventory is
+`meta/GUEST_EXECUTION_BUDGET_INVENTORY.json` in these repositories. 311 distinct model-free controls passed across
+actual confined sandbox/initializers, EvalDO owner cancellation and cleanup, strict public/internal RPC schemas,
+normalization and intent identity, three policy consumers and renderer diagnostic transport. Exact proof:
+`/home/werg/vibe-guest-execution-deadline-ops/focused-ready.json`. Official Host declaration build, actual Workerd
+native replay and a newly built installed-Hub package remain unchecked; the coherent source producer/package
+consumer must verify those paths. No SDK bytes or frozen source inputs changed, and useful Source42 Luna continued.
+
+Retained library functions can carry the prior invocation's inactive checkpoint closure. An explicit new guest
+budget fails closed before using such a build-loaded module from a different budget owner. Ordinary whole-only
+module bodies also lack cooperative in-module checkpoints: the separate diagnostic actually observed all ten
+bounded ticks (100ms fake clock) before the outer 25ms deadline check rejected the result. This is an OPEN coverage
+limit, with the existing whole-run process watchdog as fallback, not a claim all imported code is cooperatively
+bounded. Safe current-owner checkpoint rebinding must preserve valid escaped functions and realm concurrency;
+EvalDO's existing active execution context is the concrete shared seam. It does not gate the minimal no-import
+policy successor. The optional old007 guarded package was superseded; warm default-three cache retained and its
+resumption watcher now requires an exact coherent successor package spec plus actual capacity. No new model calls.
