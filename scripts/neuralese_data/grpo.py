@@ -256,6 +256,9 @@ def held_complete(out):
         return False
 
 
+MEMETIC_SEED_SIBLINGS = 3
+
+
 def held_priors(base_out, held_root, out):
     """Every complete held result of a run but ``out``'s (the start policy's first): the dispatch order's evidence of
     each task's episode wall time (held_eval.Dispatch)."""
@@ -629,9 +632,15 @@ class Collector:
         so a new collection's memetic groups need not wait for their families to be measured again."""
         families = {(row.get('curriculum') or {}).get('program_family') for row in self.memetic_rows}
         seeds = getattr(self.args, 'memetic_seed_collection', None)
-        works = [Path(path) for path in seeds] if seeds else sorted(
-            path for path in self.work.parent.glob('*') if path.is_dir() and path != self.work
-            and (path / 'groups').is_dir())
+        # the default seeds read the newest MEMETIC_SEED_SIBLINGS siblings on this disk: 2026-11-26 v0011 read every
+        # group of ~20 sibling collections, most tiered to the HDD (symlinks), and sat 45+ min in disk waits before
+        # its first episode (NATLANG_MEMETIC_SEED_ALL=1 reads them all)
+        siblings = [path for path in self.work.parent.glob('*') if path.is_dir() and path != self.work
+                    and (path / 'groups').is_dir()]
+        if os.environ.get('NATLANG_MEMETIC_SEED_ALL') != '1':
+            siblings = sorted((p for p in siblings if not p.is_symlink()), key=lambda p: p.stat().st_mtime)
+            siblings = siblings[-MEMETIC_SEED_SIBLINGS:]
+        works = [Path(path) for path in seeds] if seeds else sorted(siblings)
         directories = [d for work in [*works, self.work] for d in sorted((Path(work) / 'groups').glob('g*'))]
         for directory in directories:
             try:
