@@ -203,3 +203,60 @@ def test_static_consumers_wait_for_ledger_owned_render_and_teacher(tmp_path,monk
     monkeypatch.setattr(static,'teacher_serving',lambda:False)
     monkeypatch.setattr(static.subprocess,'Popen',lambda *a,**kw:pytest.fail('must not launch a second queued teacher'))
     static.ensure_teacher_queued()
+
+
+def test_fill_source_units_are_fresh_and_match_only_the_owned_reader_role(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from scripts import memory_ledger
+    c = object.__new__(ei.Cycle)
+    c.pin = tmp_path / 'runtime'
+    c.a = SimpleNamespace(fill_repo=str(tmp_path / 'reader-a'))
+    base = 'TEST-collect-v0001-fill'
+    a, b = c.new_fill_unit(base), c.new_fill_unit(base)
+    assert a != b and a.startswith(c.fill_unit_prefix(base) + '-')
+    c.a.fill_repo = str(tmp_path / 'reader-b')
+    current = c.new_fill_unit(base)
+    foreign = c.new_fill_unit(base + '-foreign')
+    monkeypatch.setattr(memory_ledger, 'owned_units', lambda: {x + '.service' for x in (a, b, current, foreign)})
+    present = {base, a, b, current, foreign}
+    monkeypatch.setattr(c, 'present', lambda unit: unit in present)
+    stopped = []
+    monkeypatch.setattr(c, 'stop_unit', lambda unit: (stopped.append(unit), present.discard(unit)))
+    assert c.current_fill_unit(base) == current
+    c.stop_fills(base, stale_only=True)
+    assert set(stopped) == {base, a, b} and foreign in present and current in present
+    c.stop_fills(base)
+    assert current not in present and foreign in present
+    monkeypatch.setenv('NATLANG_EI_FILL_SOURCE_UNITS', '0')
+    assert c.new_fill_unit(base) == base
+
+
+def test_fill_keeper_rejoins_existing_actor_once_without_restarting_its_collection(tmp_path, monkeypatch):
+    d = driver(tmp_path, monkeypatch)
+    d.a.fill = str(tmp_path / 'filled')
+    unit = 'TEST-collect-v0000'
+    work = tmp_path / 'owned-collection'
+    work.mkdir()
+    started = []
+    class Thread:
+        def __init__(self, *, target, args, daemon):
+            self.target, self.args, self.daemon = target, args, daemon
+            self.alive = False
+        def start(self):
+            self.alive = True
+            started.append(self)
+        def is_alive(self):
+            return self.alive
+    monkeypatch.setattr(ei.threading, 'Thread', Thread)
+    before = json.loads((d.root / 'phase-state.json').read_text())
+    d.ensure_fill_keeper(unit, work, d.controller.current)
+    assert started == []  # No invented actor receipt or remote activity.
+    (work / 'actor.json').write_text(json.dumps({'checkpoint_sha256': d.controller.current['sha256']}))
+    d.ensure_fill_keeper(unit, work, d.controller.current)
+    d.ensure_fill_keeper(unit, work, d.controller.current)
+    assert len(started) == 1 and started[0].args[0] == unit
+    assert started[0].target == d._fill_beside
+    assert json.loads((d.root / 'phase-state.json').read_text()) == before
+    started[0].alive = False
+    d.ensure_fill_keeper(unit, work, d.controller.current)
+    assert len(started) == 2  # A settled keeper is resumed; an active one is joined.
