@@ -257,7 +257,7 @@ async function main(argv: string[] = process.argv.slice(2), stop?: AbortSignal):
  * greet it, so a server that wakes up later finds only closed connections and never runs an invocation twice. */
 /** run_bonsai_queue uses a runtime's shared server only at this protocol (/1 died with EPIPE when a peer left; /2 had no
  * greeting: a client waited 60 s on a stalled server and then failed its episode, grpo-v4-run1 2026-11-18). */
-const SERVE_PROTOCOL = 'natlang-collector-serve/3';
+const SERVE_PROTOCOL = 'natlang-collector-serve/4';
 
 async function serve(argv: string[]): Promise<void> {
   const { flags } = argumentsOf(argv);
@@ -328,15 +328,25 @@ async function serve(argv: string[]): Promise<void> {
     // A peer can go away at any point (a probe, a supervisor that timed out or was killed): a write to it then fails
     // with EPIPE, which must end that connection only, never the process serving the other invocations.
     connection.on('error', () => {});
-    connection.write(JSON.stringify({ ready: true, pid: process.pid, active, capacity, listening }) + '\n');
-    let buffer = '', started = false, done = false;
+    connection.write(JSON.stringify({ ready: true, protocol: SERVE_PROTOCOL, pid: process.pid, active, capacity, listening }) + '\n');
+    let buffer = '', started = false, done = false, requestId: string | null = null;
     const stop = new AbortController();
     connection.on('close', () => stop.abort());
+    const control = () => {
+      for (let end; (end = buffer.indexOf('\n')) >= 0;) {
+        const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+        try {
+          const message = JSON.parse(line) as { cancel?: unknown; request_id?: unknown };
+          if (!done && message.cancel === true && message.request_id === requestId) stop.abort();
+        } catch { /* An invalid control frame never cancels another invocation. */ }
+      }
+    };
     connection.on('data', chunk => {
-      if (started) return;
       buffer += chunk.toString('utf8');
+      if (started) { control(); return; }
       const end = buffer.indexOf('\n');
       if (end < 0) return;
+      const first = buffer.slice(0, end); buffer = buffer.slice(end + 1);
       started = true;
       // Capacity is taken by a request, not by a connection: a connection that closes without one holds nothing.
       if (active >= capacity || !listening) { connection.end(JSON.stringify({ busy: true }) + '\n'); return; }
@@ -345,7 +355,7 @@ async function serve(argv: string[]): Promise<void> {
       const finish = (value: object) => {
         if (done) return;
         done = true; active--; served++; arm();
-        if (!connection.destroyed) connection.end(JSON.stringify(value) + '\n');
+        if (!connection.destroyed) connection.end(JSON.stringify({ ...value, request_id: requestId }) + '\n');
         // Retention is visible here: the heap after a collection, per finished invocation.
         (globalThis as { gc?: () => void }).gc?.();
         const memory = process.memoryUsage();
@@ -353,14 +363,19 @@ async function serve(argv: string[]): Promise<void> {
           heap_used_mb: Math.round(memory.heapUsed / 2**20),
           rss_mb: Math.round(memory.rss / 2**20), external_mb: Math.round(memory.external / 2**20) }) + '\n');
       };
-      let request: { argv?: unknown };
-      try { request = JSON.parse(buffer.slice(0, end)) as { argv?: unknown }; }
+      let request: { argv?: unknown; request_id?: unknown };
+      try { request = JSON.parse(first) as { argv?: unknown; request_id?: unknown }; }
       catch (error) { finish({ exit: 1, error: String(error) }); return; }
       if (!Array.isArray(request.argv) || !request.argv.every(item => typeof item === 'string')) {
         finish({ exit: 1, error: 'argv must be a list of strings' }); return; }
-      connection.write(JSON.stringify({ accepted: true, pid: process.pid }) + '\n');
+      if (typeof request.request_id !== 'string' || !/^[a-f0-9]{32}$/u.test(request.request_id)) {
+        finish({ exit: 1, error: 'request_id must name this exact invocation' }); return;
+      }
+      requestId = request.request_id;
+      connection.write(JSON.stringify({ accepted: true, pid: process.pid, request_id: requestId }) + '\n');
       main(request.argv as string[], stop.signal).then(code => finish({ exit: code }),
         error => { process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`); finish({ exit: 1, error: String(error) }); });
+      control();
     });
   });
   rmSync(socket, { force: true });

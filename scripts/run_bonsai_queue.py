@@ -16,6 +16,7 @@ import math
 import random
 import shutil
 import tempfile
+import uuid
 import urllib.request
 import urllib.parse
 from datetime import datetime
@@ -692,6 +693,10 @@ def sweep_orphan_temporaries(*directories):
     return removed
 
 
+class SharedCollectorUnjoined(BaseException):
+    """The wrapper cannot certify its shared invocation's finalization. Never score it as a finished episode."""
+
+
 class SharedChild:
     """A collector invocation served by a shared node process instead of its own (NATLANG_COLLECTOR_SHARED=N: up to N
     invocations per process; 2026-11-12, plans/neuralese/ACTOR_THROUGHPUT_20261112.md). A node process with the bundle
@@ -716,7 +721,7 @@ class SharedChild:
         """Whether the runtime's collector has the server mode at protocol /3 (pinned older trees have none, /1, whose
         server died with EPIPE when a peer left and leaked capacity to probes, or /2, which did not greet)."""
         try:
-            return 'natlang-collector-serve/3' in Path(cli).read_text()
+            return 'natlang-collector-serve/4' in Path(cli).read_text()
         except OSError:
             return False
 
@@ -724,12 +729,15 @@ class SharedChild:
         import socket as socket_module
         import fcntl
         self.returncode, self._buffer, self._accepted = None, b'', False
+        self.request_id, self.cancel_requested = uuid.uuid4().hex, False
+        self.jobs = (Path(command[command.index('--jobs') + 1]) if '--jobs' in command else
+                     Path(command[4]) if len(command) > 5 and not command[3].startswith('--') else None)
         self.log = log    # the invocation's own log: its error (the server's reply) is written there, not only the server's
         key = hashlib.sha256('\0'.join([str(Path(command[2]).resolve()), os.environ.get('INVOCATION_ID', str(os.getppid())),
                                           os.environ.get('NATLANG_MODEL_FACING', '')]).encode()).hexdigest()[:16]
         root = Path(SharedChild.ROOT) / f'natlang-collector-{os.getuid()}' / key   # short: unix socket paths < 108 bytes
         root.mkdir(parents=True, exist_ok=True)
-        request = (json.dumps({'argv': command[3:]}) + '\n').encode()
+        request = (json.dumps({'argv': command[3:], 'request_id': self.request_id}) + '\n').encode()
         for index in SharedChild.socket_order():
             path = root / f's{index:03d}.sock'
             for attempt in range(2):
@@ -757,7 +765,7 @@ class SharedChild:
                     hello = json.loads(greeting) if greeting else {}
                 except (OSError, ValueError):   # TimeoutError included: stalled, nothing was sent to it
                     greeting, hello = None, {}
-                if not hello.get('ready'):
+                if not hello.get('ready') or hello.get('protocol') != 'natlang-collector-serve/4':
                     connection.close()
                     log.write(json.dumps({'event': 'shared_collector_unresponsive', 'socket': str(path),
                                           'reason': 'no greeting' if greeting is None else 'closed'}) + '\n')
@@ -766,11 +774,18 @@ class SharedChild:
                 if hello.get('active', 0) >= hello.get('capacity', 1) or hello.get('listening') is False:
                     connection.close()
                     break   # full: the next socket
-                connection.sendall(request)
-                line = self._line(connection, self.ACCEPT_SECONDS)
-                reply = json.loads(line) if line else {}
+                self.connection, self.server_pid = connection, hello.get('pid')
+                try:
+                    connection.sendall(request)
+                    line = self._line(connection, self.ACCEPT_SECONDS)
+                    reply = json.loads(line) if line else {}
+                except (OSError, ValueError):
+                    self._unjoined('request acceptance did not settle')
                 if reply.get('accepted'):
                     self.connection, self.server_pid = connection, reply.get('pid')
+                    if reply.get('request_id') != self.request_id:
+                        self._unjoined('accepted response names another invocation')
+                    self._accepted = True
                     log.write(json.dumps({'event': 'shared_collector', 'socket': str(path), 'pid': self.server_pid}) + '\n')
                     log.flush()
                     return
@@ -828,6 +843,11 @@ class SharedChild:
         except TimeoutError:
             raise subprocess.TimeoutExpired('shared collector', timeout)
         reply = json.loads(line) if line else {}
+        if 'exit' in reply and getattr(self, 'request_id', None) is not None and reply.get('request_id') != self.request_id:
+            self._unjoined('terminal response names another invocation')
+        if 'exit' not in reply and (getattr(self, 'cancel_requested', False) or
+                getattr(self, 'request_id', None) is not None and self.server_alive()):
+            self._unjoined('connection closed before cancellation settled')
         self.lost = 'exit' not in reply
         self.returncode = int(reply['exit']) if 'exit' in reply else 1
         if reply.get('error'):
@@ -846,12 +866,32 @@ class SharedChild:
         except subprocess.TimeoutExpired:
             return None
 
-    def terminate(self):
-        if self.returncode is None:
-            self.connection.close()
-            self.returncode = -signal.SIGTERM
+    def server_alive(self):
+        from natlang_neuralese.rl.episode_files import _pid_alive
+        try:
+            return _pid_alive(self.server_pid)
+        except (TypeError, AttributeError):
+            return True
 
-    kill = terminate
+    def _unjoined(self, reason):
+        self.connection.close()
+        if getattr(self, 'jobs', None) is not None:
+            marker = self.jobs / f'.shared-cancel-unjoined-{self.request_id}.json'
+            marker.write_text(json.dumps({'schema': 'natlang.shared-cancellation-unjoined/1',
+                'server_pid': self.server_pid, 'request_id': self.request_id, 'reason': reason}) + '\n')
+        raise SharedCollectorUnjoined(reason)
+
+    def terminate(self):
+        if self.returncode is None and not self.cancel_requested:
+            self.cancel_requested = True
+            try:
+                self.connection.sendall((json.dumps({'cancel': True, 'request_id': self.request_id}) + '\n').encode())
+            except OSError:
+                self._unjoined('cancellation could not reach its owning invocation')
+
+    def kill(self):
+        if self.returncode is None:
+            self._unjoined('cancellation did not join; preserve pending evidence and shared siblings')
 
 
 # Data-backed RL task services (repo/sql/table snapshots) read their sha-pinned files from the root named by
@@ -1084,6 +1124,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         Path(entry['jobs']).mkdir(parents=True, exist_ok=True)
         Path(entry['output']).parent.mkdir(parents=True, exist_ok=True)
         Path(entry['log']).parent.mkdir(parents=True, exist_ok=True)
+        from natlang_neuralese.rl.episode_files import unjoined_writer
+        if unjoined_writer(Path(entry['jobs']).parent):
+            raise SharedCollectorUnjoined('previous shared invocation still owns pending evidence')
         start = time.monotonic()
         last_activity, previous = start, partial_metrics(entry, journal_spool_root)
         previous_poll, unobserved_seconds, was_waiting = start, 0, False
@@ -1346,9 +1389,16 @@ if __name__ == '__main__':
         STOP_REQUESTED.append(signum)
         raise KeyboardInterrupt('queue stopped')
     signal.signal(signal.SIGTERM, stop)
-    raise SystemExit(run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
+    try:
+        result = run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
               args.no_observation_seconds, args.max_batch_cases, args.provider_request_config,
               args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config,
               args.identical_turn_limit, args.neuralese_server, args.drain_file,
-              args.journal_spool_root, args.text_neuralese))
+              args.journal_spool_root, args.text_neuralese)
+    except SharedCollectorUnjoined as error:
+        print(json.dumps({'event':'shared_collector_unjoined','reason':str(error),'finished':False}),file=_sys.stderr,flush=True)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGTERM)
+        raise
+    raise SystemExit(result)

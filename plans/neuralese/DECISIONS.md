@@ -14718,3 +14718,8 @@ The nine items the reviews left open, each a default with targeted tests (opt-ou
   and the select fix.
 - Seen on the way and fixed: `test_free_cuda_cache_returns_what_the_garbage_collection_frees` compared GiB figures
   against a GB base (failed at 0.27 >= 0.271).
+
+
+### 2026-11-26: join shared collector cancellation before scoring or compression
+
+An original v0010 Pop partial had the same 76 model turns in raw/packed files but five finalized evidence/request metadata fields differed. The Python shared child declared itself terminated when it only closed a socket; the Node server was still aborting and could publish evidence after the wrapper finished/scored/compacted. Protocol 4 keeps the per-invocation connection open, sends an exact-token cancel, and waits for the actual terminal response after finalizers. Unknown closure remains interrupted, with raw evidence and writer ownership retained; no sibling process is killed. The queue, collector server, resume and direct/standing compaction share this ownership rule. Old protocols use the existing dedicated-process path. Official Node build and 75 Python/real-Node controls passed (177s,1.1GiB); a killed-but-unreaped process regression corrects zombie liveness. Current running 14fc is unchanged until a paired official client/server pin resumes. Existing actor/policy/learner checkpoints, optimizer and RNG remain unchanged. Native inference and teacher registration: zero. General unrelated external writers racing standalone compaction and the old unresponsive Colab front Python stack remain unchecked; this change does not claim those causes.

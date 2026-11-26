@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.shared-cancellation-inventory/1",
+  "beforeEdits": true,
+  "observedOriginal": "v0010-96e37100a194-pop/groups/g000032/row-000/sample-02",
+  "checkedMechanism": {
+    "scripts/run_bonsai_queue.py:823": "wait returns immediately once terminate sets returncode; terminate849 closes peer before server cleanup. Queue1230-1272 therefore scores/finishes while abort finalizers can write.",
+    "ts-host/src/teacher/cli.ts:327": "per-peer AbortController; close only starts abort, finish called when main settles. No existing client cancellation-join frame.",
+    "ts-host/src/teacher/collector.ts:1375,1613": "actual partial/evidence finalization may write after abort; no fake model rows introduced.",
+    "scripts/neuralese_data/grpo.py:1284": "compacts after group scores; assumes child queue process exit means underlying Node invocation joined.",
+    "scripts/neuralese_data/teacher_gen.py:422,722": "same queue protocol and post-episode compaction",
+    "training/neuralese/natlang_neuralese/rl/held_eval.py:674,822": "same queue protocol and post-episode compaction",
+    "scripts/neuralese_data/remote_collect.py": "launches the canonical queue on remote sources; new client and server must come from one pin.",
+    "training/neuralese/natlang_neuralese/rl/episode_files.py:155,231,258": "shared raw/packed readers and compactor; other-content collision preserves both; quiet/open-FD heuristics do not prove finalization.",
+    "scripts/ei_round_tier.py:472,515": "standing compaction also consumes quiet/closed invariants"
+  },
+  "engines": "Managed SGLang/native/remote collectors use the same host queue/Node invocation lifecycle. Browser/wllama program execution does not implement this Unix shared collector protocol; no engine inference change.",
+  "design": "Protocol4 per-connection request token, explicit cancel frame, exact-token terminal reply only after main/finalizers settle. Unjoined closure must remain interrupted/pending, never finish/scored/compacted; no shared process kill. Existing NATLANG_COLLECTOR_SHARED=0 is safe dedicated-process opt-out. Pair new client/server in official pin; do not mutate running14fc.",
+  "unchecked": [
+    "Actual old actor Python stack and pipe_write rootcause",
+    "General arbitrary external writers racing standalone compaction outside owned collector lifetime",
+    "Whether old protocol files have other historical late-finalization collisions"
+  ],
+  "implementation": {
+    "protocol": "natlang-collector-serve/4",
+    "join": "Same connection and exact random request ID; terminate requests cancellation, wait gets terminal only after main/finalizers settle.",
+    "unknownClosure": "Reject mismatched terminal or unjoined cancellation; preserve per-attempt marker, do not write finish or compact/restart while writer PID lives. CLI exits by actual SIGTERM so all existing subprocess parents retain interrupted handling.",
+    "compatibility": "Only protocol4 uses sharing; unsupported runtimes safely use existing dedicated process. Pair client/server in one official pin. NATLANG_COLLECTOR_SHARED=0 remains supported.",
+    "dataRetention": "Original raw/packed history remains. No deletion or guessed finalization; unjoined marker guards direct/standing compaction and resume. Zombie states cannot write and are distinguished from live processes."
+  },
+  "validation": {
+    "nodeBuild": "PASS, official build:node",
+    "pythonAndActualNodeControls": 75,
+    "failed": 0,
+    "durationSeconds": 176.97,
+    "peakGiB": 1.1,
+    "unit": "vibe-shared-cancel-node-pair-20261126b",
+    "actualServer": "Foreign token does not cancel; sibling remains executable; cancelled request settles with exact terminal token and final evidence bytes stable.",
+    "earlierFailure": "First paired run73PASS/1FAIL exposed zombie classified as live writer; corrected shared liveness and added real unreaped-process regression.",
+    "models": 0,
+    "teacherDataRegistration": false
+  }
+}
