@@ -382,7 +382,7 @@ function modelTypeSource(text: string): string {
 }
 
 function referencedTypeAliases(signatures: string[], definitions: Record<string, string>,
-  declarations: Record<string, string> = {}, transitive = true): string[] {
+  declarations: Record<string, string> = {}, transitive = true, semantic = true): string[] {
   const found = new Set<string>();
   const visit = (text: string): void => {
     for (const name of Object.keys(definitions)) {
@@ -394,7 +394,7 @@ function referencedTypeAliases(signatures: string[], definitions: Record<string,
   for (const signature of signatures) visit(signature);
   // A class or method-bearing interface is shown as its TypeScript declaration, not its live-value alias. An alias's own
   // doc comment (type-aliases.ts keeps it at the head of the definition) goes above it, as it is written in types.ts.
-  return [...found].map(name => declarations[name] ?? aliasDeclaration(name, modelTypeSource(definitions[name]!)));
+  return [...found].map(name => declarations[name] ?? aliasDeclaration(name, semantic ? modelTypeSource(definitions[name]!) : definitions[name]!));
 }
 
 /** A wide or deeply composed scope can exhaust the model context before its first action. */
@@ -1555,7 +1555,7 @@ export class NativeToolAgent {
         const exports = (raw.exports ?? {}) as Record<string, Export>;
         for (const [key, spec] of Object.entries(exports)) {
           if (!compact) for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''],
-            (raw.types ?? {}) as Record<string, string>, (raw.declarations ?? {}) as Record<string, string>)) aliases.add(line);
+            (raw.types ?? {}) as Record<string, string>, (raw.declarations ?? {}) as Record<string, string>, true, false)) aliases.add(line);
           entries.push(spec.kind === 'function' ? `${propertyName(key)}: (${params(spec.args ?? {}).join(', ')}) => ${returns(spec)}` :
             `${propertyName(key)}: ${spec.type ?? 'unknown'}`);
         }
@@ -1578,7 +1578,7 @@ export class NativeToolAgent {
         const exports = (raw.exports ?? {}) as Record<string, Export>;
         for (const [exportName, spec] of Object.entries(exports)) {
           if (!compact) for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''], types,
-            (raw.declarations ?? {}) as Record<string, string>)) aliases.add(line);
+            (raw.declarations ?? {}) as Record<string, string>, true, false)) aliases.add(line);
           if (exportName === 'default') {
             if (spec.kind === 'function') lines.push(...doc(spec.doc, indent),
               `${lead}function ${name}(${params(spec.args ?? {}).join(', ')}): ${returns(spec)};  // TypeScript`);

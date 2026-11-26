@@ -51,3 +51,11 @@ for(const mode of ['node','workerd'])for(const asynchronous of [false,true])test
  }});
  try{const project=core.compileVirtualProject({root:'/lexical-callback',files:{'entry.ts':`import {nl} from "@natlang/node";export default async function entry():Promise<string>{const callback=${asynchronous?'async ':''}(id:string)${asynchronous?':Promise<{id:string}>':':{id:string}'}=>({id});return await nl.with<string>({callback})\`Use the actual supplied callback.\`();}`}},core,{platform});assert.equal(project.ok,true,JSON.stringify(project.diagnostics));assert.equal(await runtime.run(()=>project.require('entry.ts').default()),'captured');assert.equal(seen,1);}finally{runtime.close();}
 });
+for(const mode of ['node','workerd'])test(`${mode} imported TS helper retains its synchronous callback alias`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});
+ const runtime=core.createNatlangRuntime({platform,calls:false,agent:async session=>{const result=await session.applyAsync('eval',{code:'const callback=makeReader();return callback("native-sync").id;',finish:true});assert.equal(result.kind,'completed',result.text);}});
+ try{const project=core.compileVirtualProject({root:'/imported-sync-callback',files:{'entry.ts':'import owner from "./owner.nl";export default async function entry():Promise<string>{return owner();}','owner.nl':'---\nargs: {}\nreturns: string\n---\nUse the exact synchronous TS callback.','owner/makeReader.ts':'export type Reader=(id:string)=>{id:string};export default function makeReader():Reader{return id=>({id});}'}},core,{platform});assert.equal(project.ok,true,JSON.stringify(project.diagnostics));assert.equal(await runtime.run(()=>project.require('entry.ts').default()),'native-sync');}finally{runtime.close();}
+});
+test('ordinary TS import aliases keep their native contract in eval ambient declarations',()=>{
+ const text=scopeDeclarations({...scope,inputs:[],typeScriptAliases:['Reader'],imports:[{name:'makeReader',params:[],returns:'Reader',async:false,kind:'TypeScript',children:[]}]});assert.match(text,/type Reader = \(id:string\)=>Snapshot\|null;/);assert.doesNotMatch(text,/type Reader[^\n]*Promise/);
+});
