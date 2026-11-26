@@ -75,6 +75,13 @@ def present(path):
 
 def _pid_alive(pid):
     try:
+        # A killed shared server can await its parent's waitpid. It cannot write.
+        try:
+            state = Path(f'/proc/{int(pid)}/stat').read_text().rsplit(')', 1)[1].split()[0]
+            if state in {'Z', 'X'}:
+                return False
+        except (OSError, ValueError, IndexError):
+            pass
         os.kill(int(pid), 0)
         return True
     except ProcessLookupError:
@@ -152,12 +159,24 @@ def compress_file(path):
     return len(data), len(blob)
 
 
+def unjoined_writer(sample):
+    """A cancelled shared invocation may still finalize files after its wrapper exits."""
+    for marker in (Path(sample) / 'jobs').glob('.shared-cancel-unjoined-*.json'):
+        try:
+            value = json.loads(marker.read_text())
+            if value.get('schema') != 'natlang.shared-cancellation-unjoined/1' or _pid_alive(value['server_pid']):
+                return True
+        except (OSError, ValueError, KeyError, TypeError):
+            return True
+    return False
+
+
 def compact_sample(sample):
     """Compact one finished sample directory (``row-*/sample-*``; see the module doc). Returns a Counter of
     files and bytes per action. Never raises for one file: a file that fails stays as it was."""
     stats = collections.Counter()
     jobs = Path(sample) / 'jobs'
-    if not enabled() or not jobs.is_dir() or jobs.is_symlink():
+    if not enabled() or not jobs.is_dir() or jobs.is_symlink() or unjoined_writer(sample):
         return stats
     results = Path(sample) / RESULTS
     for path in sorted(jobs.iterdir()):
@@ -202,7 +221,7 @@ def compact_results(sample):
     module doc: call only once its group is scored for the last time). Returns a Counter like ``compact_sample``."""
     stats = collections.Counter()
     path = Path(sample) / RESULTS
-    if not results_enabled():
+    if not results_enabled() or unjoined_writer(sample):
         return stats
     try:
         if path.is_symlink() or not path.is_file() or path.stat().st_size < MIN_BYTES:
@@ -261,6 +280,8 @@ def open_paths(root):
 
 def quiet_sample(sample, now, quiet_seconds, held):
     """No file of the sample changed in ``quiet_seconds`` and none is open (its episode is over)."""
+    if unjoined_writer(sample):
+        return False
     for path in [sample, *sample.rglob('*')]:
         try:
             if now - path.lstat().st_mtime < quiet_seconds:

@@ -14625,3 +14625,8 @@ retained in `/home/werg/vibe-native-review-premise-audit-ops`. Source49 paid sta
 remains with its owner until the corrected operational driver is pinned. The two
 new accepted Source48 originals remain unregistered while actual DGX consumers
 are reconciled; actor/learner/checkpoint state was never reset.
+
+
+### 2026-11-26: join shared collector cancellation before scoring or compression
+
+An original v0010 Pop partial had the same76 model turns in raw/packed files but five finalized evidence/request metadata fields differed. The Python shared child declared itself terminated when it only closed a socket; the Node server was still aborting and could publish evidence after the wrapper finished/scored/compacted. Protocol4 keeps the per-invocation connection open, sends an exact-token cancel, and waits for the actual terminal response after finalizers. Unknown closure remains interrupted, with raw evidence and writer ownership retained; no sibling process is killed. The queue, collector server, resume and direct/standing compaction share this ownership rule. Old protocols use the existing dedicated-process path. Official Node build and75 Python/real-Node controls passed (177s,1.1GiB); a killed-but-unreaped process regression corrects zombie liveness. Current running14fc is unchanged until a paired official client/server pin resumes. Existing actor/policy/learner checkpoints, optimizer and RNG remain unchanged. Native inference and teacher registration: zero. General unrelated external writers racing standalone compaction and the old unresponsive Colab front Python stack remain unchecked; this change does not claim those causes.
