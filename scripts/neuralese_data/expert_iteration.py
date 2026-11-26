@@ -3650,12 +3650,28 @@ class AsyncRoundDriver:
         while int(getattr(self.a, 'collect_fit_min_slots', COLLECT_FIT_MIN_SLOTS) or 0) > 0:
             time.sleep(COLLECT_FIT_CHECK_SECONDS)
             self.collection_pending()
+            self.collection_standing()
             try:
                 cur = self.controller.current
                 for target in self.dgx_clients():
                     self.requeue_client_to_fit(cur, target)
             except Exception as error:
                 self.note(client_fit_failed=repr(error)[:300])
+
+    def collection_standing(self):
+        """The DGX collection is standing: gone (stopped by hand, failed, preempted and not requeued) while no DGX SFT
+        holds the GPU, it is launched again for the current policy. 2026-11-26 05:29: a collection stopped for a pin
+        move stayed down 20 min (GPU 0%) because the driver sat in a 45 min supply wait. NATLANG_EI_STANDING_COLLECTION=0
+        opts out."""
+        if os.environ.get('NATLANG_EI_STANDING_COLLECTION', '1') == '0' or getattr(self, 'collections_held', False):
+            return
+        try:
+            cur = self.controller.current
+            if not self.c.present(self.collection_unit(cur)):
+                self.note(collection_relaunch=self.collection_unit(cur), why='gone while no DGX SFT holds the GPU')
+                self.ensure_collection(cur)
+        except Exception as error:
+            self.note(collection_standing_failed=repr(error)[:300])
 
     def collection_room_gb(self, unit):
         """``ledger_room_gb`` for the DGX collection ``unit``; None when the room fit is off."""
@@ -3687,10 +3703,18 @@ class AsyncRoundDriver:
             self.ensure_collection(policy)
             return True
 
+    ENSURE_LOCK = threading.Lock()
+
     def ensure_collection(self, policy):
+        """``_ensure_collection`` under one lock: the main loop and the standing relaunch never both launch it."""
+        with self.ENSURE_LOCK:
+            return self._ensure_collection(policy)
+
+    def _ensure_collection(self, policy):
         """The standing DGX collection serves exactly ``policy`` (the newest published): an earlier policy's collection
         unit stops (its scored groups stay), this one starts once (``--hours`` is a long horizon: the next publication
         stops it). Filled reasoning draws on its actor beside it."""
+        self.collections_held = False
         unit, work = self.collection_unit(policy), self.collect_dir(policy)
         for other in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists() else ():
             other_unit = f'{self.a.name}-collect-{other.name.split("-")[0]}'
@@ -4137,6 +4161,7 @@ class AsyncRoundDriver:
         """Stop the DGX collections and their fills (they hold the GPU the DGX learner needs) and, with ``remote``,
         the remote actors' collection clients too."""
         with self.COLLECT_LOCK:         # a fit requeue (collection_fit_loop) never relaunches one it stops
+            self.collections_held = True    # until ensure_collection: the standing relaunch leaves them stopped
             for work in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists() else ():
                 unit = f'{self.a.name}-collect-{work.name.split("-")[0]}'
                 for u in (unit, f'{unit}-fill', *(self.remote_units(unit) if remote else ())):

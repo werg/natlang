@@ -14501,3 +14501,12 @@ memory well past the 10-min wait.
   freed memory becomes headroom. The existing path restores it when the claim ends.
 - Estimate: evicting 96 of 192 slots frees ~4 GB of episode processes plus ~12 servers (~8 GB) within ~2-4 min, plus the
   claim's unspent reserve. A step that still does not fit after PREP_YIELD_WAIT preempts as before.
+
+## 2026-11-26 06:10 aei1: the DGX collection is standing (coordinator)
+
+- 05:29 the coordinator stopped `aei1-collect-v0010` so it would relaunch on pin 1a02ec703; the driver sat in a 45 min
+  supply wait and launches the collection only at round steps, so it stayed down 20 min with the GPU at 0%.
+- `collection_fit_loop` (every 60 s) now also calls `collection_standing`: the DGX collection for the current policy
+  is launched again when its unit is gone, unless `stop_collections` holds it (a DGX SFT) until the next
+  `ensure_collection`. `ensure_collection` runs under one lock (main loop and the standing check never both launch).
+  `NATLANG_EI_STANDING_COLLECTION=0` opts out. Test in `test_async_train.py`.
