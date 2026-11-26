@@ -54,11 +54,11 @@ export function evalDeclarations(session: NativeSession, bindings: readonly stri
   const types: Record<string, string> = { ...lam.typesSrc, ...session.analysisTypeAliases() };
   // Items of the folder may each define a type of the same name differently (two modules' own `Member`). The checker
   // has one namespace, so such a name cannot stand for either definition: it is declared as `any`.
-  const own = new Set(Object.keys(types)), conflicting = new Set<string>();
+  const own = new Set(Object.keys(types)), conflicting = new Set<string>(), typeScriptAliases = new Set<string>();
   const collect = (level: Record<string, ItemRecord>) => {
     for (const record of Object.values(level)) {
       if ('types' in record) for (const [name, text] of Object.entries(record.types)) {
-        if (!Object.hasOwn(types, name)) types[name] = text;
+        if (!Object.hasOwn(types, name)) {types[name] = text;if(record.kind==='module')typeScriptAliases.add(name);}
         else if (!own.has(name) && types[name] !== text) conflicting.add(name);
       }
       collect(record.codebase);
@@ -74,7 +74,7 @@ export function evalDeclarations(session: NativeSession, bindings: readonly stri
   // declared Folder parameter; never infer capabilities from a value's shape.
   if (lam.projectTransaction && !inputs.some(input => input.name === 'folder'))
     inputs.push({ name: 'folder', type: 'Folder' });
-  return { types, scopeIdentity: session.runtime.options.seedId ?? String(session.runtime.frame?.adHocDepth ?? 0),
+  return { types, typeScriptAliases:[...typeScriptAliases], scopeIdentity: session.runtime.options.seedId ?? String(session.runtime.frame?.adHocDepth ?? 0),
     inputs,
     locals: Object.entries(lam.letTypes).filter(([name]) => Object.hasOwn(lam.let, name))
       .map(([name, type]) => ({ name, type: formatType(type), mutable: true })),
@@ -86,6 +86,7 @@ export function evalDeclarations(session: NativeSession, bindings: readonly stri
     returns: lam.type.kind === 'lambda' ? formatType(lam.type.returns) : undefined,
     globals: session.runtime.environment.globalBindings,
     checkUnknownBindings: session.runtime.options.checkEvalBindings,
+    checkAwaitedFields: session.runtime.options.checkAwaitedFields,
     std: session.evalStdBindings.filter(name => !bindings.includes(name)),
     // decide already has a typed intrinsic declaration; keep its decision-record checks.
     opaque: bindings.filter(name => name !== 'decide' && !inputs.some(item => item.name === name) &&

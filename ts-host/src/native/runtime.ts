@@ -179,6 +179,8 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
   observeEffect?: (event: EffectEvent) => void;
   maxActions?: number; maxToolCalls?: number;
   checkEvalBindings?: boolean;
+  /** Check unresolved asynchronous values before reading their result fields (default true). */
+  checkAwaitedFields?: boolean;
   /**
    * The root call's ID: unique per run (it keys the call record, its children's parent link and the trace). Without one a
    * fresh `native-run:<uuid>` is used. `runLabel` is the logical name shared by runs of one kind (`curriculum-reference`),
@@ -1079,7 +1081,7 @@ export const runSeedKey = (options: { runId: string; runLabel?: string; seedId?:
 export class NativeRuntime {
   readonly events: HostEvent[] = [];
   readonly trace: NativeTraceRecorder;
-  readonly options: { checkEvalBindings?: boolean; maxActions?: number; maxToolCalls?: number; runId: string; runLabel?: string; seedId?: string; parentCallId?: string; returnErrorText?: ReturnErrorText };
+  readonly options: { checkEvalBindings?: boolean; checkAwaitedFields?: boolean; maxActions?: number; maxToolCalls?: number; runId: string; runLabel?: string; seedId?: string; parentCallId?: string; returnErrorText?: ReturnErrorText };
   readonly seedPolicy: { mode: 'derived' | 'backend'; root?: number };
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
@@ -1104,7 +1106,7 @@ export class NativeRuntime {
     this.displayLiveId = options.frame ? scopedLiveIdentity(options.frame.task) : createLiveIdentity();
     this.untrusted = options.frame ? scopedUntrusted(options.frame.task) : new UntrustedRegistry(hostUntrusted);
     const run = runIdentity(options);
-    this.options = { checkEvalBindings: options.checkEvalBindings, maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: run.runId,
+    this.options = { checkEvalBindings: options.checkEvalBindings, checkAwaitedFields: options.checkAwaitedFields, maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: run.runId,
       ...(run.runLabel !== undefined ? { runLabel: run.runLabel } : {}), seedId: options.seedId,
       parentCallId: options.parentCallId, returnErrorText: options.returnErrorText };
     for (const [name, value] of Object.entries({ maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls }))

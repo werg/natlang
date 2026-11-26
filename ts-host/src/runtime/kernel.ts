@@ -876,6 +876,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     checkEvalBindings: task.runtime.options.checkEvalBindings,
+      checkAwaitedFields: task.runtime.options.checkAwaitedFields,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,
     sharedEpisodeBudget: task.episodeBudget,

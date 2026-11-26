@@ -21,6 +21,8 @@ export type EvalScopeDeclarations = {
   /** Stable parent call identity keeps independently created inline functions distinct. */
   scopeIdentity?: string;
   types: Record<string, string>;
+  /** Aliases owned by an ordinary TS module retain its exact synchronous/async contract. */
+  typeScriptAliases?: readonly string[];
   inputs: { name: string; type: string }[];
   locals: { name: string; type: string; mutable: boolean }[];
   captures: { name: string; type: string; mutable: boolean }[];
@@ -38,6 +40,8 @@ export type EvalScopeDeclarations = {
   globals?: readonly string[];
   /** Reject unknown runtime value names before executing any effects (default true). */
   checkUnknownBindings?: boolean;
+  /** Reject unresolved Promise field reads before any effects (default true). */
+  checkAwaitedFields?: boolean;
 };
 
 /** The snippet is checked as the body of the call it runs in, so a top-level return has the call's return type. */
@@ -46,9 +50,9 @@ const SCOPE_FILE = '/__natlang__/eval/scope.ts';
 const SNIPPET_FILE = '/__natlang__/eval/snippet.ts';
 
 /** Natlang type text to TypeScript declaration text. `Live<"T", ...>` keeps its TypeScript name when resolvable. */
-export function typeScriptText(natlang: string, known: ReadonlySet<string>): string {
+export function typeScriptText(natlang: string, known: ReadonlySet<string>, semantic = true): string {
   // A natlang function type is awaited: its TypeScript result is a promise.
-  if (natlang.includes('=>') && !natlang.includes('Live<')) {
+  if (semantic && natlang.includes('=>') && !natlang.includes('Live<')) {
     try { return formatTypeScript(parseTypeCached(natlang)); } catch { /* written as it is */ }
   }
   return natlang.replace(/Live<\s*"((?:[^"\\]|\\.)*)"(?:\s*,\s*"(?:[^"\\]|\\.)*")*\s*>/g, (_, text: string) => {
@@ -60,8 +64,8 @@ const GLOBAL_TYPES = new Set(['Date', 'Map', 'Set', 'WeakMap', 'WeakSet', 'RegEx
   'ArrayBuffer', 'Folder', 'FileHandle', 'IterationTrajectory']);
 
 function importType(item: EvalImport, known: ReadonlySet<string>): string {
-  const params = item.params.map(parameter => `${parameter.rest ? '...' : ''}${parameter.name}${parameter.optional ? '?' : ''}: ${typeScriptText(parameter.type, known)}`);
-  const returns = typeScriptText(item.returns, known);
+  const params = item.params.map(parameter => `${parameter.rest ? '...' : ''}${parameter.name}${parameter.optional ? '?' : ''}: ${typeScriptText(parameter.type, known, item.kind!=='TypeScript')}`);
+  const returns = typeScriptText(item.returns, known, item.kind!=='TypeScript');
   const children = item.children.map(child => `readonly ${child.name}: ${importType(child, known)}`);
   const members = children.length ? ` & { ${children.join('; ')} }` : '';
   if (item.kind === 'module') return `{ ${children.join('; ')} }`;
@@ -74,7 +78,7 @@ function importType(item: EvalImport, known: ReadonlySet<string>): string {
 export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?: string): string {
   const known = new Set(Object.keys(scope.types));
   const lines: string[] = [];
-  for (const [name, text] of Object.entries(scope.types)) lines.push(`type ${name} = ${typeScriptText(text, known)};`);
+  for (const [name, text] of Object.entries(scope.types)) lines.push(`type ${name} = ${typeScriptText(text, known, !scope.typeScriptAliases?.includes(name))};`);
   for (const input of scope.inputs) lines.push(`declare const ${input.name}: ${typeScriptText(input.type, known)};`);
   for (const local of scope.locals) lines.push(`declare ${local.mutable ? 'let' : 'const'} ${local.name}: ${typeScriptText(local.type, known)};`);
   for (const capture of scope.captures) lines.push(`declare ${capture.mutable ? 'let' : 'const'} ${capture.name}: ${typeScriptText(capture.type, known)};`);
@@ -237,6 +241,25 @@ export function checkEvalFields(source: string, scope: EvalScopeDeclarations): N
     found.push({ code, severity: 'error', file: 'eval', start: start - prefix.length, end: node.getEnd() - prefix.length,
       line: Math.max(1, location.line), column: location.character + 1, message });
   };
+  // Promise is declared by the standard library, not the program's scope file. Excluding it below once
+  // silently admitted `const row = readSlot(id); row.panelId`, then executed the read and branched on undefined.
+  // Detect the actual checker-known awaitable without changing semantic callable types or ordinary sync values.
+  const unawaited = new Set<ts.Node>();
+  const visitAwaited = (node: ts.Node): void => {
+    if (scope.checkAwaitedFields !== false && (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))) {
+      const receiver = checker.getNonNullableType(checker.getTypeAtLocation(node.expression));
+      const awaited = checker.getAwaitedType(receiver);
+      const name = ts.isPropertyAccessExpression(node) ? node.name.text :
+        node.argumentExpression && (ts.isStringLiteral(node.argumentExpression) || ts.isNumericLiteral(node.argumentExpression)) ? node.argumentExpression.text : undefined;
+      if (awaited && awaited !== receiver && !(receiver.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) &&
+          name !== undefined && !checker.getPropertyOfType(receiver, name)) {
+        unawaited.add(node);
+        at(node, 'undeclared-field', `${node.expression.getText(snippet)} is an unresolved Promise; await it before reading ${name === undefined ? 'a result field' : name}.`);
+      }
+    }
+    ts.forEachChild(node, visitAwaited);
+  };
+  visitAwaited(snippet);
   // decide(fn, ...) answers a decision record; its answer is .value. Comparing the record itself with an answer
   // (`verb === "create_booking"`, `switch (verb) { case "create_booking": ... }`) is never true, so every branch is
   // silently skipped (held-v2 row 91: task text wrote `const verb = await decide(...)` and branched on verb).
@@ -271,7 +294,7 @@ export function checkEvalFields(source: string, scope: EvalScopeDeclarations): N
     if ((diagnostic.code !== 2339 && diagnostic.code !== 2551) || diagnostic.start === undefined) continue;
     const name = findNode(snippet, diagnostic.start);
     const access = name?.parent;
-    if (!name || !access || !ts.isPropertyAccessExpression(access) || access.name !== name) continue;
+    if (!name || !access || !ts.isPropertyAccessExpression(access) || access.name !== name || unawaited.has(access)) continue;
     if (ts.isBinaryExpression(access.parent) && access.parent.left === access &&
         access.parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && access.parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment) continue;
     const receiver = checker.getNonNullableType(checker.getTypeAtLocation(access.expression));
