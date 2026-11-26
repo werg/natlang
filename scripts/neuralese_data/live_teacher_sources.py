@@ -59,7 +59,50 @@ def same_json_value(left, right):
     return left == right
 
 
-def validate_reassessment_check_roles(proof, original_checks, root):
+
+def original_outcome_observations(original):
+    """Recover the full immutable observation set behind its required projection."""
+    checks = original.get('checks')
+    observed = original['observedChecks'] if 'observedChecks' in original else checks
+    if (not isinstance(checks, dict) or not checks or not isinstance(observed, dict) or not observed or
+            any(type(value) is not bool for value in observed.values()) or
+            any(name not in observed or type(value) is not bool or observed[name] is not value
+                for name, value in checks.items())):
+        raise ValueError('original outcome projection differs from its immutable observations')
+    if set(checks) == set(observed):
+        return observed
+    contract, dimensions = original.get('outcomeContract'), original.get('outcomeDimensions')
+    if not isinstance(contract, dict) or not isinstance(dimensions, dict):
+        raise ValueError('original projected outcome needs exhaustive native roles')
+    names, required = [], []
+    for role in ('effects', 'returnedValue', 'incidentalValues'):
+        declaration, dimension = contract.get(role), dimensions.get(role)
+        if role == 'incidentalValues' and declaration is None and dimension is None:
+            continue
+        if not isinstance(declaration, dict) or not isinstance(dimension, dict):
+            raise ValueError('original roles must account for every immutable observation')
+        role_names = declaration.get('checks')
+        if (not isinstance(role_names, list) or any(not isinstance(name, str) or not name for name in role_names) or
+                not isinstance(declaration.get('rationale'), str) or not declaration['rationale'].strip() or
+                (role == 'effects' and not role_names) or
+                (role == 'returnedValue' and (type(declaration.get('required')) is not bool or
+                    dimension.get('required') is not declaration['required']))):
+            raise ValueError('original outcome roles need explicit native requirements')
+        if any(name not in observed for name in role_names):
+            raise ValueError('original roles contain an unobserved check')
+        expected = {name: observed[name] for name in role_names}
+        if (not same_json_value(dimension.get('checks'), expected) or
+                dimension.get('passed') is not all(expected.values())):
+            raise ValueError('original dimensions differ from immutable observations')
+        names.extend(role_names)
+        if role == 'effects' or role == 'returnedValue' and declaration['required']:
+            required.extend(role_names)
+    if len(set(names)) != len(names) or set(names) != set(observed) or set(required) != set(checks):
+        raise ValueError('original outcome roles must partition its exact observations and projection')
+    return observed
+
+
+def validate_reassessment_check_roles(proof, original_checks, root, original_observations=None):
     """A projection may omit only exhaustively declared, source-bound optional roles."""
     checks = proof.get('checks')
     if (not isinstance(checks, dict) or not checks or any(value is not True for value in checks.values()) or
@@ -67,6 +110,11 @@ def validate_reassessment_check_roles(proof, original_checks, root):
         raise ValueError('completed reassessment needs positive independent required checks')
     if set(checks) == set(original_checks):
         return  # Historical corrected whole-oracle verdict, with every original check retained.
+    observations = original_checks if original_observations is None else original_observations
+    if (not isinstance(observations, dict) or not observations or
+            any(type(value) is not bool for value in observations.values()) or
+            any(name not in observations or observations[name] is not value for name, value in original_checks.items())):
+        raise ValueError('reassessment basis differs from original immutable observations')
     contract, dimensions = proof.get('outcomeContract'), proof.get('outcomeDimensions')
     if not isinstance(contract, dict) or not isinstance(dimensions, dict):
         raise ValueError('omitted reassessment checks need source-bound outcome roles')
@@ -88,7 +136,7 @@ def validate_reassessment_check_roles(proof, original_checks, root):
                 (role == 'returnedValue' and type(declaration.get('required')) is not bool) or
                 (role == 'returnedValue' and observed.get('required') is not declaration['required'])):
             raise ValueError('reassessment check roles need explicit requirements and rationales')
-        expected = {name: checks.get(name) if needed else original_checks.get(name) for name in role_names}
+        expected = {name: checks.get(name) if needed else observations.get(name) for name in role_names}
         if (any(type(value) is not bool for value in expected.values()) or
                 not same_json_value(observed.get('checks'), expected) or
                 observed.get('passed') is not all(expected.values())):
@@ -96,8 +144,17 @@ def validate_reassessment_check_roles(proof, original_checks, root):
         names.extend(role_names)
         if needed:
             required.extend(role_names)
-    if len(set(names)) != len(names) or set(names) != set(original_checks) or set(required) != set(checks):
+    if len(set(names)) != len(names) or set(names) != set(observations) or set(required) != set(checks):
         raise ValueError('reassessment roles must partition the exact original check set')
+
+
+
+def validate_reassessment_outcome_roles(proof, original, root):
+    """Validate a revised required projection against its original native record."""
+    original_checks = original.get('checks')
+    checks = proof.get('checks')
+    role_basis = original_checks if set(checks or {}) == set(original_checks or {}) else original_outcome_observations(original)
+    validate_reassessment_check_roles(proof, original_checks, root, role_basis)
 
 
 def validate_return_contribution(item, proof, records):
@@ -728,7 +785,7 @@ def verify_completed_reassessment(verification, spec, root):
             not proof['checks'] or any(value is not True for value in proof['checks'].values()) or
             not proof.get('rationale') or not proof.get('evidence') or not proof.get('checker_sources')):
         raise ValueError('completed reassessment differs from the original execution or independent whole outcome')
-    validate_reassessment_check_roles(proof, original_proof.get('checks'), root)
+    validate_reassessment_outcome_roles(proof, original_proof, root)
     for binding in proof['evidence'] + proof['checker_sources']:
         bound_file(binding, root)
 

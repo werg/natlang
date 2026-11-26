@@ -95,3 +95,55 @@ for(const[label,change]of[
  ['invented hold artifact',s=>{s.packet.execution.diagnostics.openGoalVerification.body='invented';}],
  ['unobserved confirmation',s=>{s.packet.execution.diagnostics.openGoalVerification.gate.status='changed';}],
 ])test(`refuses caretaker recovery with ${label}`,()=>{const s=gardenFixture();change(s);assert.throws(()=>gardenRun(s));});
+
+/** TEST-only bounded protocol packets, never registered as teacher samples.
+ * Actual Source48 packet preparation is a separate source-bound control. */
+function premiseFixture(kind){
+ const s=fixture(),p=s.packet.execution.diagnostics.openGoalVerification,n=s.packet.execution.diagnostics.natlangTeacher;
+ const packageCase=kind==='installed-package';p.caseId=kind+'-case';
+ s.source=Buffer.from(packageCase?'scope.workingRevision === workingRevision scope.workingDigest === local.digest decisionFor(current.observation) !== "restore-approved-field" verifiedLocalManifestEffect: preservedProtectedAndNeighbors:':'contextId !== ports.contextId directory: () => fs.mkdtemp("system-release-evidence") decode.decode(raw) === expectedBytes receipt.sha256 === hash(expectedBytes) sameEvidenceMembers(cases, reads)');s.pins.validator_sha256=sha(s.source);
+ const oldKeys=packageCase?['effects','assignment','observed','plan','repair']:['assignment','runs','cases','effects'];const oldArtifacts=packageCase?[]:['handoffText'];let rows;
+ if(packageCase){
+  const scope={source:'workers/images',field:'native-suite',key:'native',grant:'restore',workingRevision:'before',workingDigest:'before-digest',baselineDigest:'approved'};
+  p.assignment={operationId:'assigned',field:'native-suite',key:'native',scope};p.observed={operationId:'assigned',source:'workers/images',workingRevision:'before',workingDigest:'before-digest',baselineDigest:'approved',scopeMatches:true};p.plan={suite:'native',runtime:'native'};p.repair={status:'restored',observation:{...p.observed,workingRevision:'after',workingDigest:'after-digest',scopeMatches:false,targetFieldMatches:true,suiteRequest:{operationId:'plan'}}};
+  n.report={finding:{reason:'The native suite is restored at its approved pre-action scope.'},verification:{plan:p.plan}};
+  rows=[['installedPackageRead','discover',[],p.assignment],['installedPackageRead','inspect',['assigned'],p.observed],['installedPackageChange','restore',['assigned','before','before-digest'],p.repair],['testSuitePlanRead','resolve',['plan'],p.plan]];
+  s.checker.openInstalledPackageWorlds=[{id:p.caseId,goal:p.goal,requestedReturnRequired:true}];s.checker.installedPackageGoalContract=()=>({returnedValue:{required:true}});s.checker.installedPackageAuthorization=({before,after,scope,action})=>({before,after,scope,action});
+ }else{
+  p.contextId='owned';p.assignment={id:'assigned',contextId:'owned'};p.runs={current:{id:'current'}};p.cases=[{name:'delivery',primary:{code:'DELIVERY_LATENCY',detail:'Actual retained delivery was late.'}}];
+  p.handoffText=JSON.stringify({protocol:'vibestudio-local-system-release-review.v1',contextId:'owned',runId:'current',disposition:'stage-diagnostics',cases:p.cases});p.handoff={path:'/.tmp/native/release-evidence.json',bytes:Buffer.byteLength(p.handoffText),sha256:sha(p.handoffText)};n.report={assessment:{reason:'Actual delivery was late.'},handoff:p.handoff};
+  rows=[['systemReleaseEvidence','discover',[],p.assignment],['systemReleaseEvidence','compare',['assigned'],p.runs],['systemReleaseEvidence','inspectCase',['assigned','current','delivery'],p.cases[0]],['systemReleaseHandoff','stage',['assigned','current','stage-diagnostics',p.cases],p.handoff]];
+  s.checker.openSystemReleaseWorlds=[{id:p.caseId,goal:p.goal,requestedReturnRequired:false}];s.checker.systemReleaseGoalContract=()=>({returnedValue:{required:false}});s.checker.systemReleaseHandoffProtocol=({contextId,verifiedPrivateHandoff,receipt,text})=>verifiedPrivateHandoff&&contextId==='owned'&&receipt.bytes===Buffer.byteLength(text)&&receipt.sha256===sha(text)?{storage:'context-scoped-scratch',externalTransmission:false}:null;
+ }
+ p.actualResult=n.report;n.calls[0].record.output=ref(n.report);n.calls[0].record.effects=rows.map(([service,method,args,result])=>({service,method,args:ref(args),result:ref(result),by:'crisp'}));
+ p.effects=rows.map(([service,method,args,result])=>({service,method,args,result}));p.checks={native:true,verifiedPrivateHandoff:true};p.observedChecks={...p.checks,answer:true};
+ const oldInput={actual:{goal:p.goal,observations:Object.fromEntries(oldKeys.map(k=>[k,p[k]])),artifacts:Object.fromEntries(oldArtifacts.map(k=>[k,p[k]])),requestedReturn:null},expected:{goal:p.goal,requestedReturnRequired:false},rubric:'Original immutable review'};p.semanticReviewInput=oldInput;s.review.input=structuredClone(oldInput);
+ s.oldBinder=proof=>proof.semanticReviewInput;s.bindInput=proof=>{assert.equal(proof.semanticReviewInput.actual.requestedReturn,packageCase?n.report:null);return proof.semanticReviewInput;};
+ s.checker.observedContentReview=(proof,contract,value,keys,artifacts)=>({semanticReviewRequired:true,semanticReviewInput:{actual:{goal:proof.goal,observations:Object.fromEntries(keys.map(k=>[k,proof[k]])),artifacts:Object.fromEntries(artifacts.map(k=>[k,proof[k]])),requestedReturn:contract.returnedValue.required?value:null},expected:{goal:proof.goal,requestedReturnRequired:contract.returnedValue.required},rubric:'Exact native temporal and artifact semantics'}});
+ s.checker.assessSemanticOutcome=(proof,contract)=>({...proof,passed:!contract.returnedValue.required||proof.observedChecks.answer===true,outcomeDimensions:{returnedValue:{required:contract.returnedValue.required,passed:proof.observedChecks.answer===true}}});return s;
+}
+const premiseRun=(s,kind)=>reassessNativeReview(s.packet,s.pins,s.task,s.review,s.source,kind,s.checker,entry=>entry,s.bindInput,s.oldBinder);
+for(const kind of ['installed-package','system-release'])test(`${kind} binds source-owned chronology or exact local protocol without rewriting original`,()=>{const s=premiseFixture(kind),before=structuredClone(s.packet),r=premiseRun(s,kind);assert.deepEqual(s.packet,before);assert.equal(r.projected.passed,true);assert.equal(s.review.verdict.accepted,false);assert.equal(r.reviewInput.expected.requestedReturnRequired,kind==='installed-package');if(kind==='installed-package'){assert.equal(r.projected.authorization.before.scopeMatches,true);assert.equal(r.projected.authorization.after.scopeMatches,false);}else assert.equal(r.projected.handoffProtocol.externalTransmission,false);});
+for(const[label,kind,change]of[
+ ['withdrawn pre-action scope','installed-package',s=>{s.packet.execution.diagnostics.openGoalVerification.assignment.scope.grant='suspended';}],
+ ['foreign pre-action revision','installed-package',s=>{s.packet.execution.diagnostics.openGoalVerification.assignment.scope.workingRevision='foreign';}],
+ ['false pre-action matching scope','installed-package',s=>{s.packet.execution.diagnostics.openGoalVerification.observed.scopeMatches=false;}],
+ ['missing native restore effect','installed-package',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.splice(2,1);}],
+ ['missing newly required answer','installed-package',s=>{s.packet.execution.diagnostics.openGoalVerification.observedChecks.answer=false;}],
+ ['changed actual suite value','installed-package',s=>{s.packet.execution.diagnostics.openGoalVerification.plan.suite='browser';}],
+ ['forged artifact bytes','system-release',s=>{s.packet.execution.diagnostics.openGoalVerification.handoffText+=' ';}],
+ ['foreign artifact context','system-release',s=>{s.packet.execution.diagnostics.openGoalVerification.contextId='foreign';}],
+ ['forged stage receipt','system-release',s=>{s.packet.execution.diagnostics.openGoalVerification.handoff.sha256='0'.repeat(64);}],
+ ['missing native case read','system-release',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.splice(2,1);}],
+ ['missing native local protocol','system-release',s=>{s.checker.systemReleaseHandoffProtocol=()=>null;}],
+])test(`refuses ${label}`,()=>{const s=premiseFixture(kind);change(s);assert.throws(()=>premiseRun(s,kind));});
+
+test('release case grouping may differ from canonical retained order when every actual native case is bound',()=>{
+ const s=premiseFixture('system-release'),p=s.packet.execution.diagnostics.openGoalVerification,n=s.packet.execution.diagnostics.natlangTeacher;
+ p.cases.push({name:'reopen',primary:null});const body=JSON.parse(p.handoffText);body.cases=p.cases;p.handoffText=JSON.stringify(body);p.handoff.bytes=Buffer.byteLength(p.handoffText);p.handoff.sha256=sha(p.handoffText);
+ const args=['assigned','current','stage-diagnostics',[...p.cases].reverse()];p.effects=[...p.effects.filter(row=>row.method!=='stage'),{service:'systemReleaseHandoff',method:'stage',args,result:p.handoff}];
+ n.calls[0].record.effects=[...p.effects.map(row=>({...row,args:ref(row.args),result:ref(row.result),by:'crisp'})),{service:'systemReleaseEvidence',method:'inspectCase',by:'crisp',args:ref(['assigned','current','reopen']),result:ref(p.cases[1])}];n.calls[0].record.output=ref(n.report);
+ p.semanticReviewInput.actual.observations.effects=p.effects;p.semanticReviewInput.actual.observations.cases=p.cases;p.semanticReviewInput.actual.artifacts.handoffText=p.handoffText;s.review.input=structuredClone(p.semanticReviewInput);
+ assert.equal(premiseRun(s,'system-release').projected.passed,true);
+});
+test('changing proof and reviewed sidecar together still cannot replace actual captured authority',()=>{const s=premiseFixture('installed-package'),p=s.packet.execution.diagnostics.openGoalVerification;p.assignment.scope.workingDigest='forged';s.review.input=structuredClone(p.semanticReviewInput);assert.throws(()=>premiseRun(s,'installed-package'));});

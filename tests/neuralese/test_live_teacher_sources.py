@@ -1302,3 +1302,37 @@ console.log(JSON.stringify(JSON.parse(text).map(r=>graphCustodyDigest(r.task_id,
         input=json.dumps(records), text=True, capture_output=True, check=True,
         cwd=Path(__file__).resolve().parents[2] / 'ts-host').stdout)
     assert [live.observed_graph_custody_digest(record, ['nested/1']) for record in records] == expected
+
+
+def test_reassessment_can_require_an_already_recorded_optional_answer(tmp_path):
+    original = {'checks': {'native': True}, 'observedChecks': {'native': True, 'answer': True},
+        'outcomeContract': {'effects': {'checks': ['native'], 'rationale': 'Native state'},
+            'returnedValue': {'checks': ['answer'], 'required': False, 'rationale': 'Old optional finding'}},
+        'outcomeDimensions': {'effects': {'passed': True, 'checks': {'native': True}},
+            'returnedValue': {'required': False, 'passed': True, 'checks': {'answer': True}}}}
+    observed = live.original_outcome_observations(original)
+    contract = copy.deepcopy(original['outcomeContract'])
+    contract['returnedValue']['required'] = True
+    proof = {'checks': {'native': True, 'answer': True}, 'outcomeContract': contract,
+        'outcomeDimensions': {'effects': {'passed': True, 'checks': {'native': True}},
+            'returnedValue': {'required': True, 'passed': True, 'checks': {'answer': True}}},
+        'checker_sources': [{**artifact(tmp_path, 'promoted-contract.json', contract), 'role': 'outcome-contract'}]}
+    live.validate_reassessment_check_roles(proof, original['checks'], tmp_path, observed)
+    for mutate in [lambda p: p['checks'].update(native=False),
+                   lambda p: p['checks'].update(invented=True),
+                   lambda p: p['checker_sources'].clear()]:
+        bad = copy.deepcopy(proof)
+        mutate(bad)
+        with pytest.raises(ValueError):
+            live.validate_reassessment_check_roles(bad, original['checks'], tmp_path, observed)
+    for mutate in [lambda p: p['observedChecks'].update(native=False),
+                   lambda p: p['observedChecks'].update(invented=True),
+                   lambda p: p.pop('outcomeContract'),
+                   lambda p: p['outcomeDimensions']['returnedValue']['checks'].update(answer=False),
+                   lambda p: p['outcomeDimensions']['returnedValue'].update(passed=False),
+                   lambda p: p['outcomeContract']['effects']['checks'].append('answer'),
+                   lambda p: p['outcomeContract']['returnedValue'].update(required=True)]:
+        bad = copy.deepcopy(original)
+        mutate(bad)
+        with pytest.raises(ValueError):
+            live.original_outcome_observations(bad)

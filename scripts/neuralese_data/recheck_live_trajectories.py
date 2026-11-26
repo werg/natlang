@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import shutil
 
-from live_teacher_sources import bound_file, load_episode, same_json_value, validate_reassessment_check_roles, verify_original_rejection, verify_entry
+from live_teacher_sources import bound_file, load_episode, same_json_value, validate_reassessment_outcome_roles, verify_original_rejection, verify_entry
 from sft_sources import ZstdWriter, held_closure, held_hit
 
 
@@ -61,7 +61,7 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
             raise ValueError('completed reassessment must independently attest the exact original whole outcome')
         if not verify_original_rejection(packet, completed_proof, proof_path.parent):
             raise ValueError('completed reassessment needs its original native failure or bound rejected review')
-        validate_reassessment_check_roles(completed_proof, checks, proof_path.parent)
+        validate_reassessment_outcome_roles(completed_proof, original, proof_path.parent)
         for binding in completed_proof['evidence'] + completed_proof['checker_sources']:
             bound_file(binding, proof_path.parent)
     selected = assessment.get('invocations') or []

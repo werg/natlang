@@ -1,0 +1,89 @@
+{
+  "beforeEdits": true,
+  "scope": "Source-bound immutable native-passed/review-rejected capture reassessment for installed-package and system-release; no actor execution, new model sampling or fabricated native checks.",
+  "originalsInventory": "/home/werg/vibe-native-review-premise-audit-ops/inventory.json",
+  "sharedMechanism": [
+    {
+      "path": "scripts/neuralese_data/reassess_native_review.mjs",
+      "role": "Validate original clean pins/validator SHA/entry/root output/old rejected input and exact actor effect hashes; construct canonical reviewed reassessment."
+    },
+    {
+      "path": "scripts/neuralese_data/reassess_native_review.test.mjs",
+      "role": "Forgery negatives and source/effect binding tests."
+    },
+    {
+      "path": "scripts/neuralese_data/reassess_local_presentation.mjs",
+      "role": "Existing completed reassessment/independent grade exchange validation, unchanged."
+    },
+    {
+      "path": "SST open-goal-review-contracts.ts + system-release-handoff-protocol.ts",
+      "role": "Shared live verifier/source-reassessment contracts and independent exact local artifact protocol, newly ready2b4."
+    },
+    {
+      "path": "SST installed-package authorization facts in live verifier",
+      "role": "Extract same before/action/after projection to shared pure source owner before reuse; no copied alternate validator."
+    },
+    {
+      "path": "Host scripts/lib/observed-content-admission.mjs",
+      "role": "Old source48 binding for original rejected input; new97 binding for reviewed authority/protocol/bytes."
+    },
+    {
+      "path": "Base packages/application-outcomes/observed-content-review.ts",
+      "role": "New014 temporal authority and format-neutral rubric; actual source-owned mandatory review."
+    },
+    {
+      "path": "training/neuralese/records/native_ir.py + Node native-records/materializer",
+      "role": "Existing reassessment schema/retained immutable source custody; no reader schema changes planned. Actual canonical import/materialization required before registration."
+    }
+  ],
+  "requiredNegatives": [
+    "changed original source/root/goal/held split/review exchange",
+    "missing/altered original actor effect or pre-mutation authority",
+    "forged foreign/private artifact digest/context/bytes/receipt",
+    "missing newly required suite answer despite successful mutation",
+    "recomputed sidecar and proof cannot replace original source/actor/root witnesses"
+  ],
+  "unchanged": [
+    "No teacher/model replay, raw rewrite, scope waiver, fabricated parent or invented success",
+    "No new writer/schema/registry path; canonical reassessment and existing export/import only"
+  ],
+  "unchecked": [
+    "Genuine independent bound Terra review and accepted-only completed reassessment",
+    "Actual original Python/Node materialization after accepted review",
+    "Durable archive/index/seed append and actual EI consumption"
+  ],
+  "readerDefect": {
+    "observation": "The installed-package contract correctly promotes an already-recorded true answer from optional to required. Original proof.checks contains six required native checks, while immutable observedChecks contains allnine. Both readers incorrectly partition reassessment roles against only six projected checks.",
+    "python": "scripts/neuralese_data/live_teacher_sources.py:62 validate_reassessment_check_roles, called at735 with original_proof.checks",
+    "node": "ts-host/scripts/observed-workspace-evidence.mjs:29 validateReassessmentCheckRoles, completed-capture caller passes originalProof.checks",
+    "fix": "Validate the original proof exhaustive contract/dimensions and required projection against its immutable observedChecks; partition new source-bound roles against that full original observation set. Preserve every observation value, exact bound contract and all required positive checks.",
+    "consumers": [
+      "ts-host/test/native-invocation-certificates.test.mjs",
+      "ts-host/test/observed-workspace-materialization.test.mjs",
+      "ts-host/test/actual-higher-order-training.test.mjs",
+      "ts-host/scripts/materialize-native-teacher.mjs",
+      "ts-host/test/application-return-contribution.test.mjs",
+      "ts-host/test/whole-graph-effect-chronology.test.mjs",
+      "ts-host/test/void-application-return.test.mjs",
+      "ts-host/scripts/observed-goal-completion.mjs",
+      "scripts/neuralese_data/recheck_live_trajectories.py",
+      "scripts/neuralese_data/live_campaign_ingest.py",
+      "scripts/neuralese_data/inventory_live_teacher.py",
+      "scripts/vibestudio/pending_open_goal_cases.py",
+      "scripts/neuralese_data/sft_sources.py",
+      "scripts/neuralese_data/live_catalog_identity.py",
+      "scripts/neuralese_data/prompt_cache_map.py",
+      "scripts/neuralese_data/reassess_campaign_completion.py",
+      "scripts/neuralese_data/filled_reasoning.py",
+      "scripts/neuralese_data/vibestudio_campaign.py"
+    ],
+    "unchanged": "Existing manifest/NativeIR/schema/custody; no runtime engine/model/teacher changes. Reader upgrade required before publishing a promoted-role reassessment.",
+    "importer": "scripts/neuralese_data/recheck_live_trajectories.py:64 also called the low-level check-only validator. Actual PythonIR\u2192Node materialization control caught this third consumer; both Python reader and importer now share validate_reassessment_outcome_roles."
+  },
+  "checked": {
+    "canonicalOriginalPreparation": "Both actual82 clean original source/validator hashes, bound completed roots and exact native effects PASS; pending independent review, no verdict changes.",
+    "finalUnit": "vibe-native-review-final-20261126a:147 Python +95 Node PASS33.304s466.4MiB,1 optional archive control skipped",
+    "materializer": "Includes actual canonical Python NativeIR\u2192Node disk verifier\u2192TS materializer\u2192CLI promoted-answer regression; existing whole/partial/legacy controls retained.",
+    "sharedSST": "7914cbab13c7d0f4892cebcc980a196bc517d18b clean+pushed;13 actual source-hook controls PASS."
+  }
+}

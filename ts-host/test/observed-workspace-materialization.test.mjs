@@ -110,7 +110,7 @@ else:
  if kind in ('caught-child','incidental-nested','goal-void-error','goal-nonvoid-error'):
   spec['calls'][0]=artifact(root,'call.json',detail);spec['verification']=artifact(root,'verification.json',verification);path.write_text(json.dumps(spec))
  else:rewrite(root,spec,detail,verification)
-if kind in ('completed','completed-roles','completed-review'):
+if kind in ('completed','completed-roles','completed-review','completed-promoted'):
  import recheck_live_trajectories as recovery
  proof={'goal':interaction['goal'],'checks':{'native_state':True,'old_oracle':False}}
  packet={'test':{'name':'draft'},'result':{'passed':False},'execution':{'diagnostics':{
@@ -128,13 +128,22 @@ if kind in ('completed','completed-roles','completed-review'):
   contract={'effects':{'checks':['native_state'],'rationale':'Native state.'},'returnedValue':{'checks':[],'required':False,'rationale':'No answer requested.'},'incidentalValues':{'checks':['old_oracle'],'rationale':'An old convention, with no incorrect emitted value.'}}
   outcome.update(checks={'native_state':True},outcomeContract=contract,outcomeDimensions={'effects':{'passed':True,'checks':{'native_state':True}},'returnedValue':{'required':False,'passed':True,'checks':{}},'incidentalValues':{'passed':False,'checks':{'old_oracle':False},'incorrectReturns':[]}})
   outcome['checker_sources'].append({**artifact(root,'contract.json',contract),'role':'outcome-contract'})
- if kind=='completed-review':
+ if kind in ('completed-review','completed-promoted'):
   native_input={'actual':{'documents':[{'path':'note.md','text':'Checked draft'}]},'expected':{'goal':interaction['goal']},'rubric':'Check content'}
   packet['result']['passed']=True
   packet['execution']['diagnostics']['openGoalVerification'].update(preparedContentProject={'artifact':{'semanticReviewInput':native_input}},checks={'native_state':True,'old_oracle':True})
   raw=artifact(root,'original.json',packet);outcome['original_sha256']=raw['sha256']
   review={'schema':'natlang.live-workflow-review/1','input':native_input,'verdict':{'accepted':False,'verdict':'Content is correct; baseline handle mistaken for a new commit.'},'exchange':{'request':{},'reply':{}}}
   outcome['evidence'].append({**artifact(root,'original-review.json',review),'role':'original-rejected-review'})
+ if kind=='completed-promoted':
+  old_contract={'effects':{'checks':['native_state'],'rationale':'Native state.'},'returnedValue':{'checks':['answer'],'required':False,'rationale':'Originally optional answer.'},'incidentalValues':{'checks':['receipt'],'rationale':'Incidental copy.'}}
+  old_dimensions={'effects':{'passed':True,'checks':{'native_state':True}},'returnedValue':{'required':False,'passed':True,'checks':{'answer':True}},'incidentalValues':{'passed':True,'checks':{'receipt':True},'incorrectReturns':[]}}
+  packet['execution']['diagnostics']['openGoalVerification'].update(checks={'native_state':True},observedChecks={'native_state':True,'answer':True,'receipt':True},outcomeContract=old_contract,outcomeDimensions=old_dimensions)
+  raw=artifact(root,'original.json',packet);outcome['original_sha256']=raw['sha256']
+  contract=copy.deepcopy(old_contract);contract['returnedValue']['required']=True
+  dimensions=copy.deepcopy(old_dimensions);dimensions['returnedValue']['required']=True
+  outcome.update(checks={'native_state':True,'answer':True},observedChecks={'native_state':True,'answer':True,'receipt':True},outcomeContract=contract,outcomeDimensions=dimensions)
+  outcome['checker_sources'].append({**artifact(root,'promoted-contract.json',contract),'role':'outcome-contract'})
  completed=artifact(root,'completed.json',outcome)
  artifact(root,'assessment.json',{'schema':'natlang.live-reassessment/1','task_id':'live-draft',
   'original_sha256':raw['sha256'],'rationale':outcome['rationale'],'completed_outcome':completed})
@@ -152,7 +161,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['goal-nonvoid-error',1],['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['incidental',1],['incidental-nested',1]]) {
+for (const [kind, expected] of [['goal-nonvoid-error',1],['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['completed-promoted',1],['incidental',1],['incidental-nested',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {

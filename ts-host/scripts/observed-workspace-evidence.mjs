@@ -26,12 +26,37 @@ export function verifyApplicationReturn(binding, records, roots, entry) {
     throw new Error('selected domain return differs from actual application result');
 }
 
-export async function validateReassessmentCheckRoles(proof, originalChecks, root) {
+/** Full original observations remain authoritative when required roles change. */
+export function originalOutcomeObservations(original) {
+  const checks=original.checks, observed=Object.hasOwn(original,'observedChecks')?original.observedChecks:checks;
+  if(!checks||Array.isArray(checks)||!Object.keys(checks).length||!observed||Array.isArray(observed)||!Object.keys(observed).length||Object.values(observed).some(value=>typeof value!=='boolean')||Object.entries(checks).some(([name,value])=>typeof value!=='boolean'||!Object.hasOwn(observed,name)||observed[name]!==value))throw new Error('original outcome projection differs from its immutable observations');
+  if(isDeepStrictEqual(Object.keys(checks).sort(),Object.keys(observed).sort()))return observed;
+  const contract=original.outcomeContract,dimensions=original.outcomeDimensions;
+  if(!contract||!dimensions)throw new Error('original projected outcome needs exhaustive native roles');
+  const names=[],required=[];
+  for(const role of ['effects','returnedValue','incidentalValues']){
+    const declaration=contract[role],dimension=dimensions[role];
+    if(role==='incidentalValues'&&declaration===undefined&&dimension===undefined)continue;
+    if(!declaration||!dimension)throw new Error('original roles must account for every immutable observation');
+    const roleNames=declaration.checks;
+    if(!Array.isArray(roleNames)||roleNames.some(name=>typeof name!=='string'||!name)||typeof declaration.rationale!=='string'||!declaration.rationale.trim()||role==='effects'&&!roleNames.length||role==='returnedValue'&&(typeof declaration.required!=='boolean'||dimension.required!==declaration.required))throw new Error('original outcome roles need explicit native requirements');
+    if(roleNames.some(name=>!Object.hasOwn(observed,name)))throw new Error('original roles contain an unobserved check');
+    const expected=Object.fromEntries(roleNames.map(name=>[name,observed[name]]));
+    if(!isDeepStrictEqual(dimension.checks,expected)||dimension.passed!==Object.values(expected).every(Boolean))throw new Error('original dimensions differ from immutable observations');
+    names.push(...roleNames);if(role==='effects'||role==='returnedValue'&&declaration.required)required.push(...roleNames);
+  }
+  if(new Set(names).size!==names.length||!isDeepStrictEqual([...names].sort(),Object.keys(observed).sort())||!isDeepStrictEqual([...required].sort(),Object.keys(checks).sort()))throw new Error('original outcome roles must partition its exact observations and projection');
+  return observed;
+}
+
+export async function validateReassessmentCheckRoles(proof, originalChecks, root, originalObservations=originalChecks) {
   const checks = proof.checks;
   if (!checks || Array.isArray(checks) || !Object.keys(checks).length || Object.values(checks).some(value=>value!==true) ||
       !originalChecks || !Object.keys(originalChecks).length)
     throw new Error('completed reassessment needs positive independent required checks');
   if (isDeepStrictEqual(Object.keys(checks).sort(),Object.keys(originalChecks).sort())) return;
+  const observations=originalObservations;
+  if(!observations||Array.isArray(observations)||!Object.keys(observations).length||Object.values(observations).some(value=>typeof value!=='boolean')||Object.entries(originalChecks).some(([name,value])=>!Object.hasOwn(observations,name)||observations[name]!==value))throw new Error('reassessment basis differs from original immutable observations');
   const contract=proof.outcomeContract, dimensions=proof.outcomeDimensions;
   if (!contract || !dimensions) throw new Error('omitted reassessment checks need source-bound outcome roles');
   const bindings=(proof.checker_sources??[]).filter(item=>item.role==='outcome-contract');
@@ -47,15 +72,21 @@ export async function validateReassessmentCheckRoles(proof, originalChecks, root
        typeof declaration.rationale!=='string'||!declaration.rationale.trim()||role==='effects'&&!roleNames.length||
        role==='returnedValue'&&(typeof declaration.required!=='boolean'||observed.required!==declaration.required))
       throw new Error('reassessment check roles need explicit requirements and rationales');
-    const expected=Object.fromEntries(roleNames.map(name=>[name,needed?checks[name]:originalChecks[name]]));
+    const expected=Object.fromEntries(roleNames.map(name=>[name,needed?checks[name]:observations[name]]));
     if(Object.values(expected).some(value=>typeof value!=='boolean')||!isDeepStrictEqual(observed.checks,expected)||
        observed.passed!==Object.values(expected).every(Boolean))
       throw new Error('reassessment must preserve optional observations and prove required roles');
     names.push(...roleNames);if(needed)required.push(...roleNames);
   }
-  if(new Set(names).size!==names.length||!isDeepStrictEqual([...names].sort(),Object.keys(originalChecks).sort())||
+  if(new Set(names).size!==names.length||!isDeepStrictEqual([...names].sort(),Object.keys(observations).sort())||
      !isDeepStrictEqual([...required].sort(),Object.keys(checks).sort()))
     throw new Error('reassessment roles must partition the exact original check set');
+}
+
+/** Keep the old required projection distinct from all retained observations. */
+export async function validateReassessmentOutcomeRoles(proof,original,root) {
+  const roleBasis=isDeepStrictEqual(Object.keys(proof.checks??{}).sort(),Object.keys(original.checks??{}).sort())?original.checks:originalOutcomeObservations(original);
+  await validateReassessmentCheckRoles(proof,original.checks,root,roleBasis);
 }
 
 export function declaredReturnSelectors(proof) {
@@ -368,7 +399,7 @@ async function completedReassessment(receipt, manifest, row, root) {
       Object.values(proof.checks).some(value=>value!==true) || !proof.rationale ||
       !Array.isArray(proof.evidence) || !proof.evidence.length || !Array.isArray(proof.checker_sources) || !proof.checker_sources.length)
     throw new Error('completed reassessment differs from actual original execution or independent outcome');
-  await validateReassessmentCheckRoles(proof,prior.checks,root);
+  await validateReassessmentOutcomeRoles(proof,prior,root);
   for(const artifact of [...proof.evidence,...proof.checker_sources])await readBound(artifact,root);
 }
 
