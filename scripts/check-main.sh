@@ -40,7 +40,7 @@ MAIN=$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)/.." && pwd)
 # Share installed third-party packages with linked worktrees while keeping
 # workspace package links pointed at the checkout under test. A single root
 # node_modules symlink resolves @natlang/* to the wrong source revision.
-python3 "$ROOT/scripts/prepare_check_main_node_modules.py" "$ROOT" "$MAIN"
+python3 "$ROOT/scripts/prepare_check_main_node_modules.py" "$ROOT" "$MAIN" || exit $?
 # The GGUF exporter uses the installed, reviewed llama.cpp converter snapshot.
 # It is an ignored development dependency, so linked worktrees must share it
 # explicitly just as they share the installed Python and Node dependencies.

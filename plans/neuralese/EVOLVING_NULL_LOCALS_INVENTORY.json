@@ -67,5 +67,16 @@
     "durationSeconds": 34.095,
     "peakGiB": 1.0,
     "nativeWorkerdBinary": "Not exercised by this Core platform test; supplied Workerd Realm facade uses canonical shared evaluator. Installed Workerd full native references continue with unchanged Source46."
+  },
+  "investigationFollowup": {
+    "mechanism": "check-main.sh ignored a refused workspace identity overlay because initial shell setup only set-u; later checks reportedPASS",
+    "inventory": [
+      "scripts/check-main.sh:43 sole production helper caller",
+      "scripts/prepare_check_main_node_modules.py:77 correctly rejects unrelated dependency owners",
+      "tests/test_check_main_workspace_dependencies.py direct helper controls plus new actual public shell control",
+      "tests/test_check_main_ordering.py static setup/build ordering unaffected"
+    ],
+    "fix": "Fail before any checks when canonical dependency setup refuses; keep original error/exitcode. This validation has no bypass.",
+    "observedPriorUnit": "vibe-evolving-null-merged-quick-20261126a had24 runtime passes but dependency setup refused; not accepted as a clean pushgate"
   }
 }

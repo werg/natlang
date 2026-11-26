@@ -108,3 +108,33 @@ def test_canonical_checkout_and_unknown_existing_worktree_install_are_untouched(
     assert sentinel.read_text() == 'keep'
     assert (worktree / 'node_modules' / '@natlang' / 'node').resolve() == (
         main / 'npm-packages/node').resolve()
+
+
+def test_public_check_main_stops_before_checks_if_workspace_identity_setup_refuses(tmp_path):
+    """A passing later typecheck cannot override an invalid workspace dependency owner."""
+    import shutil
+    source = Path(__file__).resolve().parents[1]
+    main = tmp_path / 'canonical'
+    main.mkdir()
+    (main / 'scripts').mkdir()
+    for name in ['check-main.sh', 'prepare_check_main_node_modules.py']:
+        shutil.copy2(source / 'scripts' / name, main / 'scripts' / name)
+    (main / 'package.json').write_text(json.dumps({'private': True, 'workspaces': []}))
+    subprocess.run(['git', 'init', '-q', str(main)], check=True)
+    subprocess.run(['git', '-C', str(main), 'add', '.'], check=True)
+    subprocess.run(['git', '-C', str(main), '-c', 'user.name=TEST-only', '-c', 'user.email=test@example.invalid',
+                    'commit', '-qm', 'TEST-only workspace fixture'], check=True)
+    (main / 'node_modules').mkdir()
+    worktree = tmp_path / 'checked'
+    subprocess.run(['git', '-C', str(main), 'worktree', 'add', '--detach', str(worktree), 'HEAD'], check=True,
+                   capture_output=True, text=True)
+    foreign = tmp_path / 'foreign-dependencies'
+    foreign.mkdir()
+    (worktree / 'node_modules').symlink_to(foreign, target_is_directory=True)
+    result = subprocess.run(['bash', str(worktree / 'scripts/check-main.sh'), '--quick'], cwd=worktree,
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode != 0
+    assert 'refusing to replace unrelated node_modules symlink' in result.stderr
+    assert '=== source-review-manifest' not in result.stdout
+    assert '=== summary' not in result.stdout
+    assert (worktree / 'node_modules').resolve() == foreign
