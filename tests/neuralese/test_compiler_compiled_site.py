@@ -289,6 +289,22 @@ def test_prepare_keeps_real_header_calls_and_counts_episode_state_imports(tmp_pa
     assert {row['split'] for row in rows} == {'train', 'dev-seen'}
 
 
+def test_prepare_cases_unwrap_authored_rows_for_the_held_check_and_fail_closed(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.compiler import run_t2
+    from natlang_neuralese.rl import held_eval
+    seen = []
+    monkeypatch.setattr(held_eval, 'training_exclusion_ids', lambda cases: seen.extend(cases) or frozenset())
+    authored = tmp_path / 'authored.jsonl'
+    authored.write_text(json.dumps({'id': 'inv:p:a:1', 'source': 'invented-reference',
+                                    'task': {'id': 'inv:p:a:1', 'source_groups': ['invented:p'], 'split': 'train'}}) + '\n')
+    args = dict(collections=[], call_level=[], out=str(tmp_path / 'rows.jsonl'), max_prompt_tokens=4096, per_site=8,
+                min_per_site=2, dev_site_percent=0)
+    run_t2.prepare(SimpleNamespace(cases=[str(authored)], **args))
+    assert seen == [{'id': 'inv:p:a:1', 'source_groups': ['invented:p'], 'split': 'train'}]
+    with pytest.raises(FileNotFoundError):
+        run_t2.prepare(SimpleNamespace(cases=[str(tmp_path / 'missing.jsonl')], **args))
+
 def test_pplx_warmstart_writer_dual_lr_groups_and_strict_manifest(tmp_path):
     from types import SimpleNamespace
     from natlang_neuralese.compiler.live_kb_writer import LiveExperienceWriter, PplxWarmstartWriter

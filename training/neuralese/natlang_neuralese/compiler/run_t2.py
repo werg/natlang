@@ -106,11 +106,13 @@ def prepare(args):
             for row in _jsonl(path):
                 cases.setdefault(row['id'], row)
     for extra_cases in (getattr(args, 'cases', None) or ()):
-        cpath = Path(extra_cases)
-        if cpath.exists():
-            for row in _jsonl(cpath):
-                if isinstance(row, dict) and row.get('id'):
-                    cases.setdefault(row['id'], row)
+        # case rows, or rows wrapping one (an authored pool's authored.jsonl: {id, task: CASE, ...}); a missing file
+        # or a row without a case id fails: held closure is checked over these rows
+        for row in _jsonl(extra_cases):
+            case = row['task'] if isinstance(row.get('task'), dict) else row
+            if not case.get('id'):
+                raise ValueError(f'{extra_cases}: a row without a case id')
+            cases.setdefault(case['id'], case)
 
     excluded = training_exclusion_ids(list(cases.values()))
     funnel = {
@@ -523,6 +525,7 @@ def train(args):
                 key_dim=config.key_dim,
                 device=args.device,
                 dtype=getattr(torch, args.dtype),
+                use_hf_kernels=getattr(args, 'pplx_hf_kernels', None),
             )
         else:
             # owner 2026-11-26: Stage C never trains on the embedding stand-in; it exists for CPU unit tests
@@ -715,7 +718,7 @@ def main(argv=None):
     p = sub.add_parser('prepare')
     p.add_argument('--collections', nargs='*', default=[], help='collection directories (each with groups/g*/)')
     p.add_argument('--call-level', nargs='*', default=[], help='call_level_engine teach outputs (DIR or its call-level.jsonl.zst)')
-    p.add_argument('--cases', nargs='*', default=[], help='additional task case JSONL files (e.g. authored pool) for held closure checks')
+    p.add_argument('--cases', nargs='*', default=[], help='more case rows for call-level tasks (case JSONL, or an authored pool\'s authored.jsonl); held closure is checked over them')
     p.add_argument('--out', required=True)
     p.add_argument('--max-prompt-tokens', type=int, default=4096)
     p.add_argument('--per-site', type=int, default=8)
@@ -749,6 +752,8 @@ def main(argv=None):
                    help='pplx: hindsight-kb PPLXBlockEncoder H/Q warm-started from 000000002 (Stage C); embed: CPU unit-test stand-in')
     t.add_argument('--warmstart-dir', type=Path, default=None, help='directory containing writer_H.pt and query_Q.pt from extract_lfm3_warmstart.py')
     t.add_argument('--pplx-revision', default=None, help='pinned HF commit SHA for perplexity-ai/pplx-embed-v2-late-0.6b')
+    t.add_argument('--pplx-hf-kernels', action=argparse.BooleanOptionalAction, default=None,
+                   help="the pplx backbone's FLA/causal-conv/Liger kernels (default: on for CUDA, as 000000002 trained)")
     t.add_argument('--kb-pos', type=int, default=2)
     t.add_argument('--kb-neg', type=int, default=2)
     t.add_argument('--null-kb-prob', type=float, default=0.2, help='rows that see distractors only (plan: 20%%)')
