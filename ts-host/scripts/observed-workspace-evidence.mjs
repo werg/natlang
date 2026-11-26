@@ -279,7 +279,7 @@ export function verifyEntry(interaction, record, partial) {
 }
 
 export async function verifyNativeInvocationCertificate(invocation,records,scope,root,details){
-  if(!Object.hasOwn(invocation,'certificate'))return;
+  if(!Object.hasOwn(invocation,'certificate'))throw Error('native invocation requires a source-bound certificate');
   const certificate=JSON.parse(await readBound(invocation.certificate,root));
   const raw=await readBound(certificate.originalPacket,root);
   const packet=JSON.parse(raw[0]===0x1f&&raw[1]===0x8b?gunzipSync(raw):raw);

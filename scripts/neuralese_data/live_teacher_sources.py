@@ -601,7 +601,7 @@ def verify_application_return(binding, records, roots, entry=None):
 def verify_native_invocation_certificate(invocation, records, scope, root, details=None):
     """Bind an automatic native oracle to original bytes, not an assertion of call success."""
     if 'certificate' not in invocation:
-        return  # Existing explicitly assessed partial scopes retain their own evidence contract.
+        raise ValueError('native invocation requires a source-bound certificate')
     certificate = json.loads(bound_file(invocation['certificate'], root).read_text())
     raw = bound_file(certificate['originalPacket'], root).read_bytes()
     packet = json.loads(gzip.decompress(raw) if raw[:2] == b'\x1f\x8b' else raw)

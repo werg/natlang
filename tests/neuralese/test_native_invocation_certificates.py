@@ -80,3 +80,10 @@ def test_native_partial_protocol_is_explicit_and_cannot_downgrade(tmp_path, muta
             verified_training_scope(verification, records, tmp_path)
     else:
         assert verified_training_scope(verification, records, tmp_path) == {'question': None}
+
+
+def test_direct_native_certificate_api_refuses_missing_certificate(tmp_path):
+    records, scope, invocation, _, _, _ = fixture(tmp_path)
+    del invocation['certificate']
+    with pytest.raises(ValueError, match='requires a source-bound certificate'):
+        verify_native_invocation_certificate(invocation, records, scope, tmp_path)
