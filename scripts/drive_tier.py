@@ -359,7 +359,10 @@ class PassDeadline(Exception):
 
 
 def colab_transfer_active() -> bool:
-    """An rsync or scp to or from a Colab host is running (they share the DGX uplink with Drive uploads)."""
+    """An rsync or scp *to* a Colab host is running: it shares the DGX uplink with Drive uploads. A pull from Colab
+    uses the downlink and does not count (2026-11-26: remote collection and the compiler keepers pull almost
+    continuously, so every pass sat paused and archived nothing; NATLANG_TIER_PAUSE_ON_PULLS=1 counts pulls too)."""
+    pulls = os.environ.get('NATLANG_TIER_PAUSE_ON_PULLS') == '1'
     for pid in os.listdir('/proc'):
         if not pid.isdigit():
             continue
@@ -367,10 +370,19 @@ def colab_transfer_active() -> bool:
             argv = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
         except OSError:
             continue
-        if argv and os.path.basename(argv[0].decode(errors='replace')) in ('rsync', 'scp') and \
-                any(a.startswith(b'colab') and b':' in a for a in argv[1:]):
+        if _colab_transfer(argv, pulls):
             return True
     return False
+
+
+def _colab_transfer(argv, pulls=False) -> bool:
+    """ARGV (bytes) is an rsync/scp whose destination (last operand) is a Colab host, or with PULLS any transfer that
+    names one."""
+    argv = [a for a in argv if a]
+    if not argv or os.path.basename(argv[0].decode(errors='replace')) not in ('rsync', 'scp'):
+        return False
+    remote = [i for i, a in enumerate(argv[1:], 1) if a.startswith(b'colab') and b':' in a]
+    return bool(remote) and (pulls or remote[-1] == len(argv) - 1)
 
 
 def symlink_targets(roots=(Path.home() / 'data', Path.home() / 'natlang' / 'runs', Path.home())) -> list[str]:  # noqa

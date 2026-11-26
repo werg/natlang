@@ -101,6 +101,11 @@ def test_dry_run_moves_nothing(tmp_path, monkeypatch):
 def test_colab_transfer_detection_reads_rsync_argv(monkeypatch, tmp_path):
     m = load()
     assert m.colab_transfer_active() in (True, False)
+    push = [b'rsync', b'-a', b'/home/werg/x/', b'colab-g4:/content/x/']
+    pull = [b'rsync', b'-a', b'--partial', b'colab-g4b:/content/run.snap/', b'/home/werg/data/run.pull/']
+    assert m._colab_transfer(push) and not m._colab_transfer(pull)      # a pull uses the downlink
+    assert m._colab_transfer(pull, pulls=True)
+    assert not m._colab_transfer([b'cp', b'colab-g4:/x', b'/y']) and not m._colab_transfer([b'rsync', b'a', b'b'])
 
 
 def test_rearchiving_a_restored_file_reuses_its_drive_copy(tmp_path, monkeypatch):
