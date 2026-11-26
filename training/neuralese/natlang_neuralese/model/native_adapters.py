@@ -358,6 +358,7 @@ def _rowwise_fp8(x2d: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
 
 def fp8_weight(weight: torch.Tensor):
     """The cached per-channel FP8 quantization of a frozen base ``weight`` (computed once per weight)."""
+    import weakref
     key = (weight.data_ptr(), tuple(weight.shape), tuple(weight.stride()), weight._version, weight.device)
     hit = _FP8_WEIGHTS.get(key)
     if hit is None:
@@ -366,6 +367,10 @@ def fp8_weight(weight: torch.Tensor):
             wq, ws = _rowwise_fp8(w.contiguous())                 # (N, K), (N, 1): per output channel
             wtq, wts = _rowwise_fp8(w.t().contiguous())           # (K, N), (K, 1): per input channel
         hit = _FP8_WEIGHTS[key] = (wq, ws.reshape(1, -1).contiguous(), wtq, wts.reshape(1, -1).contiguous())
+        try:
+            weakref.finalize(weight, _FP8_WEIGHTS.pop, key, None)
+        except TypeError:
+            pass
     return hit
 
 
@@ -437,7 +442,7 @@ def fp8_frozen_linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor 
 @torch.library.custom_op('natlang::frozen_linear_f32', mutates_args=())
 def _frozen_linear_f32_op(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
     x2d = x.reshape(-1, x.shape[-1])
-    if x.is_cuda and x.dtype in (torch.bfloat16, torch.float16):
+    if x.is_cuda and x.dtype in (torch.bfloat16, torch.float16) and weight.dtype == x.dtype:
         out = torch.mm(x2d, weight.t(), out_dtype=torch.float32)     # tensor cores, FP32 accumulator kept
     else:
         out = torch.mm(x2d.float(), weight.float().t())

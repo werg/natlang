@@ -365,7 +365,8 @@ class Lfm3Learner:
         for param_name, layer_idx, layer_kind, short_name, shape in resolved:
             out_features, in_features = shape
             rank = spec.gate_rank if short_name == 'gate_proj' and spec.gate_rank is not None else spec.rank
-            scale = float(spec.alpha) / float(rank)
+            # Keep alpha/r ratio invariant when gate_rank overrides rank (otherwise alpha=128/gate_rank=8 gives 16x over-scaling).
+            scale = float(spec.alpha) / float(spec.rank)
             if rank > min(out_features, in_features):
                 raise ValueError(f'LoRA rank {rank} exceeds matrix {param_name} shape {shape}')
             a = (torch.randn((rank, in_features), generator=gen, dtype=torch.float32) / math.sqrt(in_features)).to(
@@ -684,7 +685,7 @@ def merge_policy_state(state: dict, tensors: dict, scales: dict, *, dtype=torch.
     interface = dict(state.get('interface_state') or {})
     if 'trainable_rows.rows' in tensors:
         ids = [int(i) for i in tensors['trainable_rows.token_ids'].tolist()]
-        rows = tensors['trainable_rows.rows'].to(device='cpu', dtype=dtype)
+        rows = tensors['trainable_rows.rows'].to(device='cpu', dtype=torch.float32)
         position = {tid: idx for idx, tid in enumerate(ids)}
         config = state.get('model_config') or {}
         groups = ((tuple(int(i) for i in config.get('marker_ids') or ()), 'input_rows', 'output_rows'),

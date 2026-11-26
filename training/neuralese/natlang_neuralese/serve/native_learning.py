@@ -66,6 +66,7 @@ SCORE_ITEM_FIELDS = {
     'reasoning_ids': 'served: with reasoning, its generation\'s sampled ids replace the re-encoded reasoning tokens, '
                      'kept up to the first id of the token that follows the reasoning (LFM3 </think>); results echo '
                      'reasoning_ids: true and the capture records reasoning_ids_kept (decision_sequences)',
+    'x_natlang_privileged_context': 'served: captured JOLT+ teacher decision guidance context (native_learning.decision_items)',
 }
 
 

@@ -236,7 +236,7 @@ def select(cases,stats,budget,config):
     def visit_cost(group):
         """(capped, level penalty) from an observation's visits relative to the pool's typical visit count."""
         visits,rounds=_visits(group)
-        capped=bool(cap and window and sum(1 for r in rounds if r>now-window)>=cap)
+        capped=bool(cap and window and sum(1 for r in rounds if r>=now-window)>=cap)
         return capped,(penalty*math.log2(visits/typical) if penalty and visits>typical else 0.)
     memo={}
     def priority(index):

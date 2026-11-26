@@ -3339,11 +3339,13 @@ class PhaseController:
         if reference_checkpoint and reference_sha:
             stored = state['reference_policy']
             if stored['sha256'] != str(reference_sha):
-                adopted = any(e.get('action') == 'adopt' and e.get('sha256') == stored['sha256']
+                adopted = any('adopt' in str(e.get('action') or '').lower() and e.get('sha256') == stored['sha256']
                               for e in state.get('history') or ())
-                if adopted:
+                in_later_lineage = any(p.get('sha256') == stored['sha256'] and (p.get('version') or 0) > 0
+                                       for p in state.get('lineage') or ())
+                if adopted or in_later_lineage:
                     changes['reference_kept'] = {'stored': stored, 'argument': str(reference_sha),
-                                                 'why': 'a held verdict adopted the stored reference'}
+                                                 'why': 'a held verdict or lineage adoption set the stored reference'}
                 else:
                     new = {'checkpoint': str(reference_checkpoint), 'sha256': str(reference_sha)}
                     state['reference_policy'] = new
@@ -3414,8 +3416,11 @@ class PhaseController:
             raise ValueError(f'round {round_id} trained from {base_sha256[:12]}, the lineage head is '
                              f'{self.current["sha256"][:12]}')
         self.state['version_counter'] = int(self.state['version_counter']) + 1
-        self.state['lineage'].append({'checkpoint': str(checkpoint), 'sha256': str(sha256),
-                                      'version': self.state['version_counter'], 'round_id': str(round_id)})
+        entry = {'checkpoint': str(checkpoint), 'sha256': str(sha256),
+                 'version': self.state['version_counter'], 'round_id': str(round_id)}
+        if mix_dir:
+            entry['mix_dir'] = str(mix_dir)
+        self.state['lineage'].append(entry)
         self.state['since_held'] = int(self.state['since_held']) + 1
         self.state['trained_rounds'].append(str(round_id))
         if mix_dir and str(mix_dir) not in self.state['prefer_unseen']:
@@ -3458,13 +3463,33 @@ class PhaseController:
     def _rollback(self, version_counter_bump=True):
         ref = self.state['reference_policy']
         lineage = self.state['lineage']
+        dropped = []
+        found = False
         for i in range(len(lineage) - 1, -1, -1):
             if lineage[i]['sha256'] == ref['sha256']:
+                dropped = lineage[i + 1:]
                 self.state['lineage'] = lineage[:i + 1]
-                return
-        # the reference left the lineage earlier (a phase restart): it starts a new one
-        self.state['version_counter'] = int(self.state['version_counter']) + 1
-        self.state['lineage'] = [{**ref, 'version': self.state['version_counter'], 'round_id': None}]
+                found = True
+                break
+        if not found:
+            dropped = list(lineage)
+            # the reference left the lineage earlier (a phase restart): it starts a new one
+            self.state['version_counter'] = int(self.state['version_counter']) + 1
+            self.state['lineage'] = [{**ref, 'version': self.state['version_counter'], 'round_id': None}]
+        # Prune rolled-back rounds from prefer_unseen and record rolled_back_rounds so never-trained units from
+        # discarded branches are not permanently banned under --max-prior-exposures 1.
+        dropped_rids = {p['round_id'] for p in dropped if p.get('round_id')}
+        dropped_mixes = {p['mix_dir'] for p in dropped if p.get('mix_dir')}
+        if dropped_rids or dropped_mixes:
+            rb = list(self.state.get('rolled_back_rounds') or [])
+            for rid in sorted(dropped_rids):
+                if rid not in rb:
+                    rb.append(rid)
+            self.state['rolled_back_rounds'] = rb
+            self.state['prefer_unseen'] = [
+                m for m in self.state.get('prefer_unseen') or []
+                if m not in dropped_mixes and Path(m).parent.name not in dropped_rids
+            ]
 
     def record_verdict(self, verdict_record):
         """Apply one held verdict (``verdict``, ``adopt``, ``sha256`` and ``checkpoint`` of the candidate)."""
@@ -3498,7 +3523,18 @@ class PhaseController:
                                     'reference': dict(self.state['reference_policy']),
                                     'vs_start': verdict_record.get('vs_start'), 'reason': event['bug_hunt']}
         if adopt:
-            self.state['reference_policy'] = {'checkpoint': str(ckpt), 'sha256': str(sha)}
+            # Under NEUTRAL_ADOPT, neutral rounds with negative delta continue training without rolling back,
+            # but do NOT move reference_policy downward (preventing a slow "boiling the frog" regression ratchet).
+            vs = verdict_record.get('vs_start') or {}
+            delta = vs.get('delta')
+            ran_out = vs.get('ran_out_delta')
+            moves_ref = (verdict == 'success'
+                         or delta is None
+                         or (delta >= 0 and (ran_out is None or ran_out <= 0.02)))
+            if moves_ref:
+                self.state['reference_policy'] = {'checkpoint': str(ckpt), 'sha256': str(sha)}
+            else:
+                event['reference_kept'] = dict(self.state['reference_policy'])
             event['action'] = 'adopt'
         else:
             self._rollback()
@@ -4531,9 +4567,12 @@ class AsyncRoundDriver:
 
     def trained_builds(self):
         """Every mix whose episodes train or trained in this lineage: the lineage's trained builds and each round's
-        prepared mix not discarded (a fill of their episodes never trains: ``filled_reasoning --skip-trained``)."""
+        prepared mix not discarded or rolled back (a fill of their episodes never trains: ``filled_reasoning --skip-trained``)."""
+        rolled_back = set(self.controller.state.get('rolled_back_rounds') or [])
         builds = list(self.controller.state['prefer_unseen'])
         for mix in sorted(self.root.glob('r[0-9]*/mix')):
+            if mix.parent.name in rolled_back:
+                continue
             if (mix / 'rows.jsonl.zst').exists() and not (mix.parent / 'discarded.json').exists() \
                     and str(mix) not in builds:
                 builds.append(str(mix))
@@ -4778,6 +4817,16 @@ class AsyncRoundDriver:
             report = json.loads((round_dir / 'mix' / 'build.json').read_text())
             if not self.supply_wait(round_dir, report):
                 break
+            # If the lineage advanced while this round was prepared ahead (e.g. a new policy published and is
+            # actively collecting), refresh policies on the supply_wait rebuild so it reads the active collection.
+            latest = self.lineage_policies()
+            if [p['sha256'] for p in latest] != [p['sha256'] for p in policies]:
+                policies = latest
+                cur = policies[-1]
+                (round_dir / 'stages' / 'frontier.done').unlink(missing_ok=True)
+                (round_dir / 'stages' / 'frontier.exit').unlink(missing_ok=True)
+                (round_dir / 'stages' / 'prepare.json').unlink(missing_ok=True)
+                self.note(round=round_dir.name, supply_wait_refreshed_policies=[p['sha256'] for p in policies])
         manifest = write_round_manifest(
             round_dir, round_id=round_dir.name, base_policy_sha=cur['sha256'],
             previous_policy_sha=policies[-2]['sha256'] if len(policies) > 1 else None,

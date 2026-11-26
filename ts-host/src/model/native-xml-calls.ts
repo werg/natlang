@@ -25,11 +25,25 @@ function equal(a: unknown,b: unknown): boolean {
   }
   return false;
 }
+function jsonValueType(value: unknown): string | undefined {
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? 'integer' : 'number';
+  if (typeof value === 'string') return 'string';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'object') return 'object';
+  return undefined;
+}
 function types(schema: Schema, root: Schema = schema, depth=0): string[] | undefined {
   if (depth>64) throw new Error('recursive schema reference');
   if (schema.$ref !== undefined) { const target=resolveRef(schema.$ref,root); if(typeof target==='object') return types(target,root,depth+1); return undefined; }
   if (typeof schema.type === 'string') return [schema.type];
   if (Array.isArray(schema.type) && schema.type.every(x => typeof x === 'string')) return schema.type as string[];
+  if ('const' in schema) { const t = jsonValueType(schema.const); if (t) return [t]; }
+  if (Array.isArray(schema.enum) && schema.enum.length) {
+    const inferred = [...new Set(schema.enum.map(jsonValueType).filter((t): t is string => t !== undefined))];
+    if (inferred.length) return inferred;
+  }
   for (const name of ['anyOf', 'oneOf']) if (Array.isArray(schema[name])) {
     const parts = (schema[name] as Schema[]).map(part=>types(part,root,depth+1));
     return parts.some(x => x === undefined) ? undefined : [...new Set(parts.flat() as string[])];

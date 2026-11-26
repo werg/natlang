@@ -1376,12 +1376,15 @@ def rebind_actor(*, front_url, policy_id, version, sglang_url=None, weights_sha2
             from natlang_neuralese.common.hashing import sha256_file_hex
             weights_sha256 = sha256_file_hex(Path(target_dir) / 'model.safetensors')
     _http_json(f'{sglang_url}/pause_generation', {'mode': 'retract'}, host=host, timeout=timeout)
+    weights_updated = False
+    attested = False
     try:
         upd = _http_json(f'{sglang_url}/update_weights_from_disk',
                          {'model_path': target_dir, 'flush_cache': True, 'weight_version': str(version)},
                          host=host, timeout=timeout)
         if not upd.get('success', False):
             raise RuntimeError(f'update_weights_from_disk failed on {sglang_url}: {json.dumps(upd)[:400]}')
+        weights_updated = True
         rebind_body = {'policy_id': policy_id, 'version': version, 'export_dir': target_dir}
         if weights_sha256 is not None:
             rebind_body['weights_sha256'] = weights_sha256
@@ -1394,13 +1397,17 @@ def rebind_actor(*, front_url, policy_id, version, sglang_url=None, weights_sha2
         ok, mismatches = attest_all_routes(info, expected)
         if not ok:
             raise RuntimeError(f'rebind_actor route attestation failed for {front_url}: {json.dumps(mismatches)[:600]}')
+        attested = True
     finally:
-        _http_json(f'{sglang_url}/continue_generation', {}, host=host, timeout=min(timeout, 120))
+        # Never resume SGLang after weights were swapped if rebind-policy or route attestation failed:
+        # doing so would serve the new weights under stale old policy provenance.
+        if not weights_updated or attested:
+            _http_json(f'{sglang_url}/continue_generation', {}, host=host, timeout=min(timeout, 120))
     result = {'front_url': front_url, 'sglang_url': sglang_url, 'host': host, 'policy_id': policy_id,
               'version': version, 'export_dir': target_dir, 'weights_sha256': weights_sha256,
               'routes_attested': True, 'seconds': round(time.time() - started, 2)}
-    if host and profile_key(host_profile) == 'colab':
-        state_file = colab_state_path(host)
+    if host and profile_key(host_profile) in ('colab', 'pop'):
+        state_file = colab_state_path(host) if profile_key(host_profile) == 'colab' else STATE
         record = rebound_record(read_json(state_file), result, checkpoint)
         if record is not None:
             write_json(state_file, record)

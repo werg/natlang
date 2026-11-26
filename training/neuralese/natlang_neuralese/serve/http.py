@@ -721,7 +721,9 @@ def make_handler(engine: Engine):
                 choice = response["choices"][0]
                 message = choice["message"]
                 content = message.get("content")
-                if isinstance(content, str) and content.startswith(streamed.strip()) and len(content) > len(streamed.strip()):
+                if isinstance(content, str) and content.startswith(streamed) and len(content) > len(streamed):
+                    self._event(chunk({"content": content[len(streamed):]}))
+                elif isinstance(content, str) and streamed and content.startswith(streamed.strip()) and len(content) > len(streamed.strip()) and streamed.strip():
                     self._event(chunk({"content": content[len(streamed.strip()):]}))
                 elif not in_call and pending:
                     self._event(chunk({"content": pending}))

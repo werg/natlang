@@ -1548,6 +1548,8 @@ class _LinearNLL(torch.autograd.Function):
             if ds is not None:
                 d_s = d.index_select(1, s_ids)
                 ds += d_s.t().float() @ rows.float()
+        if dw is not None and ctx.has_sparse:
+            dw.index_fill_(0, s_ids, 0.)
         return dh, None if dw is None else dw.to(weight.dtype), None, None, None, ds, None
 
 
@@ -1693,6 +1695,8 @@ class _LinearNLLNucleus(torch.autograd.Function):
             if ds is not None:
                 d_s = d.index_select(1, s_ids)
                 ds += d_s.t().float() @ rows.float()
+        if dw is not None and ctx.has_sparse:
+            dw.index_fill_(0, s_ids, 0.)
         return dh, None if dw is None else dw.to(weight.dtype), None, None, None, None, None, ds, None
 
 

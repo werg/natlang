@@ -84,7 +84,7 @@ export function sendReasoningIds(): boolean {
 }
 
 /** One item of the explicit-batch endpoint's request: the prompt and its replies as continuations. */
-export function batchScoreItem(item: Pick<DecisionRequest, 'messages' | 'options'> & Partial<Pick<DecisionRequest, 'adapters' | 'native_state_modes' | 'native_recording' | 'cache_messages' | 'open_reply' | 'reasoning' | 'reasoning_ids'>>,
+export function batchScoreItem(item: Pick<DecisionRequest, 'messages' | 'options'> & Partial<Pick<DecisionRequest, 'adapters' | 'native_state_modes' | 'native_recording' | 'cache_messages' | 'open_reply' | 'reasoning' | 'reasoning_ids'>> & { x_natlang_privileged_context?: Json },
   extra?: Json): Json {
   return { ...extra, messages: item.messages, continuations: item.options,
     ...(item.cache_messages ? { cache_messages: item.cache_messages } : {}),
@@ -95,7 +95,8 @@ export function batchScoreItem(item: Pick<DecisionRequest, 'messages' | 'options
       && sendReasoningIds() ? { reasoning_ids: [...item.reasoning_ids] } : {}),
     ...(item.adapters?.length ? { adapters: item.adapters } : {}),
     ...(item.native_state_modes ? { native_state_modes: item.native_state_modes } : {}),
-    ...(item.native_recording ? { native_recording: true } : {}) };
+    ...(item.native_recording ? { native_recording: true } : {}),
+    ...(item.x_natlang_privileged_context !== undefined ? { x_natlang_privileged_context: item.x_natlang_privileged_context } : {}) };
 }
 
 /** One result of the explicit-batch endpoint's response, for an item of `replyCount` replies. */

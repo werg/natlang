@@ -121,6 +121,24 @@ def check_xml_call(name, arguments, tools=None, *, types: bool = True) -> None:
                                f"parameter {key!r} of {name!r} does not keep its type in the XML rendering")
 
 
+def _json_value_type(value) -> str | None:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return None
+
+
 def _schema_types(schema) -> set[str] | None:
     """JSON-schema types a parameter declares, or None when it declares none (unknown)."""
     if not isinstance(schema, dict):
@@ -130,6 +148,15 @@ def _schema_types(schema) -> set[str] | None:
         return {kind}
     if isinstance(kind, list) and all(isinstance(k, str) for k in kind):
         return set(kind)
+    if "const" in schema:
+        t = _json_value_type(schema["const"])
+        if t is not None:
+            return {t}
+    if isinstance(schema.get("enum"), list) and schema["enum"]:
+        inferred = {_json_value_type(v) for v in schema["enum"]}
+        inferred.discard(None)
+        if inferred:
+            return inferred
     for key in ("anyOf", "oneOf"):
         if isinstance(schema.get(key), list):
             found = set()
@@ -429,6 +456,9 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
             message["content"] = flatten(message["content"])
         elif isinstance(message.get("content"), str):
             message["content"] = escape_specials(message["content"], specials, nonce)
+        for rkey in ("reasoning_content", "reasoning", "thinking"):
+            if isinstance(message.get(rkey), str):
+                message[rkey] = escape_specials(message[rkey], specials, nonce)
         calls = []
         for call in message.get("tool_calls") or []:
             call = json.loads(json.dumps(call))
@@ -524,7 +554,8 @@ def render_with_empty_thought(render, messages: list[dict]) -> str:
     templates render such a past turn bare, but on policy the model closes an empty `<think>` block before replying,
     so a teacher-forced reply must continue the generation prompt. Templates that ignore reasoning are unchanged."""
     last = messages[-1]
-    if last.get("role") != "assistant" or last.get("reasoning_content") or "</think>" in str(last.get("content") or ""):
+    has_reasoning = any(last.get(k) for k in ("reasoning_content", "reasoning", "thinking"))
+    if last.get("role") != "assistant" or has_reasoning or "</think>" in str(last.get("content") or ""):
         return render(messages)
     text = render(messages[:-1] + [{**last, "reasoning_content": _REASONING}])
     return text.replace(_REASONING, "") if _REASONING in text else render(messages)
@@ -707,6 +738,9 @@ def assistant_reply_segments(apply_template, message: dict, specials=(), opening
         prepared["content"] = [dict(part, **({"text": escape_specials(part.get("text") or "", specials, nonce)}
                                               if part.get("type") == "text" else {}))
                                 for part in content]
+    for rkey in ("reasoning_content", "reasoning", "thinking"):
+        if isinstance(prepared.get(rkey), str):
+            prepared[rkey] = escape_specials(prepared[rkey], specials, nonce)
     calls = []
     prepared_messages, _ = normalize_tool_call_arguments([prepared])
     prepared = prepared_messages[0]
@@ -950,13 +984,20 @@ def build_message(text: str, block_ids: list[str], call_prefix: str = "call", to
     request's declarations) type the values of XML calls (`xml_value`)."""
     text = text.replace("<|im_end|>", "").replace("<|endoftext|>", "")
     reasoning = None
-    think = _THINK.search(text)
-    if think:
-        reasoning = think.group(1).strip()
-        text = text[:think.start()] + text[think.end():]
+    # Match a leading <think>...</think> block first; otherwise, if </think> is present (thinking templates open
+    # <think> in the generation prompt), split at the first </think>. Never search inside later tool-call code
+    # strings, and preserve reasoning whitespace verbatim so multi-turn renderings stay byte-exact for prefix caching.
+    leading = re.match(r"^\s*<think>([\s\S]*?)</think>", text)
+    if leading:
+        reasoning = leading.group(1)
+        text = text[leading.end():]
     elif "</think>" in text:  # thinking templates open the block in the generation prompt
         head, _, text = text.partition("</think>")
-        reasoning = head.strip()
+        reasoning = head
+    elif re.match(r"^\s*<think>", text):
+        # Truncated before </think> on an explicit <think> reply: keep unfinished thought in reasoning, not content.
+        reasoning = re.sub(r"^\s*<think>", "", text, count=1)
+        text = ""
     tool_calls = []
     xml_calls, text, lead = _take_xml_calls(text, tools)
     for name, arguments in xml_calls:

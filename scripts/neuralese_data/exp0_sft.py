@@ -187,9 +187,7 @@ def _nll(weight, h, target, allowed=None):
 def token_nll(model, h, positions, targets, chunk=2048, *, trainable_rows=None, mask=None):
     """NLL (fp32) of ``targets`` predicted from hidden rows ``positions`` (fused chunked linear NLL; ``mask``: the
     sampling-law masks of those rows, ``law_mask``)."""
-    rows = getattr(model, '_lfm3_trainable_rows', None) if trainable_rows is None else (
-        None if trainable_rows is False else trainable_rows
-    )
+    rows = getattr(model, '_lfm3_trainable_rows', None) if trainable_rows is None else trainable_rows
     if getattr(model, '_lfm3_fast', None) is not None:
         return lfm3_fast_train.linear_nll(h[positions], model.lm_head.weight, targets, trainable_rows=rows, mask=mask)
     out = []
@@ -211,9 +209,7 @@ def token_nll_nucleus(model, h, positions, targets, top_p, *, trainable_rows=Non
     ``positions`` (`lfm3_fast.linear_nll_nucleus`; prepared models only)."""
     if getattr(model, '_lfm3_fast', None) is None:
         raise ValueError('the nucleus NLL needs a lfm3_fast.prepare()d model')
-    rows = getattr(model, '_lfm3_trainable_rows', None) if trainable_rows is None else (
-        None if trainable_rows is False else trainable_rows
-    )
+    rows = getattr(model, '_lfm3_trainable_rows', None) if trainable_rows is None else trainable_rows
     return lfm3_fast_train.linear_nll_nucleus(h[positions], model.lm_head.weight, targets, top_p, trainable_rows=rows,
                                               mask=mask)
 
@@ -263,6 +259,7 @@ def law_mask(chains, vocab_size):
 # no T^2 factor). In expectation: SFT + lambda * TM with lambda = (1 - p_c) / p_c. T -> inf is SFT, T = 1 is KD.
 AMBIENT_TEMPERATURE = 2.5
 AMBIENT_P_CLEAN = 0.75
+AMBIENT_MODE = 'additive'
 
 
 def ambient_clean(seed, step, p_clean):
@@ -275,18 +272,15 @@ def ambient_clean(seed, step, p_clean):
 
 def _tm_ce(weight, h, teacher_h, teacher_weight, temperature, sparse_ids=None, sparse_rows=None,
            teacher_sparse_ids=None, teacher_sparse_rows=None, allowed=None):
-    s_logits = F.linear(h, weight)
-    if sparse_ids is not None and sparse_rows is not None and sparse_ids.numel():
-        s_logits = s_logits.clone()
-        s_logits[:, sparse_ids] = F.linear(h, sparse_rows.to(h.dtype))
+    # Preserve FP32 head logits (matching lfm3_fast._head_logits_chunk & serving engines) so tiny tm_kl
+    # differences are not quantized into BF16 staircases near |logit| ~ 20.
+    s_logits = lfm3_fast_train._head_logits_chunk(h, weight, sparse_ids, sparse_rows)
     s = s_logits.float() / temperature
     if allowed is not None:      # rows drawn under a sampling-law mask: both laws over the allowed tokens (law_mask)
         s = s.masked_fill(~allowed, float('-inf'))
     with torch.no_grad():
-        t_logits = F.linear(teacher_h, teacher_weight)
-        if teacher_sparse_ids is not None and teacher_sparse_rows is not None and teacher_sparse_ids.numel():
-            t_logits = t_logits.clone()
-            t_logits[:, teacher_sparse_ids] = F.linear(teacher_h, teacher_sparse_rows.to(teacher_h.dtype))
+        t_logits = lfm3_fast_train._head_logits_chunk(teacher_h, teacher_weight,
+                                                      teacher_sparse_ids, teacher_sparse_rows)
         t = t_logits.float() / temperature
         if allowed is not None:
             t = t.masked_fill(~allowed, float('-inf'))
@@ -633,15 +627,15 @@ def decision_tokens(chain):
 
 
 def decision_backward(model, forward, chains, denominator, pack_tokens, activation_gb, fast=True, mark=None,
-                      backward=True):
+                      backward=True, student_top_p=1.):
     """Forward and backward of the decision objective over ``chains`` (decision chains), the loss
     sum(DECISION_MASS * CE + reasoning NLL) / ``denominator``. Every option is its prompt followed by its closed
     continuation; a decision's options (and, on the fast path, several decisions up to ``pack_tokens``) run as packed
     documents of one forward, so its option scores share one graph. Scores use the full softmax, as the readout does.
     A reasoned readout's chain (``decision_reasoning`` > 0, ``mark_decision_objective``) also takes the token NLL of
-    its reasoning span (in the prompt every option shares; read off the first option's document). Returns (sum of the
-    weighted loss, tokens computed, {'decisions', 'ce', 'correct', 'reasoning_tokens', 'reasoning_nll'}); ``backward``
-    False: no backward (validation, under ``torch.no_grad``)."""
+    its reasoning span (under ``student_top_p`` nucleus NLL when < 1 on the fast path, matching ``targets_nll``).
+    Returns (sum of the weighted loss, tokens computed, {'decisions', 'ce', 'correct', 'reasoning_tokens', 'reasoning_nll'});
+    ``backward`` False: no backward (validation, under ``torch.no_grad``)."""
     from natlang_neuralese.common.decision_objective import decision_loss, option_sequence_scores, sequence_owner
     mark = mark or (lambda name, since: time.time())
     device = model.lm_head.weight.device
@@ -667,7 +661,7 @@ def decision_backward(model, forward, chains, denominator, pack_tokens, activati
         reasoning = [decision_reasoning_span(chain) for chain in group]
         # per document: its local target positions and tokens (spans in order: a reasoned decision's reasoning span
         # on its first option's document, then each option's continuation)
-        documents, local, targets, spans = [], [], [], []
+        documents, local, targets, spans, span_is_reasoning = [], [], [], [], []
         for (prompt, _, _), options, span in zip(parts, sequences, reasoning):
             if span is not None and span[1] > len(prompt):
                 raise ValueError('a decision reasoning span lies in its prompt')
@@ -677,9 +671,11 @@ def decision_backward(model, forward, chains, denominator, pack_tokens, activati
                     at_rows.append(np.arange(span[0] - 1, span[1] - 1))
                     at_ids.append(prompt[span[0]:span[1]])
                     spans.append(span[1] - span[0])
+                    span_is_reasoning.append(True)
                 at_rows.append(np.arange(len(prompt) - 1, len(prompt) - 1 + len(ids)))
                 at_ids.append(ids)
                 spans.append(len(ids))
+                span_is_reasoning.append(False)
                 documents.append(np.concatenate([prompt, ids]))
                 local.append(np.concatenate(at_rows))
                 targets.append(np.concatenate(at_ids))
@@ -689,8 +685,14 @@ def decision_backward(model, forward, chains, denominator, pack_tokens, activati
                 set_checkpointing(model, len(ids), activation_gb)
             h = forward(model, ids, [len(d) for d in documents])
             offsets = np.cumsum([0] + [len(d) for d in documents[:-1]])
-            nll = token_nll(model, h, torch.from_numpy(np.concatenate([o + r for o, r in zip(offsets, local)])).to(device),
-                            torch.from_numpy(np.concatenate(targets)).to(device))
+            pos_t = torch.from_numpy(np.concatenate([o + r for o, r in zip(offsets, local)])).to(device)
+            tgt_t = torch.from_numpy(np.concatenate(targets)).to(device)
+            if student_top_p < 1. and any(span_is_reasoning) and getattr(model, '_lfm3_fast', None) is not None:
+                sampled_t = torch.from_numpy(np.concatenate([
+                    np.full(n, is_r, dtype=bool) for n, is_r in zip(spans, span_is_reasoning)])).to(device)
+                nll = targets_nll(model, h, pos_t, tgt_t, sampled_t, student_top_p)
+            else:
+                nll = token_nll(model, h, pos_t, tgt_t)
         else:                        # the stock path: one document per forward
             nll = torch.cat([token_nll(model, forward(model, torch.from_numpy(d).to(device)),
                                        torch.from_numpy(r).to(device), torch.from_numpy(c).to(device))
@@ -927,6 +929,14 @@ def step_backward(model, forward, chains, denominator, pack_tokens, activation_g
                             trainable_rows=getattr(model, '_lfm3_trainable_rows', None),
                             teacher_trainable_rows=ambient.get('teacher_trainable_rows'), mask=mask)
         ambient['kl'] = ambient.get('kl', 0.) + ((ce.detach() - entropy) * weights).sum().item()
+        ambient['tm_nll'] = ambient.get('tm_nll', 0.) + (ce.detach() * weights).sum().item()
+        if ambient.get('mode') == 'additive':
+            # Keep 1.0x SFT supervision on every unique batch (preventing 1-epoch + max_prior_exposures=1 from
+            # permanently discarding 25% of unique data) while adding weighted TM to preserve exact Eq. 4 balance.
+            sft_loss = targets_nll(model, h, positions, targets, sampled, student_top_p, mask) * weights
+            ambient['sft_nll'] = ambient.get('sft_nll', 0.) + sft_loss.detach().sum().item()
+            tm_weight = float(ambient.get('weight', 1.0))
+            return sft_loss + (tm_weight * ce * weights)
         return ce * weights
     if not fast:                     # the stock HF path: one chain per forward, no imports
         for index, chain in enumerate(chains):
@@ -1005,7 +1015,7 @@ def ambient_teacher_rows_lora(learner: Lfm3Learner, chains, ref_bundles, ref_row
         for (index, _), part in zip(items, h.split(counts)):
             rows[index] = part
 
-    with learner.reference_view(ref_bundles, ref_rows) as ref_kw, torch.enable_grad():
+    with learner.reference_view(ref_bundles, ref_rows) as ref_kw, torch.no_grad():
         lfm3_fast_train.run_prefix_tree(
             model, nodes, ids_of, leaf, tokens, pack_tokens or 1, activation_gb,
             backward=False, mode=mode if share_prefix_tokens > 0 else 'levels',
@@ -1069,10 +1079,12 @@ def load_chains(path):
 
 def validation_loss(model, forward, chains, pack_tokens=0, student_top_p=1.):
     """Weighted mean NLL over prebuilt validation chains (no gradient; packed rows on the fast path), under the
-    training objective (``targets_nll``)."""
+    training objective (``targets_nll``). Excludes decision-objective chains (scored separately by
+    ``decision_validation``) so decision rows are neither scored as token CE nor double-counted across field steps."""
+    token_chains = [c for c in chains if not c.get('decision_objective')]
     total, mass = 0., 0.
     with torch.no_grad():
-        for row in packed_rows(chains, pack_tokens):
+        for row in packed_rows(token_chains, pack_tokens):
             ids, positions, targets, weights, lengths, imports = row_inputs(row, 'cuda')
             h = forward(model, ids, lengths, imports) if imports is not None or len(lengths) > 1 else forward(model, ids)
             nll = targets_nll(model, h, positions, targets, sampled_mask(row, 'cuda'), student_top_p,
@@ -1171,6 +1183,8 @@ def train(args):
     decision_on = resumed_decision_objective(args, not args.no_decision_objective)
     reasoning_on = resumed_decision_objective(args, not args.no_decision_reasoning, 'decision_reasoning')
     decisions = mark_decision_objective(chains, decision_on, reasoning_on)
+    for vc in val_sets.values():
+        mark_decision_objective(vc, decision_on, reasoning_on)
     print(json.dumps({'decision_objective': {'on': decision_on, 'chains': decisions, 'rule': DECISION_RULE,
                                              'mass_per_decision': DECISION_MASS,
                                              'reasoning': {'on': reasoning_on,
@@ -1343,14 +1357,18 @@ def train(args):
 
     replanned = bool((trainer_state or {}).get('schedule', {}).get('replanned'))
     completed_step = start_step
-    for step in range(start_step, len(steps)):
+    stopped_early = False
+    ambient_mode = getattr(args, 'ambient_mode', AMBIENT_MODE)
+    step = start_step
+    while step < len(steps):
         group = steps[step]
         if args.stop_file and Path(args.stop_file).exists():
             save_state_now(step)
             print(json.dumps({'stopped_by': args.stop_file, 'at_step': step}), flush=True)
+            stopped_early = True
             break
         fraction = step / max(1, total - 1)
-        scale = min(1., (step + 1) / args.warmup) * (args.min_lr_fraction + (1 - args.min_lr_fraction) * 0.5 * (1 + math.cos(math.pi * fraction)))
+        scale = min(1., (step + 1) / max(1, args.warmup)) * (args.min_lr_fraction + (1 - args.min_lr_fraction) * 0.5 * (1 + math.cos(math.pi * fraction)))
         for g in optimizer.param_groups:
             g['lr'] = args.lr * scale * g.get('lr_scale', 1.0)
         denominator = sum(chain_mass(chains[i]) for i in group)
@@ -1368,7 +1386,7 @@ def train(args):
                                               'reasoning_nll': 0.})
             if step_decisions:
                 decided = decision_backward(model, forward, step_decisions, denominator, cur_pack_tokens, cur_act_gib,
-                                            mark=mark)
+                                            mark=mark, student_top_p=student_top_p)
             if not step_chains:
                 return decided[0], decided[1], ambient, decided[2]
             if not is_clean:
@@ -1380,7 +1398,9 @@ def train(args):
                 )
                 mark('ambient_teacher', t_amb)
                 ambient = {'temperature': args.ambient_temperature, 'head': model.lm_head.weight,
-                           'teacher_trainable_rows': ref_rows, 'rows': rows}
+                           'teacher_trainable_rows': ref_rows, 'rows': rows,
+                           'mode': ambient_mode,
+                           'weight': (1.0 / args.ambient_p_clean) if ambient_mode == 'additive' else 1.0}
             total_nll_val, computed_val = step_backward(
                 model, forward, step_chains, denominator, cur_pack_tokens, cur_act_gib, share_prefix_tokens,
                 fast=True, mark=mark, passthrough=not args.no_neuralese_passthrough, mode=tree_mode,
@@ -1399,10 +1419,24 @@ def train(args):
         mark('optimizer', t)
         completed_step = step + 1
         step_s = time.time() - step_started
-        record = {'step': completed_step, 'of': total, 'loss': total_nll / denominator, 'lr': args.lr * scale,
+        chain_denom = sum(chain_mass(c) for c in step_chains) if step_chains else denominator
+        if ambient is None:
+            logged_loss = total_nll / denominator
+            loss_kind = 'sft'
+            ambient_fields = {}
+        elif ambient.get('mode') == 'additive':
+            logged_loss = (ambient.get('sft_nll', 0.) + decided[0]) / denominator
+            loss_kind = 'sft+tm'
+            ambient_fields = {'tm_kl': ambient.get('kl', 0.) / max(1e-9, chain_denom),
+                              'tm_loss': ambient.get('tm_nll', 0.) / max(1e-9, chain_denom)}
+        else:
+            logged_loss = total_nll / denominator
+            loss_kind = 'tm'
+            ambient_fields = {'tm_kl': ambient.get('kl', 0.) / max(1e-9, chain_denom)}
+        record = {'step': completed_step, 'of': total, 'loss': logged_loss, 'lr': args.lr * scale,
                   'grad_norm': norm, 'family_grad_norms': fam_grads,
-                  'loss_kind': 'sft' if ambient is None else 'tm',
-                  **({} if ambient is None else {'tm_kl': ambient.get('kl', 0.) / denominator}),
+                  'loss_kind': loss_kind,
+                  **ambient_fields,
                   **({'decisions': decided['decisions'], 'decision_ce': decided['ce'] / decided['decisions'],
                       'decision_accuracy': decided['correct'] / decided['decisions'],
                       'decision_loss_share': DECISION_MASS * decided['ce'] / max(1e-9, total_nll)}
@@ -1452,7 +1486,11 @@ def train(args):
         print(json.dumps(record), flush=True)
         log.write(json.dumps(record) + '\n')
         log.flush()
+        step += 1
     save_state_now(completed_step)
+    if stopped_early and round_id and best is None:
+        # Stopped early via --stop-file: keep resumable state without exporting a partial round or marking round_id done.
+        return
     if args.max_steps and not args.checkpoint_at_max_steps:
         return
     out_path = out_dir / 'checkpoint.pt'
@@ -1476,7 +1514,7 @@ def train(args):
         print(json.dumps({'checkpoint': str(out_path), **exported}), flush=True)
 
     export_round(factors=factors if args.export_factors_dir else None, checkpoint=checkpoint,
-                 factors_only=args.factors_only, round_id=round_id,
+                 factors_only=args.factors_only, round_id=None if stopped_early else round_id,
                  mark_trained=lambda: save_state_now(completed_step, mark_round_done=True))
 
 
@@ -1505,7 +1543,7 @@ def bench(args):
     def run_variant(compile_layers, label):
         learner = Lfm3Learner.from_checkpoint(
             args.checkpoint, args.base, spec, device='cuda',
-            fp8_base=not getattr(args, 'no_fp8_base', False), compile_layers=compile_layers,
+            fp8_base=False if getattr(args, 'no_fp8_base', False) else None, compile_layers=compile_layers,
         )
         model = learner.model
         params = learner.trainable_parameters()
@@ -1655,6 +1693,10 @@ def main():
                         'resident teacher weights); 1 opts out (plain SFT)')
     p.add_argument('--ambient-temperature', type=float, default=AMBIENT_TEMPERATURE,
                    help='Temperature Matching temperature T (default 2.5, the paper\'s; large T approaches SFT, 1 is KD)')
+    p.add_argument('--ambient-mode', choices=('additive', 'replace'), default=AMBIENT_MODE,
+                   help="additive (default): non-clean steps train SFT + (1/p_clean)*TM jointly so 100%% of unique "
+                        "1-epoch batches receive full SFT gradient under exact Eq. 4 balance; replace: legacy Algorithm 1 "
+                        "coin flip (replaces SFT with TM-only on 1-p_clean of steps)")
     p.add_argument('--hours', type=float, default=0., help='wall-clock budget: at --replan-step the schedule (cosine '
                    'included) is cut to the steps that fit at the measured rate, keeping --reserve-minutes for eval and save')
     p.add_argument('--replan-step', type=int, default=20)

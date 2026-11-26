@@ -501,8 +501,13 @@ def infra_loss(entry, finish):
     if not finish:
         return None
     from ..eval.task_packet import classify_case
-    output = Path(entry['output']) if entry.get('output') else None
-    rows = read_jsonl(output) if output and output.is_file() and output.stat().st_size else []
+    from .episode_files import present, read_bytes
+    output = present(entry['output']) if entry.get('output') else None
+    if output and output.is_file() and output.stat().st_size:
+        rows = ([json.loads(line) for line in read_bytes(output).decode('utf-8', 'replace').splitlines() if line.strip()]
+                if output.suffix == '.zst' else read_jsonl(output))
+    else:
+        rows = []
     outcome = classify_case(rows[0] if rows else None, finish)
     if outcome == 'infrastructure_error':
         return 'infrastructure_error'
@@ -809,6 +814,7 @@ def finalize(directory, spec, started, *, complete):
               'manifest_sha256': spec['manifest_sha256'], 'series': spec['series'], 'code': spec['code'],
               'endpoint': spec['endpoint'], 'actor': spec.get('actor'), 'engine': spec.get('engine'), 'tasks': spec['tasks'], 'samples_per_task': spec['samples'],
               'seed_base': spec.get('seed_base', SEED_BASE), 'case_seconds': spec.get('case_seconds'),
+              'max_model_requests': spec.get('max_model_requests'), 'max_turns': spec.get('max_turns'),
               'context_tokens': spec.get('context_tokens', LEGACY_CONTEXT_TOKENS),
               'sampling': spec.get('sampling', LEGACY_SAMPLING),
               'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
@@ -876,7 +882,7 @@ def aggregate(samples, *, complete, elapsed):
             'timeouts': timeouts, 'timeout_rate': round(timeouts / len(ran), 4) if ran else None,
             'unscored_other': len(ran) - len(scored) - sum(s['timed_out'] and s['reward'] is None for s in ran),
             'outcome_counts': counts,
-            'loop_rate': (sum(counts.get(k, 0) for k in LOOP) / len(ran)) if ran else None,
+            'loop_rate': (sum(1 for s in measured if s.get('outcome') in LOOP) / len(measured)) if measured else None,
             'ran_out_rate': ran_out_rate({'samples': samples}),
             'repeated_action_rate': (sum(s['repeated_actions'] or 0 for s in scored) / calls) if calls else None,
             'neuralese_use_rate': (sum(s['neuralese_exchanges'] > 0 for s in scored) / len(scored)) if scored else None,
@@ -1115,7 +1121,7 @@ def pairing_differences(first, second):
     """(series differences, engine differences) of two results: {field: [first, second]} each."""
     series_a, series_b = first.get('series') or {}, second.get('series') or {}
     series = {}
-    for key in ('ts_host_tree', 'model_facing', 'ts_host_dirty', 'scoring_dirty', 'engine_host'):
+    for key in ('ts_host_tree', 'model_facing', 'prompt_states', 'ts_host_dirty', 'scoring_dirty', 'engine_host'):
         if series_a.get(key) != series_b.get(key):
             series[key] = [series_a.get(key), series_b.get(key)]
     scoring_a, scoring_b = series_a.get('scoring_sources') or {}, series_b.get('scoring_sources') or {}
@@ -1178,7 +1184,16 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
     if strict_series and (series_differences or first['series']['key'] != second['series']['key']):
         raise ValueError('results of different scoring series are not paired (--strict-series): '
                          + json.dumps(series_differences))
+    if strict_series and first.get('manifest_sha256') != second.get('manifest_sha256'):
+        raise ValueError(f"results measured different held manifests (--strict-series): "
+                         f"{first.get('manifest_sha256')} vs {second.get('manifest_sha256')}")
     warnings = []
+    if first.get('manifest_sha256') != second.get('manifest_sha256'):
+        warnings.append(f"different held manifests ({str(first.get('manifest_sha256'))[:12]} vs {str(second.get('manifest_sha256'))[:12]})")
+    for budget_key in ('max_model_requests', 'max_turns'):
+        a_val, b_val = first.get(budget_key), second.get(budget_key)
+        if a_val is not None and b_val is not None and a_val != b_val:
+            warnings.append(f'different {budget_key} ({a_val} vs {b_val})')
     if cross_host:
         warnings.append(f'different engine hosts ({hosts[0]} and {hosts[1]})')
     if first['series']['key'] != second['series']['key'] or series_differences:
@@ -1453,11 +1468,18 @@ def _measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_B
     from .actor_client import NativeActorClient
     from ..common.code_provenance import code_provenance, repository_root
     out, manifest = Path(out), Path(manifest)
+    infos = []
     for url, _ in endpoints:
         info = _read_info(NativeActorClient(url, timeout=10))
         binding = info.get('rl_policy_binding') or {}
         if policy_id_of(binding) != policy_id:
             raise ValueError(f'{url} serves {str(policy_id_of(binding))[:80]}, not {policy_id[:80]}')
+        infos.append((url, info, engine_of(binding)))
+    info = infos[0][1]
+    engines_seen = {json.dumps(eng, sort_keys=True) for _, _, eng in infos if eng is not None}
+    if len(engines_seen) > 1 and not allow_other_engine:
+        raise ValueError('multi-endpoint measurement endpoints attest different engines: '
+                         + json.dumps({u: e for u, _, e in infos}))
     pinned = json.loads(manifest.read_text())
     repo = repository_root()
     spec = {'policy_id': policy_id, 'label': label, 'endpoint': endpoints[0][0], 'endpoints': [list(e) for e in endpoints],
@@ -1467,22 +1489,23 @@ def _measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_B
             'case_seconds': case_seconds, 'max_model_requests': max_model_requests, 'max_turns': max_turns,
             'context_tokens': context_tokens, 'runtime': str(repo / 'ts-host'), 'repo': str(repo),
             'series': series(), 'code': code_provenance(), 'actor': {'info': info.get('rl_policy_binding')},
-            'engine': engine_of(info.get('rl_policy_binding')),
+            'engine': infos[0][2],
             'sampling': sampling_law_of(RL_TOP_P if top_p is None else top_p),
             'dispatch': {'order': order, 'prior': [str(Path(p).resolve()) for p in duration_priors]}}
     pin = pinned_engine(manifest)
-    if pin and not allow_other_engine:
-        attested = spec['engine'] or {}
-        wrong = {k: attested.get(k) for k, v in pin['expect'].items() if attested.get(k) != v}
-        if wrong:
-            raise ValueError(f'the actor does not serve the pinned eval engine ({Path(manifest).parent / "engine.json"}): {wrong}')
-        harness = pin.get('harness') or {}
-        if harness.get('context_tokens') not in (None, context_tokens):
-            raise ValueError(f'the pinned harness budget is {harness["context_tokens"]} tokens, not {context_tokens}')
-    served = info.get('context')
-    if isinstance(served, int) and served < context_tokens and not allow_other_engine:
-        raise ValueError(f'the actor serves {served} tokens per request, less than the call budget {context_tokens}; '
-                         'relaunch it with --sglang-context >= the budget')
+    for url, ep_info, ep_engine in infos:
+        if pin and not allow_other_engine:
+            attested = ep_engine or {}
+            wrong = {k: attested.get(k) for k, v in pin['expect'].items() if attested.get(k) != v}
+            if wrong:
+                raise ValueError(f'{url} does not serve the pinned eval engine ({Path(manifest).parent / "engine.json"}): {wrong}')
+            harness = pin.get('harness') or {}
+            if harness.get('context_tokens') not in (None, context_tokens):
+                raise ValueError(f'the pinned harness budget is {harness["context_tokens"]} tokens, not {context_tokens}')
+        served = ep_info.get('context')
+        if isinstance(served, int) and served < context_tokens and not allow_other_engine:
+            raise ValueError(f'{url} serves {served} tokens per request, less than the call budget {context_tokens}; '
+                             'relaunch it with --sglang-context >= the budget')
     if spec['code'].get('dirty') or spec['series']['ts_host_dirty'] or spec['series'].get('scoring_dirty'):
         log(json.dumps({'event': 'held eval warning', 'warning': 'the checkout is dirty; the result records it'}))
     out.mkdir(parents=True, exist_ok=True)
@@ -1500,10 +1523,16 @@ def _measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_B
             raise ValueError(f'{out} holds a run measured on another engine: {previous["engine"]!r}, '
                              f'the endpoint attests {spec["engine"]!r}')
         # The remaining episodes run on this checkout (its pin may be a newer one; the old one may be removed), and
-        # resumed_code records it.
+        # resumed_code/resumed_series record any change so cross-series resumes are never silently hidden.
+        resumed_series = spec['series'] if spec['series'] != previous.get('series') else None
+        if resumed_series is not None:
+            log(json.dumps({'event': 'held eval warning', 'warning': 'resuming on a different scoring/runtime series',
+                            'previous_series': (previous.get('series') or {}).get('key'),
+                            'resumed_series': resumed_series.get('key')}))
         spec = {**previous, 'endpoint': spec['endpoint'], 'endpoints': spec['endpoints'], 'workers': spec['workers'],
                 'dispatch': spec['dispatch'], 'repo': spec['repo'], 'runtime': spec['runtime'],
-                'resumed_code': spec['code']}
+                'resumed_code': spec['code'],
+                **({'resumed_series': resumed_series} if resumed_series is not None else {})}
     (out / 'run.json').write_text(json.dumps(spec, indent=1) + '\n')
     (out / 'result.json').unlink(missing_ok=True)
     return run(out)

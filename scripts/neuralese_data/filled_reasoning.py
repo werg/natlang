@@ -151,12 +151,16 @@ def calls_of(chain, close_id):
     for i, (start, length, row) in enumerate(segs):
         sample = np.asarray(row['sample'])
         weight = np.asarray(row['weight'], np.float32) if 'weight' in row else np.ones(length, np.float32)
+        filled_weight = (np.asarray(row['filled_weight'], np.float32)
+                         if 'filled_weight' in row else None)
         found = np.flatnonzero(sample == close_id)
         cut = int(found[0]) + 1 if len(found) and found[0] + 1 < len(sample) else None
         end = segs[i + 1][0] if i + 1 < len(segs) else start + length
         out.append({'prompt': ids[:start], 'sample': sample, 'weight': weight, 'cut': cut,
                     'action': sample[cut:] if cut is not None else sample,
                     'action_weight': weight[cut:] if cut is not None else weight,
+                    'filled_action_weight': ((filled_weight[cut:] if cut is not None else filled_weight)
+                                             if filled_weight is not None else None),
                     'suffix': ids[start + length:end], 'row': row})
     return out
 
@@ -175,12 +179,18 @@ def filled_rows(calls, fills, close_id, name):
             sample, weight = list(call['sample']), list(call['weight'])
             sampled = [False] * len(sample)
         else:
-            block = list(fill['reasoning']) if fill and fill.get('reasoning') else [close_id]
-            action, action_weight = [int(t) for t in call['action']], [float(w) for w in call['action_weight']]
-            trained = 1. if fill and fill.get('reasoning') and any(action_weight) else 0.
+            has_fill = bool(fill and fill.get('reasoning'))
+            block = list(fill['reasoning']) if has_fill else [close_id]
+            action = [int(t) for t in call['action']]
+            # When filled reasoning replaces an empty think block, the first action token (<tool_call>) is no longer
+            # predicted at an empty-think </think> position: use filled_action_weight (without empty_think_first_end),
+            # while fallback empty-think steps retain call['action_weight'] (with empty_think_first_end masked).
+            raw_aw = call.get('filled_action_weight') if (has_fill and call.get('filled_action_weight') is not None) else call['action_weight']
+            action_weight = [float(w) for w in raw_aw]
+            trained = 1. if has_fill and any(action_weight) else 0.
             sample = block + action
             weight = [trained] * len(block) + action_weight
-            sampled = [bool(fill and fill.get('reasoning'))] * len(block) + [False] * len(action)
+            sampled = [has_fill] * len(block) + [False] * len(action)
         rows.append({'id': f'{name}#{call["row"].get("index", i)}', 'invocation': call['row'].get('invocation', name),
                      'index': call['row'].get('index', i), 'prompt': np.asarray(context, np.int32),
                      'sample': np.asarray(sample, np.int32), 'weight': np.asarray(weight, np.float32),
@@ -273,7 +283,17 @@ class Renderer:
         from sft_sources import call_row, candidate_turns, mark_open_goal
         turns = candidate_turns(item['work'], item)
         with self.lock:
-            rows = [call_row(self.renderer, 'teacher', item['key'], index, turn)[0] for index, turn in enumerate(turns)]
+            rows = []
+            for index, turn in enumerate(turns):
+                row, _ = call_row(self.renderer, 'teacher', item['key'], index, turn)
+                # Also compute action weights without empty_think_first_end so filled_rows trains the first action
+                # token (<tool_call>) when real student reasoning replaces an empty think block.
+                filled_row, _ = call_row(self.renderer, 'teacher', item['key'], index, turn, empty_think_first=False)
+                if 'weight' in filled_row:
+                    row['filled_weight'] = filled_row['weight']
+                elif 'weight' in row:
+                    row['filled_weight'] = np.ones(len(row['sample']), np.float32)
+                rows.append(row)
         chains = chains_of([{'task_id': item['task_id'], 'round': item['key'], 'rows': rows}])
         mark_open_goal(chains, open_goal_of(item), turns)
         return chains, self.renderer
@@ -1179,11 +1199,17 @@ def block_weights(records, cap, mode='joint', hazard_bins=3, smooth=0.5):
     edges = hazard_edges(own, hazard_bins) if mode == 'joint' else []
     own_n = collections.Counter(block_cell(c, edges) for c in own)
     chosen_n = collections.Counter(block_cell(c, edges) for c in chosen)
+    chosen_tok = collections.Counter()
+    for c in chosen:
+        chosen_tok[block_cell(c, edges)] += max(1, int(c.get('length') or 1))
     cells = set(own_n) | set(chosen_n)
     total_own, total_chosen = len(own) + smooth * len(cells), len(chosen) + smooth * len(cells)
     raw = {cell: min(cap, ((own_n[cell] + smooth) / total_own) / ((chosen_n[cell] + smooth) / total_chosen))
            for cell in chosen_n}
-    mean = sum(raw[cell] * n for cell, n in chosen_n.items()) / len(chosen)
+    # Normalize over tokens (not block counts) so token-normalized SFT loss mass is preserved instead of inflated
+    # when longer blocks receive higher weights.
+    total_tok = sum(chosen_tok.values())
+    mean = sum(raw[cell] * tok for cell, tok in chosen_tok.items()) / total_tok if total_tok else 1.
     return {cell: w / mean for cell, w in raw.items()}, edges
 
 

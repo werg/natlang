@@ -362,6 +362,8 @@ class Engine:
         """Bind ``export`` ({kind, format, sha256}, rl.actors) into this actor's receipt and every capture."""
         self.actor_export_default = dict(export)
         self.rl_policy_binding['actor_export'] = dict(export)
+        if hasattr(self, 'sglang_actor_export') and isinstance(self.sglang_actor_export, dict):
+            self.sglang_actor_export = dict(export)
 
     def generate(self, request: GenerationRequest) -> dict:
         """Run one request to completion on the calling thread (no scheduler)."""
@@ -1357,7 +1359,13 @@ class Engine:
             reply = reply + span
             end = len(reply)
         elif select is not None:
-            start, end = selected_span(lambda part: self.tokenizer.decode(part, skip_special_tokens=False), reply[:end], select)
+            # Exclude reasoning (<think>...</think>) from select search so drafting note text inside <think> does not
+            # create a duplicate match and break compact_history learned compaction.
+            think_close = self.tokenizer.convert_tokens_to_ids("</think>")
+            search_from = next((i + 1 for i, token in enumerate(reply[:end]) if token == think_close), 0)
+            rel_start, rel_end = selected_span(
+                lambda part: self.tokenizer.decode(part, skip_special_tokens=False), reply[search_from:end], select)
+            start, end = search_from + rel_start, search_from + rel_end
         else:
             think_close = self.tokenizer.convert_tokens_to_ids("</think>")
             start = max((i + 1 for i, token in enumerate(reply[:end]) if token == think_close), default=0)

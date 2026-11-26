@@ -226,6 +226,8 @@ test('context overflow messages of llama.cpp and vLLM give the prompt size and t
     { promptTokens: 25601, window: 32768 });
   assert.deepEqual(contextOverflow("This model's maximum context length is 4096 tokens. However, you requested 5000 tokens (4000 in the messages, 1000 in the completion)."),
     { promptTokens: 4000, window: 4096 });
+  assert.deepEqual(contextOverflow('model HTTP 400: {"error":{"type":"context-length","message":"prompt uses 132000 positions, context is 131072"}}'),
+    { promptTokens: 132000, window: 131072 });
   assert.equal(contextOverflow('model HTTP 500: internal error'), undefined);
 });
 

@@ -229,7 +229,7 @@ def test_length_reweighting_restores_the_students_own_length_mix():
     weights, edges = fr.block_weights(records, cap=4., mode='length')
     short, long_ = (fr.length_bin(100), 0), (fr.length_bin(900), 0)
     assert edges == [] and weights[long_] > 1 > weights[short]
-    assert abs((6 * weights[short] + 2 * weights[long_]) / 8 - 1) < 1e-9          # mean 1: the loss mass is kept
+    assert abs((6 * 100 * weights[short] + 2 * 900 * weights[long_]) / (6 * 100 + 2 * 900) - 1) < 1e-9  # token-mass conserving
     long_share = 2 * weights[long_] / (6 * weights[short] + 2 * weights[long_])
     assert 0.25 < long_share <= 0.5                                                 # toward the student's 50%
     assert fr.block_weights(records, cap=0) is None and fr.block_weights(records, cap=4., mode='off') is None

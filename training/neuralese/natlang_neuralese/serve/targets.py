@@ -80,7 +80,19 @@ def target_items(engine, messages, tools, target, *, response_tools=None):
     return before, rest
 
 
-def non_student_context(tokenizer, target_message, target_ids, *, think="context", lead_in="context"):
+def _reasoning_text(message):
+    """Reasoning text of an assistant message across all template fields (LFM3 jinja checks thinking, reasoning, reasoning_content)."""
+    if not isinstance(message, dict):
+        return ""
+    for key in ("thinking", "reasoning", "reasoning_content"):
+        val = message.get(key)
+        if isinstance(val, str) and val.strip():
+            return val
+    return ""
+
+
+def non_student_context(tokenizer, target_message, target_ids, *, think="context", lead_in="context",
+                        empty_think_first=True):
     """Leading tokens of a rendered reply the student did not sample (teacher, October, live, a privileged run) that
     are context, not loss: its think block through ``</think>`` and the whitespace after it, and (``lead_in``
     'context') the text it writes before its first tool call. ``think`` 'train' keeps visible reasoning (and the text
@@ -90,7 +102,7 @@ def non_student_context(tokenizer, target_message, target_ids, *, think="context
     12% vs the base's 2%); no verified outcome of the student selects either (DECISIONS 2026-11-18)."""
     if think not in ("context", "train") or lead_in not in ("context", "train"):
         raise ValueError(f"think {think!r} / lead_in {lead_in!r}: context or train")
-    if think == "train" and (target_message.get("reasoning_content") or "").strip():
+    if think == "train" and _reasoning_text(target_message):
         return 0
     ids = list(target_ids)
     end = think_end(tokenizer, ids)
@@ -98,6 +110,8 @@ def non_student_context(tokenizer, target_message, target_ids, *, think="context
         start = _first(tokenizer, ids, "<tool_call>", "<|tool_call_start|>")
         if start is not None:
             end = max(end, start)
+    if not empty_think_first:
+        return end
     return max(end, empty_think_first_end(tokenizer, target_message, ids))
 
 
@@ -112,7 +126,7 @@ def empty_think_first_end(tokenizer, target_message, target_ids):
     import os
     if os.environ.get("NATLANG_EMPTY_THINK_FIRST", "context") == "train":
         return 0
-    if (target_message.get("reasoning_content") or "").strip():
+    if _reasoning_text(target_message):
         return 0
     end = think_end(tokenizer, target_ids)
     return min(end + 1, len(list(target_ids))) if end else 0
@@ -127,7 +141,7 @@ def own_empty_think_context(tokenizer, target_message, target_ids):
     block at once: 2026-11-25 the program-tuning fits (``tune.rows``) trained it in 96-153 own readout rows of
     tally and tree, and the merged arms reasoned in 0-7% of their turns (base 100%). ``sft_sources.think_context``
     applies the same rule to expert-iteration builds (sft-v4-run1 trained it in 18 own rows)."""
-    if (target_message.get("reasoning_content") or "").strip():
+    if _reasoning_text(target_message):
         return 0
     return max(think_end(tokenizer, target_ids), empty_think_first_end(tokenizer, target_message, target_ids))
 

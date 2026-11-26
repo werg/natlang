@@ -460,13 +460,13 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         // A tool call the server could not parse arrives as markup in the text: it is a malformed call, not a reply.
         const replyText = contentText(message?.content);
         let parsedNative = false;
-        if (!calls.length && TOOL_MARKUP.test(replyText)) {
-          if (responseTools && !truncated) {
+        if (TOOL_MARKUP.test(replyText)) {
+          if (!calls.length && responseTools && !truncated) {
             try {
               calls.push(...parseNativeXmlCalls(replyText, responseTools).map(([name,args]) => [reverse[name] ?? name,args] as [string,Json]));
               parsedNative = true;
             } catch { throw new LeakedCall(leakedCallFeedback(replyText, responseTools)); }
-          } else throw new LeakedCall(leakedCallFeedback(replyText, tools));
+          } else throw new LeakedCall(leakedCallFeedback(replyText, responseTools ?? tools));
         }
         // A reply that is nothing but one offered tool's arguments, written out as JSON, is that call.
         const written = calls.length ? undefined : callWrittenAsText(replyText, tools);

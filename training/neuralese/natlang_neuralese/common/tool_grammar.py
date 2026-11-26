@@ -188,15 +188,17 @@ def validate_law(law):
 
 
 _COMPILERS = {}
+_CACHE_LOCK = threading.Lock()
 
 
 def _compiler(info):
     import xgrammar
     key = id(info)
-    entry = _COMPILERS.get(key)
-    if entry is None or entry[0] is not info:
-        entry = _COMPILERS[key] = (info, xgrammar.GrammarCompiler(info, cache_enabled=True))
-    return entry[1]
+    with _CACHE_LOCK:
+        entry = _COMPILERS.get(key)
+        if entry is None or entry[0] is not info:
+            entry = _COMPILERS[key] = (info, xgrammar.GrammarCompiler(info, cache_enabled=True))
+        return entry[1]
 
 
 def compiled(law, info):
@@ -266,13 +268,14 @@ def _interned(mask):
     ceil(V / 32) words, 16 KB for LFM3), so rows caching their masks hold references, not copies."""
     import hashlib as _hashlib
     key = _hashlib.blake2b(mask.tobytes(), digest_size=16).digest()
-    found = _INTERN.get(key)
-    if found is None:
-        if len(_INTERN) >= INTERN_LIMIT:
-            _INTERN.pop(next(iter(_INTERN)))
-        found = _INTERN[key] = mask.copy()
-        found.flags.writeable = False
-    return found
+    with _CACHE_LOCK:
+        found = _INTERN.get(key)
+        if found is None:
+            if len(_INTERN) >= INTERN_LIMIT:
+                _INTERN.pop(next(iter(_INTERN)))
+            found = _INTERN[key] = mask.copy()
+            found.flags.writeable = False
+        return found
 
 
 def replay_masks(law, tokens, info, *, prefix=()):

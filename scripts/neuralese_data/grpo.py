@@ -1504,13 +1504,13 @@ def load_group(collector, group, stats):
     """(task_id, [episode dicts with 'reward', 'rows'], versions) of one scored group."""
     from natlang_neuralese.common.jsonio import read_jsonl
     from lower_rollout_turns import decision_reasoning_turns, decision_turns, episode_turns
-    from natlang_neuralese.rl.jolt import student_form
+    from natlang_neuralese.rl.jolt import student_episode
     from natlang_neuralese.rl.rollout_math import budget_stopped_rollout, truncated_rollout
     info = collector.groups[group]
     episodes = []
     for row in read_jsonl(info['dir'] / 'rollouts.jsonl'):
         role = row.get('jolt_role', 'student')
-        if role == 'teacher':   # JOLT+: the guided run's actions under the unguided prompt (rl/jolt.py student_form)
+        if role == 'teacher':   # JOLT+: the guided run's actions under the unguided prompt (rl/jolt.py student_episode)
             leak = teacher_guidance_leak(collector, info, row)
             if leak:
                 # its replies quote or name the guidance, or the guidance carried the answer: in student form they would
@@ -1519,7 +1519,7 @@ def load_group(collector, group, stats):
                 for reason in leak:
                     stats['teacher_guidance_leak_' + reason] += 1
                 continue
-            row = student_form(row, stats)
+            row = student_episode(row, stats)
         reward = row.get('reward')
         calls = episode_turns(row, stats, collector.states) if row.get('turns') else []
         if row.get('turns') and getattr(collector.args, 'decision_reasoning', True):
@@ -2089,11 +2089,14 @@ class WeightSync:
         front_url = front_url or self.front_url
         t = time.time()
         post(sglang_url + '/pause_generation', {'mode': 'retract'})
+        weights_updated = False
+        attested = False
         try:
             raw = post(sglang_url + '/update_weights_from_disk',
                        {'model_path': str(target['dir']), 'flush_cache': True, 'weight_version': str(target['version'])})
             if not json.loads(raw).get('success', False):
                 raise RuntimeError(f'update_weights_from_disk failed: {raw[:300]}')
+            weights_updated = True
             timing['actor_update_s'] = round(time.time() - t, 2)
             if front_url is not None:
                 t = time.time()
@@ -2108,8 +2111,10 @@ class WeightSync:
                     raise RuntimeError(f'route attestation failed: {json.dumps(mismatches)[:600]}')
                 timing['rebind_s'] = round(time.time() - t, 2)
                 timing['routes_attested'] = True
+            attested = True
         finally:
-            post(sglang_url + '/continue_generation', {})
+            if not weights_updated or attested:
+                post(sglang_url + '/continue_generation', {})
 
     def _publish_extra(self, target, timing):
         """Publish the version the primary actor now serves to every ``--extra-actor``: one on this machine reloads the
@@ -4281,11 +4286,12 @@ class ExploreWalk:
 
     def next(self, cursor, measured, rng):
         """(the next row to explore, the new cursor). After two passes over the pool (everything measured) any row."""
-        n, scanned = len(self.tasks), 0
+        n, scanned, steps = len(self.tasks), 0, 0
         while True:
             row = self.tasks[cursor % n]
             cursor += 1
-            exhausted = cursor > 2 * n
+            steps += 1
+            exhausted = steps > 2 * n
             if row['id'] in measured and not exhausted:
                 continue
             scanned += 1
@@ -4687,13 +4693,13 @@ def train(args):
         collector.actor_versions.update(extra_actor_start_versions(extra_actors, source_sha, step))
         log_line(log, {'event': 'extra actors', 'actors': extra_actors, 'versions': collector.actor_versions})
     if args.resume and not args.replay:
-        reused, left_out = collector.reuse_scored(step, args.max_staleness, args.memetic_max_staleness)
         if consumed_groups:
-            # Never double-train a group already recorded in rl_rollout_ledger.
+            # Never double-train a group already recorded in rl_rollout_ledger: touch RETIRED *before* reuse_scored().
             for g in consumed_groups:
                 d = work / 'groups' / f'g{g:06d}'
                 if d.is_dir():
                     (d / RETIRED).touch()
+        reused, left_out = collector.reuse_scored(step, args.max_staleness, args.memetic_max_staleness)
         if reused or left_out:
             log_line(log, {'event': 'reused groups', 'reused': len(reused), 'left_out': left_out[:50],
                            'left_out_count': len(left_out)})
@@ -5321,17 +5327,21 @@ def train(args):
                         decisions.append({'row': d, 'advantage': advantage, 'group': group, 'task_id': task_id,
                                           'stale': stale, 'actor_version': step - stale, 'episode': key})
         replays = []
-        if args.sd_weight > 0:
-            # self-distillation: verified rare successes of the last --sd-window steps again, as a positive-advantage
-            # (truncated-IS cross-entropy) term of weight --sd-weight on their own exact actor calls
-            replays += [(episode, args.sd_weight, 'sd', episode.get('sd_source', 'own'))
-                        for episode in sd_take(sd_buffer, step, args, stats)]
-        if teacher_demos is not None and sd_teacher_on:
-            # verified teacher-pool successes of tasks in the pass band or all-fail, in student form; no actor
-            # log-probabilities, so a ratio-free cross-entropy of weight --sd-teacher-weight (rho = 1: the learner's
-            # own log-probability stands in for the actor's)
-            replays += [(episode, args.sd_teacher_weight, 'sd_teacher', 'teacher') for episode in teacher_demos.take(
-                sd_teacher_tasks(collector, args.pass_band), args.sd_teacher_episodes, stats)]
+        # Only mix auxiliary sources (sd, sd_teacher, reasoning_rl, replay_corpora) when the RL batch has reward spread
+        # (spread > 0); otherwise spread_keys is empty -> step_data == 0 -> data_scale == 0 -> a 30-60 min lr=0/grad=0
+        # no-op step that decays AdamW moments, burns warmup and consumes auxiliary cursors.
+        if spread > 0:
+            if args.sd_weight > 0:
+                # self-distillation: verified rare successes of the last --sd-window steps again, as a positive-advantage
+                # (truncated-IS cross-entropy) term of weight --sd-weight on their own exact actor calls
+                replays += [(episode, args.sd_weight, 'sd', episode.get('sd_source', 'own'))
+                            for episode in sd_take(sd_buffer, step, args, stats)]
+            if teacher_demos is not None and sd_teacher_on:
+                # verified teacher-pool successes of tasks in the pass band or all-fail, in student form; no actor
+                # log-probabilities, so a ratio-free cross-entropy of weight --sd-teacher-weight (rho = 1: the learner's
+                # own log-probability stands in for the actor's)
+                replays += [(episode, args.sd_teacher_weight, 'sd_teacher', 'teacher') for episode in teacher_demos.take(
+                    sd_teacher_tasks(collector, args.pass_band), args.sd_teacher_episodes, stats)]
         for episode, weight, role, source in replays:
             kept = exp0_sft.chains_of([episode], max_len=args.max_sequence_tokens)
             if not kept:
@@ -5347,7 +5357,7 @@ def train(args):
                 chain.update(advantage=weight, episode=key, role=role)
                 chains.append(chain)
         rrl_stats = None
-        if reasoning_rl is not None:
+        if spread > 0 and reasoning_rl is not None:
             # reasoning RL against fixed teacher actions (ReasoningRL): each sample's reasoning at its group-normalized
             # action likelihood, the teacher action after it as a ratio-free cross-entropy
             rrl_groups, rrl_dropped, carried = reasoning_rl.take(step, args.reasoning_rl_groups, args.max_staleness)
@@ -5371,7 +5381,7 @@ def train(args):
                 for episode in carried:
                     stats[f"sd_{episode['sd_source']}_added"] += 1
         replay_record = {}
-        for corpus in replay_corpora:
+        for corpus in (replay_corpora if spread > 0 else ()):
             entry = replay_record.setdefault(corpus.name, collections.Counter())
             for _, unit in corpus.take(step):
                 kept = [c for c in unit if len(c['ids']) + exp0_sft.source_tokens(c) <= args.max_sequence_tokens]
@@ -5642,8 +5652,8 @@ def train(args):
                         log_rho = logp.detach() - actor
                         rho = log_rho.clamp(max=20).exp()
                         advantage = token_advantage(chain, logp.device)
-                        weight, tail = policy_weight(rho, actor, advantage, args.rho_cap,
-                                                     None if chain.get('role') == 'replay' else args.tail_logp_floor)
+                        tail_floor = None if chain.get('role') in ('replay', 'sd_teacher', 'rrl_action') else args.tail_logp_floor
+                        weight, tail = policy_weight(rho, actor, advantage, args.rho_cap, tail_floor)
                         if row_weight is not None:
                             weight = weight * row_weight
                         if args.second_close == 'context' and think_close is not None:
@@ -5664,7 +5674,10 @@ def train(args):
                     loss_terms = -(weight * advantage * policy_logp)
                     if ref is not None:
                         d = ref - logp
-                        loss_terms = loss_terms + args.kl_beta * kl_term(d, args.kl_estimator)
+                        kl = kl_term(d, args.kl_estimator)
+                        if row_weight is not None:
+                            kl = kl * (row_weight > 0).to(kl.dtype)
+                        loss_terms = loss_terms + args.kl_beta * kl
                         kl_stats(sums, d)
                         if p_close_rows is not None:
                             pull = d.detach() if args.kl_estimator == 'k2' else d.detach().exp() - 1

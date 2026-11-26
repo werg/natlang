@@ -813,6 +813,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     return coalesced(request, signal);
   }, { scoreMany: coalesced.scoreMany });
   return Object.assign(driver, { neuralese: true as const, artifacts: remote, decide: scoped,
+    contextWindow: async () => { const ctx = (await serverInfo())?.context; return typeof ctx === 'number' ? ctx : undefined; },
     neuraleseRuntime: async () => (await import('./native-state-client.js')).nativeStateRuntimeOptions(
       { endpoint: http.endpoint, headers: http.headers, store: remote }, { write: 'available' }) });
 }

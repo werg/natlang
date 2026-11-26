@@ -299,6 +299,8 @@ export function contextOverflow(message: string): { promptTokens: number; window
     const window = /"n_ctx":(\d+)/.exec(message);
     return { promptTokens: Number(llama[1]), window: window ? Number(window[1]) : null };
   }
+  const native = /prompt uses (\d+) positions, context is (\d+)/.exec(message);
+  if (native) return { promptTokens: Number(native[1]), window: Number(native[2]) };
   const window = /maximum context length is (\d+) tokens/.exec(message);
   if (!window) return undefined;
   const prompt = /prompt contains at least (\d+) input tokens/.exec(message) ?? /\((\d+) in the messages/.exec(message) ??
@@ -2796,6 +2798,7 @@ export class NativeToolAgent {
         consecutiveEmptyEosWithoutResult = 0;
         const elided = collapseHistory(messages, protectedLength);
         if (elided) pinNote(null);
+        compactedTurn = turns;
         compactedAt = estimate(allTools);
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns,
           elided, note: null, estimated_tokens: Math.round(estimate(allTools)) });

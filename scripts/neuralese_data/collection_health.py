@@ -141,9 +141,15 @@ def episode_reasons(result):
     return out
 
 
-def _category(outcome, reasons, job_codes):
-    """One category per episode: success, unscored, crash, budget_stop, runtime_error, wrong_answer."""
+def _is_success(outcome, row=None):
     if outcome == SUCCESS:
+        return True
+    return outcome == 'memetic_scored' and bool((row or {}).get('memetic_success'))
+
+
+def _category(outcome, reasons, job_codes, row=None):
+    """One category per episode: success, unscored, crash, budget_stop, runtime_error, wrong_answer."""
+    if _is_success(outcome, row):
         return 'success'
     if outcome in UNSCORED or outcome is None:
         return 'unscored'
@@ -202,14 +208,16 @@ def group_summary(gdir):
             job_codes.add(code or 'uncoded-error')
         reasons |= {f'job:{c}' for c in job_codes}
         outcome, finish = row.get('outcome'), row.get('finish_status')
-        if outcome != SUCCESS:
+        ok = _is_success(outcome, row)
+        if not ok:
             reasons.add(f'outcome:{outcome}')
             if finish and finish not in ('complete',):
                 reasons.add(f'finish:{finish}')
         summary['episodes'].append({
-            'sample': row.get('sample'), 'outcome': outcome, 'guided': bool(row.get('jolt_role')),
-            'category': _category(outcome, reasons, job_codes),
-            'reasons': sorted(reasons) if outcome != SUCCESS else []})
+            'sample': row.get('sample'), 'outcome': outcome,
+            'guided': row.get('jolt_role') not in (None, '', 'student'),
+            'category': _category(outcome, reasons, job_codes, row),
+            'reasons': sorted(reasons) if not ok else []})
     return summary
 
 

@@ -747,7 +747,7 @@ class WeightedLead(int):
 
 
 def think_context(renderer, source, target_message, target_ids, teacher_think='context', lead_in='context',
-                  own_empty_think='context'):
+                  own_empty_think='context', empty_think_first=True):
     """Leading target tokens that are context, not loss: for a reply the student did not sample, its think block and
     (``lead_in`` 'context') the text it writes before its first tool call (``serve.targets.non_student_context``, the
     one rule the program-tune rows share). sft-v3-run1 trained teacher think blocks: held-v3 reasoning p50 fell
@@ -757,23 +757,26 @@ def think_context(renderer, source, target_message, target_ids, teacher_think='c
     template's empty think block of an own reply without reasoning: a decision readout the actor scored, not sampled
     (its option is the scored continuation after the prefix all options share, so ``</think>`` at the first target
     position is never the student's choice; the base gives it ~20 nats). sft-v4-run1 trained it in 18 own rows."""
-    from natlang_neuralese.serve.targets import non_student_context, think_end
+    from natlang_neuralese.serve.targets import _reasoning_text, non_student_context, think_end
     think, think_weight = parse_think(teacher_think)
     if lead_in not in TEACHER_LEAD_IN:
         raise ValueError(f'lead_in {lead_in!r} not in {TEACHER_LEAD_IN}')
     if own_empty_think not in TEACHER_THINK:
         raise ValueError(f'own_empty_think {own_empty_think!r} not in {TEACHER_THINK}')
     if source in OWN_SOURCES:
-        if own_empty_think == 'train' or (target_message.get('reasoning_content') or '').strip():
+        if own_empty_think == 'train' or _reasoning_text(target_message):
             return 0
-        return non_student_context(renderer.tokenizer, target_message, target_ids, think='context', lead_in='train')
+        return non_student_context(renderer.tokenizer, target_message, target_ids, think='context', lead_in='train',
+                                   empty_think_first=empty_think_first)
     if think == 'train' and think_weight < 1:
-        lead = non_student_context(renderer.tokenizer, target_message, target_ids, think='context', lead_in=lead_in)
-        if not think_weight or not (target_message.get('reasoning_content') or '').strip():
+        lead = non_student_context(renderer.tokenizer, target_message, target_ids, think='context', lead_in=lead_in,
+                                   empty_think_first=empty_think_first)
+        if not think_weight or not _reasoning_text(target_message):
             return lead          # an empty block stays context
         end = think_end(renderer.tokenizer, target_ids)
         return WeightedLead(lead, end, think_weight) if end else lead
-    return non_student_context(renderer.tokenizer, target_message, target_ids, think=think, lead_in=lead_in)
+    return non_student_context(renderer.tokenizer, target_message, target_ids, think=think, lead_in=lead_in,
+                               empty_think_first=empty_think_first)
 
 
 # Teacher reasoning is chosen per teacher model, source or episode (owner 2026-11-20): a treatment table published through
@@ -2094,11 +2097,21 @@ class Exposures:
                    or (stood is not None and (stood in keys or (task, stood) in units)))
 
 
+CORE_ROUND_PREFIXES = frozenset({'rl', 'teacher', 'october-teacher', 'october', 'live', 'jolt', 'jolt-guided'})
+
+
 def stand_in(unit):
     """(task, the episode key a stand-in unit's round ``<prefix>:<episode key>`` names) or (task, None): the key after
-    the prefix counts only when it is itself an episode key (``<source>:...:<sample>``)."""
+    the prefix counts only when ``prefix`` is not itself a core episode-source prefix (so ordinary ``rl:...``,
+    ``teacher:...``, ``october-teacher:...`` and ``live:...`` episode keys are never misclassified as stand-ins) and
+    the remainder is itself an episode key (``<source>:...:<sample>``)."""
     task, round_ = unit
-    rest = str(round_).split(':', 1)[1] if ':' in str(round_) else ''
+    text = str(round_)
+    if ':' not in text:
+        return (task, None)
+    prefix, rest = text.split(':', 1)
+    if prefix in CORE_ROUND_PREFIXES:
+        return (task, None)
     return (task, rest) if rest.count(':') >= 2 else (task, None)
 
 
@@ -2379,24 +2392,26 @@ def task_constructs(task):
 
 
 def call_row(renderer, source, key, index, turn, teacher_think='context', lead_in='context',
-             backend_workarounds='context', own_empty_think='context'):
+             backend_workarounds='context', own_empty_think='context', empty_think_first=True):
     """One verified call as a learner row: {'id', 'invocation', 'index', 'prompt', 'sample'[, 'weight']} (int32 token ids
     from the chat template; a reply the student did not sample has its think block at weight 0, ``think_context``; with
     ``backend_workarounds`` 'context' a non-student call whose prompt holds the text backend's Neuralese refusal is all
     context, ``backend_workaround``). Training, validation and size measurement all render through here. Raises on a
     render error. Also returns (prompt length, target length, zero-weight lead)."""
-    return rendered_row(render_call(renderer, source, turn, teacher_think, lead_in, own_empty_think), source, key, index,
+    return rendered_row(render_call(renderer, source, turn, teacher_think, lead_in, own_empty_think,
+                                    empty_think_first=empty_think_first), source, key, index,
                         turn, backend_workarounds)
 
 
 def render_call(renderer, source, turn, teacher_think='context', lead_in='context', own_empty_think='context',
-                decisions=False):
+                decisions=False, empty_think_first=True):
     """The expensive half of ``call_row`` (chat template, tokenizer, think context): (prompt ids, target ids as int32
     arrays, zero-weight lead), and with ``decisions`` a fourth item, the call's decision (``render_decision``). Raises
     on a render error."""
     import numpy as np
     prompt, target = renderer.render(turn['messages'], turn['tools'], turn['target'])
-    context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in, own_empty_think)
+    context = think_context(renderer, source, turn['target'], target, teacher_think, lead_in, own_empty_think,
+                            empty_think_first=empty_think_first)
     rendered = np.asarray(prompt, np.int32), np.asarray(target, np.int32), context
     return ((*rendered, render_decision(renderer, turn, rendered[0], own=source in OWN_SOURCES)) if decisions
             else rendered)
@@ -2641,7 +2656,7 @@ def _render_worker(c, think):
     return render_candidate(w['renderer'], w['work'], c, think, w['lead_in'], w['own_empty_think'])
 
 
-RENDER_FIELDS = ('key', 'source', 'name', 'verification_mode', 'live_source')
+RENDER_FIELDS = ('key', 'source', 'name', 'verification_mode', 'live_source', 'recorded_turns')
 
 
 def default_workers():
@@ -2757,9 +2772,10 @@ class EpisodeSizes:
                     record = json.loads(line)
                     self.cache[(record['key'], record['policy'])] = (record['forward'], record['weighted'])
 
-    def policy(self, think):
+    def policy(self, think, recorded_turns=False):
         policy = [self.renderer.identity, think, self.lead_in, self.backend_workarounds, self.own_empty_think,
-                  'wrapped-refusal', 'detour-spawned']
+                  'wrapped-refusal', 'detour-spawned', bool(recorded_turns),
+                  os.environ.get('NATLANG_EMPTY_THINK_FIRST', 'context')]
         return hashlib.sha256(json.dumps(policy, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
     def measure(self, c, rendered):
@@ -2767,7 +2783,7 @@ class EpisodeSizes:
         miss."""
         from exp0_sft import chains_of
         think = self.think_of(c)
-        policy = self.policy(think)
+        policy = self.policy(think, bool(c.get('recorded_turns')))
         hit = self.cache.get((c['key'], policy))
         if hit is not None:
             return hit
@@ -3352,15 +3368,38 @@ def build(args):
             funnel[c['source']][why] += 1
         else:
             teacher_candidates.append(c)
-    teacher_pool = wrapper_capped(capped(teacher_candidates, rng, funnel, core_cap, args.max_family_share, lambda c: 0,
-                                         trained_keys, shape_of=shape_of, shape_share=shape_share),
-                                  rng, funnel, is_wrapper, args.wrapper_share, trained_keys)
+    renderer = TemplateRenderer(args.tokenizer)
+    # Load prebuilt aux parts before teacher capping so capped()/wrapper_capped() prefer teacher episodes that already
+    # have a filled-reasoning unit (avoiding dropping ~1,600 filled units per round as teacher_not_selected).
+    aux_parts = [parse_aux(spec) for spec in args.aux]
+    loaded = [(part, load_aux(part, renderer.tokenizer, held)) for part in aux_parts]
+    if fill_after_raw:      # a fill of an episode that trained raw trains its filled reasoning only
+        close_id = int(renderer.tokenizer.convert_tokens_to_ids('</think>'))
+        for part, units in loaded:
+            if part.get('replaces') != 'teacher':
+                continue
+            for unit in units:
+                episode_key = replaced_round(part, unit)
+                if episode_key is not None and exposure.raw_trained(unit['task'], episode_key):
+                    unit['chains'], unit['weighted'] = reasoning_after_raw(unit['chains'], close_id)
+                    part['reasoning_after_raw'] = part.get('reasoning_after_raw', 0) + 1
+            units[:] = [u for u in units if u['chains'] and u['weighted'] > 0]
+    filled_keys = frozenset(
+        key for part, units in loaded if part.get('replaces') == 'teacher' and part['share'] == 'all'
+        for key in (replaced_round(part, unit) for unit in units) if key is not None) \
+        if getattr(args, 'filled_teacher', 'skip') == 'skip' else frozenset()
+    all_filled_keys = frozenset(
+        key for part, units in loaded if part.get('replaces') == 'teacher'
+        for key in (replaced_round(part, unit) for unit in units) if key is not None)
+    prefer_filled = (lambda c: 0 if c['key'] in all_filled_keys else 1) if all_filled_keys else (lambda c: 0)
+    teacher_pool = wrapper_capped(capped(teacher_candidates, rng, funnel, core_cap, args.max_family_share,
+                                         prefer_filled, trained_keys, shape_of=shape_of, shape_share=shape_share),
+                                  rng, funnel, is_wrapper, args.wrapper_share, trained_keys, rank=prefer_filled)
     pool_keys = {c['key'] for c in teacher_pool}
     teacher_left_out |= {c['key'] for c in teacher_candidates if c['key'] not in pool_keys}
     if getattr(args, 'aux_teacher_selection', 'follow') != 'follow':
         teacher_left_out = set()
 
-    renderer = TemplateRenderer(args.tokenizer)
     rows_out = ZstdWriter(out / 'rows.jsonl.zst')
     sft_episodes, all_chains = [], []
     stats = collections.defaultdict(collections.Counter)
@@ -3540,30 +3579,8 @@ def build(args):
         return (not bool(c.get('open_goal')), own_policy_tier(c, frontier_policy, previous_policy, policy_equivalents),
                 not bool(constructs.get(c['task_id'], ((), False))[0]), 0.5 if p is None else p, rng.random())
 
-    # the prebuilt parts (``--aux``), loaded before the teacher admission: a teacher episode that a share=all part
-    # stands in for (``replaces=teacher``: filled_reasoning.py rows, the student's filled reasoning before the same
-    # teacher actions) trains as that unit, so its raw rendering is not admitted and does not spend the teacher forward
-    # budget (``--filled-teacher skip``, default); ``admit`` (the old rule) admits it and drops it again in step 3,
-    # after it took budget from teacher episodes that have no fill (r0002: 2,811 such episodes, ~36% of 180M)
-    aux_parts = [parse_aux(spec) for spec in args.aux]
-    loaded = [(part, load_aux(part, renderer.tokenizer, held)) for part in aux_parts]
-    if fill_after_raw:      # a fill of an episode that trained raw trains its filled reasoning only
-        close_id = int(renderer.tokenizer.convert_tokens_to_ids('</think>'))
-        for part, units in loaded:
-            if part.get('replaces') != 'teacher':
-                continue
-            for unit in units:
-                episode_key = replaced_round(part, unit)
-                if episode_key is not None and exposure.raw_trained(unit['task'], episode_key):
-                    unit['chains'], unit['weighted'] = reasoning_after_raw(unit['chains'], close_id)
-                    part['reasoning_after_raw'] = part.get('reasoning_after_raw', 0) + 1
-            units[:] = [u for u in units if u['chains'] and u['weighted'] > 0]
-    filled_keys = frozenset(
-        key for part, units in loaded if part.get('replaces') == 'teacher' and part['share'] == 'all'
-        for key in (replaced_round(part, unit) for unit in units) if key is not None) \
-        if getattr(args, 'filled_teacher', 'skip') == 'skip' else frozenset()
-
     # teacher successes, breadth-first under the forward-token budget (0: all of the capped pool)
+    # (aux_parts, loaded and filled_keys were already loaded before teacher_pool so capped() prefers filled episodes)
     task_tokens = collections.Counter()      # weighted target tokens admitted per task, all sources
     left_over = collections.defaultdict(list)    # candidates a budget or share left out: validation sets
     teacher_forward = 0
@@ -3752,9 +3769,10 @@ def build(args):
         aux_state[part['name']] = {'budget': budget,
                                    'taken': 0, 'used': collections.Counter(), 'per_task': collections.Counter(),
                                    'units': len(units),
-                                   # one program shape: at most --max-shape-share of the part (its budget's tokens,
-                                   # else its units)
-                                   'shapes': ShapeQuota(budget if budget is not None else len(units), shape_share)}
+                                   # one program shape: at most --max-shape-share of the mix (total_tokens for
+                                   # share-bounded parts so a small 1% aux part like fallow22 is not capped at 0.02%
+                                   # of the mix per shape, else its units for share=all parts)
+                                   'shapes': ShapeQuota(total_tokens if budget is not None else len(units), shape_share)}
         rng.shuffle(units)
         # unseen units first (``--prefer-unseen``: a share-bounded part takes the units no earlier build trained before
         # repeats; stable, so the shuffle orders each group)
@@ -3774,11 +3792,13 @@ def build(args):
         total_tokens = (actions_tokens + sum(aux_state[q['name']]['taken'] for q, _ in loaded)) / (1 - fixed_share)
     # 4. the student's own verified successes (their reasoning included) up to their share, breadth-first over tasks,
     #    held constructs and low base pass rates first, each task's loss capped (``--max-task-target-tokens``);
-    #    leak-checked JOLT+ guided successes follow unguided own successes within the student-distribution share
-    # the own share is a floor, not a ceiling against scarce teacher data: fresh own successes are the student's own
-    # distribution, so their budget never falls below the old rule's (trial r0009 inputs: the actual-mix total alone
-    # cut own successes from 1,054 chains to 207); the aux parts are held to their actual share by ``trim_shares``
-    own_budget = args.own_loss_share * max(total_tokens, nominal_total) if args.own_loss_share else None
+    #    leak-checked JOLT+ guided successes follow unguided own successes within the student-distribution share.
+    #    ``--own-share-of actual`` (default) sizes the own budget from actual post-exposure mix mass (``total_tokens``)
+    #    instead of pre-filter ``nominal_total`` (which counted over-exposed share=all units and bloated rl-own to
+    #    50-76% in aei1 r0012-r0014); ``nominal`` opts out.
+    own_share_of = getattr(args, 'own_share_of', 'actual')
+    own_basis = max(total_tokens, nominal_total) if own_share_of == 'nominal' else total_tokens
+    own_budget = args.own_loss_share * own_basis if args.own_loss_share else None
     own_tokens = 0
     ordered = ordered_pool(student_pool, priority)   # own before guided within each task, breadth-first over tasks
     ahead.walk(ordered)
@@ -3873,11 +3893,13 @@ def build(args):
     exposure_cap['candidates_over_exposed'] = {
         **{source: n for source, counts in funnel.items() if (n := counts.get('over_exposed'))},
         **{name: n for name, state in aux_state.items() if (n := state['used'].get('over_exposed'))}}
-    if share_of == 'actual':     # each share-bounded part at most its share of the mix as it now is
-        all_chains[:], share_trim = trim_shares(all_chains, {q['name']: q['share'] for q in aux_parts
-                                                             if q['share'] != 'all'})
+    if share_of == 'actual':     # each share-bounded part (and rl-own under --own-share-of actual) at most its share
+        trim_spec = {q['name']: q['share'] for q in aux_parts if q['share'] != 'all'}
+        if own_share_of == 'actual' and args.own_loss_share:
+            trim_spec['rl-own'] = args.own_loss_share
+        all_chains[:], share_trim = trim_shares(all_chains, trim_spec)
         for name, n in share_trim['dropped_units'].items():
-            aux_report[name]['over_actual_share'] = n
+            (aux_report[name] if name in aux_report else funnel[name])['over_actual_share'] = n
     all_chains[:], target_cap = cap_target_tokens(all_chains, getattr(args, 'max_target_tokens', 0) or 0, trained_keys,
                                                   trained_unit_keys, getattr(args, 'max_forward_tokens', 0) or 0,
                                                   exposure=exposure)
@@ -4549,6 +4571,10 @@ def main():
                    help="actual (default): an aux part's share is of the mix as admitted (share=all parts count by what "
                         'they take; a part above its share after every other rule loses its last units); nominal: the '
                         'old rule (every loaded share=all unit counted)')
+    b.add_argument('--own-share-of', choices=('actual', 'nominal'), default='actual',
+                   help="actual (default): --own-loss-share is capped against actual post-exposure mix mass and "
+                        "enforced in trim_shares (prevents rl-own bloating to 50-76% when share=all units are "
+                        "over-exposed); nominal: old pre-filter nominal_total floor")
     b.add_argument('--diversity-baseline', metavar='BUILD',
                    help="the build whose mix diversity this one's flags compare with (default: the newest --prefer-unseen "
                         'build with a diversity report)')

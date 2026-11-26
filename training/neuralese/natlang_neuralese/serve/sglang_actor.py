@@ -1320,7 +1320,8 @@ class SglangEngine(Engine):
         request = seq.request
         if not capture_enabled(seq) or request.native_recording is not True:
             raise RequestError('forced-message', 'forced teacher replay requires native structural recording')
-        tokens = self._forced_message_plan(request.forced_message, request.tools, opening=request.messages)
+        tokens = self._forced_message_plan(request.forced_message, request.tools, opening=request.messages,
+                                           template_kwargs=request.chat_template_kwargs)
         if len(tokens) > request.max_tokens:
             raise RequestError('forced-message', 'exact teacher reply exceeds the request token allowance')
         import copy
