@@ -711,6 +711,21 @@ def test_family_seconds_are_seeded_from_earlier_collections(tmp_path):
     c.family_seconds = __import__('collections').defaultdict(list)
     c._seed_family_seconds()
     assert c.family_seconds['fam'] == [444.]
+    # a sibling tiered to the HDD (a symlink) is not read by default: its scan stalled a collector 45+ min
+    tiered = tmp_path / 'hdd' / 'v0000'
+    tiered.parent.mkdir()
+    (tmp_path / 'collect' / 'v0000').rename(tiered)
+    (tmp_path / 'collect' / 'v0000').symlink_to(tiered)
+    c.family_seconds = __import__('collections').defaultdict(list)
+    c._seed_family_seconds()
+    assert c.family_seconds['fam'] == []
+    import os
+    os.environ['NATLANG_MEMETIC_SEED_ALL'] = '1'
+    try:
+        c._seed_family_seconds()
+    finally:
+        del os.environ['NATLANG_MEMETIC_SEED_ALL']
+    assert c.family_seconds['fam'] == [444.]
 
 
 def test_an_answer_the_program_or_support_inputs_already_name_is_no_leak():
