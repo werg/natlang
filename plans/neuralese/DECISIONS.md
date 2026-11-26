@@ -14595,3 +14595,33 @@ Drive within minutes of each save, but the DGX download runs at ~10.6 MB/s (meas
 normal claim 20/24 GiB (program-tuning tenants yield), mirror `/home/werg/data/compiler-t1-20261126/run1`. T2: unit
 `cmp-t2-keeper-2`, g4a preemptible 36/40 GiB (waits for aei1's round SFT), mirror
 `/home/werg/data/compiler-t2-20261126/t2-pplx-run1`. Launch scripts and keeper logs in each `launch/`.
+
+### 2026-11-26 — preserve both source-bound reassessment partition scopes
+
+Actual Source49 startup exposed a reader regression introduced by bdda/eb077:
+65 of the 67 immutable recovered seeds loaded; Image answer-role recovery and
+Regency findings recovery failed before teacher inference. Both archived checker
+contracts exhaustively repartition the original required checks. Their original
+native records also retain an already-optional `returnedArtifactReceipt`, which
+those contracts never claimed to reassess. Expanding every changed projection to
+all observations therefore rejected legitimate historical contracts.
+
+Python's shared loader/recheck-importer validator and Node's disk/materialization
+validator now distinguish the exact source-bound contract universe: the original
+required projection, or the complete validated original observations for a full
+repartition/promotion. Both still bind the contract hash, validate the original
+role/dimension partition, retain optional boolean observations, require every
+current required check true, and reject invented checks, missing roles, swapped
+contracts and forged original dimensions. No case-name exception, raw rewrite,
+seed exclusion or semantic-review waiver was added. Native function/actor/learner
+execution and schema versions are unchanged.
+
+Actual LOW `vibe-reassessment-real67-regression-20261126a` passed 148 Python and
+46 Node controls, then loaded every actual 67-seed manifest through the canonical
+importer/NativeIR path and Node verifier/materializer: 67 accepted rows, 1,076
+eligible decisions, zero rejects, zero replayed/held actions. Wall21.41s/peak1GiB.
+Original failing audit (65/2), full per-manifest hashes and resulting NativeIR are
+retained in `/home/werg/vibe-native-review-premise-audit-ops`. Source49 paid startup
+remains with its owner until the corrected operational driver is pinned. The two
+new accepted Source48 originals remain unregistered while actual DGX consumers
+are reconciled; actor/learner/checkpoint state was never reset.

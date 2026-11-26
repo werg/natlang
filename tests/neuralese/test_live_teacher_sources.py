@@ -1336,3 +1336,37 @@ def test_reassessment_can_require_an_already_recorded_optional_answer(tmp_path):
         mutate(bad)
         with pytest.raises(ValueError):
             live.original_outcome_observations(bad)
+
+
+def test_historical_projection_repartition_keeps_original_optional_scope(tmp_path):
+    original = {'checks': {'native': True, 'oldLabel': False},
+                'observedChecks': {'native': True, 'oldLabel': False, 'receipt': True},
+                'outcomeContract': {'effects': {'checks': ['native'], 'rationale': 'Actual native state'},
+                                    'returnedValue': {'checks': ['oldLabel'], 'required': True, 'rationale': 'Original label'},
+                                    'incidentalValues': {'checks': ['receipt'], 'rationale': 'Already optional receipt'}},
+                'outcomeDimensions': {'effects': {'checks': {'native': True}, 'passed': True},
+                                      'returnedValue': {'checks': {'oldLabel': False}, 'required': True, 'passed': False},
+                                      'incidentalValues': {'checks': {'receipt': True}, 'passed': True}}}
+    contract = {'effects': {'checks': ['native'], 'rationale': 'Actual native state remains required'},
+                'returnedValue': {'checks': [], 'required': False, 'rationale': 'Literal goal requires actual effect'},
+                'incidentalValues': {'checks': ['oldLabel'], 'rationale': 'Retain unrequested old label diagnostically'}}
+    binding = artifact(tmp_path, 'historical-contract.json', contract)
+    proof = {'checks': {'native': True}, 'outcomeContract': contract,
+             'outcomeDimensions': {'effects': {'checks': {'native': True}, 'passed': True},
+                                   'returnedValue': {'checks': {}, 'required': False, 'passed': True},
+                                   'incidentalValues': {'checks': {'oldLabel': False}, 'passed': False}},
+             'checker_sources': [{**binding, 'role': 'outcome-contract'}]}
+    live.validate_reassessment_outcome_roles(proof, original, tmp_path)
+    import copy
+    for mutate in (lambda p: p['checks'].update(native=False),
+                   lambda p: p['checks'].update(receipt=True),
+                   lambda p: p['outcomeDimensions']['incidentalValues']['checks'].update(oldLabel=True),
+                   lambda p: p.update(checker_sources=[])):
+        bad = copy.deepcopy(proof)
+        mutate(bad)
+        with pytest.raises(ValueError):
+            live.validate_reassessment_outcome_roles(bad, original, tmp_path)
+    corrupt = copy.deepcopy(original)
+    corrupt['outcomeDimensions']['incidentalValues']['checks']['receipt'] = False
+    with pytest.raises(ValueError):
+        live.validate_reassessment_outcome_roles(proof, corrupt, tmp_path)

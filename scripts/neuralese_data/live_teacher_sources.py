@@ -153,7 +153,25 @@ def validate_reassessment_outcome_roles(proof, original, root):
     """Validate a revised required projection against its original native record."""
     original_checks = original.get('checks')
     checks = proof.get('checks')
-    role_basis = original_checks if set(checks or {}) == set(original_checks or {}) else original_outcome_observations(original)
+    role_basis = original_checks
+    if set(checks or {}) != set(original_checks or {}):
+        observations = original_outcome_observations(original)
+        # Historical source-bound contracts repartitioned the original required
+        # projection; they did not claim to reassess its already optional roles.
+        # A promotion/full-observation contract must instead account for every
+        # retained observation. The low-level validator binds either exact
+        # partition to its archived source contract and unchanged booleans.
+        contract = proof.get('outcomeContract') or {}
+        declared = []
+        if isinstance(contract, dict):
+            for role in ('effects', 'returnedValue', 'incidentalValues'):
+                declaration = contract.get(role)
+                names = declaration.get('checks') if isinstance(declaration, dict) else None
+                if isinstance(names, list):
+                    declared.extend(names)
+        projection_contract = (all(isinstance(name, str) for name in declared) and
+                               set(declared) == set(original_checks or {}))
+        role_basis = original_checks if projection_contract else observations
     validate_reassessment_check_roles(proof, original_checks, root, role_basis)
 
 

@@ -85,7 +85,15 @@ export async function validateReassessmentCheckRoles(proof, originalChecks, root
 
 /** Keep the old required projection distinct from all retained observations. */
 export async function validateReassessmentOutcomeRoles(proof,original,root) {
-  const roleBasis=isDeepStrictEqual(Object.keys(proof.checks??{}).sort(),Object.keys(original.checks??{}).sort())?original.checks:originalOutcomeObservations(original);
+  let roleBasis=original.checks;
+  if(!isDeepStrictEqual(Object.keys(proof.checks??{}).sort(),Object.keys(original.checks??{}).sort())) {
+    const observations=originalOutcomeObservations(original);
+    // Older bound contracts partition the original required projection. Full
+    // observation/promotion contracts must exhaust the complete retained set.
+    const declared=['effects','returnedValue','incidentalValues'].flatMap(role=>proof.outcomeContract?.[role]?.checks??[]);
+    const projectionContract=declared.every(name=>typeof name==='string')&&isDeepStrictEqual([...new Set(declared)].sort(),Object.keys(original.checks??{}).sort());
+    roleBasis=projectionContract?original.checks:observations;
+  }
   await validateReassessmentCheckRoles(proof,original.checks,root,roleBasis);
 }
 
