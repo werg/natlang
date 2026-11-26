@@ -25,7 +25,12 @@ explicit owned actor/session lifetime and are not standing-controller adoption.
 Serving engines and TypeScript native/teacher runtimes do not implement this
 Python offline data-consumer ownership mechanism.
 
-Targeted helper/keeper and existing asynchronous-driver controls are pending.
+Actual targeted helper/keeper controls2/2 and full existing routing/async/cycle
+controls188/188 passed (38.52s,960MiB). This includes a yield/retirement lock
+check preventing a stopped fill from reappearing beside the learner. The first
+run exposed fixture-only mocks (uninitialized ledger import under a global
+subprocess stub and the old fixed unit-name expectation); the corrected real
+ledger-ownership fixture and fresh-attempt assertions pass.
 Actual process/cmdline/source verification and safe live controller resume remain
 required before claiming reader closure. The original two accepted episodes
 remain unregistered until actual consumers are compatible. No actor/learner reset
