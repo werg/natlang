@@ -31,9 +31,9 @@ export function platformDefaults(defaultPlatform: () => Platform) {
     /** The callable entry of a playground project file; TypeScript entries run on the entry's platform unless `platform` says otherwise. */
     projectEntry: (files: Record<string, string>, path: string, runtimeNamespace?: Record<string, unknown>,
         platform: Platform = defaultPlatform()) => projectEntry(files, path, runtimeNamespace, platform),
-    loadVirtualNatlang: (files: Record<string, string>, path: string, root = '/project', platform: Platform = defaultPlatform()): NatlangCallable =>
-      loadVirtualNatlang(files, path, root, platform),
-    loadVirtualCallables: (files: Record<string, string>, dir = '', root = '/project', platform: Platform = defaultPlatform()): Record<string, unknown> =>
-      loadVirtualCallables(files, dir, root, platform),
+    loadVirtualNatlang: (files: Record<string, string>, path: string, root = '/project', platform: Platform = defaultPlatform(), sourceTypes?:import('./runtime/source-type-context.js').SourceTypeContext): NatlangCallable =>
+      loadVirtualNatlang(files, path, root, platform,sourceTypes),
+    loadVirtualCallables: (files: Record<string, string>, dir = '', root = '/project', platform: Platform = defaultPlatform(), sourceTypes?:import('./runtime/source-type-context.js').SourceTypeContext): Record<string, unknown> =>
+      loadVirtualCallables(files, dir, root, platform,sourceTypes),
   };
 }

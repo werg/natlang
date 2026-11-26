@@ -1,3 +1,4 @@
+import {sourceTypeContext,sourceTypeContextMatches,sourceTypeReuseEnabled,type SourceTypeContext} from './source-type-context.js';
 import {invokeNativeEntry} from './native-entry.js';
 /**
  * Compile and execute a project held in memory (browser playground, Studio workers, tests).
@@ -59,29 +60,31 @@ export function virtualProjectFiles(files: Record<string, string>, root = '/proj
 }
 
 /** Loader access to in-memory files; display paths are relative to `root`. */
-export function virtualSourceFiles(files: Record<string, string>, root = '/project'): SourceFiles {
-  const virtual = virtualProjectFiles(files, root);
+export function virtualSourceFiles(files: Record<string, string>, root = '/project', sourceTypes?:SourceTypeContext): SourceFiles {
+  const snapshot=Object.fromEntries(Object.entries(files));
+  const virtual = virtualProjectFiles(snapshot, root);
+  const linkedTypes=sourceTypeReuseEnabled()&&sourceTypeContextMatches(sourceTypes,snapshot,root)?structuredClone(sourceTypes!.modules):undefined;
   return { join: joinSourcePath,
     dirname: path => path.slice(0, path.lastIndexOf('/')) || '/',
     basename: (path, extension) => { const base = path.slice(path.lastIndexOf('/') + 1); return extension && base.endsWith(extension) ? base.slice(0, -extension.length) : base; },
     extname: path => { const base = path.slice(path.lastIndexOf('/') + 1); const at = base.lastIndexOf('.'); return at > 0 ? base.slice(at) : ''; },
     isFile: path => virtual.isFile(path), isDirectory: path => virtual.isDirectory(path),
     read: path => virtual.read(path), list: path => virtual.list(path),
-    relative: path => path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path, root };
+    relative: path => path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path, root, ...(linkedTypes?{linkedTypes}: {}) };
 }
 
 /** Load a named `.nl` function, with its companion folder, from in-memory files; its TypeScript modules run on `platform`. */
-export function loadVirtualNatlang(files: Record<string, string>, path: string, root = '/project', platform?: Platform): NatlangCallable {
-  const record = loadNamedFunction(path.startsWith('/') ? path : `${root}/${path}`, virtualSourceFiles(files, root));
+export function loadVirtualNatlang(files: Record<string, string>, path: string, root = '/project', platform?: Platform, sourceTypes?:SourceTypeContext): NatlangCallable {
+  const record = loadNamedFunction(path.startsWith('/') ? path : `${root}/${path}`, virtualSourceFiles(files, root,sourceTypes));
   return namedCallable(record.name, record, undefined, platform);
 }
 
 /** Load an in-memory directory as a callable folder: its `.nl` and `.ts` items as a record of callables. */
-export function loadVirtualCallables(files: Record<string, string>, dir = '', root = '/project', platform?: Platform): Record<string, unknown> {
-  return callableTree(loadCallableFolder(dir ? `${root}/${dir}` : root, virtualSourceFiles(files, root)), undefined, platform);
+export function loadVirtualCallables(files: Record<string, string>, dir = '', root = '/project', platform?: Platform, sourceTypes?:SourceTypeContext): Record<string, unknown> {
+  return callableTree(loadCallableFolder(dir ? `${root}/${dir}` : root, virtualSourceFiles(files, root,sourceTypes)), undefined, platform);
 }
 
-export type CompiledProject = BuildResult & { require(path: string): Record<string, unknown> };
+export type CompiledProject = BuildResult & { require(path: string): Record<string, unknown>; sourceTypes?:SourceTypeContext };
 
 export type VirtualProjectOptions = { inlineRecords?: boolean; platform: Platform; constrained?: boolean; programId?: string; guidance?: string;
   importedGuidancePrograms?: readonly string[]; services?: ProgramDescriptor['services']; runtimeSpecifiers?: string[];
@@ -91,7 +94,8 @@ export type VirtualProjectOptions = { inlineRecords?: boolean; platform: Platfor
   /** Return generated declaration documents (default true); type checking is unchanged. */
   declarations?: boolean;
   /** Collect the program descriptor for adaptation. Defaults to true. */
-  adaptation?: boolean };
+  adaptation?: boolean;
+  reuseSourceTypes?:boolean };
 
 /**
  * Compile a virtual project and return a loader for its modules. `runtime` is the namespace that
@@ -109,6 +113,7 @@ export type VirtualProjectProduct = {
   project: VirtualProject;
   runtimeSpecifiers: string[];
   build: BuildResult;
+  sourceTypes?:SourceTypeContext;
 };
 export type VirtualProjectProductOptions = Omit<VirtualProjectOptions, 'platform' | 'modules' | 'target'> & {
   /** Explicit: a compiler worker has no runtime platform from which to infer this. */
@@ -121,10 +126,12 @@ export function compileVirtualProjectProduct(project: VirtualProject, options: V
   const root = snapshot.root ?? '/project';
   const files = virtualProjectFiles(snapshot.files, root);
   const specifiers = [...(options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'])];
-  const build = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
+  const compiled = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
     guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
-    inlineRecords:options.inlineRecords,target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, declarations: options.declarations, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
-  return { schema: 'natlang.virtual-project-product/1', project: snapshot, runtimeSpecifiers: specifiers, build };
+    inlineRecords:options.inlineRecords,reuseSourceTypes:options.reuseSourceTypes,target: options.target, runtimeSpecifier: specifiers[0]!, write: true, emit: options.emit, declarations: options.declarations, adaptation: options.adaptation, surfaceSpecifiers: specifiers });
+  const {linkedTypes,...build}=compiled;
+  return { schema: 'natlang.virtual-project-product/1', project: snapshot, runtimeSpecifiers: specifiers, build,
+    ...(compiled.ok&&options.reuseSourceTypes!==false&&sourceTypeReuseEnabled()&&linkedTypes?{sourceTypes:sourceTypeContext(snapshot.files,root,options as unknown as Record<string,unknown>,linkedTypes)}:{}) };
 }
 
 /** Bind a reusable frontend product to this owner's runtime and fresh module/realm state. */
@@ -132,8 +139,8 @@ export function instantiateVirtualProjectProduct(product: VirtualProjectProduct,
   if (product.schema !== 'natlang.virtual-project-product/1') throw new Error('unsupported virtual project product');
   // Public build metadata stays caller-owned; executable closures only own the
   // source and emitted modules they can use after that metadata is released.
-  const { project, build: result, runtimeSpecifiers: specifiers } = structuredClone(product);
-  return { ...result, require: createVirtualProjectRequire(project, result.outputs, specifiers, runtime, options) };
+  const { project, build: result, runtimeSpecifiers: specifiers,sourceTypes } = structuredClone(product);
+  return { ...result,...(sourceTypes?{sourceTypes}:{}), require: createVirtualProjectRequire(project, result.outputs, specifiers, runtime, options) };
 }
 
 function createVirtualProjectRequire(

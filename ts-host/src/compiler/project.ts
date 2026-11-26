@@ -11,7 +11,8 @@ import { checkSequentialNlLoops } from './sequential-loops.js';
 import { checkFixedCursorIterations, checkNlIdiomsIn } from './idiom.js';
 import { refinedSlotsOf, type RefinedSlot } from './refined-slots.js';
 import ts from 'typescript';
-import {withSourceLoadSession} from '../runtime/source-session.js';
+import {withSourceLoadSession,sourceTypeExports} from '../runtime/source-session.js';
+import {sourceTypeReuseEnabled,type SourceTypeExports} from '../runtime/source-type-context.js';
 import { REWRITE_RULES, RewriteGate, rewriteCombinators, type RewriteRecord, type RewriteRule, type RuleMeasurement } from './rewrites.js';
 import { describeProgram, namedDescriptor, inlineDescriptor } from '../adaptation/inventory.js';
 import type { ComponentDescriptor, ProgramDescriptor } from '../adaptation/types.js';
@@ -65,6 +66,8 @@ function sourceFiles(files: ProjectFiles, root: string): SourceFiles {
 export { NEUTRAL_RUNTIME_SPECIFIER };
 
 export type BuildOptions = {
+  /** Diagnostic opt-out of reusable pure linked-type metadata. */
+  reuseSourceTypes?: boolean;
   /** Opt out of shared generated record modules (diagnostic/reference mode). */
   inlineRecords?: boolean;
   /** Enforce the finite generated-program profile on every editable application module. */
@@ -127,6 +130,7 @@ export type DefinitionManifest = { version: typeof NATLANG_COMPILE_VERSION;
   adaptation?: ProgramDescriptor };
 
 export type BuildResult = { ok: boolean; diagnostics: NatlangDiagnostic[]; outputs: Record<string, string>;
+  linkedTypes?: SourceTypeExports;
   declarations: Record<string, string>; manifest: DefinitionManifest; outDir: string;
   /** Rewrites applied per emitted file (empty until a rule is enabled). */
   rewrites?: Record<string, RewriteRecord[]>;
@@ -417,7 +421,10 @@ function findTsconfig(files: ProjectFiles, project: string): { configPath?: stri
 /** Check and optionally compile a project. File access comes from `options.files`. */
 export function compileProject(options: BuildOptions): BuildResult {
   const files=sourceFiles(options.files,findTsconfig(options.files,options.project).root);
-  return withSourceLoadSession(files,()=>compileProjectInSession(options,files));
+  return withSourceLoadSession(files,()=>{
+    const result=compileProjectInSession(options,files);
+    return options.reuseSourceTypes!==false&&sourceTypeReuseEnabled()?{...result,linkedTypes:sourceTypeExports(files)}:result;
+  });
 }
 function compileProjectInSession(options: BuildOptions, files: SourceFiles): BuildResult {
   const fs = options.files;

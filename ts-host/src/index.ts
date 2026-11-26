@@ -95,3 +95,6 @@ export { nativeStateWritePort, nativeStateRuntimeOptions, nativeTextOperation, t
 export { archiveNativeTensorArtifact, restoreNativeTensorArtifacts } from './neuralese/native-tensor-client.js';
 export { rewriteTypeModuleSpecifiers } from './compiler/type-module-links.js';
 export { packageExportTarget } from './runtime/loader.js';
+
+export {sourceTypeContextMatches} from './runtime/source-type-context.js';
+export type {SourceTypeContext} from './runtime/source-type-context.js';

@@ -136,3 +136,6 @@ export * from '../adaptation/index.js';
 export type { FolderProposal } from '../native/scoped-fs.js';
 
 export { nativeStateWritePort, nativeStateRuntimeOptions, nativeTextOperation, type NativeClientOptions, type NativeSourceCapture, type NativeTextResult } from '../model/native-state-client.js';
+
+export {sourceTypeContextMatches} from '../runtime/source-type-context.js';
+export type {SourceTypeContext} from '../runtime/source-type-context.js';
