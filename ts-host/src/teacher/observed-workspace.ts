@@ -39,11 +39,10 @@ export function materializeObservedWorkspace(row: ObservedRow, digest: string): 
   const selected = new Map<string, Set<number> | null>();
   if (row.outcome.status === 'partial') {
     const scope = object(row.outcome.training_scope);
-    if (row.outcome.task_completed !== false || !['natlang.training-scope/1', 'natlang.training-scope/2'].includes(String(scope.schema)) ||
+    if (row.outcome.task_completed !== false || scope.schema !== 'natlang.training-scope/2' ||
         !Array.isArray(scope.invocations) || !scope.invocations.length)
       throw new Error('partial observed decisions require independent training scope');
-    const certified = scope.schema === 'natlang.training-scope/2';
-    if (certified && !scope.assessor || scope.invocations.some(value => Object.hasOwn(object(value), 'certificate') !== certified))
+    if (!scope.assessor || scope.invocations.some(value => !Object.hasOwn(object(value), 'certificate')))
       throw new Error('native certificates require training-scope/2 and its source-bound assessor');
     for (const value of scope.invocations) {
       const invocation = object(value);

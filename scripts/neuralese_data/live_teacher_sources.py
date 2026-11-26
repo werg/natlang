@@ -678,12 +678,11 @@ def verified_training_scope(verification, records, root, details=None):
             raise ValueError('partial live verification needs an explicit training scope')
         return None
     if (verification['status'] != 'partial' or not isinstance(scope, dict) or
-            scope.get('schema') not in {'natlang.training-scope/1', 'natlang.training-scope/2'}):
-        raise ValueError('invalid partial live training scope')
+            scope.get('schema') != 'natlang.training-scope/2'):
+        raise ValueError('partial live training scope requires source-bound native certificates (training-scope/2)')
     if scope.get('assessor'):
         bound_file(scope['assessor'], root)
-    certified = scope['schema'] == 'natlang.training-scope/2'
-    if certified and not scope.get('assessor') or any(('certificate' in invocation) != certified for invocation in scope.get('invocations') or []):
+    if not scope.get('assessor') or any('certificate' not in invocation for invocation in scope.get('invocations') or []):
         raise ValueError('native certificates require training-scope/2 and its source-bound assessor')
     original = json.loads(bound_file(scope['original_outcome'], root).read_text())
     if original.get('passed') is not False:
@@ -701,14 +700,7 @@ def verified_training_scope(verification, records, root, details=None):
         for binding in evidence:
             if binding.get('kind') not in {'workspace', 'cdp'}:
                 raise ValueError('recovered invocation needs workspace or CDP evidence')
-            witness = bound_file(binding, root)
-            if not certified:
-                try:
-                    payload = json.loads(witness.read_text())
-                except (UnicodeDecodeError, json.JSONDecodeError):
-                    payload = None
-                if isinstance(payload, dict) and payload.get('schema') == 'natlang.independent-native-return/1':
-                    raise ValueError('native return evidence cannot downgrade to training-scope/1')
+            bound_file(binding, root)
         try:
             verify_native_invocation_certificate(invocation, records, scope, root, details)
         except (KeyError, TypeError, IndexError) as error:

@@ -150,6 +150,10 @@ if kind in ('completed','completed-roles','completed-review','completed-promoted
  recovery.held_closure=lambda _:{};recovery.held_hit=lambda *_:False
  result=recovery.recover(root/'original.json',root/'pins.json',root/'assessment.json',root/'catalog.jsonl',root/'held.json',root/'derivative')
  path=Path(result['manifest'])
+if kind.startswith('partial'):
+ def test_only_uncertified_scope(verification,records,root,details=None):
+  return {i['call_id']:set(i['ordinals']) if i.get('ordinals') is not None else None for i in verification['training_scope']['invocations']}
+ live.verified_training_scope=test_only_uncertified_scope
 row=live.load_episode(path)['trajectory_ir']
 if kind=='masked-historical':row['outcome'].pop('excluded_return_decisions',None)
 (root/'input.jsonl').write_text(json.dumps(row)+'\n')
@@ -161,7 +165,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['goal-nonvoid-error',1],['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['partial',1],['partial-error',1],['partial-assessor',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['completed-promoted',1],['incidental',1],['incidental-nested',1]]) {
+for (const [kind, expected] of [['goal-nonvoid-error',1],['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['completed-promoted',1],['incidental',1],['incidental-nested',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {
@@ -180,7 +184,7 @@ for (const [kind, expected] of [['goal-nonvoid-error',1],['goal-void-error',1],[
     } finally {await rm(root,{recursive:true,force:true});}
   });
 }
-for (const kind of ['partial','partial-error','masked','incidental']) {
+for (const kind of ['masked','incidental']) {
   test(`rejects forged decision admission from independently excluded ${kind} evidence`, async () => {
     const {root,row}=await fixture(kind);
     try {
@@ -255,10 +259,14 @@ for(const mutation of ['actual-result','native-evidence','completion-status'])te
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('partial original assessor bytes remain independently bound',async()=>{
- const {root,row}=await fixture('partial-assessor');
- try{await writeFile(join(root,row.outcome.training_scope.assessor.path),'changed assessor source');
-  await assert.rejects(verifyObservedWorkspaceEvidence(row),/artifact changed/);
+for(const kind of ['partial','partial-error','partial-assessor'])test(`rejects uncertified legacy private decisions: ${kind}`,async()=>{
+ const {root,row}=await fixture(kind);
+ try{
+  await assert.rejects(verifyObservedWorkspaceEvidence(row),/partial training scope/);
+  assert.throws(()=>materializeNativeRows([row]),/independent training scope/);
+  const run=spawnSync(process.execPath,[join(repo,'ts-host/scripts/materialize-native-teacher.mjs'),join(root,'input.jsonl'),join(root,'output.jsonl')],{encoding:'utf8'});
+  assert.notEqual(run.status,0);
+  await assert.rejects(readFile(join(root,'output.jsonl')),{code:'ENOENT'});
  }finally{await rm(root,{recursive:true,force:true})}
 });
 

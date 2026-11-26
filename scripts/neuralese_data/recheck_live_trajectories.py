@@ -67,10 +67,8 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
     selected = assessment.get('invocations') or []
     if completed is not None and selected:
         raise ValueError('completed reassessment must not silently restrict its training scope')
-    for row in selected:
-        names = row.get('checks') or []
-        if not isinstance(names, list) or not names or any(checks.get(name) is not True for name in names):
-            raise ValueError('reassessment cites an absent or failed independent workspace check')
+    if selected:
+        raise ValueError('partial invocation recovery requires source-bound native certificates; whole-packet checks do not certify private decisions')
     if completed is None and packet['result'].get('passed') is not False:
         raise ValueError('partial reassessment requires its original native failure')
     if not selected and completed is None:
@@ -117,9 +115,6 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
                 completed_proof[field] = copied
             bind(out, 'completed-reassessment.json', completed_proof)
         proof_binding = {**bind(out, 'workspace.json', {'proof': completed_proof} if completed_proof is not None else original), 'kind': 'workspace'}
-        invocation_scope = [{'call_id': row['call_id'], 'checks': {name: True for name in row['checks']},
-                             'evidence': [proof_binding], **({'ordinals': row['ordinals']} if 'ordinals' in row else {})}
-                            for row in selected]
         interaction = {'kind': 'open-user-goal', 'goal': goal, 'program': exercise['programPath']}
         if exercise.get('entry'):
             interaction['entry'] = exercise['entry']
@@ -134,9 +129,7 @@ def recover(packet_path, pins_path, assessment_path, catalog_path, held_path, ou
                         'checks': {'originalCapturePreserved': True, 'independentInvocationEvidence': True},
                         'validator': validator, 'evidence': [proof_binding], 'interaction': interaction,
                         'root_call_ids': roots, 'calls': [call['summary'] for call in calls],
-                        **({'reassessment': {'original_outcome': original_binding, 'assessment': assessment_binding}} if completed_proof is not None else
-                           {'training_scope': {'schema': 'natlang.training-scope/1', 'original_outcome': original_binding,
-                                              'invocations': invocation_scope, **({'assessor': assessor_binding} if assessor_binding else {})}})}
+                        'reassessment': {'original_outcome': original_binding, 'assessment': assessment_binding}}
         spec = {'schema': 'natlang.live-teacher-task/1', 'id': task['taskId'], 'family': task['family'],
                 'split': 'train', 'source_namespace': task['taskId'].rsplit(':', 1)[0],
                 'source_ids': [task['taskId']], 'source_groups': task['sourceGroups'],
