@@ -6421,6 +6421,8 @@ def build_parser():
 def main():
     args = build_parser().parse_args()
     if args.command == 'train':
+        from natlang_neuralese.common.host_heap import bound_host_heap
+        bound_host_heap()      # collector slot threads + learner: the arenas never keep their peaks (common/host_heap.py)
         args.top_p = check_top_p(args.top_p)
         from natlang_neuralese.common.cuda_context import ensure_context
         ensure_context()   # GB10: a context can fail to create under host-memory fragmentation; retried

@@ -1510,6 +1510,8 @@ def _measure(out, manifest, endpoints, policy_id, *, samples=4, seed_base=SEED_B
 
 
 def main(argv=None):
+    from natlang_neuralese.common.host_heap import bound_host_heap
+    bound_host_heap()          # measure's slot threads (common/host_heap.py)
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='command', required=True)
     r = sub.add_parser('run', help='measure the run.json of one policy directory (resumable)')

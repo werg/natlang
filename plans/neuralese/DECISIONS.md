@@ -14379,3 +14379,30 @@ SGLang's native fallback route, program tuning / compiled-site fits and releases
 their next resume or launch on a pin at or after ac348293f; their forward (and fit gradients) shift by BF16 reduction
 order, so a fit measured before and after re-measures its base. aei1 (lfm3 learner, SGLang vendor collection and held
 eval) is unaffected numerically.
+
+## 2026-11-26 02:40 aei1: collection clients run at what fits; every many-threaded process bounds its malloc arenas (collection-fit agent)
+
+**Observation.** `aei1-collect-v0009-pop` (DGX-side client of the Pop actor, 64 slots, 22.2 GB = its learned peak x 1.1)
+waited 30+ min in the ledger (17.5 GB headroom), Pop's GPU idle. It was OOM-killed at its cap at 17:38, 21:25 and 23:39
+on 2026-11-25; each time the kernel's victim was the collector's main Python process (anon RSS 7.0 GB after 1 h 55 min,
+8.1 GB after 2 h 9 min), and each relaunch claimed the higher learned peak. The DGX collection's main process (192 slot
+threads) held ~470 64 MB glibc arena heaps (2.0 GB) beside a 0.9 GB main heap and grew ~170 MB in 10 min with flat
+load. The shared node episode servers do not leak: across ~190k `invocation_end` records their JS heap after an
+invocation is flat (~160 MB busy) from the 1st to the 64th invocation, RSS rises ~410 -> 630 MB and is bounded by the
+existing recycle (64 invocations or 1.5 GB RSS).
+
+**Cause and fix.** glibc gives each allocating thread its own arena, which keeps its peak after frees (the mechanism
+`bound_host_heap` already fixed in the SGLang front, 2026-11). It now lives in `natlang_neuralese/common/host_heap.py`
+(2 arenas + malloc_trim every 60 s; `MALLOC_ARENA_MAX` wins; `NATLANG_BOUND_HOST_HEAP=0` opts out) and runs in every
+thread-per-slot or per-request entry point: expert_iteration (collect and the driver), grpo train, held_eval, filled_reasoning,
+teacher_gen and serve_native_checkpoint. The learned peaks (a max) stay high until reset; `memory_ledger reset-peak`
+of the `-pop` families once the fixed clients have run is the follow-up.
+
+**Clients fitted.** The 2026-11-25 rule now covers every DGX-side client (Pop's `-pop`, a `--collect-on-dgx`
+`-remote<i>`): the fit loop requeues a waiting client at the most slots that fit the room (budget 6 GB + (full - 6) x
+n/S, at least min(`--collect-fit-min-slots`, S/4)), launched `--shrunk` with MemoryMax at its full size, and its
+collector (no held-priority dir) restores its slots and claim (`--room-slots`, `--ledger-full-gb`) once room returns.
+Not applicable: clients on their remote host (`remote_collect.py run`, fixed REMOTE_SYNC_GB of rsync, no episodes on the
+DGX) and the fills (FILL_GB / COLAB_FILL_GB claim for the source listings, not slots: `expert_iteration.py` FILL_GB
+comment). With today's 17.5 GB headroom (room ~2.5 GB after the reserve) even 16 Pop slots do not fit; the client starts
+as soon as room for its minimum appears instead of waiting for 22 GB.

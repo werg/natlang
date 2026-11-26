@@ -817,6 +817,46 @@ def test_a_collection_launched_at_room_slots_runs_them_until_the_ledger_has_room
     assert plain.room_slots is None and plain.active_slots == 64        # not fewer than its slots: no limit
 
 
+def test_a_remote_client_started_at_room_slots_restores_without_a_held_priority_dir(tmp_path, monkeypatch):
+    """A DGX-side client of a remote actor has no held-priority dir; started at --room-slots it still checks the room
+    and restores its slots and claim (--ledger-full-gb)."""
+    resized = []
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(
+        start=lambda: args and resized.append(args[0])))
+    import scripts.memory_ledger as ml
+    monkeypatch.setattr(ml, 'claimed_budget', lambda unit, state_path=None: 12 * ml.GIB)
+    room = {'gb': 3.}
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda u=None, priority='medium': room['gb'])
+    collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    collector.active_slots = 64
+    collector.setup(['t1'], time.time() + 3600, endpoints=[('http://pop', 64)], verify=True,
+                    ledger_unit='aei-collect-v0001-pop', ledger_full_gb=22., room_slots=24)
+    collector._priority()
+    assert collector.active_slots == 24 and resized == []
+    room['gb'] = 11.
+    collector.priority_read = 0
+    collector._priority()
+    assert collector.active_slots == 64 and resized == ['restore']
+
+
+def test_every_many_threaded_process_bounds_its_malloc_arenas():
+    """2026-11-25: the Pop client's main process (64 slot threads) grew to 7.0 / 8.1 GB anon RSS and was OOM-killed at
+    each cap; the DGX collection's held ~470 64 MB arena heaps. One mechanism (common/host_heap.bound_host_heap) in every
+    thread-per-slot / per-request entry point; NATLANG_BOUND_HOST_HEAP=0 opts out."""
+    from natlang_neuralese.common import host_heap
+    for path in ('scripts/neuralese_data/expert_iteration.py', 'scripts/neuralese_data/grpo.py',
+                 'scripts/neuralese_data/filled_reasoning.py', 'scripts/neuralese_data/teacher_gen.py',
+                 'scripts/neuralese_data/serve_native_checkpoint.py',
+                 'training/neuralese/natlang_neuralese/rl/held_eval.py'):
+        text = (REPO / path).read_text()
+        assert 'from natlang_neuralese.common.host_heap import bound_host_heap' in text and 'bound_host_heap()' in text, path
+    os.environ['NATLANG_BOUND_HOST_HEAP'] = '0'
+    try:
+        assert host_heap.bound_host_heap() is None
+    finally:
+        del os.environ['NATLANG_BOUND_HOST_HEAP']
+
+
 def test_pop_rl_actor_profiles_keep_pop_settings():
     pop_settings, pop_fmt = pop_rl_actor.pop_sglang('fp8_e4m3', 20, profile='pop')
     assert pop_settings['max_running'] == 20 and pop_fmt == 'sglang-pop-rtx4060-bf16-vendor-projection-kv-fp8_e4m3'
