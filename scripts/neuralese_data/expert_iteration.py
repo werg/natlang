@@ -3612,6 +3612,7 @@ class AsyncRoundDriver:
         self.c.collection_pending = self.collection_pending
         self.c.hold_clients = self.hold_clients
         self.clients_held = False
+        self.collections_held = False
         if self.argument_changes:
             self.note(arguments_reconciled=self.argument_changes)
         self.lock = threading.RLock()
@@ -3867,20 +3868,23 @@ class AsyncRoundDriver:
         keep = os.environ.get('NATLANG_EI_FILL_KEEPER', '1') != '0'
         launches = 0
         while True:
-            base = f'{unit}-fill'
-            self.c.stop_fills(base, stale_only=True)
-            if not self.c.current_fill_unit(base):
-                fill = self.c.new_fill_unit(base)
-                self.c.ledger(fill, FILL_GB, 'medium',
-                              self.c.fill_command(actor, skip_trained=self.trained_builds()),
-                              work / 'fill.log', detach=True, repo=self.c.fill_repo())
-                launches += 1
-                self.note(fill_started=fill, policy=policy['sha256'], launch=launches, reader=str(self.c.fill_repo()))
+            # The same lock protects learner yield/policy retirement. A fill
+            # cannot reappear after that owner stopped its collection/clients.
+            with self.COLLECT_LOCK:
+                if self.collections_held or not self.c.active(unit):
+                    return
+                base = f'{unit}-fill'
+                self.c.stop_fills(base, stale_only=True)
+                if not self.c.current_fill_unit(base):
+                    fill = self.c.new_fill_unit(base)
+                    self.c.ledger(fill, FILL_GB, 'medium',
+                                  self.c.fill_command(actor, skip_trained=self.trained_builds()),
+                                  work / 'fill.log', detach=True, repo=self.c.fill_repo())
+                    launches += 1
+                    self.note(fill_started=fill, policy=policy['sha256'], launch=launches, reader=str(self.c.fill_repo()))
             if not keep:
                 return
             time.sleep(FILL_KEEPER_SECONDS)
-            if not self.c.active(unit):
-                return
 
     def remote_targets(self):
         """The ``--rebind-actor HOST@FRONT_URL[=SLOTS]`` targets: {index, host, front, slots, pop, suffix}. A target on

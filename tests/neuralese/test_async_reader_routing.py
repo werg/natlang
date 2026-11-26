@@ -57,7 +57,7 @@ def test_async_readers_preserve_runtime_and_route_every_data_consumer(tmp_path,m
     monkeypatch.setattr(d.c,'ledger',lambda *args,**kwargs:launched.append((args,kwargs)))
     # the fill is standing: gone while the collection runs, it is launched again (2026-11-25 22:22 OOM)
     monkeypatch.setattr(d.c,'present',lambda unit:False)
-    alive=iter([True,False])
+    alive=iter([True,True,False])
     monkeypatch.setattr(d.c,'active',lambda unit:next(alive))
     monkeypatch.setattr(ei.time,'sleep',lambda s:None)
     monkeypatch.setattr(ei.subprocess,'run',lambda *a,**k:None)
@@ -260,3 +260,19 @@ def test_fill_keeper_rejoins_existing_actor_once_without_restarting_its_collecti
     started[0].alive = False
     d.ensure_fill_keeper(unit, work, d.controller.current)
     assert len(started) == 2  # A settled keeper is resumed; an active one is joined.
+
+
+def test_fill_keeper_cannot_relaunch_after_learner_yield(tmp_path, monkeypatch):
+    d = driver(tmp_path, monkeypatch)
+    d.a.fill = str(tmp_path / 'filled')
+    work = tmp_path / 'actor';work.mkdir()
+    (work / 'actor.json').write_text(json.dumps({'checkpoint_sha256': d.controller.current['sha256']}))
+    monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    monkeypatch.setattr(d.c, 'active', lambda unit: True)
+    launched = []
+    monkeypatch.setattr(d.c, 'ledger', lambda *args, **kwargs: launched.append(args))
+    d.collections_held = True
+    before = json.loads((d.root / 'phase-state.json').read_text())
+    d._fill_beside('TEST-held-collection', work, d.controller.current)
+    assert launched == []
+    assert json.loads((d.root / 'phase-state.json').read_text()) == before
