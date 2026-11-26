@@ -1056,13 +1056,18 @@ def test_round_stages_preempt_the_standing_collection_which_resumes_on_its_polic
     monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
     monkeypatch.setattr(d, 'ensure_teacher', lambda rd: None)
 
+    caps = {}
+
     def stage(unit, budget, priority, command, log, **kw):
         launched.append((unit, priority))
+        caps[unit] = kw.get('host_max_gb')
         (rd / 'mix').mkdir(parents=True, exist_ok=True)
         (rd / 'mix' / 'build.json').write_text('{}')
     monkeypatch.setattr(d.c, 'ledger', stage)
     d.prepare(rd, d.lineage_policies())
     assert launched == [(f'aei-r0001-{s}', ei.STAGE_PRIORITY) for s in ('frontier', 'data', 'build')]
+    # a measured claim never caps the step's memory (2026-11-26 r0014 data OOM at its measured 21.8 GB)
+    assert caps['aei-r0001-data'] == ei.DATA_STAGE_GB and caps['aei-r0001-build'] == ei.BUILD_STAGE_GB
 
 
 

@@ -4738,7 +4738,7 @@ class AsyncRoundDriver:
 
         # Each step records stages/<step>.done, so a driver restart resumes after the last finished step instead of
         # rerunning frontier and data (hours) beneath a build that may still be reading their outputs.
-        def step(name, budget, argv, repo=None):
+        def step(name, budget, argv, repo=None, cap=None):
             done = round_dir / 'stages' / f'{name}.done'
             if done.exists():
                 return
@@ -4752,7 +4752,7 @@ class AsyncRoundDriver:
                 (round_dir / 'stages' / f'{name}.exit').unlink(missing_ok=True)
                 (round_dir / 'stages' / f'{name}.rerun').unlink(missing_ok=True)
             self.c.ledger(unit, budget, STAGE_PRIORITY, step_command(argv, round_dir / 'stages' / f'{name}.exit'),
-                          round_dir / f'{name}.log', repo=repo, room=True)
+                          round_dir / f'{name}.log', repo=repo, room=True, host_max_gb=cap)
             done.write_text(json.dumps({'time': time.time()}) + '\n')
         # the standing DGX collection yields slots (and its claim) from the frontier to the end of the build, instead
         # of being preempted for the data and build steps (Cycle.prep_yield, PREP_YIELD_SHARE)
@@ -4769,11 +4769,12 @@ class AsyncRoundDriver:
                     tmp = script.with_name(script.name + '.tmp')
                     tmp.write_text('set -e\n' + ''.join(' '.join(map(_quote, x)) + '\n' for x in lines))
                     os.replace(tmp, script)
-                step('data', self.stage_gb('data', DATA_STAGE_GB), ['/bin/sh', str(script)], repo=self.c.data_repo())
+                step('data', self.stage_gb('data', DATA_STAGE_GB), ['/bin/sh', str(script)], repo=self.c.data_repo(),
+                     cap=DATA_STAGE_GB)
                 # 24 GB: r0004-r0007 peaked at 17.0-17.5 GiB (18.7 GB) with the aux parts loaded before the teacher
                 # admission and --prefer-unseen reading older mixes (the 32 GB of 2026-11-24 morning anticipated them);
                 # r0001's 21.2 GB was before. The guard raises an over-budget unit while memory is plentiful.
-                step('build', self.stage_gb('build', BUILD_STAGE_GB), build, repo=self.c.data_repo())
+                step('build', self.stage_gb('build', BUILD_STAGE_GB), build, repo=self.c.data_repo(), cap=BUILD_STAGE_GB)
             report = json.loads((round_dir / 'mix' / 'build.json').read_text())
             if not self.supply_wait(round_dir, report):
                 break
@@ -4792,7 +4793,8 @@ class AsyncRoundDriver:
     def stage_gb(self, stage, default):
         """A preparation step's ledger GB: its recent rounds' measured peak x 1.1, at most ``default``
         (``measured_stage_gb``; r0011-r0013 data 12.1-19.8, build 17.5-19.3 GiB against 24 claimed);
-        --no-measured-stage-budget claims ``default``."""
+        --no-measured-stage-budget claims ``default``. The unit's MemoryMax stays ``default`` (``step(cap=...)``):
+        2026-11-26 10:06 r0014's data step, capped at its measured 21.8, was OOM-killed at 21.6 GiB after 1.5 h."""
         if not getattr(self.a, 'measured_stage_budget', True):
             return default
         return measured_stage_gb(self.a.name, stage, default, ledger_family_peaks())
