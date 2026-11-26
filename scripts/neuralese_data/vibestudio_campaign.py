@@ -99,7 +99,7 @@ def capture_integrity_errors(errors):
             if error != 'Assigned authored root did not complete successfully']
 
 
-def authored_lifecycle(packet):
+def authored_lifecycle(packet, expected_case_id=None):
     """The outer runner RPC error carries its private, exact-Eval lifecycle.
 
     Never search guest causes or infer a boundary from missing records, error
@@ -110,6 +110,16 @@ def authored_lifecycle(packet):
     error = failure.get('error') if isinstance(failure, dict) else None
     data = error.get('errorData') if isinstance(error, dict) else None
     evidence = data.get('authoredLifecycle') if isinstance(data, dict) else None
+    if (isinstance(evidence, dict)
+            and evidence.get('schema') == 'vibestudio.authored-lifecycle/2'):
+        if (set(evidence) == {'schema', 'boundary', 'caseId', 'sourceContextId', 'teacherStarted'}
+                and evidence.get('boundary') == 'teacher-worker-dispatch'
+                and evidence.get('teacherStarted') is False
+                and isinstance(expected_case_id, str) and bool(expected_case_id)
+                and evidence.get('caseId') == expected_case_id
+                and isinstance(evidence.get('sourceContextId'), str) and evidence['sourceContextId'].strip()):
+            return evidence
+        return None
     if not isinstance(evidence, dict) or set(evidence) != {
             'schema', 'runId', 'runtimeId', 'boundary', 'teacherStarted'}:
         return None
@@ -200,7 +210,7 @@ def outcomes(capture, names, held, training, cases):
             if not has_training_manifest(results[name]):
                 results[name]['status'] = 'interrupted'
         if packet is not None:
-            lifecycle = authored_lifecycle(packet)
+            lifecycle = authored_lifecycle(packet, name.removeprefix("open-goal-"))
             if lifecycle is not None:
                 # A retained actual call is stronger than a contradictory no-start
                 # marker. Preserve the contradiction as failed evidence, not a waiver.

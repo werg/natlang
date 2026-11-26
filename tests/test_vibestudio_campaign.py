@@ -1173,3 +1173,40 @@ def test_retained_teacher_call_contradicts_no_start_marker_as_integrity_failure(
     assert outcome['teacher_started'] is True
     assert 'authored_lifecycle' not in outcome
     assert outcome['capture_errors'] == ['Authored lifecycle contradicts retained teacher calls']
+
+
+def dispatch_lifecycle_packet(case_id='example'):
+    packet = lifecycle_packet(False)
+    packet['execution']['failure']['error']['errorData']['authoredLifecycle'] = {
+        'schema':'vibestudio.authored-lifecycle/2','boundary':'teacher-worker-dispatch',
+        'caseId':case_id,'sourceContextId':'TEST-owned-source-context','teacherStarted':False}
+    return packet
+
+
+def test_owned_predispatch_failure_is_bound_to_the_case_and_preserves_original_raw(tmp_path):
+    packet = dispatch_lifecycle_packet()
+    raw = tmp_path/'st_original'/'trajectory-open-goal-example-full.json.gz'
+    raw.parent.mkdir()
+    with gzip.open(raw,'wt') as stream: json.dump(packet,stream)
+    original=raw.read_bytes()
+    outcome=vibestudio_campaign.outcomes(tmp_path,['open-goal-example'],None,{}, {'open-goal-example':{}})['open-goal-example']
+    assert outcome['teacher_started'] is False
+    assert outcome['teacher_model_sampled'] is False
+    assert vibestudio_campaign.infrastructure_failure(outcome,{})
+    assert raw.read_bytes()==original
+
+
+@pytest.mark.parametrize('damage',['wrong-case','no-case-binding','already-dispatched','wrong-boundary','empty-context','fake-eval-id','nested-guest'])
+def test_predispatch_witness_cannot_claim_another_case_or_a_started_teacher(damage):
+    packet=dispatch_lifecycle_packet()
+    error=packet['execution']['failure']['error']
+    witness=error['errorData']['authoredLifecycle']
+    expected='example'
+    if damage=='wrong-case': witness['caseId']='foreign'
+    elif damage=='no-case-binding': expected=None
+    elif damage=='already-dispatched': witness['teacherStarted']=True
+    elif damage=='wrong-boundary': witness['boundary']='assigned-program-load'
+    elif damage=='empty-context': witness['sourceContextId']=''
+    elif damage=='fake-eval-id': witness['runtimeId']='invented-eval'
+    else: packet['execution']['failure']['error']={'message':'outer transport error','cause':error}
+    assert vibestudio_campaign.authored_lifecycle(packet,expected) is None

@@ -14192,3 +14192,10 @@ Sixteen targeted custody/negative controls passed in ledger vibe-regency-recover
 - Tests: `test_episode_files.py` (compaction and readers, retention pass on an open collection, remote pull, block GC
   cutoff); the stale expectation in `test_grpo_sampling_supply.py` (the token after an empty think block is context
   since c1abc6a47) fixed.
+
+
+### 2026-11-26: distinguish native open-goal setup from teacher-worker dispatch
+
+The actual Tendril About warm-panel failure occurs before the finite teacher utility exists. The shared open-goal runner now owns a per-invocation pre-dispatch boundary across its twelve typed worker-call sites, covering all 2,327 current catalog rows (all open-user-goal). A native setup failure before dispatch carries the exact case and real source context, with no invented Eval identity. After dispatch, a lost worker response remains unknown; the worker's exact-Eval load witness is preserved when available. Both a failed worker response and a later cleanup failure are retained instead of replacing the first error. The Python reader accepts only the closed schema and matching actual case, and rejects nested/foreign/post-dispatch claims. Original legacy raw is unchanged and remains conservative.
+
+Targeted evidence: 124 campaign controls pass; public runner controls cover pre-dispatch setup, unknown response, existing exact worker witness, failed cleanup, and parallel invocations. The common lifecycle RPC contract is exported from the already-declared System Testing skill dependency, avoiding a new generated dependency on the worker package. Existing verified-manifest exposure is justified by canonical load_episode requiring actual model reply identity, even when all generated decisions are excluded from targets. No model, sampling, SFT admission, goal text, split or user-effect guard changes. The actual future finite-Eval marker RPC remains unchecked until the coherent source consumer runs; this does not gate active paid Source41.
