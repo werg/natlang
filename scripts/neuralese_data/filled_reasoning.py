@@ -1031,7 +1031,30 @@ def generate(args):
     record_fills(out, works, held, **registry_options(registry_repo, ref=registry_ref, writer=True))
 
 
-def record_fills(out, works, held, *, registry_repo=None, registry_ref=None):
+RECORD_ATTEMPTS = 6
+
+
+def record_fills(out, works, held, *, registry_repo=None, registry_ref=None, attempts=None, wait=20.):
+    """Registers ``fills.jsonl``. The DGX and Colab fills append to the same open file, so a snapshot can see it change
+    while hashing (2026-11-26: the Colab fill failed at its end, its fills already written): retried while the other
+    writer is active, then logged instead of failing the finished run (the next run's snapshot records the file)."""
+    attempts = RECORD_ATTEMPTS if attempts is None else attempts
+    for attempt in range(attempts):
+        try:
+            return _record_fills(out, works, held, registry_repo=registry_repo, registry_ref=registry_ref)
+        except RuntimeError as error:
+            if 'file changed while hashing' not in str(error):
+                raise
+            print(json.dumps({'event': 'fills record retried', 'attempt': attempt + 1, 'error': str(error)[:200]}),
+                  flush=True)
+            if attempt + 1 < attempts:
+                time.sleep(wait)
+    print(json.dumps({'event': 'fills record deferred', 'why': 'fills.jsonl kept changing (another fill appends)'}),
+          flush=True)
+    return None
+
+
+def _record_fills(out, works, held, *, registry_repo=None, registry_ref=None):
     from sft_sources import registry_options
     data_registry.record_dataset(data_registry.dataset_id(out, 'filled-reasoning'), out, kind='trajectories',
                                  include=['fills.jsonl', 'generate.log'], inputs=[*works, held],

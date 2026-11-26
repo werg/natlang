@@ -532,3 +532,26 @@ def test_build_renders_episodes_in_worker_processes_as_it_does_serially():
                 assert r1.keys() == r2.keys() and all(np.array_equal(r1[k], r2[k]) for k in r1)
         calls = fr.calls_of(a[0][0], CLOSE)          # prompts are cut from the chain ids
         assert [len(c['prompt']) for c in calls] == [5 + 7 * i for i in range(1 + n % 3)]
+
+
+def test_a_fills_record_that_sees_the_file_change_is_retried_then_deferred(monkeypatch):
+    """The DGX and Colab fills append to one open fills.jsonl: a snapshot that sees it change while hashing is retried,
+    and never fails a run whose fills are written (2026-11-26 Colab fill)."""
+    import filled_reasoning as fr
+    calls = []
+
+    def flaky(*a, **kw):
+        calls.append(1)
+        if len(calls) < 3:
+            raise RuntimeError('file changed while hashing: fills.jsonl')
+        return 'ok'
+    monkeypatch.setattr(fr, '_record_fills', flaky)
+    assert fr.record_fills('out', [], 'held', wait=0) == 'ok' and len(calls) == 3
+    calls.clear()
+    monkeypatch.setattr(fr, '_record_fills', lambda *a, **kw: (_ for _ in ()).throw(
+        RuntimeError('file changed while hashing: fills.jsonl')))
+    assert fr.record_fills('out', [], 'held', attempts=2, wait=0) is None
+    monkeypatch.setattr(fr, '_record_fills', lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('other')))
+    import pytest
+    with pytest.raises(RuntimeError):
+        fr.record_fills('out', [], 'held', wait=0)
