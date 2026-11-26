@@ -1112,8 +1112,21 @@ def _drive(args, checkpoint):
             receipt, cases, getattr(args, 'infrastructure_hold_threshold', 2),
             getattr(args, 'provider_transport_hold_fraction', 0.5))
         if runtime_hold is not None:
-            publish(root / 'runtime-hold.json', {'wave': started.stem, **runtime_hold})
-            (root / 'stop-after-wave').touch()
+            previous_provenance = plan.get('provenance')
+            previous_info = previous_provenance.get('release') if isinstance(previous_provenance, dict) else None
+            current_info = provenance.get('release')
+            previous_release = previous_info.get('sha256') if isinstance(previous_info, dict) else None
+            current_release = current_info.get('sha256') if isinstance(current_info, dict) else None
+            historical = (isinstance(previous_release, str) and bool(previous_release) and
+                          isinstance(current_release, str) and bool(current_release) and previous_release != current_release)
+            if historical and not getattr(args, 'hold_historical_infrastructure', False):
+                publish(waves / f'{started.stem}-historical-infrastructure-hold.json', {
+                    'wave': started.stem, 'recorded_release': previous_release,
+                    'current_release': current_release, **runtime_hold,
+                    'reason': 'Retained historical failures do not describe the current repaired release'})
+            else:
+                publish(root / 'runtime-hold.json', {'wave': started.stem, **runtime_hold})
+                (root / 'stop-after-wave').touch()
 
 
 def main():
@@ -1154,6 +1167,8 @@ def main():
                      help='maximum concurrency for waves containing nested installed hubs; raise explicitly when memory permits')
     run.add_argument('--teacher-timeout-ms', type=int, default=DEFAULT_TEACHER_TIMEOUT_MS,
                      help='per-teacher episode wall time, including native preparation; default 3600000ms; explicit override leaves normal test budgets unchanged')
+    run.add_argument('--hold-historical-infrastructure', action='store_true',
+                     help='Also stop a new release when archiving failures captured by an older release')
     run.add_argument('--finish-archive-wave', action='store_true',
                      help='Defer graceful source/user stops until the whole archival wave finishes instead of the next settled runtime')
     run.add_argument('--reserve-disk-gib', type=float, default=8)

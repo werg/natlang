@@ -1245,3 +1245,33 @@ def test_native_reference_packets_are_excluded_from_training_snapshots(tmp_path,
     vibestudio_campaign.export_trajectories(tmp_path,{'teacher':{'status':'verified','manifest':'manifest.json'}},set(),set())
     assert 'capture/native-reference-only/**' in registrations[0]['exclude']
     assert reference.read_text()=='TEST-only held native reference original'
+
+
+@pytest.mark.parametrize("previous_release", ["old-release", "current-release", None, 17])
+@pytest.mark.parametrize("legacy_hold", [False, True])
+def test_archival_recovery_only_holds_current_or_unidentified_release(tmp_path, monkeypatch, previous_release, legacy_hold):
+    from types import SimpleNamespace
+    names=['one','two']
+    cases={name:{'taskId':name,'workspace':'system','family':'settings'} for name in names}
+    waves=tmp_path/'waves';jobs=waves/'jobs';jobs.mkdir(parents=True)
+    plan={'cases':names,'attempt_epoch':'old-epoch','provenance':{'release':{'sha256':previous_release}}}
+    vibestudio_campaign.publish_immutable(jobs/'0000.json',plan)
+    (waves/'0000-capture').mkdir()
+    monkeypatch.setattr(vibestudio_campaign,'campaign_scope',lambda *_:(None,{},cases))
+    monkeypatch.setattr(vibestudio_campaign,'attempt_context',lambda *_:('new-epoch',{'release':{'sha256':'current-release'}},{}))
+    monkeypatch.setattr(vibestudio_campaign,'native_reference_capable',lambda *_:False)
+    monkeypatch.setattr(vibestudio_campaign,'prerequisite_holds',lambda *_:{})
+    monkeypatch.setattr(vibestudio_campaign,'sync_index',lambda *_,**__:None)
+    archived=[]
+    monkeypatch.setattr(vibestudio_campaign,'remote_archive',lambda *args,**kw:archived.append(kw['wave']))
+    monkeypatch.setattr(vibestudio_campaign,'outcomes',lambda *_:{name:{'status':'no-capture','teacher_started':False,'reason':'Original harness produced no capture'} for name in names})
+    def no_teacher(*_,**__):raise AssertionError('Historical capture must never regenerate teacher calls')
+    monkeypatch.setattr(vibestudio_campaign.CollectorCheckpoint,'run',no_teacher)
+    args=SimpleNamespace(root=tmp_path,held=tmp_path/'held',seed=[],host=tmp_path,archive=tmp_path/'archive',review_model=None,attempts=2,max_waves=1,wave_size=64,concurrency=8,hold_historical_infrastructure=legacy_hold)
+    vibestudio_campaign.drive(args)
+    expected_hold=legacy_hold or previous_release!='old-release'
+    assert (tmp_path/'runtime-hold.json').is_file() is expected_hold
+    assert (tmp_path/'stop-after-wave').is_file() is expected_hold
+    assert (waves/'0000-historical-infrastructure-hold.json').is_file() is not expected_hold
+    assert len(archived)==1 and archived[0]['plan']==plan
+    assert vibestudio_campaign.read(waves/'0000-result.json')['one']['status']=='no-capture'
