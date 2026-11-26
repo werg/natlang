@@ -14451,3 +14451,11 @@ bounded. Safe current-owner checkpoint rebinding must preserve valid escaped fun
 EvalDO's existing active execution context is the concrete shared seam. It does not gate the minimal no-import
 policy successor. The optional old007 guarded package was superseded; warm default-three cache retained and its
 resumption watcher now requires an exact coherent successor package spec plus actual capacity. No new model calls.
+
+### 2026-11-26 — source-bound notification answer reassessment
+
+Inventory: `reassess_native_review.mjs` handles native-pass rejected reviews; `reassess_image_answer.mjs` handles source-identified obsolete answer bookkeeping and exact return masks. `recheck_live_trajectories.recover` plus Python `validate_reassessment_check_roles`/`verify_completed_reassessment`, Node observed-workspace validation and canonical NativeIR materialization consume the existing completed-reassessment schema. No new reader format or execution path is needed.
+
+Added `reassess_notification_answer.mjs` for completed clean original read-only notification captures with all three original native scope/refresh/independent-row checks true. The original reference action/state/ID/revision equality remains false diagnostically. The actual nonempty typed original answer, exact output/effect references and root/projection causal masks must bind before a mandatory independent meaning review. Acknowledgment/effect branches, empty answers, unrelated masks, held tasks, forged observations and false lineage fail closed. No goal, ID, original raw packet or actor output is rewritten. Visibility is explicitly distinguished from retained SQLite storage; requested event-explanation completeness must be judged, never inferred from native custody.
+
+Targeted actual check: `vibe-notification-reassessment-check-20261126a` passed 46 Node controls (16 new notification + existing native/image controls). Immutable wave0075 removed-history and invite-replaced-by-brief originals both deterministically prepare review inputs, with all original native checks retained. Semantic acceptance, canonical recovery/materialization, archiving and training admission remain pending their actual independent reviews; no teacher rerun or training gain is claimed.
