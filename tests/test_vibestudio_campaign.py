@@ -232,7 +232,8 @@ def test_default_attempt_epoch_is_verified_release_sha_with_exact_provenance(mon
 
 
 @pytest.mark.parametrize("teacher_timeout", [3_600_000, 600_000])
-def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, tmp_path, teacher_timeout):
+@pytest.mark.parametrize("finish_archive_wave", [False, True])
+def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, tmp_path, teacher_timeout, finish_archive_wave):
     from types import SimpleNamespace
     cases = {name: {'taskId': name, 'workspace': 'system', 'family': 'settings'} for name in ['retry', 'done']}
     waves = tmp_path / 'waves'
@@ -262,6 +263,9 @@ def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, 
         assert command[:4] == ['node', '--import', 'tsx', 'scripts/collect-live-workflow-teacher.mjs']
         assert kwargs['env'] == {'PINNED': 'yes'}
         assert command[command.index('--checkpoint-request') + 1] == str(kwargs['request_file'])
+        assert ('--drain-request' in command) is not finish_archive_wave
+        if not finish_archive_wave:
+            assert command[command.index('--drain-request') + 1] == str(tmp_path / 'stop-after-wave')
         assert command.count('--case') == 1 and command[-1] == 'retry'
         assert command[command.index('--test-timeout-ms') + 1] == str(teacher_timeout)
         assert command[command.index('--cases-per-instance') + 1] == '12'
@@ -271,7 +275,7 @@ def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, 
     monkeypatch.setattr(vibestudio_campaign.CollectorCheckpoint, 'run', collect)
     args = SimpleNamespace(root=tmp_path, held=tmp_path / 'held', seed=[], host=tmp_path, archive=tmp_path / 'archive',
         review_model=None, attempts=2, max_waves=1, wave_size=6, concurrency=3, reserve_disk_gib=8,
-        teacher_timeout_ms=teacher_timeout)
+        teacher_timeout_ms=teacher_timeout, finish_archive_wave=finish_archive_wave)
     vibestudio_campaign.drive(args)
     plan = vibestudio_campaign.read(jobs / '0003.json')
     assert plan == {'cases': ['retry'], 'attempt_epoch': 'new-release', 'provenance': provenance}

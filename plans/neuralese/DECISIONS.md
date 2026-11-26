@@ -14451,3 +14451,7 @@ bounded. Safe current-owner checkpoint rebinding must preserve valid escaped fun
 EvalDO's existing active execution context is the concrete shared seam. It does not gate the minimal no-import
 policy successor. The optional old007 guarded package was superseded; warm default-three cache retained and its
 resumption watcher now requires an exact coherent successor package spec plus actual capacity. No new model calls.
+
+## 2026-11-26 — drain collection at settled runtime boundaries
+
+Source43's repaired release was actually ready while Source42 still had most of an archival64-case wave left. SIGTERM correctly cancels active managed work, so using it to pick up ready source would interrupt useful inference; waiting for all64 delays improvements. Add a soft drain to the existing collector owner. The full driver forwards stop-after-wave to Host, which checks only before another runtime/run after the previous run's review/export/retirement. The existing interruption receipt preserves completed outcomes and labels only unstarted cases unfinished. Hard signals retain cancellation semantics, including after soft drain. Default on with --finish-archive-wave opt-out. Four real-child Node controls and131 actual campaign tests passed; no model calls. Existing Source42/43 pins remain unchanged; ship the coupled Host+driver at the next coherent source cutover.

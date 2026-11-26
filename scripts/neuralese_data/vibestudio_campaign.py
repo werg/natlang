@@ -1050,6 +1050,8 @@ def _drive(args, checkpoint):
             collect = ['node', '--import', 'tsx', 'scripts/collect-live-workflow-teacher.mjs', '--model', LUNA, '--approve-codex-session',
                        '--cases-per-instance', str(limits['cases_per_instance']), '--test-timeout-ms', str(args.teacher_timeout_ms), '--out', str(capture)]
             collect += ['--checkpoint-request', str(checkpoint_request)]
+            if not getattr(args, 'finish_archive_wave', False):
+                collect += ['--drain-request', str(root / 'stop-after-wave')]
             if limits['concurrency'] > 1:
                 collect += ['--concurrency', str(limits['concurrency'])]
             if first.get('requiresReview'):
@@ -1152,6 +1154,8 @@ def main():
                      help='maximum concurrency for waves containing nested installed hubs; raise explicitly when memory permits')
     run.add_argument('--teacher-timeout-ms', type=int, default=DEFAULT_TEACHER_TIMEOUT_MS,
                      help='per-teacher episode wall time, including native preparation; default 3600000ms; explicit override leaves normal test budgets unchanged')
+    run.add_argument('--finish-archive-wave', action='store_true',
+                     help='Defer graceful source/user stops until the whole archival wave finishes instead of the next settled runtime')
     run.add_argument('--reserve-disk-gib', type=float, default=8)
     export = sub.add_parser('export-wave')
     export.add_argument('--archive', type=Path, required=True)
