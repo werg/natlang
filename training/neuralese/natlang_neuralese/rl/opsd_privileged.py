@@ -489,6 +489,7 @@ def main(argv=None):
     t.add_argument('--lr', type=float, default=3e-5)
     t.add_argument('--kind', choices=DIVERGENCES, default='forward_kl')
     t.add_argument('--topk', type=int)
+    t.add_argument('--state-every', type=int, default=25, help='learner-state save interval in steps')
     args = parser.parse_args(argv)
     if args.command == 'build':
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
@@ -504,7 +505,7 @@ def main(argv=None):
         tokenizer = AutoTokenizer.from_pretrained(args.base)
         result = train_t1(args.twins, args.out, checkpoint=args.checkpoint, base=args.base, tokenizer=tokenizer,
                           max_steps=args.max_steps, batch_twins=args.batch_twins, lr=args.lr, kind=args.kind,
-                          topk=args.topk)
+                          topk=args.topk, state_every=args.state_every)
     print(json.dumps(result, indent=2, default=str))
 
 
