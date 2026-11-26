@@ -1,3 +1,4 @@
+import { modelConnectionAttemptTimeout } from './node-connection-policy.js';
 /**
  * The one chat-completions adapter between the runtime's model turns and an OpenAI-style chat endpoint, shared by
  * every host. A transport only moves a request body to a model and yields what comes back: streamed chunks, or one
@@ -602,7 +603,10 @@ export async function fetchModel(url: string, init: RequestInit = {}): Promise<R
   for (const [base, handler] of localEndpoints) if (url === base || url.startsWith(base + '/')) return handler(url, init);
   if (typeof process !== 'undefined' && process.versions?.node) {
     longDispatcher ??= import(/* @vite-ignore */ 'undici').then(({ Agent }) =>
-      new Agent({ headersTimeout: 0, bodyTimeout: 0 }), () => undefined);
+      new Agent({ headersTimeout: 0, bodyTimeout: 0, connect: {
+        ...(modelConnectionAttemptTimeout(process.env) === undefined ? {} :
+          { autoSelectFamilyAttemptTimeout: modelConnectionAttemptTimeout(process.env) })
+      } }), () => undefined);
     const dispatcher = await longDispatcher;
     if (dispatcher) return fetch(url, { ...init, dispatcher } as RequestInit);
   }

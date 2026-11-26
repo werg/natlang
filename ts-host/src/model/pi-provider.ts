@@ -1,3 +1,4 @@
+import { configureNodeModelConnections } from './node-connection-runtime.js';
 import {operationalErrorMetadata} from './operational-error.js';
 /** Optional provider backend. Natlang retains the conversation, tools, retries, and execution loop. */
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -234,12 +235,14 @@ export function createPiModelBackend(provider: string, modelId: string, environm
   };
   return {
     async prepare() {
+      if (!injectedModels) await configureNodeModelConnections();
       if (!await models.getAuth(provider, { ...(apiKeyEnv && environment[apiKeyEnv] ? { apiKey: environment[apiKeyEnv] } : {}),
         env: scopedEnv as Record<string, string> }))
         throw new Error(`provider ${provider} has no credentials; run natlang auth login ${provider} or set its API key environment variable`);
       await selectModel();
     },
     async turn(request: ModelTurnRequest, signal?: AbortSignal, turnOptions: SessionTurnOptions = {}): Promise<ModelTurn> {
+      if (!injectedModels) await configureNodeModelConnections();
       const { onProgress, onDelta } = turnOptions;
       signal?.throwIfAborted();
       const model = await selectModel();

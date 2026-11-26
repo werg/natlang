@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { configureNodeModelConnections } from '../model/node-connection-runtime.js';
 /**
  * The natlang command line: help, version and argument parsing here; each command's implementation is imported when
  * it runs (commands.ts and the per-area modules), so `natlang --version` and `natlang help` answer at once.
@@ -386,7 +387,10 @@ function failure(error: unknown): number {
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   try {
     const separate = SEPARATE[argv[0] ?? ''];
-    if (separate && !argv.includes('--help') && !argv.includes('-h')) return await separate(argv);
+    if (separate && !argv.includes('--help') && !argv.includes('-h')) {
+      await configureNodeModelConnections();
+      return await separate(argv);
+    }
     if (argv.includes('--version') && !argv.includes('--')) { output(NATLANG_CLI_VERSION, false); return 0; }
     const asksHelp = !argv.length || argv[0] === 'help' || argv.slice(0, argv.includes('--') ? argv.indexOf('--') : argv.length)
       .some(value => value === '--help' || value === '-h');
@@ -394,6 +398,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       const topic = argv[0] === 'help' ? argv[1] : argv[0]?.startsWith('-') ? undefined : argv[0];
       output(topic ? topicHelp(topic) : help(), false); return 0;
     }
+    await configureNodeModelConnections();
     const parsed = parseArgs(argv);
     const [command, ...words] = parsed.words;
     if (!command) throw usageError('natlang needs a command; natlang help lists them');
