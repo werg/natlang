@@ -140,6 +140,13 @@ def dgx_collection_budget_gb(kv_gb, slots):
 # NATLANG_EI_COLLECT_FIT_MIN_SLOTS=0 in the driver's environment).
 COLLECT_FIT_MIN_SLOTS = int(os.environ.get('NATLANG_EI_COLLECT_FIT_MIN_SLOTS', '32'))
 COLLECT_FIT_CHECK_SECONDS = 60
+# The DGX-side collection clients (Pop's ``-pop``, a DGX-side ``-remote<i>``; DECISIONS 2026-11-26 "collection clients run
+# at what fits"): the same rule. 2026-11-26 00:50-02:20+: aei1-collect-v0009-pop (64 slots, 22.2 GB: its learned peak)
+# waited 30+ min with 17.5 GB of headroom, Pop's GPU idle. A client's budget at n of its S slots is
+# CLIENT_BASE_GB + (full - CLIENT_BASE_GB) x n / S (its main process and scoring, then the episode servers per slot); its
+# minimum is min(--collect-fit-min-slots, S // 4). A client on its remote host (``remote_collect.py run``) claims a fixed
+# REMOTE_SYNC_GB on the DGX and fills claim for their source listings, not slots (FILL_GB): neither is fitted.
+CLIENT_BASE_GB = 6
 # The full claim follows measured use: the largest ledger-learned peak (``family_peaks``) of this driver's newest
 # MEASURED_COLLECT_RECENT DGX collection units times MEASURED_COLLECT_MARGIN (the ledger's own learned-peak margin),
 # capped by ``dgx_collection_budget_gb`` (which stays the unit's MemoryMax). Without a measured peak: the formula.
@@ -158,10 +165,11 @@ def ledger_family_peaks():
         return {}
 
 
-def measured_collection_gb(name, peaks, recent=MEASURED_COLLECT_RECENT, margin=MEASURED_COLLECT_MARGIN):
-    """GB: the largest learned peak among the newest ``recent`` DGX collection units ``<name>-collect-vNNNN`` (fills,
-    selects and remote collectors are other families) times ``margin``; None without one."""
-    pattern = re.compile(rf'{re.escape(name)}-collect-v(\d+)')
+def measured_collection_gb(name, peaks, recent=MEASURED_COLLECT_RECENT, margin=MEASURED_COLLECT_MARGIN, suffix=''):
+    """GB: the largest learned peak among the newest ``recent`` collection units ``<name>-collect-vNNNN<suffix>`` (the
+    DGX collection with no suffix, a remote client's with its ``-pop`` / ``-remote<i>``; fills and selects are other
+    families) times ``margin``; None without one."""
+    pattern = re.compile(rf'{re.escape(name)}-collect-v(\d+){re.escape(suffix)}')
     rows = sorted((int(m.group(1)), peak) for family, peak in peaks.items() if (m := pattern.fullmatch(family)) and peak)
     if not rows:
         return None
@@ -552,10 +560,11 @@ def frontier_collector(base):
 
         def _priority(self):
             """At most every 30 s: the active slots under live held claims (``priority_slots``)."""
-            if not self.priority_dir or time.time() - self.priority_read < 30:
+            if not (self.priority_dir or self.room_slots) or time.time() - self.priority_read < 30:
                 return
             self.priority_read = time.time()
-            active = priority_slots(self.full_slots, held_priority_claims(self.priority_dir), self.priority_share)
+            claims = held_priority_claims(self.priority_dir) if self.priority_dir else []
+            active = priority_slots(self.full_slots, claims, self.priority_share)
             if self.room_slots:
                 if self._room_returned():
                     print(json.dumps({'event': 'ledger room returned', 'room_slots': self.room_slots,
@@ -820,9 +829,10 @@ def collect(args):
     collector.setup(order, time.time() + args.hours * 3600, endpoints=endpoints,
                     priority_dir=None if args.no_held_priority or actor is None else Path(args.held_priority_dir),
                     priority_share=args.held_priority_share, verify=actor is None,
-                    ledger_unit=None if actor is None else args.unit_prefix,
+                    # a remote actor's DGX-side client resizes its claim only to restore after a room-fitted start
+                    ledger_unit=args.unit_prefix if actor is not None or getattr(args, 'room_slots', None) else None,
                     ledger_full_gb=getattr(args, 'ledger_full_gb', None),
-                    room_slots=None if actor is None else getattr(args, 'room_slots', None))
+                    room_slots=getattr(args, 'room_slots', None))
     # the groups earlier runs of this policy left unfinished (stops, preemptions, OOM kills) resume first
     resumed, not_resumed = collector.resume_unfinished()
     if resumed or not_resumed:
@@ -1909,8 +1919,8 @@ class Cycle:
                        '--memetic-nested-slots' if getattr(self.a, 'memetic_nested_slots', True)
                        else '--no-memetic-nested-slots',
                        '--slots', slots, '--unit-prefix', unit, *actor,
-                       *(['--ledger-full-gb', full_gb] if full_gb is not None and not endpoints else []),
-                       *(['--room-slots', room_slots] if room_slots and not endpoints else []))
+                       *(['--ledger-full-gb', full_gb] if full_gb is not None else []),
+                       *(['--room-slots', room_slots] if room_slots else []))
 
     def serve_colab(self, hosts, start, sha, profile):
         """Serve the collected policy on each reachable Colab G4 session (``pop_rl_actor serve-checkpoint
@@ -3596,6 +3606,12 @@ class AsyncRoundDriver:
         while int(getattr(self.a, 'collect_fit_min_slots', COLLECT_FIT_MIN_SLOTS) or 0) > 0:
             time.sleep(COLLECT_FIT_CHECK_SECONDS)
             self.collection_pending()
+            try:
+                cur = self.controller.current
+                for target in self.dgx_clients():
+                    self.requeue_client_to_fit(cur, target)
+            except Exception as error:
+                self.note(client_fit_failed=repr(error)[:300])
 
     def collection_room_gb(self, unit):
         """``ledger_room_gb`` for the DGX collection ``unit``; None when the room fit is off."""
@@ -3928,6 +3944,60 @@ class AsyncRoundDriver:
                                          *argv), REMOTE_SYNC_GB
         return unit, work, argv, max(8, round(target['slots'] * REMOTE_COLLECTOR_SLOT_GB) + 4)
 
+    def client_formula_gb(self, slots):
+        return max(8, round(slots * REMOTE_COLLECTOR_SLOT_GB) + 4)
+
+    def client_plan(self, target, formula, room_gb=None):
+        """How to launch a DGX-side collection client of ``target`` (``CLIENT_BASE_GB``): {budget, full, slots,
+        room_slots}. ``full``: its formula budget, or the newest same-suffix clients' learned peak x 1.1 when larger
+        (the ledger raises a full launch to its family's peak anyway); with ``room_gb``, at most the slots whose budget
+        fits it, if at least min(--collect-fit-min-slots, slots // 4)."""
+        slots = int(target['slots'])
+        measured = (measured_collection_gb(self.a.name, ledger_family_peaks(), suffix=target['suffix'])
+                    if getattr(self.a, 'measured_collection_claim', MEASURED_COLLECT_CLAIM) else None)
+        full = max(formula, measured or 0)
+        base = min(CLIENT_BASE_GB, full)
+
+        def budget_of(count):
+            return full if count >= slots else min(full, max(1, round(base + (full - base) * count / slots)))
+        start, room_slots = slots, None
+        min_slots = min(int(getattr(self.a, 'collect_fit_min_slots', COLLECT_FIT_MIN_SLOTS) or 0), slots // 4)
+        if room_gb is not None and min_slots > 0 and full > room_gb:
+            fitted = fit_collection_slots(room_gb, slots, budget_of, min_slots)
+            if fitted is not None and fitted < slots:
+                start = room_slots = fitted
+        return {'budget': budget_of(start), 'full': full, 'slots': start, 'room_slots': room_slots}
+
+    def dgx_clients(self):
+        """The remote targets whose collection client runs on the DGX (Pop, ``--collect-on-dgx`` remotes)."""
+        return [t for t in self.remote_targets() if t['host'] and not t.get('on_host')]
+
+    def requeue_client_to_fit(self, policy, target):
+        """A DGX-side collection client waiting in the ledger at more than ``client_plan`` asks now is cancelled and
+        started again at that budget (``start_remote_collector``; its collector restores its slots and claim once room
+        returns). Only while its actor serves ``policy`` and, for Pop, nothing holds Pop. Returns whether it
+        requeued."""
+        import pop_rl_actor
+        unit = self.collection_unit(policy) + target['suffix']
+        with self.COLLECT_LOCK:
+            if not ledger_queued(unit) or self.c.active(unit):
+                return False
+            queued = ledger_waiting_gb(unit)
+            if queued is None:
+                return False
+            room = self.collection_room_gb(unit)
+            plan = self.client_plan(target, self.client_formula_gb(target['slots']), room)
+            if queued <= plan['budget'] + 0.5:
+                return False
+            if (target['pop'] and pop_rl_actor.pop_busy()) or not endpoint_alive(self.target_endpoint(target),
+                                                                                 policy['sha256']):
+                return False
+            self.c.stop_unit(unit)
+            self.note(collection_requeued=unit, from_gb=round(queued, 1), to_gb=plan['budget'], slots=plan['slots'],
+                      room_gb=None if room is None else round(room, 1), why='the ledger room')
+            self.start_remote_collector(policy, target)
+            return True
+
     def start_remote_collector(self, policy, target):
         """``target``'s collector of ``policy`` (``collect --actor``) once its actor serves ``policy``; never on the
         session a round's SFT holds (every start path ends here)."""
@@ -3945,8 +4015,15 @@ class AsyncRoundDriver:
         tasks = self.prepare_collection_dir(policy, work, unit)
         if not tasks.exists():
             self.c.ledger(f'{unit}-select', 6, 'medium', self.select_command(tasks), work / 'select.log')
-        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True)
-        self.note(remote_collection=unit, host=target['host'], endpoint=endpoint, slots=target['slots'])
+        full, slots = budget, target['slots']
+        if not target.get('on_host'):      # a DGX-side client: fitted to the room, restored when room returns
+            plan = self.client_plan(target, budget, self.collection_room_gb(unit))
+            budget, full, slots = plan['budget'], plan['full'], plan['slots']
+            argv += ['--ledger-full-gb', str(full), *(['--room-slots', str(slots)] if plan['room_slots'] else [])]
+        self.c.ledger(unit, budget, COLLECTION_PRIORITY, argv, work / 'collect.log', detach=True,
+                      **({'shrunk': True, 'host_max_gb': full} if budget < full else {}))
+        self.note(remote_collection=unit, host=target['host'], endpoint=endpoint, slots=target['slots'],
+                  start_slots=slots, budget_gb=budget, full_gb=full)
 
     # -- Pop: a standing collection actor whenever no held measurement holds it -------------------------------------
     def pop_target(self):
@@ -5615,6 +5692,9 @@ def main():
     # one pipe and log per collection slot, plus the actor's: not the unit's soft 1024 (common/open_files.py)
     from natlang_neuralese.common.open_files import raise_open_files_limit
     raise_open_files_limit()
+    # collect's slot threads (and the driver's): arenas that keep their peaks grew the Pop client to 8 GB in 2 h
+    from natlang_neuralese.common.host_heap import bound_host_heap
+    bound_host_heap()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
 

@@ -1542,6 +1542,8 @@ def audit(args):
 
 def main():
     args = build_parser().parse_args()
+    from natlang_neuralese.common.host_heap import bound_host_heap
+    bound_host_heap()          # generate's worker threads (common/host_heap.py)
     {'generate': generate, 'status': status, 'build': build, 'audit': audit}[args.command](args)
 
 

@@ -871,6 +871,8 @@ def record_episode_files(work, directory):
 
 
 def main():
+    from natlang_neuralese.common.host_heap import bound_host_heap
+    bound_host_heap()          # the campaign's slot threads (common/host_heap.py)
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--work', required=True)
     p.add_argument('--pool', action='append', default=[],

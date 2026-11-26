@@ -3031,6 +3031,54 @@ def test_the_full_collection_claim_follows_the_measured_peaks_capped_by_the_form
     assert d.c.collection_full_gb(192) == (70, 70)
 
 
+def test_a_waiting_dgx_side_collection_client_is_requeued_at_the_slots_that_fit(tmp_path, monkeypatch):
+    """2026-11-26 00:50-02:20+: aei1-collect-v0009-pop (64 slots, 22.2 GB, its learned peak) waited 30+ min, Pop's GPU
+    idle. A DGX-side client (Pop, a --collect-on-dgx remote) waiting at more than fits is started again at the slots that
+    fit (budget CLIENT_BASE_GB + (full - base) x n / S, at least min(--collect-fit-min-slots, S // 4)), shrunk, with
+    --room-slots and --ledger-full-gb so its collector restores; a client on its remote host is never fitted."""
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'POP', 'pop-host')
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port, bind_host=None: 'http://100.1.2.3:18531')
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--rebind-actor', 'pop-host@http://100.1.2.3:18531=64'])
+    cur = d.controller.current
+    target = d.dgx_clients()[0]
+    assert target['pop'] and target['suffix'] == '-pop'
+    G = 2**30
+    monkeypatch.setattr(ei, 'ledger_family_peaks', lambda: {'aei-collect-v0000-pop': 20.2 * G, 'aei-collect-v0000': 99 * G})
+    full = d.client_plan(target, d.client_formula_gb(64))
+    assert full == {'budget': 22, 'full': 22, 'slots': 64, 'room_slots': None}   # 20.2 x 1.1, over the 17 formula
+    plan = d.client_plan(target, 17, room_gb=14.)
+    assert plan['room_slots'] == plan['slots'] and plan['budget'] <= 14 and plan['slots'] >= 16
+    assert d.client_plan(target, 17, room_gb=7.)['room_slots'] is None     # below 16 slots: left as it is
+    unit = d.collection_unit(cur) + '-pop'
+    queued = {unit: 22.2}
+    monkeypatch.setattr(pop_rl_actor, 'pop_busy', lambda: None)
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda u=None, priority='medium': 14.)
+    monkeypatch.setattr(ei, 'ledger_queued', lambda u: u in queued)
+    monkeypatch.setattr(ei, 'ledger_waiting_gb', lambda u: queued.get(u))
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda endpoint, sha: True)
+    monkeypatch.setattr(d.c, 'active', lambda u: False)
+    monkeypatch.setattr(d.c, 'present', lambda u: u in queued)
+    (d.collect_dir(cur)).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    stopped, launched = [], []
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), queued.pop(u, None)))
+    monkeypatch.setattr(d.c, 'ledger', lambda u, budget, prio, argv, log, **kw: (
+        launched.append((u, budget, argv, kw)), queued.__setitem__(u, budget)))
+    assert d.requeue_client_to_fit(cur, target) is True
+    u, budget, argv, kw = launched[-1]
+    assert stopped == [unit] and u == unit and budget == plan['budget'] and kw == {'detach': True, 'shrunk': True, 'host_max_gb': 22}
+    assert argv[argv.index('--room-slots') + 1] == str(plan['slots']) and argv[argv.index('--ledger-full-gb') + 1] == '22'
+    assert argv[argv.index('--actor') + 1].endswith('=64')                 # the collector's full slots
+    assert d.requeue_client_to_fit(cur, target) is False and len(stopped) == 1     # fitted: left alone
+    queued[unit] = 22.2
+    monkeypatch.setattr(pop_rl_actor, 'pop_busy', lambda: 'held')              # Pop measuring: never restarted
+    assert d.requeue_client_to_fit(cur, target) is False and len(stopped) == 1
+    monkeypatch.setattr(pop_rl_actor, 'pop_busy', lambda: None)
+    d.a.collect_fit_min_slots = 0                                              # the opt-out
+    assert d.requeue_client_to_fit(cur, target) is False and len(stopped) == 1
+
+
 def test_async_driver_retention_pass_and_opt_out(tmp_path, monkeypatch):
     """The driver runs ei_round_tier.retain on its root in the background (each publication, each collection stop,
     its start), one pass at a time, and records what it freed; --no-retention opts out (DECISIONS 2026-11-25)."""
