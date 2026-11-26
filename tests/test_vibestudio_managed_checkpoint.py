@@ -1,3 +1,4 @@
+import pytest
 import importlib.util
 import json
 from pathlib import Path
@@ -132,3 +133,59 @@ print(value+":"+Path(sys.argv[2]).read_text())
     assert result.returncode==0 and result.stdout=='preserved input:drain-native\n'
     assert calls==['actual paid export settled']
     assert owner.child is None and not owner.requested
+
+
+@pytest.fixture(autouse=True)
+def isolated_collector_ledger_owner(monkeypatch):
+    monkeypatch.delenv('NATLANG_LEDGER_UNIT', raising=False)
+
+
+def test_normal_completion_and_explicit_owner_signal_withdraw_continuation(monkeypatch,tmp_path):
+    monkeypatch.setenv('NATLANG_LEDGER_UNIT','test-owner.service')
+    state=tmp_path/'ledger.json';state.write_text(json.dumps({'waiting':{}}));monkeypatch.setenv('NATLANG_MEMORY_LEDGER',str(state))
+    calls=[]
+    def cancel(argv,**kwargs):
+        calls.append(argv);return SimpleNamespace(returncode=1,stdout=json.dumps({'unit':'test-owner.service','cancelled':False}))
+    monkeypatch.setattr(checkpoint.subprocess,'run',cancel)
+    with checkpoint.CollectorCheckpoint():pass
+    with checkpoint.CollectorCheckpoint()as owner:owner._request(signal.SIGTERM,None)
+    cancellations=[c for c in calls if 'cancel' in c]
+    assert len(cancellations)==2 and all(c[-3:]==['cancel','--unit','test-owner.service']for c in cancellations)
+    assert all(c==['systemd-run','--version'] for c in calls if c not in cancellations)
+
+
+def test_guard_owned_pressure_checkpoint_keeps_queue_despite_clean_process_exit(monkeypatch,tmp_path):
+    monkeypatch.setenv('NATLANG_LEDGER_UNIT','test-owner.service')
+    state=tmp_path/'ledger.json';state.write_text(json.dumps({'waiting':{'test-owner.service':{'requeued':True}}}));monkeypatch.setenv('NATLANG_MEMORY_LEDGER',str(state))
+    monkeypatch.setattr(checkpoint.subprocess,'run',lambda *a,**k:pytest.fail('must preserve guard-owned continuation'))
+    with checkpoint.CollectorCheckpoint()as owner:owner._request(signal.SIGTERM,None)
+    assert owner.requested and not owner.continuation_cancelled
+    assert json.loads(state.read_text())['waiting']['test-owner.service']['requeued'] is True
+
+
+def test_explicit_stop_overrides_a_guard_owned_queue(monkeypatch,tmp_path):
+    monkeypatch.setenv('NATLANG_LEDGER_UNIT','test-owner.service')
+    state=tmp_path/'ledger.json';state.write_text(json.dumps({'waiting':{'test-owner.service':{'requeued':True}}}));monkeypatch.setenv('NATLANG_MEMORY_LEDGER',str(state))
+    calls=[]
+    monkeypatch.setattr(checkpoint.subprocess,'run',lambda argv,**kw:calls.append(argv)or SimpleNamespace(returncode=0,stdout=json.dumps({'unit':'test-owner.service','cancelled':True})))
+    with checkpoint.CollectorCheckpoint()as owner:
+        owner._request(signal.SIGTERM,None)
+        owner.cancel_continuation()  # canonical stop-after-wave/runtime hold
+    assert len(calls)==1 and owner.continuation_cancelled
+
+
+def test_actual_child_guard_checkpoint_exits_zero_without_dropping_continuation(monkeypatch,tmp_path):
+    import os
+    state=tmp_path/'ledger.json';state.write_text(json.dumps({'waiting':{'test-owner.service':{'requeued':True}}}))
+    env={**os.environ,'NATLANG_LEDGER_UNIT':'test-owner.service','NATLANG_MEMORY_LEDGER':str(state)}
+    code='''import os,signal,json
+from scripts.vibestudio.managed_checkpoint import CollectorCheckpoint
+with CollectorCheckpoint()as owner:
+ os.kill(os.getpid(),signal.SIGTERM)
+ assert owner.requested
+print(json.dumps({'checkpointed':owner.requested,'cancelled':owner.continuation_cancelled}))
+'''
+    result=subprocess.run([sys.executable,'-c',code],env=env,cwd=MODULE.parents[2],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    assert json.loads(result.stdout)=={'checkpointed':True,'cancelled':False}
+    assert json.loads(state.read_text())['waiting']['test-owner.service']['requeued'] is True

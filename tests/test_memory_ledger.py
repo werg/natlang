@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 SPEC = importlib.util.spec_from_file_location('memory_ledger', Path(__file__).resolve().parents[1] / 'scripts/memory_ledger.py')
 ledger = importlib.util.module_from_spec(SPEC)
@@ -490,7 +491,7 @@ def test_under_the_floor_the_cheapest_stop_per_grace_goes_first_within_a_class()
 
 def running(cls, budget, used, priority=None, age=3600, **extra):
     c = claim(cls, budget, used, ledger.time.time() - age)
-    c.update(priority=priority, spec={'reserve': 8 * GIB}, **extra)
+    c.update(priority=priority, spec={'reserve': 8 * GIB, 'budget': budget * GIB}, **extra)
     return c
 
 
@@ -1906,3 +1907,83 @@ def test_family_peaks_keep_the_most_recently_updated(monkeypatch):
     for unit, peak in (('a.service', GIB), ('b.service', GIB), ('a.service', 2 * GIB), ('c.service', GIB)):
         ledger.record_family_peak(state, unit, peak)
     assert state['family_peaks'] == {'a': 2 * GIB, 'c': GIB}
+
+
+def test_requeue_preserves_raised_admission_budget_and_original_execution_limits():
+    spec={'unit':'owned.service','budget':int(5.5*GIB),'host_max_gb':18,'cuda_budget':None,'reserve':int(7.5*GIB),
+          'reserve_explicit':True,'priority':'medium','cls':'collection','command':['same','exact','command'],
+          'env':['UNCHANGED=actual'],'resumable':True,'cancel_generation':0}
+    claim=ledger.claim_for(spec,now=100);claim['budget']=8*GIB
+    state={'claims':{'owned.service':claim},'events':[]}
+    assert ledger.requeue_spec(state,'owned.service',now=200)
+    entry=state['waiting']['owned.service'];continued=entry['spec']
+    assert entry['budget']==continued['budget']==8*GIB
+    assert ledger.claim_for(continued)['budget']==8*GIB
+    assert continued['host_max_gb']==18 and continued['allocation_budget']==int(5.5*GIB)
+    assert continued['command']==spec['command'] and continued['env']==spec['env']
+    assert entry['reserve']==int(7.5*GIB) and spec['budget']==int(5.5*GIB)
+
+
+def test_pressure_overshoot_queues_only_at_measured_floor_and_keeps_original_hard_limit(monkeypatch,tmp_path):
+    available,usage=[6*GIB],{'owned.service':7*GIB}
+    calls=guard_env(monkeypatch,tmp_path,available,usage)
+    monkeypatch.setattr(ledger,'unit_state',lambda _:('active',''))
+    spec={'unit':'owned.service','budget':int(5.5*GIB),'host_max_gb':18,'cuda_budget':None,'reserve':int(7.5*GIB),
+          'reserve_explicit':True,'priority':'medium','cls':'collection','command':['same'],'resumable':True}
+    with ledger.ledger()as state:state['claims']['owned.service']=ledger.claim_for(spec)
+    ledger.guard(SimpleNamespace(floor_gb=7.5,overshoot=1.15,interval=0,once=True))
+    with ledger.ledger()as state:
+        entry=state['waiting']['owned.service']
+        assert entry['requeued'] is True and entry['budget']==entry['spec']['budget']==int(7*GIB*1.1)
+        assert entry['spec']['host_max_gb']==18 and entry['reserve']==int(7.5*GIB)
+        assert not ledger.fits(13*GIB,entry['budget'],entry['reserve'])
+    assert calls==[('term','owned.service')]
+
+
+def test_withdrawn_owner_continuation_does_not_requeue_after_a_late_pressure_snapshot():
+    spec={'budget':4*GIB,'priority':'low','cls':'collection','command':['same'],'resumable':True,'cancel_generation':2}
+    state={'claims':{'owned.service':ledger.claim_for(spec)},'events':[],'cancel_generations':{'owned.service':3}}
+    assert ledger.requeue_spec(state,'owned.service',minimum_budget=8*GIB) is False
+    assert not state.get('waiting')
+
+
+def test_accounting_only_re_adoption_keeps_implicit_execution_allowance_and_hard_limit():
+    original={'budget':4*GIB,'host_max_gb':None,'cuda_budget':None,'command':['same'],'env':[]}
+    continued=ledger.continuation_spec(original,8*GIB)
+    assert continued['budget']==8*GIB and continued['host_max_gb']==4
+    assert continued['allocation_budget']==4*GIB
+    assert ledger.continuation_spec(continued,12*GIB)['allocation_budget']==4*GIB
+    assert original['host_max_gb'] is None and original['budget']==4*GIB
+
+
+def test_yielded_claim_requeue_keeps_its_deliberately_reduced_admission_envelope():
+    original={'budget':16*GIB,'host_max_gb':20,'cuda_budget':None,'command':['same'],'env':[],'priority':'low','cls':'collection','resumable':True}
+    claim=ledger.claim_for(original);claim['budget']=8*GIB
+    state={'claims':{'owned.service':claim},'events':[]}
+    assert ledger.requeue_spec(state,'owned.service')
+    continued=state['waiting']['owned.service']['spec']
+    assert continued['budget']==8*GIB and continued['host_max_gb']==20 and continued['allocation_budget']==16*GIB
+
+
+def test_corrected_admission_does_not_expand_actual_launch_caps_or_cuda_allowance(monkeypatch,tmp_path):
+    calls=[]
+    monkeypatch.setattr(ledger.subprocess,'run',lambda argv,**kw:calls.append(argv)or SimpleNamespace(returncode=0,stdout=''))
+    original={'unit':'test-only.service','budget':4*GIB,'cuda_budget':None,'host_max_gb':None,'priority':'low',
+              'command':['/usr/bin/true'],'env':[],'workdir':str(tmp_path),'oom_policy':'stop','stop_seconds':10,'containers':[]}
+    assert ledger.launch(ledger.continuation_spec(original,8*GIB))==0
+    command=calls[-1]
+    assert f'MemoryMax={4*GIB}'in command and 'NATLANG_CUDA_MEMORY_GB=4.0'in command
+    assert 'NATLANG_CUDA_MEMORY_GB=8.0'not in command
+
+
+def test_guard_normalizes_an_existing_queued_spec_to_its_admitted_budget(monkeypatch,tmp_path):
+    guard_env(monkeypatch,tmp_path,[20*GIB],{})
+    launched=[];monkeypatch.setattr(ledger,'launch',lambda spec:launched.append(spec)or 0)
+    spec={'unit':'queued.service','budget':4*GIB,'cls':'collection','priority':'low','command':['same'],
+          'host_max_gb':18,'resumable':True,'env':[]}
+    now=ledger.time.time()
+    with ledger.ledger()as state:state['waiting']={'queued.service':{'priority':'low','since':now-1,'requeued':True,'not_before':now-1,'budget':8*GIB,'reserve':8*GIB,'spec':spec}}
+    ledger.guard(SimpleNamespace(floor_gb=8,overshoot=1.15,interval=0,once=True))
+    assert len(launched)==1 and launched[0]['budget']==8*GIB
+    assert launched[0]['host_max_gb']==18 and launched[0]['allocation_budget']==4*GIB
+    with ledger.ledger()as state:assert state['claims']['queued.service']['budget']==8*GIB

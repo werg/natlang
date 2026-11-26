@@ -974,6 +974,9 @@ def drive(args):
             return _drive(args, checkpoint)
         except CheckpointRequested:
             return  # Original packets remain available to unfinished_wave; no failed verdict.
+        finally:
+            if (args.root / 'stop-after-wave').exists():
+                checkpoint.cancel_continuation()  # Explicit owner/runtime hold wins even during guard pressure.
 
 
 

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
 import time
 
 
@@ -19,6 +20,7 @@ class CollectorCheckpoint:
         self.request_file = None
         self.previous = {}
         self.signalled = False
+        self.continuation_cancelled = False
 
     def __enter__(self):
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
@@ -28,6 +30,32 @@ class CollectorCheckpoint:
     def __exit__(self, *_):
         for sig, handler in self.previous.items():
             signal.signal(sig, handler)
+        if not self.requested or not self.guard_continuation():
+            self.cancel_continuation()
+
+    def guard_continuation(self):
+        unit = os.environ.get('NATLANG_LEDGER_UNIT')
+        if not unit:
+            return False
+        from scripts.memory_ledger import read_snapshot
+        state_path = os.path.expanduser(os.environ.get('NATLANG_MEMORY_LEDGER', '~/.local/state/natlang/memory-ledger.json'))
+        state = read_snapshot(state_path)
+        return state.get('waiting', {}).get(unit, {}).get('requeued') is True
+
+    def cancel_continuation(self):
+        """Explicit completion/stop withdraws future launches, never the active execution."""
+        unit = os.environ.get('NATLANG_LEDGER_UNIT')
+        if not unit or self.continuation_cancelled:
+            return
+        result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'memory_ledger.py'),
+                                 'cancel', '--unit', unit], capture_output=True, text=True)
+        try:
+            receipt = json.loads(result.stdout)
+        except ValueError as error:
+            raise RuntimeError('Unable to withdraw owned collector continuation') from error
+        if result.returncode not in (0, 1) or receipt.get('unit') != unit or type(receipt.get('cancelled')) is not bool:
+            raise RuntimeError('Unable to withdraw owned collector continuation')
+        self.continuation_cancelled = True
 
     def _notify(self):
         if self.request_file is not None:

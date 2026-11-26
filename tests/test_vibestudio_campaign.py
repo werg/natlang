@@ -1337,3 +1337,25 @@ def test_native_passed_packet_with_bound_review_transport_waits_for_review(tmp_p
     assert outcomes['goal']['status']=='pending-review' and outcomes['goal']['teacher_model_sampled'] is True
     sidecar.write_text('{}')
     assert vibestudio_campaign.outcomes(tmp_path,['goal'],None,{}, {'goal':{'taskId':'goal-id'}})['goal']['status']=='export-rejected'
+
+
+@pytest.fixture(autouse=True)
+def isolated_collector_ledger_owner(monkeypatch):
+    monkeypatch.delenv('NATLANG_LEDGER_UNIT', raising=False)
+
+
+def test_explicit_campaign_hold_withdraws_a_concurrent_guard_queue(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_LEDGER_UNIT','test-owner.service')
+    state=tmp_path/'ledger.json';state.write_text(json.dumps({'waiting':{'test-owner.service':{'requeued':True}}}));monkeypatch.setenv('NATLANG_MEMORY_LEDGER',str(state))
+    def stop(args,checkpoint):
+        (tmp_path/'stop-after-wave').write_text('owned runtime hold')
+        checkpoint._request(__import__('signal').SIGTERM,None)
+    calls=[]
+    def cancel(argv,**kwargs):
+        calls.append(argv);state.write_text(json.dumps({'waiting':{}}))
+        return SimpleNamespace(returncode=0,stdout=json.dumps({'unit':'test-owner.service','cancelled':True}))
+    monkeypatch.setattr(vibestudio_campaign,'_drive',stop)
+    monkeypatch.setattr(vibestudio_campaign.subprocess,'run',cancel)
+    vibestudio_campaign.drive(SimpleNamespace(root=tmp_path))
+    assert len(calls)==1 and calls[0][-3:]==['cancel','--unit','test-owner.service']
+    assert (tmp_path/'stop-after-wave').read_text()=='owned runtime hold'

@@ -39,7 +39,7 @@ may_backfill): its start leaves the head's whole need free, or, while the head i
 head may preempt it (resumable, lower priority) or it fits within a quarter of the head's remaining shortfall
 (NATLANG_LEDGER_BACKFILL=legacy: any resumable job behind a blocked head). A backfilled unit is not preempted for that
 same head within BACKFILL_HOLD (no backfill/preemption livelock); `status` marks backfilled claims. Units are resumable by default (tests, checks and data jobs are rerunnable; `--no-resumable` only for long non-checkpointed jobs; services and adopted units are protected); a
-stopped resumable unit (preemption or pressure, not an over-budget stop) re-enters the queue with the spec it was
+stopped resumable unit (preemption or pressure, including a measured overshoot) re-enters the queue with the spec it was
 launched from and the guard relaunches it when room returns. `status` lists claims with priority, budget, use and
 reservation, and the queue with the units that would be preempted for each entry and the non-preemptible units blocking it (`blocked_by`). Claims are measured outside the allocator lock and the measurement is shared for USAGE_TTL seconds (shared_usage). A stopped unit's docker containers (named by the command, `run --container`, a `docker run --name` client in its cgroup, or the unit name) are stopped by name too, and a requeued unit is not relaunched while one still runs. The guard's kill threshold is still
 the original budget.
@@ -913,7 +913,18 @@ def non_preemptible(live, wanted, count=4):
     return [{'unit': u, 'held_gb': round(h / GIB, 1), 'reason': why} for h, u, why in sorted(rows, reverse=True)[:count]]
 
 
-def requeue_spec(state, unit, now=None, containers=(), preempted=False):
+def continuation_spec(original, budget):
+    """A corrected accounting envelope does not change execution limits or argv."""
+    spec = dict(original)
+    if budget != spec['budget']:
+        spec['host_max_gb'] = spec.get('host_max_gb') or spec['budget'] / GIB
+        if not spec.get('cuda_budget'):
+            spec['allocation_budget'] = spec.get('allocation_budget', spec['budget'])
+    spec['budget'] = budget
+    return spec
+
+
+def requeue_spec(state, unit, now=None, containers=(), preempted=False, minimum_budget=0):
     """Put a stopped resumable unit back in the waiting queue with the spec it was launched from. ``preempted``: it
     was stopped for a waiting higher-priority job, not for its own memory: its backoff is capped at
     REQUEUE_PREEMPT_DELAY_MAX."""
@@ -924,6 +935,12 @@ def requeue_spec(state, unit, now=None, containers=(), preempted=False):
     if not claim.get('spec'):
         state['events'].append({'time': now, 'event': 'stopped without launch spec; owner must restart', 'unit': unit})
         return False
+    spec = dict(claim['spec'])
+    generation = spec.get('cancel_generation')
+    if generation is not None and generation != state.get('cancel_generations', {}).get(unit, 0):
+        state['events'].append({'time': now, 'event': 'continuation cancelled', 'unit': unit})
+        return False
+    spec = continuation_spec(spec, max(claim['budget'], minimum_budget))
     # A relaunch into memory that falls short again moments later (a learner's phases swing by tens of GB) was
     # stopped and relaunched every 2-4 minutes on 2026-11-17: back off while the unit keeps being stopped early.
     delay = REQUEUE_DELAY
@@ -931,11 +948,12 @@ def requeue_spec(state, unit, now=None, containers=(), preempted=False):
         delay = min(REQUEUE_PREEMPT_DELAY_MAX if preempted else REQUEUE_DELAY_MAX, 2 * claim['requeue_delay'])
     state.setdefault('waiting', {})[unit] = {'priority': PRIORITY_NAMES[priority_of(claim)], 'since': now,
                                              'requeued': True, 'not_before': now + delay, 'delay': delay,
-                                             'budget': claim['budget'], 'reserve': spec_reserve(claim['spec'], claim['budget']),
-                                             'spec': claim['spec']}
+                                             'budget': spec['budget'], 'reserve': spec_reserve(spec, spec['budget']),
+                                             'spec': spec}
     if containers:
         state['waiting'][unit]['containers'] = list(containers)
-    state['events'].append({'time': now, 'event': 'requeued', 'unit': unit})
+    state['events'].append({'time': now, 'event': 'requeued', 'unit': unit,
+                            'budget': spec['budget'], 'previous_budget': claim['budget']})
     return True
 
 
@@ -961,7 +979,7 @@ def launch(spec):
                '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={PRIORITY_OOM[spec["priority"]]}',
                '-p', f'OOMPolicy={spec["oom_policy"]}',
                '--working-directory', os.path.abspath(spec['workdir']),
-               '-E', f'NATLANG_CUDA_MEMORY_GB={round((spec.get("cuda_budget") or budget) / GIB, 1)}',
+               '-E', f'NATLANG_CUDA_MEMORY_GB={round((spec.get("cuda_budget") or spec.get("allocation_budget", budget)) / GIB, 1)}',
                '-E', 'PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True']
     # CPU niceness does not prioritize a contended external disk. Bulk conversion
     # yields to training/source reads; recovery owners explicitly select BE2.
@@ -1091,7 +1109,7 @@ def run(args):
                         'stop_seconds': args.stop_seconds, 'command': args.command, 'priority': priority,
                         'resumable': args.resumable if args.resumable is not None else args.cls != 'service',
                         'hold_budget': args.hold_budget, 'reserve': reserve, 'reserve_explicit': explicit_reserve,
-                        'containers': args.container}
+                        'containers': args.container, 'cancel_generation': request_generation}
                 state['claims'][unit] = claim_for(spec)
                 if head != unit:
                     state['claims'][unit].update(backfilled_behind=head, backfill=backfill)
@@ -1192,7 +1210,7 @@ def adopt(args):
         if fixed_claim(previous) and not getattr(args, 'release_fixed_claim', False):
             current['hold_budget'] = True
         if current.get('spec'):
-            current['spec'] = {**current['spec'], 'budget': current['budget'], 'cls': args.cls,
+            current['spec'] = {**continuation_spec(current['spec'], current['budget']), 'cls': args.cls,
                                'priority': PRIORITY_NAMES[priority_of(current)],
                                'hold_budget': current.get('hold_budget', False)}
         state['events'].append({'time': time.time(), 'event': 'adopted', 'unit': unit,
@@ -1676,7 +1694,8 @@ def guard(args):
                 if not unit and plan_launch(state, head, wanted, backfill, free, cuda_free):
                     behind = head
                     head, wanted = backfill if backfill else (head, wanted)
-                    state['claims'][head] = claim_for(wanted['spec'])
+                    continued_spec = continuation_spec(wanted['spec'], wanted['budget'])
+                    state['claims'][head] = claim_for(continued_spec)
                     if wanted.get('delay'):
                         state['claims'][head]['requeue_delay'] = wanted['delay']
                     if backfill:
@@ -1684,14 +1703,17 @@ def guard(args):
                     state['waiting'].pop(head)
                     state['events'].append({'time': time.time(), 'event': 'relaunched', 'unit': head, 'free': free,
                                             **({'backfilled_behind': behind, 'backfill': kind} if backfill else {})})
-                    to_launch = wanted['spec']
+                    to_launch = continued_spec
             command = state['claims'].get(unit, {}).get('command') if unit else None
             state_claim_containers = state['claims'].get(unit, {}).get('spec', {}).get('containers', ()) if unit else ()
             containers = unit_containers(unit, command, state_claim_containers) if unit else []
             requeued = False
-            if unit and (reason.startswith('preempted') or reason.startswith('free memory below floor')):
+            if unit and (reason.startswith('preempted') or reason.startswith('free memory below floor')
+                         or reason == 'over budget under memory pressure'):
                 requeued = requeue_spec(state, unit, containers=containers,  # back when room returns
-                                        preempted=reason.startswith('preempted'))
+                                        preempted=reason.startswith('preempted'),
+                                        minimum_budget=int(live[unit]['used'] * 1.1)
+                                        if reason == 'over budget under memory pressure' else 0)
             grace = graces.get(unit, GRACE_MIN) if unit else 0
             if unit:
                 state['events'].append({'time': time.time(), 'event': 'stopped', 'unit': unit, 'reason': reason,
