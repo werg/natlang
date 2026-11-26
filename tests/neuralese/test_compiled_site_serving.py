@@ -97,3 +97,56 @@ def test_bf16_served_adapter_is_the_trained_factored_arithmetic(tmp_path):
         trained = logits(stack).detach()
     assert not torch.equal(trained, base), 'the adapter changes the logits'
     assert torch.equal(served, trained)
+
+
+cuda = __import__('pytest').mark.skipif(not torch.cuda.is_available(), reason='the batch-invariant kernel is CUDA')
+
+
+@cuda
+def test_factored_lora_delta_is_row_invariant_fp32():
+    """The low-rank delta of a row is the same in a one-row call and a long one, and FP32-exact (cuBLAS ran it in TF32
+    with a reduction chosen by the row count: the native engine's decode drifted from the whole-prompt graph pass)."""
+    from natlang_neuralese.model.native_adapters import FactoredLoRALinear
+    torch.manual_seed(0)
+    base = torch.nn.Linear(512, 384, bias=False).to('cuda', torch.bfloat16)
+    factor_a, factor_b = torch.randn(16, 512, device='cuda') * 0.05, torch.randn(384, 16, device='cuda') * 0.05
+    x = torch.randn(1, 700, 512, device='cuda').to(torch.bfloat16)
+    layer = FactoredLoRALinear(base, factor_b, factor_a)
+    with torch.no_grad():
+        whole = layer(x)
+        pieces = torch.cat([layer(x[:, :1]), layer(x[:, 1:64]), layer(x[:, 64:65]), layer(x[:, 65:])], dim=1)
+    assert torch.equal(whole, pieces)
+    wide = FactoredLoRALinear(torch.nn.Linear(512, 384, bias=False).cuda(), factor_b, factor_a)
+    with torch.no_grad():       # FP32 end to end: the delta is IEEE FP32, not TF32 (relative error ~1e-3)
+        got = wide(x.float()).double()
+        exact = x.double() @ wide.weight.double().T + (x.double() @ factor_a.double().T) @ factor_b.double().T
+    assert float((got - exact).abs().max() / exact.abs().max()) < 1e-5
+
+
+@cuda
+def test_chunked_native_prefill_under_a_stack_equals_one_pass(tmp_path):
+    """The native engine prefills a prompt holding a state in chunks (tokens, consume_open, splice, consume_close,
+    tokens) and decodes one token at a time; under an adapter stack every chunking gives the one-pass logits."""
+    from natlang_neuralese.model.shared_state import native_step
+    engine = bf16_engine(tmp_path)
+    engine.shared_model.to('cuda')
+    names = sorted(target_parameters(engine.shared_model))
+    record = create_adapter(engine, {'kind': 'xs', 'rank': 2, 'seed': 0, 'parameter_names': names})
+    torch.manual_seed(1)
+    values = {name: torch.randn_like(value) * 3e-2 for name, value in record.artifact.tensors.items()}
+    stack = [{'id': engine.store.put_native_tensor_artifact(replace(record.artifact, tensors=values)).id, 'scale': 1.0}]
+    ids = [4, *range(10, 50), *range(10, 50), 5]
+
+    def logits(cuts):
+        def run():
+            cache, h = None, None
+            for start, stop in zip((0, *cuts), (*cuts, len(ids))):
+                out = native_step(engine.shared_model, torch.tensor([ids[start:stop]], device='cuda'), cache)
+                cache, h = out['cache'], out['h_final']
+            return engine.shared_model.logits(h[:, -1]).float()
+        with torch.no_grad():
+            return engine._native_run(run, stack)
+
+    whole = logits(())
+    assert torch.equal(whole, logits((40, 41, 81)))
+    assert torch.equal(whole, logits((len(ids) - 1,)))
