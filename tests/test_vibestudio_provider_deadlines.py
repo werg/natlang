@@ -10,7 +10,9 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'/'neuralese_d
 import vibestudio_campaign as campaign
 
 
-def native_deadline(kind='generation'):
+def native_deadline(kind='generation', failure='deadline'):
+    error = ({'name':'Error','message':'terminated', 'diagnostics':{'name':'Error','cause':{'name':'RemoteRpcError'}}}
+             if failure == 'terminated-rpc' else {'name':'Error','message':'The operation was aborted due to timeout'})
     return {'rootCallIds':['root'],'rootOutcome':'error','captureErrors':[],
             'executionError':{'name':'NatlangCallError','message':'natlang child: failed: The operation was aborted due to timeout'},
             'calls':[{'record':{'call_id':'root','parent_call_id':None,'outcome':'error'}},
@@ -18,12 +20,13 @@ def native_deadline(kind='generation'):
                                 'executor':{'kind':'agent','model_id':'test:provider'},
                                 'model_turns':[{'schema':'natlang.model-exchange/1','kind':kind,
                                                 'request':{'invocation_id':'child','messages':[{'role':'user','content':'test'}]},
-                                                'error':{'name':'Error','message':'The operation was aborted due to timeout'}}]},
+                                                'error':error}]},
                       'events':[{'kind':'model_request','phase':'error','call_id':'child','actor':{'id':'test:provider'}}]}]}
 
 @pytest.mark.parametrize('kind',['generation','score'])
-def test_captured_deadline_is_infrastructure_without_changing_sampling_evidence(kind):
-    teacher=native_deadline(kind)
+@pytest.mark.parametrize('failure',['deadline','terminated-rpc'])
+def test_captured_deadline_is_infrastructure_without_changing_sampling_evidence(kind, failure):
+    teacher=native_deadline(kind, failure)
     teacher['calls'][1]['record']['cost']={'model_requests':2,'tokens':37}
     before=copy.deepcopy(teacher)
     evidence=campaign.captured_provider_transport_errors(teacher)
@@ -32,11 +35,12 @@ def test_captured_deadline_is_infrastructure_without_changing_sampling_evidence(
     outcome={'status':'test-failed','reason':teacher['executionError']['message'],'captured_provider_transport_errors':evidence}
     assert campaign.infrastructure_failure(outcome,{})
 
+@pytest.mark.parametrize('failure',['deadline','terminated-rpc'])
 @pytest.mark.parametrize('change',['quoted-model-answer','tool-timeout','wrong-request','wrong-model','no-request-events',
                                    'completed-request-event','completed-call','recovered-request','unknown-error-name',
                                    'authored-abort','authored-timeout','budget-cancellation','budget-quiescence','cancelled-root','wrong-schema'])
-def test_timeout_text_alone_never_classifies_a_goal_as_infrastructure(change):
-    teacher=native_deadline();call=teacher['calls'][1];record=call['record'];exchange=record['model_turns'][0]
+def test_timeout_text_alone_never_classifies_a_goal_as_infrastructure(change, failure):
+    teacher=native_deadline(failure=failure);call=teacher['calls'][1];record=call['record'];exchange=record['model_turns'][0]
     if change=='quoted-model-answer':exchange.pop('error');exchange['reply']={'text':'The operation was aborted due to timeout'}
     elif change=='tool-timeout':record['model_turns']=[];record['detail']='The operation was aborted due to timeout'
     elif change=='wrong-request':exchange['request']['invocation_id']='foreign'
@@ -59,3 +63,24 @@ def test_timeout_text_alone_never_classifies_a_goal_as_infrastructure(change):
 
 def test_legacy_root_timeout_prose_is_not_a_provider_witness():
     assert not campaign.provider_transport_failure({'status':'test-failed','reason':'natlang user: failed: The operation was aborted due to timeout'})
+
+
+@pytest.mark.parametrize('diagnostics', [None, {}, {'cause':{}}, {'cause':{'name':'ToolError'}}, 'RemoteRpcError'])
+def test_terminated_without_actual_rpc_error_metadata_is_not_operational(diagnostics):
+    teacher=native_deadline(failure='terminated-rpc')
+    teacher['calls'][1]['record']['model_turns'][0]['error']['diagnostics']=diagnostics
+    assert campaign.captured_provider_transport_errors(teacher)==[]
+
+
+def test_original_failed_capture_when_requested():
+    path=os.environ.get('NATLANG_TEST_PROVIDER_FAILED_CAPTURE')
+    if not path:
+        pytest.skip('optional original provider-failure capture was not supplied')
+    raw=Path(path).read_bytes()
+    packet=json.loads(gzip.decompress(raw))
+    teacher=packet['execution']['diagnostics']['natlangTeacher']
+    evidence=campaign.captured_provider_transport_errors(teacher)
+    assert len(evidence)==1
+    call=next(c['record'] for c in teacher['calls'] if c['record']['call_id']==evidence[0]['call_id'])
+    assert call['model_turns'][-1]['error']['message']=='terminated'
+    assert Path(path).read_bytes()==raw

@@ -257,22 +257,29 @@ def provider_transport_cause(cause):
         cause))
 
 
-def captured_provider_deadline(call, exchange, teacher):
+def captured_provider_operational_failure(call, exchange, teacher):
     """A failed native provider request, never an authored/tool timeout or quoted reply.
 
-    Some provider SDKs flatten TimeoutError to Error.message. Require its original
-    request identity and the runtime's failed model-request event in that case.
-    This identifies the operational boundary, not DNS/connect/stream causality.
+    Flattened deadline and terminated RPC failures require the original request
+    identity and the runtime's failed model-request event. This identifies the
+    operational boundary, not DNS/connect/stream causality.
     """
     record = call.get('record') or {}
     error = exchange.get('error') or {}
     request = exchange.get('request') or {}
     executor = record.get('executor') or {}
     terminal = teacher.get('executionError') or {}
+    diagnostics = error.get('diagnostics') or {}
+    terminated_rpc = (error.get('message') == 'terminated'
+                      and isinstance(diagnostics, dict)
+                      and isinstance(diagnostics.get('cause'), dict)
+                      and diagnostics['cause'].get('name') == 'RemoteRpcError')
+    recognized = (error.get('message') == 'The operation was aborted due to timeout'
+                  or terminated_rpc)
     if (exchange.get('schema') != 'natlang.model-exchange/1'
             or exchange.get('reply') is not None
             or error.get('name') not in ('Error', 'TimeoutError')
-            or error.get('message') != 'The operation was aborted due to timeout'
+            or not recognized
             or terminal.get('name') in ('AbortError', 'NatlangAbortError', 'NatlangTimeoutError',
                                         'NatlangBudgetError', 'NatlangModelBudgetError',
                                         'NatlangCancelledError')
@@ -338,7 +345,7 @@ def captured_provider_transport_errors(teacher):
         last = exchanges[-1]
         message = (last.get('error') or {}).get('message')
         if last.get('reply') is None and (provider_transport_cause(message)
-                                         or captured_provider_deadline(call, last, teacher)):
+                                         or captured_provider_operational_failure(call, last, teacher)):
             failures.append({'call_id': call_id, 'kind': last['kind'],
                              'error_sha256': hashlib.sha256(json.dumps(last['error'], sort_keys=True,
                                  separators=(',', ':'), ensure_ascii=True).encode('ascii')).hexdigest()})
