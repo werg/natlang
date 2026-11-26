@@ -95,16 +95,24 @@ def init_header_state(engine, messages, tools, header):
     return written['id']
 
 
-def site_graph(engine, messages, tools, reply, header, state_id, block_tokens, *, graph_id, source_groups):
+def site_graph(engine, messages, tools, reply, header, state_id, block_tokens, *, graph_id, source_groups, own,
+               mask_context=True):
     """One call as a single-node native graph row importing the header state at its position; the reply's tokens are
-    the targets (prompt, tool output and the state are zero-weight context)."""
-    from ..serve.targets import target_items
+    the targets (prompt, tool output and the state are zero-weight context). ``own``: the reply is the student's own
+    sample (a rollout) rather than a teacher's; its leading non-student tokens (``serve.targets.target_context_end``:
+    a teacher's think block, empty or not, and lead-in, an own reply's unsampled empty think block) are context.
+    ``mask_context`` False (``run_t2 train --no-mask-non-student-context``) opts out."""
+    from ..serve.targets import target_context_end, target_items
     prompt, target = target_items(engine, place_header(messages, header, state_id), tools, reply)
-    return items_graph(engine, prompt, target, state_id, block_tokens, graph_id=graph_id, source_groups=source_groups)
+    lead = (target_context_end(engine.tokenizer, reply, [value for _, value in target], own=own)
+            if mask_context else 0)
+    return items_graph(engine, prompt, target, state_id, block_tokens, graph_id=graph_id, source_groups=source_groups,
+                       context_lead=lead)
 
 
-def items_graph(engine, prompt, target, state_id, block_tokens, *, graph_id, source_groups):
-    """The graph row of rendered items (``serve.targets`` items: ``('tok', id)`` and the state's ``('block', id)``)."""
+def items_graph(engine, prompt, target, state_id, block_tokens, *, graph_id, source_groups, context_lead=0):
+    """The graph row of rendered items (``serve.targets`` items: ``('tok', id)`` and the state's ``('block', id)``);
+    the first ``context_lead`` target tokens are zero-weight context."""
     from ..tune.soft import soft_items_to_node
     if not target:
         raise ValueError('the reply rendered no target tokens')
@@ -112,6 +120,11 @@ def items_graph(engine, prompt, target, state_id, block_tokens, *, graph_id, sou
                                                          state_names={state_id: STATE_NAME})
     if external[STATE_NAME]['token_count'] != block_tokens:
         raise ValueError('the imported state length differs from its block')
+    start = len(ids) - len(target)
+    for position in range(start, start + int(context_lead)):
+        weights[position] = 0.
+    if not any(weights[start:]):
+        raise ValueError('the reply has no target token after its non-student context')
     return {'schema': GRAPH_SCHEMA, 'id': graph_id, 'split': 'train', 'source_groups': list(source_groups),
             'tokenizer_fingerprint': engine.model_config['tokenizer_fingerprint'],
             'nodes': [{'name': 'turn', 'token_ids': ids, 'imports': [dataclasses.asdict(edge) for edge in imports],

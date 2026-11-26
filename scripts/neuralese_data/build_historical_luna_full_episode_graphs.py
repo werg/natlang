@@ -23,6 +23,7 @@ from natlang_neuralese.common.hashing import canonical_json_bytes, sha256_file_h
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.data.native_graph_schema import parse_graph
 from natlang_neuralese.data.text_corpus import native_gold_packet, tokenizer_fingerprint
+from natlang_neuralese.serve.targets import target_context_end
 
 
 SCHEMA = "natlang.historical-luna-full-episode-graphs/1"
@@ -251,7 +252,12 @@ def build(*, continuity_path: Path, recovery_path: Path, selected_path: Path,
             if name in action_names:
                 raise ValueError("whole episode contains duplicate source action node identity")
             action_names.add(name)
-            weights = [0.0] * boundary + [1.0] * (len(token_ids) - boundary)
+            # a teacher's reply: its think block (empty or not) and lead-in are context, not loss
+            # (serve.targets.target_context_end; NATLANG_TARGET_CONTEXT=train opts out)
+            lead = target_context_end(tokenizer, turn["target"], list(token_ids[boundary:]), own=False)
+            if boundary + lead >= len(token_ids):
+                raise ValueError("historical Luna action has no target token after its non-student context")
+            weights = [0.0] * (boundary + lead) + [1.0] * (len(token_ids) - boundary - lead)
             weights[0] = 0.0
             nodes.append({"name": name, "token_ids": list(token_ids), "target_weights": weights})
             node_receipts.append({"node": name, "turn_id": turn["id"],
@@ -259,7 +265,7 @@ def build(*, continuity_path: Path, recovery_path: Path, selected_path: Path,
                 "source_row_sha256": turn["source_ref"]["source_row_sha256"],
                 "provider_context_sha256": sha256_hex(canonical_json_bytes(turn["messages"])),
                 "invocation_id": turn["source_ref"]["invocation_id"],
-                "tokens": len(token_ids), "prompt_tokens": boundary,
+                "tokens": len(token_ids), "prompt_tokens": boundary, "target_context_tokens": lead,
                 "supervised_tokens": len(token_ids) - boundary})
 
         full_trace = raw.get("trajectory") or []

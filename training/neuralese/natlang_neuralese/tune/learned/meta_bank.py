@@ -145,7 +145,7 @@ def rollout_rows(engine, paths, *, protected, max_tokens, policy=None):
     episode is one node with its sampled reply as the only target; episodes that exchanged Neuralese state are left to
     the whole-graph path (counted, not lowered). ``policy``: the required actor checkpoint SHA-256, or None."""
     from ...data.native_graph_schema import SCHEMA as GRAPH_SCHEMA
-    from ...serve.targets import target_items
+    from ...serve.targets import target_context_end, target_items
     counts = {'read': 0, 'unsuccessful': 0, 'other_policy': 0, 'protected': 0, 'neuralese': 0, 'oversize': 0}
     rows = []
     for path in paths:
@@ -172,8 +172,10 @@ def rollout_rows(engine, paths, *, protected, max_tokens, policy=None):
                     nodes = None
                     break
                 ids = [int(item[1]) for item in prompt] + [int(item[1]) for item in target]
+                # the policy's own reply: an unsampled empty think block (a scored readout) is context
+                lead = target_context_end(engine.tokenizer, turn['target'], [int(item[1]) for item in target], own=True)
                 nodes.append({'name': f'turn:{index}', 'token_ids': ids,
-                              'target_weights': [0.] * len(prompt) + [1.] * len(target)})
+                              'target_weights': [0.] * (len(prompt) + lead) + [1.] * (len(target) - lead)})
             if nodes is None:
                 counts['neuralese'] += 1
                 continue

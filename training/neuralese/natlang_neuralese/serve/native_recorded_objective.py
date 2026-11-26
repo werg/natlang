@@ -7,7 +7,7 @@ from ..common.hashing import canonical_json_sha256_hex
 from ..model.native_graph_plan import Invocation, compile_graph, invocation_dict
 from ..rl.native_replay import _input_stream
 from .native_recorded_graph import compile_recorded_graph
-from .targets import target_items
+from .targets import target_context_end, target_items
 
 
 def _capture(turn):
@@ -85,6 +85,13 @@ def lower_recorded_objective(engine,turns,events,terms,*,owner=None):
     def target_branch(turn,target):
         if not isinstance(target,dict):raise ValueError('native CE/distillation requires its target assistant message')
         _,rest=target_items(engine,turn['messages'],turn.get('tools'),target)
+        # a target the student did not sample (any but its recorded reply) trains after its think block and lead-in;
+        # its own reply without reasoning after the unsampled empty think block (serve.targets.target_context_end)
+        lead_ids=[]
+        for kind,value in rest:
+            if kind!='tok':break
+            lead_ids.append(int(value))
+        lead=target_context_end(engine.tokenizer,target,lead_ids,own=target==turn.get('reply'))
         source=by_name[compiled.invocations[turn['native']['id']][0]]
         length=prompt_length(turn)
         tokens=list(source.token_ids[:length]);flags=[False]*length
@@ -111,7 +118,8 @@ def lower_recorded_objective(engine,turns,events,terms,*,owner=None):
         if name in by_name:raise ValueError('native objective branch collides with a recorded occurrence')
         node=Invocation(name,tuple(tokens),imports=source.imports,producing=tuple(producing))
         nodes.append(node);by_name[name]=node;declarations[name]=copy.deepcopy(turn.get('adapters') or [])
-        return [(name,local-1,token,1.,None,None) for local,token in enumerate(tokens) if local>=length]
+        if lead>=len(tokens)-length:raise ValueError('native objective target has no tokens after its non-student context')
+        return [(name,local-1,token,1.,None,None) for local,token in enumerate(tokens) if local>=length+lead]
     def observed(turn,law):
         if law not in ('model-conditional','sampled-policy'):
             raise ValueError('native likelihood must explicitly declare model-conditional or sampled-policy law')
