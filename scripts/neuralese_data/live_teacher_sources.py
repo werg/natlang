@@ -183,6 +183,12 @@ def validate_return_contribution(item, proof, records):
     roles = proof.get('outcomeDimensions') or {}
     failed = {**((roles.get('returnedValue') or {}).get('checks') or {}),
               **((roles.get('incidentalValues') or {}).get('checks') or {})}
+    unreviewed = item.get("trainingEvidence") == "format-only"
+    returned = roles.get("returnedValue") or {}
+    if unreviewed and (returned.get("required") is not False or returned.get("trainingEvidence") != "format-only" or
+            (proof.get("outcomeContract") or {}).get("returnedValue", {}).get("trainingEvidence") != "format-only" or
+            item.get("required") is not False):
+        raise ValueError("unreviewed return hold requires its optional format-only source contract")
     valid_path = lambda path: isinstance(path, list) and all(
         isinstance(key, str) or type(key) is int and 0 <= key <= 9007199254740991 for key in path)
     if (not isinstance(c, dict) or c.get('schema') != 'natlang.application-return-contribution/1' or
@@ -191,7 +197,7 @@ def validate_return_contribution(item, proof, records):
             hashlib.sha256(c['root_value_json'].encode()).hexdigest() != c.get('root_sha256') or
             not all(valid_path(c.get(key)) for key in ('root_path', 'producer_path')) or
             not isinstance(c.get('checks'), list) or not c['checks'] or
-            any(not isinstance(check, str) or failed.get(check) is not False for check in c['checks']) or
+            any(not isinstance(check, str) or failed.get(check) is not (True if unreviewed else False) for check in c['checks']) or
             len(c['checks']) != len(set(c['checks'])) or
             not isinstance(c.get('lineage'), list) or not c['lineage'] or
             any(not isinstance(key, str) for key in c['lineage']) or len(c['lineage']) != len(set(c['lineage']))):
@@ -261,7 +267,7 @@ def validate_return_contribution(item, proof, records):
                 c['root_path'] or c['producer_path'] or any(incidental.get(name) is not False for name in c['checks'])):
             raise ValueError('incidental child hold needs an actual sampled child and independently failed incidental checks')
         return c['producer_call_id']
-    if producer is root or not sampled(producer) or chain(producer) != c['lineage']:
+    if producer is root or not sampled(producer) or chain(producer, crisp=not unreviewed) != c['lineage']:
         raise ValueError('application return contribution needs a sampled NL producer with actual crisp ancestry')
     if c['kind'] == 'forwarded':
         if c['root_path'] or c['producer_path'] or not same_projection(producer_value):
@@ -276,7 +282,7 @@ def validate_return_contribution(item, proof, records):
     if not isinstance(suffix, str) or not suffix or not isinstance(candidates, list):
         raise ValueError('projected return contribution needs its authored source and full candidate inventory')
     eligible = {key for key, record in records.items() if sampled(record) and key != root['call_id'] and
-                str((record.get('definition') or {}).get('source') or '').endswith(suffix) and chain(record)}
+                str((record.get('definition') or {}).get('source') or '').endswith(suffix) and chain(record, crisp=not unreviewed)}
     supplied = [candidate.get('call_id') for candidate in candidates if isinstance(candidate, dict)]
     if len(supplied) != len(candidates) or len(set(supplied)) != len(supplied) or set(supplied) != eligible:
         raise ValueError('application return candidate inventory differs from actual sampled source calls')
@@ -337,14 +343,26 @@ def validate_uncertain_return_groups(selectors, records):
 
 
 def declared_return_exclusions(proofs, records):
-    """Bind optional wrong returns to original function identity and value bytes."""
+    """Bind incorrect or explicitly unreviewed returns to exact original output bytes."""
     selectors = []
     def contains(value, wanted):
         return same_json_value(value, wanted) or (isinstance(value, dict) and any(contains(item, wanted) for item in value.values())) or (isinstance(value, list) and any(contains(item, wanted) for item in value))
     for proof in proofs:
         dimensions = proof.get('outcomeDimensions') or {}
         incidental, returned = dimensions.get('incidentalValues') or {}, dimensions.get('returnedValue') or {}
-        if incidental.get('passed') is not False and returned.get('passed') is not False:
+        if returned.get("required") is False and returned.get("trainingEvidence") == "format-only" and proof.get("actualResult") is None:
+            roots = [row for row in records.values() if row.get("parent_call_id") is None]
+            if len(roots) != 1 or (roots[0].get("outcome") == "done" and (roots[0].get("output") or {}).get("complete") is True and
+                    (roots[0].get("output") or {}).get("hash") != hashlib.sha256(b"null").hexdigest()):
+                raise ValueError("optional null readout differs from the actual captured root")
+        held = returned.get("unreviewedReturns", [])
+        if not isinstance(held, list):
+            raise ValueError("unreviewed returns need exact original value bindings")
+        if held and (returned.get("required") is not False or returned.get("trainingEvidence") != "format-only"):
+            raise ValueError("unreviewed return hold requires an optional format-only contract")
+        if incidental.get('passed') is not False and returned.get('passed') is not False and not held:
+            if returned.get("required") is False and returned.get("trainingEvidence") == "format-only" and proof.get("actualResult") is not None:
+                raise ValueError("format-only optional readout lacks an actual root training hold")
             continue
         values = []
         for role in (incidental, returned):
@@ -356,6 +374,11 @@ def declared_return_exclusions(proofs, records):
                     values.append(item)
         if incidental.get('passed') is False and 'incorrectReturns' not in incidental and not values:
             raise ValueError('incorrect incidental returns need exact original value bindings')
+        for item in held:
+            if item.get("trainingEvidence") != "format-only" or item.get("contribution") is None:
+                raise ValueError("unreviewed return lacks its source-bound evidence role")
+            if item not in values:
+                values.append(item)
         for item in values:
             definition, text = item.get('definition'), item.get('valueJson')
             if (not isinstance(definition, dict) or not definition.get('name') or not definition.get('source') or
@@ -368,6 +391,8 @@ def declared_return_exclusions(proofs, records):
             elif not contains(proof.get('actualResult'), value):
                 raise ValueError('incorrect return value is outside the actual application result')
             selectors.append(item)
+        if held and not any(item.get("contribution", {}).get("kind") == "root" for item in held):
+            raise ValueError("format-only optional readout lacks its complete root hold")
         validate_uncertain_return_groups(values, records)
     excluded, matched = {}, set()
     for call_id, record in records.items():
@@ -1088,6 +1113,8 @@ def load_episode(path):
             current = records[current]['parent_call_id']
         ancestry[call_id] = list(reversed(chain))
     incorrect_returns = declared_return_exclusions(workspace_proofs, records)
+    unreviewed_returns = {item["contribution"]["producer_call_id"] for proof in workspace_proofs
+        for item in ((proof.get("outcomeDimensions") or {}).get("returnedValue") or {}).get("unreviewedReturns", [])}
     reviewed_decisions = declared_decision_exclusions(workspace_proofs, details)
     if interaction is not None and incorrect_optional_return:
         for call_id in roots:
@@ -1162,6 +1189,8 @@ def load_episode(path):
                 denial = ('invocation lacks independent outcome evidence' if training_scope is not None and call_id not in training_scope else
                           'decision lacks independent outcome evidence' if training_scope is not None and training_scope[call_id] is not None and index not in training_scope[call_id] else
                           'source-bound decision quality review' if (call_id, index) in reviewed_decisions else
+                          'optional semantic return lacks independent correctness evidence'
+                          if incorrect_returns.get(call_id) == index and call_id in unreviewed_returns else
                           'application return failed independent outcome checks'
                           if incorrect_returns.get(call_id) == index else
                           'executor did not complete' if not selected_executor else

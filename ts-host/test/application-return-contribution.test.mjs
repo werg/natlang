@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {declaredReturnSelectors,validateReturnContribution,validateReturnContributions} from '../scripts/observed-workspace-evidence.mjs';
+import {declaredReturnSelectors,validateReturnContribution,validateReturnContributions,validateUnreviewedReturnCoverage} from '../scripts/observed-workspace-evidence.mjs';
 const hash=text=>createHash('sha256').update(text).digest('hex');
 const output=value=>{const text=JSON.stringify(value);return {complete:true,bytes:Buffer.byteLength(text),hash:hash(text)};};
 function fixture(kind='projection'){
@@ -95,4 +95,32 @@ test('independently checked wrong incidental child binds actual bytes without a 
  f.records.get('root').executor={kind:'agent',model_id:'offline-reference'};check(f);
  f.proof.outcomeDimensions.incidentalValues.checks={};f.proof.outcomeDimensions.returnedValue={passed:false,checks:{answerCorrect:false}};
  assert.throws(()=>check(f),/incidental checks/);
+});
+function uncheckedFixture(){
+ const f=fixture(),c=f.selector.contribution;
+ f.records.get('root').executor={kind:'agent',model_id:'offline-reference'};
+ Object.assign(f.selector,{trainingEvidence:'format-only'});
+ f.proof={actualResult:f.proof.actualResult,outcomeContract:{returnedValue:{required:false,trainingEvidence:'format-only'}},outcomeDimensions:{returnedValue:{required:false,passed:true,checks:{answerCorrect:true},trainingEvidence:'format-only',unreviewedReturns:[f.selector]}}};
+ const rootSelector={...structuredClone(f.selector),definition:f.records.get('root').definition,valueJson:c.root_value_json,sha256:c.root_sha256,contribution:{...structuredClone(c),kind:'root',producer_call_id:'root',root_path:[],producer_path:[],lineage:['root']}};
+ f.proof.outcomeDimensions.returnedValue.unreviewedReturns.unshift(rootSelector);
+ return f;
+}
+test('unreviewed format-only holds bind optional original outputs without claiming they are wrong',()=>{
+ const f=uncheckedFixture(),selectors=declaredReturnSelectors(f.proof);
+ assert.equal(f.proof.outcomeDimensions.returnedValue.passed,true);assert.equal(selectors.length,2);
+ validateReturnContributions(selectors,f.records,['root']);
+ for(const corrupt of [f=>{f.proof.outcomeDimensions.returnedValue.required=true;},f=>{delete f.proof.outcomeContract.returnedValue.trainingEvidence;},f=>{f.selector.contribution.checks=['nativeWrite'];},f=>{f.selector.contribution.root_sha256='0'.repeat(64);},f=>{f.records.get('producer').output=output('other');},f=>{f.proof.outcomeDimensions.returnedValue.unreviewedReturns.shift();}]){
+  const bad=uncheckedFixture();corrupt(bad);assert.throws(()=>validateReturnContributions(declaredReturnSelectors(bad.proof),bad.records,['root']));
+ }
+});
+test('nonnull format-only returns require complete holds while null and native receipts do not',()=>{
+ assert.throws(()=>declaredReturnSelectors({actualResult:'unsupported',outcomeDimensions:{returnedValue:{required:false,passed:true,trainingEvidence:'format-only',checks:{answer:true}}}}),/root training hold/);
+ assert.deepEqual(declaredReturnSelectors({actualResult:null,outcomeDimensions:{returnedValue:{required:false,passed:true,trainingEvidence:'format-only',checks:{answer:true}}}}),[]);
+ assert.deepEqual(declaredReturnSelectors({actualResult:'independently bound receipt',outcomeDimensions:{returnedValue:{required:false,passed:true,checks:{receipt:true}}}}),[]);
+});
+
+test('a missing or claimed null optional readout cannot hide the actual nonnull root',()=>{
+ const f=uncheckedFixture(),proof={actualResult:null,outcomeDimensions:{returnedValue:{required:false,trainingEvidence:'format-only'}}};
+ assert.throws(()=>validateUnreviewedReturnCoverage([proof],f.records),/actual captured root/);
+ f.records.get('root').output=output(null);assert.doesNotThrow(()=>validateUnreviewedReturnCoverage([proof],f.records));
 });

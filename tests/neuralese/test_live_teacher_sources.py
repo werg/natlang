@@ -1360,3 +1360,63 @@ def test_historical_projection_repartition_keeps_original_optional_scope(tmp_pat
     corrupt['outcomeDimensions']['incidentalValues']['checks']['receipt'] = False
     with pytest.raises(ValueError):
         live.validate_reassessment_outcome_roles(proof, corrupt, tmp_path)
+
+
+def format_only_return_fixture():
+    proof, records, selector = contribution_fixture()
+    selector['trainingEvidence'] = 'format-only'
+    records['root']['executor'] = {'kind': 'agent', 'model_id': 'actual-luna'}
+    records['root']['cost'] = {'model_requests': 1}
+    records['root']['model_turns'] = [{'kind': 'generation', 'reply': {}}, {'kind': 'generation', 'reply': {}}]
+    c = selector['contribution']
+    root = copy.deepcopy(selector)
+    root.update(definition=records['root']['definition'], valueJson=c['root_value_json'], sha256=c['root_sha256'])
+    root['contribution'].update(kind='root', producer_call_id='root', root_path=[], producer_path=[], lineage=['root'])
+    proof['outcomeContract'] = {'returnedValue': {'required': False, 'trainingEvidence': 'format-only'}}
+    proof['outcomeDimensions'] = {'returnedValue': {'required': False, 'passed': True, 'checks': {'answerCorrect': True},
+        'trainingEvidence': 'format-only', 'unreviewedReturns': [root, selector]}}
+    return proof, records, selector
+
+
+def test_unreviewed_format_only_return_holds_do_not_invent_failed_observations():
+    proof, records, _ = format_only_return_fixture()
+    assert live.declared_return_exclusions([proof], records) == {'root': 1, 'producer': 2}
+    assert proof['outcomeDimensions']['returnedValue']['passed'] is True
+    assert proof['outcomeDimensions']['returnedValue']['checks']['answerCorrect'] is True
+
+
+@pytest.mark.parametrize('corrupt', [
+    lambda p, r, s: p['outcomeDimensions']['returnedValue'].update(required=True),
+    lambda p, r, s: p['outcomeContract']['returnedValue'].pop('trainingEvidence'),
+    lambda p, r, s: s['contribution'].update(checks=['nativeWrite']),
+    lambda p, r, s: s['contribution'].update(root_sha256='0' * 64),
+    lambda p, r, s: r['producer']['output'].update(hash='0' * 64),
+    lambda p, r, s: p['outcomeDimensions']['returnedValue']['unreviewedReturns'].pop(0),
+])
+def test_format_only_return_hold_rejects_forged_role_or_original_output(corrupt):
+    proof, records, selector = format_only_return_fixture()
+    corrupt(proof, records, selector)
+    with pytest.raises(ValueError):
+        live.declared_return_exclusions([proof], records)
+
+
+def test_optional_null_and_native_receipts_need_no_unreviewed_readout_hold():
+    proof = {'actualResult': None, 'outcomeDimensions': {'returnedValue': {'required': False, 'passed': True,
+        'trainingEvidence': 'format-only', 'checks': {'answer': True}}}}
+    null_records = {'root': {'call_id':'root','parent_call_id':None,'outcome':'done','output':{'complete':True,'hash':hashlib.sha256(b'null').hexdigest(),'bytes':4}}}
+    assert live.declared_return_exclusions([proof], null_records) == {}
+    proof['actualResult'] = 'unreviewed conclusion'
+    with pytest.raises(ValueError, match='root training hold'):
+        live.declared_return_exclusions([proof], {})
+    del proof['outcomeDimensions']['returnedValue']['trainingEvidence']
+    assert live.declared_return_exclusions([proof], {}) == {}
+
+
+def test_claimed_optional_null_does_not_hide_an_actual_nonnull_readout():
+    proof, records, _ = format_only_return_fixture()
+    proof['actualResult'] = None
+    proof['outcomeDimensions']['returnedValue'].pop('unreviewedReturns')
+    with pytest.raises(ValueError, match='actual captured root'):
+        live.declared_return_exclusions([proof], records)
+    records['root']['output'] = {'complete': True, 'hash': hashlib.sha256(b'null').hexdigest(), 'bytes': 4}
+    assert live.declared_return_exclusions([proof], records) == {}

@@ -99,20 +99,29 @@ export async function validateReassessmentOutcomeRoles(proof,original,root) {
 
 export function declaredReturnSelectors(proof) {
   const incidental=proof.outcomeDimensions?.incidentalValues,returned=proof.outcomeDimensions?.returnedValue;
-  if(incidental?.passed!==false&&returned?.passed!==false)return [];
+  const held=returned?.unreviewedReturns??[];
+  if(!Array.isArray(held))throw Error("unreviewed returns need exact original value bindings");
+  if(held.length&&(returned?.required!==false||returned.trainingEvidence!=="format-only"))throw Error("unreviewed return hold requires an optional format-only contract");
+  if(incidental?.passed!==false&&returned?.passed!==false&&!held.length){
+    if(returned?.required===false&&returned.trainingEvidence==="format-only"&&proof.actualResult!=null)throw Error("format-only optional readout lacks an actual root training hold");
+    return [];
+  }
   if(incidental?.passed===false&&!Array.isArray(incidental.incorrectReturns))throw new Error('incorrect incidental returns need exact original value bindings');
   const values=[...(incidental?.incorrectReturns??[])];
   for(const item of returned?.incorrectReturns??[])if(!values.some(existing=>isDeepStrictEqual(existing,item)))values.push(item);
+  for(const item of held){if(item.trainingEvidence!=="format-only"||!item.contribution)throw Error("unreviewed return lacks its source-bound evidence role");if(!values.some(value=>isDeepStrictEqual(value,item)))values.push(item);}
+  if(held.length&&!held.some(item=>item.contribution?.kind==="root"))throw Error("format-only optional readout lacks its complete root hold");
   const contains=(value,wanted)=>isDeepStrictEqual(value,wanted)||value!==null&&typeof value==='object'&&Object.values(value).some(item=>contains(item,wanted));
   for(const item of values){
     if(!item.definition?.name||!item.definition?.source||typeof item.valueJson!=='string'||createHash('sha256').update(item.valueJson).digest('hex')!==item.sha256)throw new Error('incorrect return value identity/hash differs');
     if(item.contribution){
       const c=item.contribution,roles=proof.outcomeDimensions??{};
-      const failed={...roles.returnedValue?.checks,...roles.incidentalValues?.checks};
+      const failed={...roles.returnedValue?.checks,...roles.incidentalValues?.checks},unreviewed=item.trainingEvidence==="format-only";
+      if(unreviewed&&(returned.required!==false||returned.trainingEvidence!=="format-only"||proof.outcomeContract?.returnedValue?.trainingEvidence!=="format-only"||item.required!==false))throw Error("unreviewed return hold requires its optional format-only source contract");
       if(c.schema!=='natlang.application-return-contribution/1' || !['root','forwarded','projection','uncertain-projection','incidental-child'].includes(c.kind) ||
          typeof c.root_call_id!=='string'||typeof c.producer_call_id!=='string'||typeof c.root_value_json!=='string'||
          digest(c.root_value_json)!==c.root_sha256||!isDeepStrictEqual(JSON.parse(c.root_value_json),proof.actualResult)||
-         !Array.isArray(c.checks)||!c.checks.length||new Set(c.checks).size!==c.checks.length||c.checks.some(check=>typeof check!=='string'||failed[check]!==false)||
+         !Array.isArray(c.checks)||!c.checks.length||new Set(c.checks).size!==c.checks.length||c.checks.some(check=>typeof check!=='string'||failed[check]!==(unreviewed?true:false))||
          ![c.root_path,c.producer_path].every(path=>Array.isArray(path)&&path.every(key=>typeof key==='string'||Number.isSafeInteger(key)&&key>=0))||
          !Array.isArray(c.lineage)||!c.lineage.length||c.lineage.some(id=>typeof id!=='string')||new Set(c.lineage).size!==c.lineage.length)
         throw new Error('invalid authored application return contribution');
@@ -154,7 +163,7 @@ export function validateReturnContribution(item, records, roots) {
       throw new Error('incidental child contribution needs an actual sampled child return');
     return;
   }
-  if(producer===root||!sampled(producer)||!crispChain(producer))
+  if(producer===root||!sampled(producer)||!(item.trainingEvidence==="format-only"?chainOf(producer):crispChain(producer)))
     throw new Error('forwarded or projected contribution needs an actual sampled NL producer and crisp ancestry');
   if(c.kind==='forwarded'){
     if(c.root_path.length||c.producer_path.length)throw new Error('forwarding contribution cannot project values');
@@ -167,7 +176,7 @@ export function validateReturnContribution(item, records, roots) {
   }
   if(typeof c.producer_source_suffix!=='string'||!c.producer_source_suffix||!producer.definition.source.endsWith(c.producer_source_suffix)||!Array.isArray(c.candidates))
     throw new Error('projection needs its authored source suffix and complete actual candidate returns');
-  const eligible=[...records.values()].filter(record=>sampled(record)&&record.definition.source.endsWith(c.producer_source_suffix)&&crispChain(record));
+  const eligible=[...records.values()].filter(record=>sampled(record)&&record!==root&&record.definition.source.endsWith(c.producer_source_suffix)&&(item.trainingEvidence==="format-only"?chainOf(record):crispChain(record)));
   if(new Set(c.candidates.map(candidate=>candidate.call_id)).size!==c.candidates.length||
      !isDeepStrictEqual(c.candidates.map(candidate=>candidate.call_id).sort(),eligible.map(record=>record.call_id).sort()))
     throw new Error('projection candidates differ from the complete actual source inventory');
@@ -203,6 +212,16 @@ export function validateReturnContributions(items,records,roots){
     const needed=matching.length?matching:c.candidates.map(candidate=>candidate.call_id);
     if(needed.some(id=>!chosen.includes(id)))throw new Error('uncertain return contribution omitted an actual possible producer');
   }
+}
+
+export function validateUnreviewedReturnCoverage(proofs,records){
+ for(const proof of proofs){
+  const returned=proof.outcomeDimensions?.returnedValue;
+  if(returned?.required!==false||returned.trainingEvidence!=="format-only"||proof.actualResult!=null)continue;
+  const roots=[...records.values()].filter(record=>record.parent_call_id===null);
+  if(roots.length!==1||roots[0].outcome==='done'&&roots[0].output?.complete===true&&roots[0].output.hash!==digest('null'))
+   throw Error('optional null readout differs from the actual captured root');
+ }
 }
 
 async function readBound(binding, root) {
@@ -616,6 +635,7 @@ export async function verifyObservedWorkspaceEvidence(row) {
     callFiles.delete(call.artifact.path);
     decisions.delete(call.call_id);
   }
+  validateUnreviewedReturnCoverage(workspaceEvidence.map(item=>item.proof??{}),capturedRecords);
   if(matchedDecisionSelectors.size!==decisionSelectors.length || !equal(row.outcome.excluded_review_decisions??[],decisionSelectors))throw new Error('decision review names an absent captured generation or differs from outcome');
   if (captureScopes.size || callFiles.size || decisions.size || roots.size)
     throw new Error('observed trajectory does not cover the full verified call tree');

@@ -87,6 +87,9 @@ else:
   if kind=='incidental-forged-hash':selector['sha256']='0'*64
   if kind=='incidental-foreign-call':selector['definition']['source']='foreign.nl'
   proof={'actualResult':{'wrong':True},'outcomeDimensions':{'incidentalValues':{'passed':False,'incorrectReturns':[selector,selector,{**selector,'required':False,'definition':{'name':'absentHelper','source':'absent.nl'}}]}}}
+  if kind=='incidental-format-only':
+   selector.update(required=False,trainingEvidence='format-only',contribution={'schema':'natlang.application-return-contribution/1','kind':'root','root_call_id':detail['record']['call_id'],'producer_call_id':detail['record']['call_id'],'root_value_json':text,'root_sha256':selector['sha256'],'root_path':[],'producer_path':[],'checks':['optionalFindingFormat'],'lineage':[detail['record']['call_id']]})
+   proof={'actualResult':{'wrong':True},'outcomeContract':{'returnedValue':{'required':False,'trainingEvidence':'format-only'}},'outcomeDimensions':{'returnedValue':{'required':False,'passed':True,'checks':{'optionalFindingFormat':True},'trainingEvidence':'format-only','unreviewedReturns':[selector]}}}
   if kind=='incidental-nested':
    child['record']['definition']['source']='owned/recoverAndWrite.nl'
    child['record']['output']=copy.deepcopy(detail['record']['output'])
@@ -177,11 +180,19 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['goal-reference-review',1],['goal-nonvoid-error',1],['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['completed-promoted',1],['incidental',1],['incidental-nested',1]]) {
+for (const [kind, expected] of [['incidental-format-only',1],['goal-reference-review',1],['goal-nonvoid-error',1],['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['completed-promoted',1],['incidental',1],['incidental-nested',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {
       await verifyObservedWorkspaceEvidence(row);
+      if(kind==='incidental-format-only'){
+        assert.equal(row.trajectory[0].training_admission.approved,true);
+        assert.equal(row.trajectory.at(-1).training_admission.approved,false);
+        assert.match(row.trajectory.at(-1).training_admission.reason,/lacks independent correctness/);
+        const payload=JSON.parse(await readFile(join(root,'incidental.json'),'utf8'));
+        assert.equal(payload.proof.outcomeDimensions.returnedValue.passed,true);
+        assert.equal(payload.proof.outcomeDimensions.returnedValue.checks.optionalFindingFormat,true);
+      }
       assert.equal(materializeNativeRows([row]).turns.length, expected);
       const run = spawnSync(process.execPath,[join(repo,'ts-host/scripts/materialize-native-teacher.mjs'),join(root,'input.jsonl'),join(root,'output.jsonl')],{encoding:'utf8'});
       assert.equal(run.status,0,run.stderr);
@@ -196,11 +207,11 @@ for (const [kind, expected] of [['goal-reference-review',1],['goal-nonvoid-error
     } finally {await rm(root,{recursive:true,force:true});}
   });
 }
-for (const kind of ['masked','incidental']) {
+for (const kind of ['masked','incidental','incidental-format-only']) {
   test(`rejects forged decision admission from independently excluded ${kind} evidence`, async () => {
     const {root,row}=await fixture(kind);
     try {
-      const excluded=['masked','incidental'].includes(kind)?row.trajectory.at(-1):row.trajectory.find(turn=>turn.invocation_id==='call-one'&&turn.phase==='action');
+      const excluded=row.trajectory.at(-1);
       excluded.training_admission={approved:true};
       await assert.rejects(verifyObservedWorkspaceEvidence(row),/observed decision differs/);
       await writeFile(join(root,'forged.jsonl'),JSON.stringify(row)+'\n');
