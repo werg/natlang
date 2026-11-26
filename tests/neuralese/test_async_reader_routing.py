@@ -60,6 +60,8 @@ def test_async_readers_preserve_runtime_and_route_every_data_consumer(tmp_path,m
     alive=iter([True,True,False])
     monkeypatch.setattr(d.c,'active',lambda unit:next(alive))
     monkeypatch.setattr(ei.time,'sleep',lambda s:None)
+    from scripts import memory_ledger
+    monkeypatch.setattr(memory_ledger, 'owned_units', lambda: set())
     monkeypatch.setattr(ei.subprocess,'run',lambda *a,**k:None)
     d._fill_beside('aei-collect-v0000',work,d.controller.current)
     assert len(launched)==2

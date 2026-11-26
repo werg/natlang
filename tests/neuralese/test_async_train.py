@@ -3283,10 +3283,13 @@ def test_the_colab_fill_is_kept_running_beside_each_serving_session_and_never_on
     alive, present, busy, launched = [True], set(), set(), []
     monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: alive[0])
     monkeypatch.setattr(d.c, 'present', lambda unit: unit in present)
+    from scripts import memory_ledger
+    monkeypatch.setattr(memory_ledger, 'owned_units', lambda: {unit + '.service' for unit in present})
     monkeypatch.setattr(d, 'colab_sft_busy_hosts', lambda: busy)
     monkeypatch.setattr(d.c, 'ledger', lambda unit, gb, prio, argv, log, **kw: launched.append((unit, gb, argv)))
-    assert d.colab_fill_check() == ['aei-colab-fill-remote0']           # Pop is not a Colab session
-    unit, gb, argv = launched[0]
+    first = d.colab_fill_check()
+    assert len(first) == 1 and first[0].startswith(d.c.fill_unit_prefix('aei-colab-fill-remote0') + '-')
+    unit, gb, argv = launched[0]  # Pop is not a Colab session
     parsed = filled_reasoning.build_parser().parse_args(list(map(str, argv[2:])))
     assert gb == ei.COLAB_FILL_GB and parsed.polite and parsed.sglang == 'http://127.0.0.1:19731'
     assert parsed.front == 'http://127.0.0.1:18731' and parsed.skip_trained == ['/r1/mix']
@@ -3294,7 +3297,9 @@ def test_the_colab_fill_is_kept_running_beside_each_serving_session_and_never_on
     present.add(unit)
     assert d.colab_fill_check() == []                                    # running: left alone
     present.clear()
-    assert d.colab_fill_check() == ['aei-colab-fill-remote0']           # it died: relaunched
+    second = d.colab_fill_check()
+    assert len(second) == 1 and second[0] != first[0]  # settled attempt gets a fresh unit
+    assert second[0].startswith(d.c.fill_unit_prefix('aei-colab-fill-remote0') + '-')
     busy.add('colab-g4')
     assert d.colab_fill_check() == []                                    # a round's SFT holds the session
     busy.clear()
