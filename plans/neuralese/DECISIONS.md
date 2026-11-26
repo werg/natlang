@@ -14308,3 +14308,39 @@ steps (fix). **Open, separate mechanism:** the base (unadapted) arm still differ
 `nn.Linear` (cuBLAS, row-count dependent); `stable-v1` makes every split bit-equal in the same probe. Adapted FFN
 targets already go through the invariant kernel. Known since 2026-11-02 (ENGINEERING_FINDINGS "Actual replay
 qualification": source-v1 actor vs replay 0.1755); the lever is the declared profile of exported checkpoints.
+
+## 2026-11-26 02:00 Mode-W memory cells in the fork, pin natlang-b12096, compiled-release parity on real weights (fork-memory agent)
+
+**LLAMA_POS_MEMORY.** The compiler Stage C agent's uncommitted fork patch (a -2 position for Mode-W window-exempt,
+RoPE-free memory cells) is fork aa7f41533, unchanged; review fixes and tests are e8552cc50. As written the patch was
+inert and wrong where it would have run: no batch with a -2 entry passed `llama_batch_allocr::init` (the
+decreasing-position check starts at -1), and memory cells sat in `llama_kv_cells::seq_pos`, so `seq_pos_min` became -2
+and `apply_ubatch`'s SWA purge (`seq_rm(s, seq_pos_min, ...)`) deleted the memory at the first eviction; on LFM hybrids
+a memory ubatch also wrote its inputs into the short-convolution state and -2 into the recurrent cell's position.
+Fixed: memory batches hold memory only and skip the position checks; memory is off the position timeline
+(`seq_pos_min/max` ignore it); the LFM short convolution writes its state back unchanged for a memory ubatch; RoPE at 0
+in both `llm_graph_input_pos` branches and the attention-temperature input; memory modules that do not implement it
+refuse memory batches. `tests/test-pos-memory.cpp` (generated LFM3 and Gemma3): memory adds exactly its cells to every
+KQ mask, the sliding-window one included, with full and evicting SWA caches (which agree to 6e-8); it survives partial
+`seq_rm`, save/restore and SWA eviction, is removed by a whole-sequence clear or `[LLAMA_POS_MEMORY, 0)`, copied by
+`seq_cp`; a state span at -2 equals the same span at position 0 bit for bit (unrotated, visible) whatever its
+convolution rows. Decoding with no memory is byte-identical to b536c7379 on both models; Release and Debug pass it and
+`test-llama-context`. Pin moved with `update_llama_runtime.mjs --fork natlang-b12096` (9ad4a2bbf).
+
+**Mode W is not green.** No engine can place memory: no server request or native-state form puts a span at -2, the
+Python native engine and SGLang have no memory slots, and no engine serves hindsight-kb's Mode-W output gate
+`tanh(gamma)` (memory would enter attention ungated). No trained Mode-W reader exists. ENGINE_PARITY's Mode-W row
+names this as the blocker.
+
+**Compiled release (Mode P), real weights** (cde55352685b, release `t2-smoke3`, greedy 32, natlang f0073246a with
+836fc32d5): SGLang 32/32 compiled and base; fork llama-server 32/32 both (prompt tokens equal natlang's) on b536c7379
+x64, natlang-b12096 x64 (g4b) and natlang-b12096 linux-arm64 (DGX); base 32/32 everywhere. Python native engine 6/32
+compiled on g4b, split at the reference's 0.021-nat tie at step 6: cause and fix in the entry above (7936c09b7, the
+LoRA delta's row-count-dependent cuBLAS kernel); after it the DGX gives 32/32 both arms with per-step |dlogp| 0.0 on the
+compiled arm, and the reference recomputed with the fix has the same tokens, so SGLang's and llama's 32/32 stand; the
+g4b rerun is not run (its L4 is held by a long non-preemptible job; `/content/natlang-work/cmp-modep/chain6.sh` is
+ready). Page: not measured; the harness cannot load the 3.47 GB BF16 natlang GGUF in Chromium (fetch
+to Blob fails, also as three gguf-split shards; the vendored build's memory64 maximum is 4 GiB). The pin-bump smoke on
+the stock LFM3 Q8_0 passes (page vs natlang-b12096 server: same ranking on 5 items, largest gaps 0.26-0.63 nats, tuple
+grammar enforced). Work: g4b `/content/natlang-work/cmp-modep/parity4`, `parity5`; DGX
+`/home/werg/data/compiled-parity-20261126/parity5`.
