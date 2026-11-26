@@ -1250,7 +1250,12 @@ def status(args):
                           'cuda_headroom_gb': round(cuda_free / GIB, 1)} if cuda_free is not None else {}),
                       'claims': claims,
                       'waiting': [{'position': n + 1, 'unit': name, 'priority': w['priority'],
-                                   'budget_gb': round(w['budget'] / GIB, 1), 'requeued': bool(w.get('requeued')),
+                                   'budget_gb': round(w['budget'] / GIB, 1),
+                                   'reserve_gb': round(w['reserve'] / GIB, 1),
+                                   'need_gb': round((w['budget'] + w['reserve']) / GIB, 1),
+                                   'fits_now': fits(free, w['budget'], w['reserve']) and cuda_fits_entry(w, cuda_free),
+                                   'shortfall_gb': round(max(0, w['budget'] + w['reserve'] - free) / GIB, 1),
+                                   'requeued': bool(w.get('requeued')),
                                    'waiting_s': round(time.time() - w['since']) if w.get('since') else None,
                                    **({'cuda_budget_gb': round((w.get('cuda_budget') or w.get('spec', {}).get('cuda_budget')) / GIB, 1),
                                        'cuda_fits': cuda_fits_entry(w, cuda_free)}

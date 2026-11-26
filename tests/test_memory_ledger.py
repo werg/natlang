@@ -1987,3 +1987,26 @@ def test_guard_normalizes_an_existing_queued_spec_to_its_admitted_budget(monkeyp
     assert len(launched)==1 and launched[0]['budget']==8*GIB
     assert launched[0]['host_max_gb']==18 and launched[0]['allocation_budget']==4*GIB
     with ledger.ledger()as state:assert state['claims']['queued.service']['budget']==8*GIB
+
+
+def test_status_distinguishes_current_shortfall_from_eventual_preemption_capacity(status_machine, monkeypatch, capsys):
+    now = ledger.time.time()
+    wait = dict(budget=6.5 * GIB, reserve=7.5 * GIB, reserve_explicit=True,
+                priority='medium', since=now, seen=now)
+    live = {'lower.service': dict(running('experiment', 2, 2, priority='low'),
+                                  resumable=True, command=['test'])}
+    monkeypatch.setattr(ledger, 'read_snapshot', lambda: {'claims': live, 'waiting': {'next.service': wait}})
+    monkeypatch.setattr(ledger, 'shared_usage', lambda **kw: ({}, {}))
+    monkeypatch.setattr(ledger, 'headroom', lambda *args: (12.6 * GIB, live))
+    # Grace/hold rules may prevent a current stop even when eventual capacity suffices.
+    monkeypatch.setattr(ledger, 'preemption_plan', lambda *args, **kw: [])
+    ledger.status(SimpleNamespace())
+    row = ledger.json.loads(capsys.readouterr().out)['waiting'][0]
+    assert 'cannot_fit' not in row
+    assert row['would_preempt'] == []
+    assert row['fits_now'] is False
+    assert (row['budget_gb'], row['reserve_gb'], row['need_gb'], row['shortfall_gb']) == (6.5, 7.5, 14, 1.4)
+    monkeypatch.setattr(ledger, 'headroom', lambda *args: (14 * GIB, live))
+    ledger.status(SimpleNamespace())
+    row = ledger.json.loads(capsys.readouterr().out)['waiting'][0]
+    assert row['fits_now'] is True and row['shortfall_gb'] == 0
