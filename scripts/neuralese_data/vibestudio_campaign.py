@@ -15,6 +15,7 @@ import subprocess
 import time
 
 import archive_reuse
+from live_export_diagnostics import export_rejection_diagnostic
 from natlang_neuralese.common import data_registry
 from natlang_neuralese.common.code_provenance import code_provenance
 
@@ -190,7 +191,9 @@ def outcomes(capture, names, held, training, cases):
             entry = packet.get('execution') or {}
             teacher = (entry.get('diagnostics') or {}).get('natlangTeacher') or {}
             transport = (teacher.get('executionError') or {}).get('message')
-            reason = transport or entry.get('error') or test.get('reason')
+            export_diagnostic, diagnostic_errors = export_rejection_diagnostic(directory, raw, name)
+            reason = transport or entry.get('error') or test.get('reason') or (
+                export_diagnostic['error']['message'] if export_diagnostic else None)
             records = [call.get('record') or {} for call in teacher.get('calls') or []]
             def sampled_record(record):
                 requests = (record.get('cost') or {}).get('model_requests')
@@ -202,7 +205,9 @@ def outcomes(capture, names, held, training, cases):
                              'raw': str(raw.relative_to(capture)), 'reason': reason,
                              'teacher_started': True if (teacher.get('rootCallIds') or teacher.get('calls'))
                              and not capture_integrity_errors(teacher.get('captureErrors')) else None,
-                             'teacher_model_sampled': model_sampled}
+                             'teacher_model_sampled': model_sampled,
+                             **({'export_rejection': export_diagnostic} if export_diagnostic else {}),
+                             **({'export_diagnostic_errors': diagnostic_errors} if diagnostic_errors else {})}
         else:
             results[name] = {'status': 'no-capture', 'teacher_started': None}
         if name in interrupted and results[name]['status'] != 'verified':
