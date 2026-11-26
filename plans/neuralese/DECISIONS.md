@@ -14478,3 +14478,41 @@ The shared post-archive stop decision now retains a source-bound historical hold
 Wave0077 retained seven export-rejected raw captures but campaign reasons were null: ordinary Host exporter errors were only logged/aggregated, while the Python outcome reader only saw the passing native test. The shared producer/consumer now appends per-run diagnostics bound to exact compressed packet bytes and source pins, and reads only matching records. Existing native/transport reasons remain primary; mismatched or malformed auxiliary diagnostics never grant admission or become fabricated capture-integrity failures. Actual pending-review/checkpoint semantics and original raw/review/receipts stay unchanged. Diagnostic I/O failure preserves the original exporter error. `VIBESTUDIO_EXPORT_FAILURE_DIAGNOSTICS=0` restores earlier diagnostic behavior.
 
 Inventory: `LIVE_EXPORT_FAILURE_DIAGNOSTICS_20261126.md`. Actual targeted checks: 139 existing campaign tests +5 reader/outcome controls PASS, six reader controls including real Host→Python UTF-8/hash boundary PASS, three actual Node writer controls PASS. Host source successor is separate from immutable active Source46; the new pair enters the next normal pin/cutover. The seven old rejections are being audited by native proof and actual grade, not blanket-accepted or rewritten.
+
+## 2026-11-26 05:40 aei1: the DGX collection shrinks in place for round preparation (collection-fit agent)
+
+**Observation.** `aei1-collect-v0010` (192 slots, ~51 GB used) was SIGKILLed by ledger preemption when r0013's data
+(03:44) and build (04:29) steps launched; the fit loop requeued it ~1 min later, but every in-flight episode died and
+its group resumed only partly. `collect.log` shows no `held priority` yield before either preemption, and both prep
+yields logged `room: false, waited: 601`.
+
+**Cause.** The driver restarted at 02:41 inside r0013's preparation. Its predecessor's claim
+`ops/ei/held-priority/aei1-r0013-prep.json` (dead pid 926634) stayed on disk; `yield_claim` took any existing file for a
+nested block of its own and wrote nothing, while `held_priority_claims` (correctly) ignored the dead claim. So the
+collection never yielded, PREP_YIELD_WAIT ran out, and the step's admission preempted it. Even a working yield only
+stopped new episodes in the yielded half: those still running (~45 min each) and their shared episode servers kept their
+memory well past the 10-min wait.
+
+**Changes (default on).**
+- `yield_claim` replaces a dead or stale claim under its name; only a live one is left to its owner.
+- A round-preparation claim carries `evict_seconds` (`--prep-evict-seconds`, 120; 0 opts out, also
+  `NATLANG_EI_PREP_EVICT_SECONDS=0`). That long after the collection yields, grpo's slot loop stops the episodes in the
+  yielded slots (`_evict_slot`) and requeues them first in the same run (`_requeue_evicted`): continued from their
+  partials when `episode_files.partial_continuable`, else set aside as `stopped` (not counted as lost) and rerun. A held
+  claim never evicts.
+- Slot -> episode-server affinity (`grpo.slot_env`, `run_bonsai_queue.SharedChild.socket_order`): slot i searches from
+  socket i // 8, so the yielded top slots empty whole servers (~0.7 GB each), which exit, besides their episode
+  processes (~44 MB each). Opt-out `NATLANG_COLLECTOR_SLOT_AFFINITY=0`.
+- While yielding, the collection lowers its ledger claim to its use every 60 s (`resize yield`, never raised), so the
+  freed memory becomes headroom. The existing path restores it when the claim ends.
+- Estimate: evicting 96 of 192 slots frees ~4 GB of episode processes plus ~12 servers (~8 GB) within ~2-4 min, plus the
+  claim's unspent reserve. A step that still does not fit after PREP_YIELD_WAIT preempts as before.
+
+## 2026-11-26 06:10 aei1: the DGX collection is standing (coordinator)
+
+- 05:29 the coordinator stopped `aei1-collect-v0010` so it would relaunch on pin 1a02ec703; the driver sat in a 45 min
+  supply wait and launches the collection only at round steps, so it stayed down 20 min with the GPU at 0%.
+- `collection_fit_loop` (every 60 s) now also calls `collection_standing`: the DGX collection for the current policy
+  is launched again when its unit is gone, unless `stop_collections` holds it (a DGX SFT) until the next
+  `ensure_collection`. `ensure_collection` runs under one lock (main loop and the standing check never both launch).
+  `NATLANG_EI_STANDING_COLLECTION=0` opts out. Test in `test_async_train.py`.

@@ -3006,6 +3006,20 @@ def test_a_waiting_collection_is_requeued_at_the_slots_that_fit_the_ledger_room(
     queued[unit] = 70.0
     d.a.collect_fit_min_slots = 0
     assert d.collection_room_gb(unit) is None and d.collection_pending() is True and len(stopped) == 2
+    # standing: gone while no DGX SFT holds the GPU, it is launched again; after stop_collections it stays stopped
+    d.a.collect_fit_min_slots = ei.COLLECT_FIT_MIN_SLOTS
+    queued.clear()
+    d.collections_held = False
+    d.collection_standing()
+    assert launched[-1][0] == unit and unit in queued
+    d.stop_collections(remote=False)
+    n = len(launched)
+    d.collection_standing()
+    assert unit not in queued and len(launched) == n
+    monkeypatch.setenv('NATLANG_EI_STANDING_COLLECTION', '0')
+    d.collections_held = False
+    d.collection_standing()
+    assert len(launched) == n
 
 
 def test_the_full_collection_claim_follows_the_measured_peaks_capped_by_the_formula(tmp_path, monkeypatch):
