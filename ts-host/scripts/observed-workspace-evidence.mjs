@@ -328,14 +328,13 @@ async function trainingScope(receipt, row, root) {
       throw new Error('partial observed decisions require independently attested training scope');
     return null;
   }
-  if (receipt.status !== 'partial' || !['natlang.training-scope/1','natlang.training-scope/2'].includes(scope.schema) ||
+  if (receipt.status !== 'partial' || scope.schema !== 'natlang.training-scope/2' ||
       !isDeepStrictEqual(scope, row.outcome.training_scope) ||
       JSON.parse(await readBound(scope.original_outcome, root)).passed !== false ||
       !Array.isArray(scope.invocations) || !scope.invocations.length)
     throw new Error('invalid independent partial training scope');
   if(scope.assessor)await readBound(scope.assessor,root);
-  const certified=scope.schema==='natlang.training-scope/2';
-  if(certified&&!scope.assessor||scope.invocations.some(invocation=>Object.hasOwn(invocation,'certificate')!==certified))
+  if(!scope.assessor||scope.invocations.some(invocation=>!Object.hasOwn(invocation,'certificate')))
     throw Error('native certificates require training-scope/2 and its source-bound assessor');
   const selected = new Map();
   for (const invocation of scope.invocations) {
@@ -349,9 +348,7 @@ async function trainingScope(receipt, row, root) {
       throw new Error('partial invocation lacks independently verified decision evidence');
     for (const evidence of invocation.evidence) {
       if (!['workspace', 'cdp'].includes(evidence.kind)) throw new Error('partial decisions require native workspace evidence');
-      const bytes=await readBound(evidence, root);
-      if(!certified){let witness;try{witness=JSON.parse(bytes);}catch{}
-        if(witness?.schema==='natlang.independent-native-return/1')throw Error('native return evidence cannot downgrade to training-scope/1');}
+      await readBound(evidence, root);
     }
     selected.set(invocation.call_id, invocation.ordinals == null ? null : new Set(invocation.ordinals));
   }

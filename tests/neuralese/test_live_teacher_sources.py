@@ -525,15 +525,14 @@ def partial_fixture(root):
     return path, spec, verification
 
 
-def test_partial_success_keeps_original_graph_and_excludes_unsupported_parent(tmp_path):
+def test_unrelated_passing_check_cannot_certify_private_semantic_return(tmp_path):
     path, _, _ = partial_fixture(tmp_path)
-    episode = live.load_episode(path)
-    assert len(episode['call_tree']) == 4
-    assert [turn['invocation_id'] for turn in episode['turns']] == ['agent-child']
-    ir = episode['trajectory_ir']
-    assert ir['outcome']['status'] == 'partial'
-    assert ir['trajectory'][0]['training_admission'] == {
-        'approved': False, 'reason': 'invocation lacks independent outcome evidence'}
+    original = (tmp_path / 'child.json').read_bytes()
+    # The completed private helper and a whole-task written_draft=True witness
+    # do not establish correctness of its semantic decision.
+    with pytest.raises(ValueError, match='source-bound native certificates'):
+        live.load_episode(path)
+    assert (tmp_path / 'child.json').read_bytes() == original
     assert json.loads((tmp_path / 'original-outcome.json').read_text())['passed'] is False
 
 
@@ -576,27 +575,20 @@ def test_partial_scope_can_recover_actions_without_supervising_wrong_final_statu
     verification['training_scope']['invocations'][0]['ordinals'] = [0]
     spec['verification'] = artifact(tmp_path, 'verification.json', verification)
     path.write_text(json.dumps(spec))
-    episode = live.load_episode(path)
-    assert len(episode['turns']) == 1
-    excluded = [row for row in episode['trajectory_ir']['trajectory']
-                if row['invocation_id'] == 'agent-child' and not row['training_admission']['approved']]
-    assert any(row['training_admission']['reason'] == 'decision lacks independent outcome evidence' for row in excluded)
-    assert len(episode['trajectory_ir']['outcome']['invocation_ledger']) == 4
+    with pytest.raises(ValueError, match='source-bound native certificates'):
+        live.load_episode(path)
 
 
 def test_structural_coverage_counts_actual_learned_functions(tmp_path):
     from recheck_live_trajectories import structural_coverage
     path, _, _ = partial_fixture(tmp_path)
     metrics = structural_coverage([path, tmp_path / 'missing.json'])
-    assert metrics['episodes'] == 1
-    assert metrics['learned_functions'] == {'recoverAndWrite': 1}
-    assert metrics['learned_invocation_depths'] == {1: 1}
-    assert metrics['learned_invocation_children'] == {0: 1}
-    assert len(metrics['unreadable_manifests']) == 1
+    assert metrics['episodes'] == 0
+    assert metrics['learned_functions'] == {}
+    assert len(metrics['unreadable_manifests']) == 2
 
 
-@pytest.mark.parametrize("failed_publication", [False, True])
-def test_offline_recovery_binds_independent_checks_and_preserves_original(tmp_path, monkeypatch, failed_publication):
+def test_manual_recovery_refuses_unrelated_passing_checks_before_publication(tmp_path, monkeypatch):
     import recheck_live_trajectories as recovery
     root = tmp_path / 'source'
     root.mkdir()
@@ -620,51 +612,12 @@ def test_offline_recovery_binds_independent_checks_and_preserves_original(tmp_pa
     artifact(root, 'assessment.json', assessment)
     monkeypatch.setattr(recovery, 'held_closure', lambda _: {})
     monkeypatch.setattr(recovery, 'held_hit', lambda *_: False)
-    import os
-    import stat
-    parent_mode = stat.S_IMODE(tmp_path.stat().st_mode)
-    source_mode = stat.S_IMODE((root / 'original.json').stat().st_mode)
-    source_directory_mode = stat.S_IMODE(root.stat().st_mode)
     out = tmp_path / 'recovered'
-    original_copy = recovery.shutil.copyfile
-    def copy_into_private_root(source, destination):
-        assert stat.S_IMODE(out.stat().st_mode) == 0o700
-        return original_copy(source, destination)
-    monkeypatch.setattr(recovery.shutil, 'copyfile', copy_into_private_root)
-    if failed_publication:
-        def reject_publication(*_):
-            (out / 'input-link').symlink_to(root / 'original.json')
-            (out / 'input-directory-link').symlink_to(root, target_is_directory=True)
-            raise OSError('actual publication failure')
-        monkeypatch.setattr(recovery, 'load_episode', reject_publication)
-    old_umask = os.umask(0)
-    try:
-        if failed_publication:
-            with pytest.raises(OSError, match='actual publication failure'):
-                recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
-                                 root / 'catalog.jsonl', root / 'held.json', out)
-        else:
-            result = recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
-                                      root / 'catalog.jsonl', root / 'held.json', out)
-    finally:
-        os.umask(old_umask)
-    assert stat.S_IMODE(out.stat().st_mode) == 0o700
-    assert all(stat.S_IMODE(path.stat().st_mode) == 0o600 for path in out.iterdir() if not path.is_symlink())
-    assert stat.S_IMODE(tmp_path.stat().st_mode) == parent_mode
-    assert stat.S_IMODE((root / 'original.json').stat().st_mode) == source_mode
-    assert stat.S_IMODE(root.stat().st_mode) == source_directory_mode
-    assert json.loads((root / 'original.json').read_text()) == packet
-    if failed_publication:
-        assert (out / 'INCOMPLETE').is_file()
-        return
-    assert result['decisions'] == 1
-    assert json.loads((out / 'original.json').read_text()) == packet
-    assert live.load_episode(out / 'manifest.json')['trajectory_ir']['outcome']['status'] == 'partial'
-    assessment['invocations'][0]['checks'] = ['reported_status']
-    artifact(root, 'assessment.json', assessment)
-    with pytest.raises(ValueError, match='failed independent'):
+    with pytest.raises(ValueError, match='whole-packet checks do not certify private decisions'):
         recovery.recover(root / 'original.json', root / 'pins.json', root / 'assessment.json',
-                         root / 'catalog.jsonl', root / 'held.json', tmp_path / 'bad-recovery')
+                         root / 'catalog.jsonl', root / 'held.json', out)
+    assert not out.exists()
+    assert json.loads((root / 'original.json').read_text()) == packet
 
 
 def test_rejection_inventory_keeps_all_failed_calls_visible(tmp_path):
@@ -792,7 +745,7 @@ def test_successful_effects_do_not_supervise_known_incorrect_optional_return(tmp
     import filled_reasoning
     import exp0_sft
     import threading
-    monkeypatch.setattr(sft_sources, 'call_row', lambda renderer, source, key, index, turn: (turn['target'], 0))
+    monkeypatch.setattr(sft_sources, 'call_row', lambda renderer, source, key, index, turn, **kwargs: (turn['target'], 0))
     monkeypatch.setattr(exp0_sft, 'chains_of', lambda episodes: episodes[0]['rows'])
     monkeypatch.setattr(sft_sources, 'mark_open_goal', lambda *args: None)
     renderer = object.__new__(filled_reasoning.Renderer)
@@ -877,9 +830,8 @@ def test_partial_reassessment_binds_retained_assessor_source(tmp_path):
     verification['training_scope']['assessor'] = artifact(tmp_path, 'assessor-source.json', {'code': 'native byte comparison'})
     spec['verification'] = artifact(tmp_path, 'verification.json', verification)
     path.write_text(json.dumps(spec))
-    assert len(live.load_episode(path)['turns']) == 1
-    (tmp_path / 'assessor-source.json').write_text('changed assessor source')
-    with pytest.raises(ValueError, match='artifact changed'):
+    # Merely binding assessor bytes does not certify a private invocation.
+    with pytest.raises(ValueError, match='source-bound native certificates'):
         live.load_episode(path)
 
 
