@@ -413,13 +413,23 @@ def container_cgroups(names):
     return [f'/sys/fs/cgroup/system.slice/docker-{i}.scope' for i in dict.fromkeys(ids)]
 
 
+def resource_bearing_state(active):
+    """Stopping services retain their claim until systemd finishes their resource lifetime.
+
+    NATLANG_LEDGER_COUNT_DEACTIVATING=0 restores legacy accounting for diagnosis.
+    It does not change cancellation, restart eligibility or unit completion.
+    """
+    return active in ('active', 'activating', 'reloading') or (
+        active == 'deactivating' and os.environ.get('NATLANG_LEDGER_COUNT_DEACTIVATING', '1') != '0')
+
+
 def unit_usage(unit, gpu, command=None, containers=(), cuda_separate=False):
     """Host memory charged to the unit's cgroup plus CUDA memory of its processes, and the same for every container it
     runs (unit_containers: named by its command, declared with ``run --container``, named by a docker client in its
     cgroup, or named like the unit). 2026-10-12: a wrapper's view-ask container used 12.9 GiB while its claim read 0, so
     preemption underestimated what stopping it frees and a high head was starved by backfill."""
     active, cgroup = unit_state(unit)
-    if active not in ('active', 'activating', 'reloading') or not cgroup:
+    if not resource_bearing_state(active) or not cgroup:
         return None
     # A discrete GPU's VRAM is outside MemAvailable. Counting it as host use
     # starves unrelated CPU collectors; unified-memory machines keep the
@@ -538,7 +548,7 @@ def learned_budget(state, unit, budget):
 def unit_cuda(unit, gpu, command=None, containers=()):
     """CUDA memory held by the unit's processes and its containers (from nvidia-smi's per-pid list)."""
     active, cgroup = unit_state(unit)
-    if active not in ('active', 'activating', 'reloading') or not cgroup:
+    if not resource_bearing_state(active) or not cgroup:
         return 0
     roots = ['/sys/fs/cgroup' + cgroup, *container_cgroups(unit_containers(unit, command, containers, cgroup=cgroup))]
     total = 0

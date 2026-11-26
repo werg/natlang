@@ -2010,3 +2010,41 @@ def test_status_distinguishes_current_shortfall_from_eventual_preemption_capacit
     ledger.status(SimpleNamespace())
     row = ledger.json.loads(capsys.readouterr().out)['waiting'][0]
     assert row['fits_now'] is True and row['shortfall_gb'] == 0
+
+
+@pytest.mark.parametrize('active', ['active', 'activating', 'reloading', 'deactivating'])
+def test_resource_claim_survives_all_resource_bearing_states(monkeypatch, active):
+    monkeypatch.delenv('NATLANG_LEDGER_COUNT_DEACTIVATING', raising=False)
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: (active, '/owned'))
+    monkeypatch.setattr(ledger, 'cgroup_usage', lambda root, gpu: 2 * GIB)
+    monkeypatch.setattr(ledger, 'unit_containers', lambda *a, **k: ())
+    monkeypatch.setattr(ledger, 'container_cgroups', lambda names: [])
+    state = {'claims': {'stopping.service': dict(claim('collection', 2, 0, 0),
+                                               priority='low', resumable=True)}, 'events': []}
+    live = ledger.live_claims(state, {})
+    assert live['stopping.service']['used'] == 2 * GIB
+    assert not state['events']
+    head = {'priority': 'medium', 'budget': 8 * GIB, 'reserve': 7 * GIB}
+    entry = {'priority': 'low', 'budget': GIB, 'reserve': 7 * GIB, 'resumable': True}
+    assert not ledger.head_blocked(live, 14 * GIB, head)
+    assert ledger.may_backfill(live, 14 * GIB, 'teacher.service', head, entry) is None
+    # After the cgroup has finished, release is valid and still records provenance.
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('inactive', ''))
+    assert ledger.live_claims(state, {}) == {}
+    assert state['events'][-1]['event'] == 'released'
+
+
+def test_deactivating_cuda_and_legacy_optout(monkeypatch):
+    import io
+    import builtins
+    monkeypatch.delenv('NATLANG_LEDGER_COUNT_DEACTIVATING', raising=False)
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('deactivating', '/owned'))
+    monkeypatch.setattr(ledger, 'unit_containers', lambda *a, **k: ())
+    monkeypatch.setattr(ledger, 'container_cgroups', lambda names: [])
+    monkeypatch.setattr(builtins, 'open', lambda path, *a, **k: io.StringIO('321\n'))
+    assert ledger.unit_cuda('stopping.service', {321: GIB}) == GIB
+    monkeypatch.setenv('NATLANG_LEDGER_COUNT_DEACTIVATING', '0')
+    assert ledger.unit_cuda('stopping.service', {321: GIB}) == 0
+    assert ledger.unit_usage('stopping.service', {}) is None
+    assert ledger.resource_bearing_state('active')
+    assert not ledger.resource_bearing_state('failed')

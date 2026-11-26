@@ -14913,3 +14913,7 @@ attempt was admitted and then evicted by aei1's r0015 round SFT (77 GiB, started
 starts when that SFT ends (the r0014 SFT held the A100 ~3 h). Separate observation: the VM's pplx writer runs the
 reference PyTorch `causal_conv1d` / `chunk_gated_delta_rule` (neither `causal-conv1d` nor `flash-linear-attention` is
 installed in the VM venv), correct but slow; not changed here.
+
+## 2026-11-26 — Account for resources through service deactivation
+
+A service entering systemd deactivating still owns its cgroup and may be checkpointing children. Shared host/container and CUDA measurement now retain it until completion, preventing premature claim release and backfill during shutdown. The diagnostic opt-out is NATLANG_LEDGER_COUNT_DEACTIVATING=0; completion, fixed-claim and explicit cancellation contracts are unchanged. Inventory and attribution limits: DEACTIVATING_RESOURCE_CLAIMS_20261126.md. Actual LOW ledger controls: 132 passed, 1.86s, 132.1MiB peak. This does not explain the full historical physical reclaim gap by itself.
