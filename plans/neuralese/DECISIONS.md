@@ -14338,3 +14338,44 @@ to Blob fails, also as three gguf-split shards; the vendored build's memory64 ma
 the stock LFM3 Q8_0 passes (page vs natlang-b12096 server: same ranking on 5 items, largest gaps 0.26-0.63 nats, tuple
 grammar enforced). Work: g4b `/content/natlang-work/cmp-modep/parity4`, `parity5`; DGX
 `/home/werg/data/compiled-parity-20261126/parity5`.
+
+## 2026-11-26 03:00 Native engine numerics: source-v1 FFN on the invariant kernel; IEEE FP32 adapter gradients (numerics agent)
+
+**Base arm, cause.** `source-v1` (the legacy `native_shared_execution` profile; absent = source-v1, which every
+exported production checkpoint declares, cde55352685b included) differs from `stable-v1` only in which modules
+`shared_execution.configure_shared_execution` replaces: stable-v1 runs the FFN Linears (w1, w3, w2) through
+`_fixed_ffn` (fixed-tile IEEE `invariant_linear`) and the norms through `_fixed_norm`, and uses an FP64 convolution
+adjoint under grad. Under source-v1 the FFN ran HF `nn.Linear` (cuBLAS BF16, reduction chosen by the row count), so the
+native engine's chunked prefill and one-token decode differed from the graph executor's whole-prompt pass. Everything
+else was already row-invariant: attention/conv/head projections go through `shared_state._linear` (invariant kernel),
+LFM3 norms through `native_parameter_precision.rowwise_norm_forward` (128-row padded windows), so the norm and conv
+differences of stable-v1 are not part of it. **Fix** ac348293f: under source-v1 the FFN modules run `_fixed_ffn` by
+default (opt-out `NATLANG_INVARIANT_FFN=0`); the declared profile, native identity digest and state identities are
+unchanged; plain training updates keep their vendor fast path (`allow_plain_fastpath`). Found along the way and fixed:
+`_fixed_ffn` skipped `linear_precision_output`, so an inline QAT point at lambda = 1 under stable-v1/ffn-stable-v1 lost
+its real NVFP4 GEMM. **SGLang fork** 8b9418a4e2 (+ doc 8d2533921, pin moved in `sglang-fork.json`; the DGX checkout
+that live actors import stays at 17e3458c2e until a boundary with no live actor): source-v1 FFN under
+`NATLANG_SGLANG_PROJECTION=native` follows the runtime (`natlang_native_projection`); the vendor policy, which held
+eval and collection use, is unchanged. llama.cpp / wllama run their own kernels and are scored by greedy agreement.
+**Measured** (DGX, cde55352685b, release `t2-smoke3`, greedy 32; per-step max |dlogp| over the reference's top-20 along
+native's path, `runs/compiled-site-parity-invlora-20261126/ffnfix/`): base arm 0.165 max (0.047-0.165 over steps 1-15)
+with the opt-out -> 0.0 at all 16 steps with the fix; compiled arm 0.0 both; greedy 32/32 both arms both ways.
+
+**Adapter backward.** `FactoredLoRALinear`'s delta (7936c09b7) ran IEEE FP32 forward, and `_InvariantLinear`'s input
+adjoint was the exact kernel, but its weight gradient `grad.T @ x` ran on cuBLAS in TF32
+(`configure_native_precision`), and inside a plain training update with `NATLANG_PROJECTION_ARITHMETIC=vendor` the
+forward and both adjoints took `_VendorLinear` (TF32 for FP32 operands). **Fix** ac348293f: FP32 operands declared
+`ieee` use `invariant_weight_gradient` for dW and never take the plain/vendor GEMMs (opt-out `NATLANG_IEEE_FP32_GRAD=0`).
+The lfm3 learner's `factored_linear` is a separate BF16-branch mechanism and is not touched.
+
+**Tests:** `test_lfm3_port.py::test_source_profile_runs_the_fixed_ffn_by_default`; `test_compiled_site_serving.py`:
+chunked native base decode equals one pass (dispatch assertion fails under the opt-out), `_fixed_ffn` row invariance at
+LFM3 FFN shapes, factor gradients vs an FP64 reference < 1e-5 relative in invariant/vendor x plain/not (fails under the
+opt-out); fork `test_lfm3_activation_contract.py`. Neighbouring suites (shared_state, inline QAT, cotangent scope, norm
+execution, serving adapters, HF export profile): 189 passed.
+
+**Who picks it up:** everything that loads a native model through `load_native_model`: the Python native engine and
+SGLang's native fallback route, program tuning / compiled-site fits and releases (`tune/*`, compiler T1 on the L4) at
+their next resume or launch on a pin at or after ac348293f; their forward (and fit gradients) shift by BF16 reduction
+order, so a fit measured before and after re-measures its base. aei1 (lfm3 learner, SGLang vendor collection and held
+eval) is unaffected numerically.
