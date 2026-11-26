@@ -3187,8 +3187,9 @@ def write_round_manifest(round_dir, *, round_id, base_policy_sha, previous_polic
 
 # The round data step's ledger claim. 12 GB OOM-killed aei1 r0011's data step after 2.5 h (2026-11-25 10:01): its
 # peak follows the pool and episode volume (68,887 eligible rows after the broad-external admissions), and a
-# learned budget cannot grow past a cap the unit was killed at.
-DATA_STAGE_GB = float(os.environ.get('NATLANG_EI_DATA_GB', '24'))
+# learned budget cannot grow past a cap the unit was killed at. 24 OOM-killed r0015's at 24.0 GiB twice (2026-11-26
+# 16:24, 17:56, ~2 h each): 32 is the cap; the claim is the measured peak x 1.1 (stage_gb).
+DATA_STAGE_GB = float(os.environ.get('NATLANG_EI_DATA_GB', '32'))
 BUILD_STAGE_GB = 24
 PREPARE_STEPS = ('frontier', 'data', 'build')
 
