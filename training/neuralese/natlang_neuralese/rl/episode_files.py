@@ -214,7 +214,8 @@ def compress_file(path):
     tmp.write_bytes(blob)
     os.utime(tmp, ns=(stat.st_atime_ns, stat.st_mtime_ns))
     os.replace(tmp, packed)
-    path.unlink()
+    # a concurrent pass (the tier timer beside a manual one) may have packed the same bytes and unlinked it first
+    path.unlink(missing_ok=True)
     return len(data), len(blob)
 
 
