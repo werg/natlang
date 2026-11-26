@@ -535,14 +535,31 @@ class FactoredLoRALinear(nn.Module):
         self.factor_b, self.factor_a = factor_b, factor_a
 
     def forward(self, x):
-        from .shared_state import _linear
+        from .shared_state import _linear, _linear_weight
         out = _linear(self.original, x)
         with torch.amp.autocast(device_type=x.device.type, enabled=False):
-            low = torch.nn.functional.linear(
-                torch.nn.functional.linear(x.to(self.factor_a.dtype), self.factor_a),
-                self.factor_b.to(x.device),
-            )
+            if invariant_lora_enabled():
+                # The row-local fixed-tile kernel of the base projections (exact FP32 on CUDA): a row's delta is the
+                # same whether it runs in a one-token decode, a short chunk or a whole prompt.
+                low = _linear_weight(_linear_weight(x.to(self.factor_a.dtype), self.factor_a, force_invariant=True),
+                                     self.factor_b.to(x.device), force_invariant=True)
+            else:
+                low = torch.nn.functional.linear(
+                    torch.nn.functional.linear(x.to(self.factor_a.dtype), self.factor_a),
+                    self.factor_b.to(x.device),
+                )
             return (out.float() + low.float()).to(out.dtype)
+
+
+def invariant_lora_enabled():
+    """``NATLANG_INVARIANT_LORA`` (default on; ``0`` opts out): ``FactoredLoRALinear`` computes its low-rank delta with
+    the batch-invariant FP32 kernel (``maple.fused_moe.invariant_linear``, IEEE FP32) instead of cuBLAS ``F.linear``.
+    cuBLAS ran the FP32 factors in TF32 (``NATLANG_STOCK_ARITHMETIC`` defaults to tf32) with a reduction chosen by the
+    row count, so the Python native engine's chunked prefill and one-token decode under an adapter stack drifted from
+    the graph executor's whole-prompt pass (2026-11-26, compiled-site parity: 0.15 nats at the prefill's last position,
+    greedy agreement 6/32; bit-equal with this kernel)."""
+    import os
+    return os.environ.get('NATLANG_INVARIANT_LORA', '1') != '0'
 
 
 from contextlib import contextmanager
