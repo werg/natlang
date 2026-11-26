@@ -464,6 +464,48 @@ def verify_entry(interaction, root):
             raise ValueError('open goal application input differs from the actual root invocation')
 
 
+
+def semantic_review_roles_bound(review, declared_input=None):
+    """Bind declared review bytes; new reference roles also bind the actual request and raw grade."""
+    actual_input = review.get('input') if isinstance(review, dict) else None
+    if declared_input is not None and not same_json_value(actual_input, declared_input):
+        return False
+    expected = actual_input.get('expected') if isinstance(actual_input, dict) else None
+    layout = expected.get('evidenceRoleLayout') if isinstance(expected, dict) else None
+    if layout is None:
+        return True  # Historical captures without the new role protocol retain their original admission law.
+    if layout != 'native-reference/1' or not isinstance(declared_input, dict):
+        return False
+    try:
+        candidate = actual_input['actual']
+        if (set(expected) != {'goal', 'requestedReturnRequired', 'evidenceRoleLayout', 'observations'} or
+                not isinstance(candidate, dict) or set(candidate) != {'goal', 'artifacts', 'requestedReturn', 'attemptedArguments'} or
+                candidate['goal'] != expected['goal'] or type(expected['requestedReturnRequired']) is not bool or
+                not isinstance(expected['observations'], dict) or not isinstance(candidate['artifacts'], dict) or
+                not isinstance(candidate['attemptedArguments'], list) or
+                not expected['requestedReturnRequired'] and candidate['requestedReturn'] is not None):
+            return False
+        exchange = review['exchange']
+        request, reply = exchange['request'], exchange['reply']
+        users = [message for message in request['messages'] if message.get('role') == 'user']
+        if len(users) != 1 or not same_json_value(json.loads(users[0]['content']), {
+                'rubric': actual_input['rubric'], 'reference': actual_input['expected'], 'candidate': actual_input['actual']}):
+            return False
+        provider, separator, model = review['model'].partition(':')
+        if not separator or not provider or not model or not review.get('teacher') or review['teacher'] == review['model'] or reply['raw_response'].get('provider') != provider or reply['raw_response'].get('model') != model:
+            return False
+        grade = next(arguments for name, arguments in reply['calls'] if name == 'grade')
+        if type(grade.get('accepted')) is not bool or not isinstance(grade.get('verdict'), str) or not grade['verdict'].strip() or 'needs_review' in grade and type(grade['needs_review']) is not bool:
+            return False
+        if not any(call.get('function', {}).get('name') == 'grade' and same_json_value(json.loads(call['function']['arguments']), grade) for call in reply['raw_calls']):
+            return False
+        normalized = {'accepted': grade['accepted'] and not grade.get('needs_review', False), 'verdict': grade['verdict'].strip()}
+        if grade.get('needs_review'):
+            normalized['needs_review'] = True
+        return same_json_value(normalized, review['verdict'])
+    except (KeyError, TypeError, ValueError, StopIteration, AttributeError):
+        return False
+
 def semantic_goal_completed(interaction, workspace_proofs, verification, *, workspace_evidence=(), reassessment_verified=False):
     """A whole, scope-bound semantic verdict, independently of execution exit.
 
@@ -527,6 +569,12 @@ def semantic_goal_completed(interaction, workspace_proofs, verification, *, work
         return False
     if declared_review is True and (len(reviews) != 1 or not accepted_review(reviews[0])):
         return False
+    if required_review or declared_review is True:
+        declared_input = proof.get('semanticReviewInput')
+        if declared_input is None:
+            declared_input = ((proof.get('preparedContentProject') or {}).get('artifact') or {}).get('semanticReviewInput')
+        if not semantic_review_roles_bound(reviews[0], declared_input):
+            return False
     required_checks = proof.get('checks') or {}
     if not required_checks or any(value is not True for value in required_checks.values()):
         return False

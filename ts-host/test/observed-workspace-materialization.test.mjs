@@ -95,6 +95,18 @@ else:
    proof['outcomeDimensions']['incidentalValues']['incorrectReturns'].append({**selector,'definition':copy.deepcopy(child['record']['definition'])})
    spec['calls'][1]=artifact(root,'child.json',child)
   verification['evidence']=[{**artifact(root,'incidental.json',{'proof':proof}),'kind':'workspace'}]
+ if kind=='goal-reference-review':
+  from test_review_evidence_roles import review_fixture
+  review,source_input=review_fixture()
+  source_input['actual']['goal']=source_input['expected']['goal']=interaction['goal']
+  source_input['actual']['requestedReturn']=None
+  source_input['expected']['requestedReturnRequired']=False
+  review['input']=copy.deepcopy(source_input)
+  review['exchange']['request']['messages'][1]['content']=json.dumps({'rubric':source_input['rubric'],'reference':source_input['expected'],'candidate':source_input['actual']})
+  verification['world'].update(context_id='actual-context',case_id='actual-case');spec['world']=copy.deepcopy(verification['world'])
+  proof={'goal':interaction['goal'],'contextId':'actual-context','caseId':'actual-case','passed':True,'checks':{'actualEffect':True},
+   'semanticReviewRequired':True,'semanticReviewInput':source_input,'outcomeDimensions':{'effects':{'passed':True},'returnedValue':{'required':False,'passed':True}}}
+  verification['evidence']=[{**artifact(root,'reference-review.json',{'proof':proof,'semanticReview':review}),'kind':'workspace'}]
  if kind.startswith('decision-review'):
   binding=artifact(root,'call.json',detail)
   selector={'call_id':detail['record']['call_id'],'ordinal':0,'definition':copy.deepcopy(detail['record']['definition']),'call_sha256':binding['sha256'],'reason':'Source-bound semantic audit of this exact captured decision.'}
@@ -165,7 +177,7 @@ async function fixture(kind) {
   assert.equal(result.status, 0, result.stderr);
   return {root, row: JSON.parse(await readFile(join(root, 'input.jsonl'), 'utf8'))};
 }
-for (const [kind, expected] of [['goal-nonvoid-error',1],['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['completed-promoted',1],['incidental',1],['incidental-nested',1]]) {
+for (const [kind, expected] of [['goal-reference-review',1],['goal-nonvoid-error',1],['goal-void-error',1],['goal-root-error',1],['goal-root-error-text',1],['reasoned-readout',1],['redacted-thinking',1],['historical-redacted-thinking',1],['decision-review',0],['legacy',1],['native-bridge',1],['typed',1],['masked',1],['typed-masked',1],['masked-historical',1],['masked-only',0],['caught-child',2],['completed',1],['completed-roles',1],['completed-review',1],['completed-promoted',1],['incidental',1],['incidental-nested',1]]) {
   test(`Python native IR -> disk verifier -> TS materializer -> CLI: ${kind}`, async () => {
     const {root,row} = await fixture(kind);
     try {
