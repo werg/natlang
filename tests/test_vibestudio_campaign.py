@@ -1346,6 +1346,8 @@ def isolated_collector_ledger_owner(monkeypatch):
 
 
 def test_explicit_campaign_hold_withdraws_a_concurrent_guard_queue(tmp_path,monkeypatch):
+    # Feature discovery is read-only and is not an owned cancellation command.
+    __import__('scripts.memory_ledger')
     monkeypatch.setenv('NATLANG_LEDGER_UNIT','test-owner.service')
     state=tmp_path/'ledger.json';state.write_text(json.dumps({'waiting':{'test-owner.service':{'requeued':True}}}));monkeypatch.setenv('NATLANG_MEMORY_LEDGER',str(state))
     def stop(args,checkpoint):
