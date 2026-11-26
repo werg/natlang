@@ -1,6 +1,6 @@
 """Per-call compilation with retrieved experience: ``[z_site, z_kb]`` -> a compiled release (``.nzs`` + ``xs`` cores).
 
-Bridges ``ScopedExperienceKB`` (retrieval, Stage C slots), ``LiveExperienceWriter`` (the lookup query),
+Bridges ``ScopedExperienceKB`` (retrieval, Stage C slots), the Live-KB writer (``PplxWarmstartWriter`` in production; its lookup query),
 ``CompiledSiteHead`` and an optional ``LearnedBankBasis``: one call site, its retrieved experience and its enclosing
 scopes' cores (``C = C_site + C_scope ...``) compile into a ``compiled_site.compile_release`` release, cached by
 provenance. The release is the ordinary compiled-site release (header state + GGUF-exportable cores), so serving it is
@@ -27,7 +27,6 @@ from .compiled_site import (
     init_block_values,
     init_header_state,
 )
-from .live_kb_writer import LiveExperienceWriter
 
 
 @dataclass(frozen=True)
@@ -49,7 +48,7 @@ class PerCallNeuralHKBCompiler:
     """One-pass call-entry compiler: header + retrieved experience + scope cores, cached by provenance key."""
 
     def __init__(self, engine, head: CompiledSiteHead, *, adapter_id: str, release_root: str | Path,
-                 writer: LiveExperienceWriter | None = None, scoped_kb=None, basis_module: LearnedBankBasis | None = None):
+                 writer=None, scoped_kb=None, basis_module: LearnedBankBasis | None = None):
         if (scoped_kb is None) != (writer is None):
             raise ValueError('retrieval needs both the experience KB and the writer whose space its records are in')
         self.engine = engine
@@ -86,11 +85,20 @@ class PerCallNeuralHKBCompiler:
                 q_vec, scopes=list(req.scopes), exclude_tasks=set(req.exclude_tasks), max_slots=req.max_kb_slots)
             kb_hits = int(kb_valid.sum().item())
         extra_cores = None
+        scope_writes: list[str] = []
         if req.scope_headers:
-            # each scope header's text state, written as the training compositional step writes it (run_t2.Sites)
+            # A scope text that occurs once in the call is written in the call, as training writes it
+            # (run_t2.Sites.part_block); an enclosing scope that is not in the call (a repo or folder header) is
+            # written alone, a form the compositional step does not train: the release records which each was.
             scope_cores = []
             for text in req.scope_headers:
-                block = self.engine.store.get_native_state(self.engine.native_write_text(text)['id']).block
+                try:
+                    sid = init_header_state(self.engine, req.messages, req.tools, text)
+                    scope_writes.append('in-call')
+                except ValueError:
+                    sid = self.engine.native_write_text(text)['id']
+                    scope_writes.append('alone')
+                block = self.engine.store.get_native_state(sid).block
                 scope_cores.append(self.head(init_block_values(block), kv=False, apply_dropout=False).cores)
             extra_cores = compose_site_cores(*scope_cores)
         out_dir = self.release_root / key[:16]
@@ -100,7 +108,7 @@ class PerCallNeuralHKBCompiler:
             site_id=req.site_id, owner=owner,
             provenance={'cache_key': key, 'compiler_sha': req.compiler_sha, 'policy_sha': req.policy_sha,
                         'scopes': list(req.scopes), 'kb_hits': kb_hits, 'kb_generation': self._kb_generation(),
-                        'compositional_scopes': len(req.scope_headers)})
+                        'compositional_scopes': len(req.scope_headers), 'scope_writes': scope_writes})
         result['cacheKey'] = key
         result['kbHits'] = kb_hits
         result['releaseDir'] = str(out_dir)

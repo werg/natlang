@@ -665,6 +665,8 @@ export class NativeToolAgent {
       /** Prefix-shared `branch@N` search with crisp-first + StepVerifierHead ranking (`plans/NATLANG_COMPILER.md` §6.2).
        * The kept turn is a selection over samples, not one policy sample: never set it for on-policy collection. */
       branchSearch?: BranchSearchOptions;
+      /** Hoist deterministic structural return-type directives into the call's opening notes on pass 1 (§6.4). */
+      hoistContracts?: boolean;
       /**
        * Receives the deltas of the call's model turns as they stream (plans/STREAMING.md §1.6), with the turn's number
        * (as its `model_request` trace events give it). A turn taken again after a failed request first gets a `reset`.
@@ -2279,10 +2281,18 @@ export class NativeToolAgent {
     const systemPrompt = () =>
       typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? SYSTEM_PROMPT;
     const declaredReturns = session.lam.type.kind === 'lambda' ? session.lam.type.returns : undefined;
+    let hoistedContractDirective = '';
+    if (this.options.hoistContracts && declaredReturns) {
+      try { hoistedContractDirective = hoistReturnContract(declaredReturns, session.env).directive; }
+      catch (error) {
+        session.runtime.trace.emit('contract_hoist_error', { call_id: session.runtime.currentCallId ?? null, error: String((error as Error)?.message ?? error).slice(0, 300) });
+      }
+    }
+    const effectiveGuidance = [guidance, hoistedContractDirective].map(text => text.trim()).filter(Boolean).join('\n\n');
     let functionResult: string | undefined;
     try { functionResult = declaredReturns && session.env.resolve(declaredReturns).kind === 'lambda' ? formatType(declaredReturns) : undefined; }
     catch { functionResult = undefined; }
-    const notes = callNotes({ guidance, ownCode: Object.keys(session.lam.codebase).length > 0, functionResult,
+    const notes = callNotes({ guidance: effectiveGuidance, ownCode: Object.keys(session.lam.codebase).length > 0, functionResult,
       folder: session.lam.projectTransaction ? { fileTools: this.options.fileTools,
         writable: session.lam.projectTransaction.folder.access !== 'read', withheld: session.lam.withheldTools } : undefined,
       allowAdHoc: canGenerateNl(session.runtime.frame), rendering: this.options.promptRendering });

@@ -343,6 +343,21 @@ function selectedServicesModule(record: ModuleRecord): object {
   return Object.fromEntries([...names].map(name => [name, lowered.selectedService(name)]));
 }
 
+/**
+ * The lowered bindings of one module instance that every task of its platform shares, for an evaluator whose guest
+ * code creates inline `nl` values through `__natlang.inline` across awaits. Values created before top-level evaluation
+ * ends belong to the module (`lowered.sharedModuleValue`). Returns the bindings and the function that ends top level.
+ */
+function sharedModuleBindings<B extends { inline: (...args: never[]) => unknown }>(bindings: B): [B, () => void] {
+  let topLevel = true;
+  const inline = (...args: Parameters<B['inline']>) => {
+    const value = bindings.inline(...args);
+    if (!topLevel) return value;
+    return value instanceof Promise ? value.then(lowered.sharedModuleValue) : lowered.sharedModuleValue(value);
+  };
+  return [{ ...bindings, inline }, () => { topLevel = false; }];
+}
+
 /** The live exports of a module in its folder `level` (its sibling items). */
 export function moduleInstance(platform: Platform, record: ModuleRecord, level: Record<string, ItemRecord>): Record<string, unknown> {
   const task = currentFrame()?.task;
@@ -407,9 +422,10 @@ export function moduleInstance(platform: Platform, record: ModuleRecord, level: 
     return platform.packageLoader(specifier, task);
   };
   const module = { exports };
+  const evaluate = () => environment.evaluateModule(code, { exports, module, require, __natlang: lowered,
+    __natlang_context: level, nl: surface.nl, iterateOn: surface.iterateOn });
   try {
-    environment.evaluateModule(code, { exports, module, require, __natlang: lowered, __natlang_context: level,
-      nl: surface.nl, iterateOn: surface.iterateOn });
+    if (cache === host.instances) lowered.inSharedModuleTopLevel(evaluate); else evaluate();
   } catch (error) {
     cache.delete(record);
     throw error;
@@ -605,16 +621,20 @@ export async function moduleInstanceAsync(platform: Platform, record: ModuleReco
         return platform.packageLoader(specifier, task);
       };
       const module = {exports:raw};
-      const runtimeBindings = scope.environment.authority.startsWith('selected-semantic/') ? {
+      const loweredBindings = scope.environment.authority.startsWith('selected-semantic/') ? {
         ...lowered,
         // Context is loader authority, not a guest-synthesized module tree.
         inline: (plan: InlineLambdaPlan, values: unknown[], accessors: Record<string, unknown>, _context: unknown, version?: number) =>
           lowered.inlineSelected(plan, values, accessors, siblings, version),
       } : lowered;
-      await scope.environment.evaluateModuleAsync!(code, {exports:raw, module, require,
-        __natlang:runtimeBindings, __natlang_context:siblings, nl:surface.nl, iterateOn:surface.iterateOn,
-        __natlang_module:{id:current.id,source:current.source,revision:current.revision,
-          originalSource:current.text,imports:[...current.imports]}});
+      const [runtimeBindings, endTopLevel] = scope === moduleHost(platform).sharedAsyncScope ?
+        sharedModuleBindings(loweredBindings) : [loweredBindings, () => {}];
+      try {
+        await scope.environment.evaluateModuleAsync!(code, {exports:raw, module, require,
+          __natlang:runtimeBindings, __natlang_context:siblings, nl:surface.nl, iterateOn:surface.iterateOn,
+          __natlang_module:{id:current.id,source:current.source,revision:current.revision,
+            originalSource:current.text,imports:[...current.imports]}});
+      } finally { endTopLevel(); }
       scope.check();
       if (module.exports !== raw) Object.defineProperties(raw, Object.getOwnPropertyDescriptors(module.exports));
       if (!Object.hasOwn(raw, '__esModule')) Object.defineProperty(raw, '__esModule', {value:true});

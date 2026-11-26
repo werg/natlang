@@ -155,7 +155,8 @@ function partialCallable(original: NatlangCallable, meta: CallableMeta, bound: u
   const values = [...bound];
   const rebind = meta.rebindInline;
   const isReducer = definition.subtype === 'directory-reducer';
-  return makeCallable({ ...meta, definition: { ...definition, params: definition.params.slice(values.length) },
+  return makeCallable({ ...meta, definition: { ...definition, params: definition.params.slice(values.length),
+      partialBindings: [...(definition.partialBindings ?? []), ...values] },
     invoke: (args, frame, at, folder) => {
       // Directory reducers take their Folder/FolderHandle first, before declared `args:`; keep it in front of bound args.
       const combined = isReducer && (folder || args[0] instanceof Folder || args[0] instanceof FolderHandle)

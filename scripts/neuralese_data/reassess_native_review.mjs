@@ -11,7 +11,7 @@ import {pathToFileURL,fileURLToPath} from 'node:url';
 import {validateWorkflowReview} from './reassess_local_presentation.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const matches=(ref,value)=>ref?.complete===true&&ref.bytes===Buffer.byteLength(JSON.stringify(value))&&ref.hash===sha(JSON.stringify(value));
-const fields={"chat-continuity":[['index','frames','evidence'],['artifact']],"owned-task":[['effects','current','original','delivery','nativeDeliveryError','raceInjected'],[]]};
+const fields={"chat-continuity":[['index','frames','evidence'],['artifact']],"owned-task":[['effects','current','original','delivery','nativeDeliveryError','raceInjected'],[]],"route-authority":[['offer','snapshots','authority','choice','readback'],['artifact']]};
 export function reassessNativeReview(packet,pins,task,originalReview,source,kind,checker,entryBinding,bindInput){
  const prior=packet.execution?.diagnostics?.openGoalVerification,native=packet.execution?.diagnostics?.natlangTeacher;
  if(!fields[kind]||!task||task.scenario!==packet.test?.name||task.split!=='train'||packet.result?.passed!==true||!prior||!native||native.executionError||native.captureErrors?.length||pins.teacher!=='openai-codex:gpt-6-luna'||Object.values(pins.repositories??{}).some(row=>row.dirty!==false)||!same(entryBinding(task.entry),native.entry)||native.entry?.arguments?.goal!==prior.goal||task.interaction!=='open-user-goal'||task.goalSha256!==sha(JSON.stringify(prior.goal))||pins.validator_sha256!==sha(source))throw Error('requires exact original clean native-passed training capture');
@@ -28,6 +28,13 @@ export function reassessNativeReview(packet,pins,task,originalReview,source,kind
   if(!witness('chatContinuityIndex','list',[],prior.index)||!Array.isArray(prior.frames)||prior.frames.length!==2)throw Error('missing original native chat index or observations');
   for(const frame of prior.frames)if(!witness('chatContinuityState','read',[frame.channelId],frame))throw Error('unbound actor native chat readback');
   projected.evidence={...prior.evidence,nativeWorkerIdentity:checker.observedChatWorkerIdentity(prior.index,prior.frames)};
+ }else if(kind==='route-authority'){
+  for(const guard of ['binding.services.assignedAuthorityRead.preflight(operationId)','snapshots.push(observation)'])if(!source.toString().includes(guard))throw Error('original source lacks exact native preflight observations');
+  if(!witness('routeEvidenceRead','discover',[],prior.offer)||!Array.isArray(prior.snapshots)||!prior.snapshots.length||!Array.isArray(prior.offer?.request?.operations)||!Array.isArray(prior.offer.request.ceiling))throw Error('missing original native route offer or preflights');
+  const operationIds=prior.offer.request.operations.map(row=>row.id);
+  if(new Set(prior.snapshots.map(row=>row.operationId)).size!==prior.snapshots.length)throw Error('duplicate native preflight observation');
+  for(const observation of prior.snapshots)if(!operationIds.includes(observation.operationId)||!witness('assignedAuthorityRead','preflight',[observation.operationId],observation))throw Error('unbound original native preflight');
+  if(!same(checker.observedRouteAuthority(prior.snapshots,prior.offer.request.ceiling),prior.authority))throw Error('reported authority differs from exact native preflights');
  }else{
   for(const guard of ['owner: view.resolution?.kind === "ref" ? view.resolution.ref : null','lane.lane.maySend && lane.owner'])if(!source.toString().includes(guard))throw Error('original source lacks exact recipient lookup and send authorization guarantees');
   if(!Array.isArray(prior.effects)||!prior.effects.length||!prior.effects.some(row=>row.service==='ownedTaskAttempts'&&row.method==='inspect'))throw Error('missing actual recipient and task observations');
@@ -36,7 +43,9 @@ export function reassessNativeReview(packet,pins,task,originalReview,source,kind
  const [observations,artifacts]=fields[kind];
  const review=checker.observedContentReview(projected,prior.outcomeContract,native.report,observations,artifacts);
  if(review.semanticReviewRequired!==true)throw Error('cannot waive required meaning review');
- review.semanticReviewInput.rubric+=kind==='chat-continuity'?checker.chatContinuityReviewGuidance:checker.ownedTaskReviewGuidance;
+ const guidance={"chat-continuity":checker.chatContinuityReviewGuidance,"owned-task":checker.ownedTaskReviewGuidance,"route-authority":checker.routeAuthorityReviewGuidance}[kind];
+ if(typeof guidance!=='string'||!guidance.trim())throw Error('missing source-derived domain guidance');
+ review.semanticReviewInput.rubric+=guidance;
  projected={...projected,...review};bindInput(projected,{kind,goal:prior.goal});
  return {prior,native,projected,reviewInput:review.semanticReviewInput};
 }
@@ -63,7 +72,7 @@ async function main(){
  const sources=[await store('original-native-checker.ts',source),bundle,await store('assessor.mjs',await readFile(fileURLToPath(import.meta.url))),await store('reassess_local_presentation.mjs',await readFile(new URL('./reassess_local_presentation.mjs',import.meta.url))),await store('model-judge.ts',await readFile(new URL('../../ts-host/src/teacher/model-judge.ts',import.meta.url))),await store('entry-binding.mjs','export '+applicationEntryBinding.toString()+'\n')];
  for(const[index,path]of Object.keys(bundled.metafile.inputs).filter(path=>path!=='<stdin>').entries())sources.push(await store(`checker-source-${index}-${basename(path)}`,await readFile(resolve(path))));
  const repo=fileURLToPath(new URL('../..',import.meta.url));
- const proof={...result.projected,schema:'natlang.live-outcome-reassessment/1',task_id:task.taskId,original_sha256:sha(raw),entry:result.native.entry,actualResult:result.native.report,passed:true,reassessmentCode:{git_commit:execFileSync('git',['-C',repo,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),dirty:Boolean(execFileSync('git',['-C',repo,'status','--porcelain'],{encoding:'utf8'}).trim())},rationale:'Every original native and requested-answer check remains true. Exact original actor effects ground native identity, lifecycle, recipient resolution, permissions and retained artifacts. Source-bound API semantics and the actual requested diagnostic/conditional mode guide a new independent bound meaning review. The original rejection, raw packet and all requested obligations remain intact; no native outcome or return value is rewritten.',checker_sources:sources,evidence:[{...await store('original-rejected-review.json',originalReviewBytes),role:'original-rejected-review'},await store('independent-review.json',await readFile(args.review))]};
+ const proof={...result.projected,schema:'natlang.live-outcome-reassessment/1',task_id:task.taskId,original_sha256:sha(raw),entry:result.native.entry,actualResult:result.native.report,passed:true,reassessmentCode:{git_commit:execFileSync('git',['-C',repo,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),dirty:Boolean(execFileSync('git',['-C',repo,'status','--porcelain'],{encoding:'utf8'}).trim())},rationale:'Every original native and requested-answer check remains true. Exact original actor effects ground native observations, identity, lifecycle, recipient resolution, permissions, preflight state and retained artifacts. Source-bound API semantics and the actual requested diagnostic/conditional mode guide a new independent bound meaning review. The original rejection, raw packet and all requested obligations remain intact; no native outcome or return value is rewritten.',checker_sources:sources,evidence:[{...await store('original-rejected-review.json',originalReviewBytes),role:'original-rejected-review'},await store('independent-review.json',await readFile(args.review))]};
  const completed=await store('completed-outcome.json',JSON.stringify(proof,null,2)+'\n');await store('assessment.json',JSON.stringify({schema:'natlang.live-reassessment/1',task_id:task.taskId,original_sha256:sha(raw),rationale:proof.rationale,completed_outcome:completed},null,2)+'\n');console.log(JSON.stringify({assessment:join(out,'assessment.json'),teacher_rerun:false}));
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();

@@ -366,8 +366,12 @@ def _per_family_auroc(scores, labels, families, minimum=10):
     return out
 
 
-def train_t0(features_dir, out, *, cfg: VerifierTrainConfig = VerifierTrainConfig(), seed=0, device='cpu'):
-    """Train the head on task-disjoint splits of stored features; write head, per-epoch jsonl and receipt."""
+def train_t0(features_dir, out, *, cfg: VerifierTrainConfig = VerifierTrainConfig(), seed=0, device='cpu',
+             progress_weighting: bool = True):
+    """Train the head on task-disjoint splits of stored features; write head, per-epoch jsonl and receipt.
+
+    ``progress_weighting`` (default True) up-weights late/decisive boundaries within each episode
+    (``0.25 + 0.75 * progress``) so ambiguous turn-1 boundaries do not drown out decisive tool/return boundaries."""
     import json
     from pathlib import Path
     from ..common.code_provenance import code_provenance
@@ -384,14 +388,26 @@ def train_t0(features_dir, out, *, cfg: VerifierTrainConfig = VerifierTrainConfi
     val = torch.tensor([bool(m['validation']) for m in meta])
     fam = [m['family'] or 'unknown' for m in meta]
     tr_idx, va_idx = (~val).nonzero().squeeze(1), val.nonzero().squeeze(1)
-    # pass/fail balance per family (and equal family mass) by sample weights
+    # pass/fail balance per family (and equal family mass) by sample weights, optionally scaled by episode progress
+    progress_scale = torch.ones(len(meta))
+    if progress_weighting:
+        by_ep: dict[str, list[int]] = {}
+        for i, m in enumerate(meta):
+            by_ep.setdefault(str(m.get('episode') or i), []).append(i)
+        for members in by_ep.values():
+            members.sort(key=lambda idx: (meta[idx].get('turn', 0), meta[idx].get('boundary', 0)))
+            denom = max(1, len(members) - 1)
+            for rank, idx in enumerate(members):
+                progress_scale[idx] = 0.25 + 0.75 * (rank / denom)
     weights = torch.zeros(len(meta))
     for family in set(fam[i] for i in tr_idx.tolist()):
         members = [i for i in tr_idx.tolist() if fam[i] == family]
         for label in (0., 1.):
             cls = [i for i in members if y[i] == label]
             if cls:
-                weights[cls] = 1. / (2 * len(cls))
+                cls_scale = progress_scale[cls]
+                denom_scale = float(cls_scale.sum())
+                weights[cls] = cls_scale / (2.0 * denom_scale if denom_scale > 0 else 2.0 * len(cls))
     head = StepVerifierHead(x.shape[-1]).to(device)
     optimizer = torch.optim.AdamW(head.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     n = len(tr_idx)
@@ -471,6 +487,8 @@ def main(argv=None):
     t.add_argument('--out', required=True)
     t.add_argument('--epochs', type=int, default=VerifierTrainConfig.epochs)
     t.add_argument('--seed', type=int, default=0)
+    t.add_argument('--progress-weighting', action=argparse.BooleanOptionalAction, default=True,
+                   help='Upweight later episode boundaries (0.25 -> 1.0) where trajectories diverge (default: true).')
     args = parser.parse_args(argv)
     if args.command == 'build':
         result = build_t0_sequences(args.collection, args.out, policy_sha256=args.policy_sha256,
@@ -487,7 +505,8 @@ def main(argv=None):
                                      checkpoint_sha256=args.checkpoint_sha256)
     else:
         result = train_t0(args.features, args.out, cfg=VerifierTrainConfig(epochs=args.epochs), seed=args.seed,
-                          device='cuda' if torch.cuda.is_available() else 'cpu')
+                          device='cuda' if torch.cuda.is_available() else 'cpu',
+                          progress_weighting=args.progress_weighting)
     print(json.dumps(result, indent=2, default=str))
 
 

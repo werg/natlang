@@ -14,10 +14,13 @@ header into train sites and unseen dev sites, and every train site leaves its la
 
 ``train``: the frozen policy as the Python native engine (serving dtype); per site the header's text state written in
 its real call (cached in RUN/store); one shared ``xs`` adapter basis, learned jointly by default (``LearnedBankBasis``,
-``--no-learn-basis`` keeps the weight-SVD basis); ``CompiledSiteHead`` (FP32) trained with AdamW on the native graph CE
+``--no-learn-basis`` keeps the weight-SVD basis); ``CompiledSiteHead`` (FP32) trained with AdamW (FP32 masters) on the native graph CE
 of the verified reply under the compiled stack, with independent ``kv_drop`` / ``adapter_drop``. Alongside, by default:
-- Live-KB (``LiveExperienceWriter``): each row gets slots from related same-family peers (never its own task or a
-  source-group sibling) and other-family distractors; ``--null-kb-prob`` of rows see distractors only (restraint).
+- Live-KB: each row gets slots from related same-family peers (never its own task or a source-group sibling) and
+  other-family distractors; ``--null-kb-prob`` of rows see distractors only (restraint). The writer is hindsight-kb's
+  pplx ``H``/``Q`` warm-started from 000000002 (``--writer-backend pplx --warmstart-dir --pplx-revision``; fresh
+  ``value_head`` and poolers at ``--lr``, warm encoders at ``--warm-lr``; FP32 masters via MasterAdamW); the embedding
+  stand-in (``--writer-backend embed``) runs only on CPU, for unit tests.
 - FO-MAML every ``--meta-every`` steps on a multi-call site: inner SGD on ``z_site`` over the support calls, the query
   call's loss at ``z0 + sg(z_K - z0)`` into the encoder, head and basis, plus a Reptile pull.
 - Compositional cores every ``--comp-every`` steps: a call compiled as ``C_scope + C_body`` (signature line and
@@ -102,6 +105,14 @@ def prepare(args):
         if path.exists():
             for row in _jsonl(path):
                 cases.setdefault(row['id'], row)
+    for extra_cases in (getattr(args, 'cases', None) or ()):
+        # case rows, or rows wrapping one (an authored pool's authored.jsonl: {id, task: CASE, ...}); a missing file
+        # or a row without a case id fails: held closure is checked over these rows
+        for row in _jsonl(extra_cases):
+            case = row['task'] if isinstance(row.get('task'), dict) else row
+            if not case.get('id'):
+                raise ValueError(f'{extra_cases}: a row without a case id')
+            cases.setdefault(case['id'], case)
 
     excluded = training_exclusion_ids(list(cases.values()))
     funnel = {
@@ -434,7 +445,7 @@ def train(args):
         CompiledSiteConfig, CompiledSiteHead, compile_release, create_compiler_adapter,
         create_learned_compiler_basis, site_loss, state_layout,
     )
-    from .live_kb_writer import LiveExperienceWriter, _engine_embedding_weight, build_live_kb_slots
+    from .live_kb_writer import LiveExperienceWriter, PplxWarmstartWriter, _engine_embedding_weight, build_live_kb_slots
 
     run = Path(args.out)
     run.mkdir(parents=True, exist_ok=True)
@@ -496,17 +507,51 @@ def train(args):
 
     head = CompiledSiteHead(config).to(args.device)
     writer = None
+    writer_backend = getattr(args, 'writer_backend', 'pplx')
+    warmstart_dir = getattr(args, 'warmstart_dir', None)
+    if warmstart_dir is not None and writer_backend != 'pplx':
+        raise ValueError('--warmstart-dir requires --writer-backend pplx (000000002 weights belong to pplx-embed-v2-late-0.6b)')
     if args.live_kb:
-        embed_dim = int(_engine_embedding_weight(engine).shape[-1])
-        writer = LiveExperienceWriter(embed_dim, value_dim=config.value_dim, key_dim=config.key_dim).to(args.device)
+        if writer_backend == 'pplx':
+            pplx_rev = getattr(args, 'pplx_revision', None)
+            if not pplx_rev:
+                raise ValueError('--writer-backend pplx requires --pplx-revision (pinned HF commit SHA)')
+            if warmstart_dir is None and not resumed:
+                raise ValueError('--writer-backend pplx starts from 000000002: pass --warmstart-dir (writer_H.pt, query_Q.pt)')
+            writer = PplxWarmstartWriter.from_warmstart(
+                revision=pplx_rev,
+                warmstart_dir=None if resumed else str(warmstart_dir),
+                value_dim=config.value_dim,
+                key_dim=config.key_dim,
+                device=args.device,
+                dtype=getattr(torch, args.dtype),
+                use_hf_kernels=getattr(args, 'pplx_hf_kernels', None),
+            )
+        else:
+            # owner 2026-11-26: Stage C never trains on the embedding stand-in; it exists for CPU unit tests
+            if str(args.device) != 'cpu':
+                raise ValueError('--writer-backend embed is the CPU unit-test stand-in; Stage C trains with --writer-backend pplx')
+            embed_dim = int(_engine_embedding_weight(engine).shape[-1])
+            writer = LiveExperienceWriter(embed_dim, value_dim=config.value_dim, key_dim=config.key_dim).to(args.device)
 
-    # optimizer groups: the head and the writer at --lr, the learned basis at --basis-lr
+    # Dual-LR optimizer groups: fresh head/H_val at --lr (2e-4), warm-started 000000002 H_key/Q at --warm-lr (2e-5), basis at --basis-lr
     param_groups = [{'params': list(head.parameters()), 'lr': args.lr, 'base_lr': args.lr, 'name': 'head'}]
     if basis_module is not None:
         param_groups.append({'params': list(basis_module.parameters()), 'lr': args.basis_lr, 'base_lr': args.basis_lr, 'name': 'basis'})
     if writer is not None:
-        param_groups.append({'params': list(writer.parameters()), 'lr': args.lr, 'base_lr': args.lr, 'name': 'writer'})
-    optimizer = torch.optim.AdamW(param_groups, weight_decay=args.weight_decay, betas=(.9, .95))
+        fresh_w = writer.fresh_parameters()
+        warm_w = writer.warm_parameters()
+        if fresh_w:
+            param_groups.append({'params': fresh_w, 'lr': args.lr, 'base_lr': args.lr, 'name': 'writer_fresh'})
+        if warm_w:
+            warm_lr = getattr(args, 'warm_lr', 2e-5)
+            param_groups.append({'params': warm_w, 'lr': warm_lr, 'base_lr': warm_lr, 'name': 'writer_warm'})
+    # FP32 master weights and moments for every parameter (AGENTS.md "Precision"): the pplx encoders' parameters are
+    # BF16, so a plain AdamW would round each 2e-5 update away; MasterAdamW is plain AdamW on FP32 parameters.
+    from .hkb_dependency import require as _require_hkb
+    _require_hkb()
+    from hindsight_kb.recipe.optimizer import MasterAdamW
+    optimizer = MasterAdamW(param_groups, weight_decay=args.weight_decay, betas=(.9, .95))
 
     step, order, position = 0, list(range(len(train_rows))), 0
     if saved is not None:
@@ -534,6 +579,8 @@ def train(args):
         'parameter_dtypes': sorted({str(p.dtype) for p in all_params}),
         'resumed_at_step': step if resumed else None,
         'objective': 'unified-compiler-live-kb-maml-compositional/2',
+        'writer_backend': writer_backend if writer is not None else None,
+        'writer_warmstart': getattr(writer, 'warmstart', None),
     }
     _write_json(run / ('receipt.json' if not resumed else f'receipt-resume-{step}.json'), receipt)
     log = (run / 'train.jsonl').open('a', encoding='utf-8')
@@ -587,12 +634,19 @@ def train(args):
                 scale=args.meta_weight,
             )
 
-        # compositional cores: C_scope + C_body
+        # compositional cores: C_scope + C_body (jointly with Live-KB when active)
         if args.comp_every > 0 and (step + 1) % args.comp_every == 0:
             comp_row = rng.choice(train_rows)
+            comp_kb = {}
+            if writer is not None:
+                cz, ck, cw, cv = build_live_kb_slots(
+                    engine, writer, comp_row, train_rows, k_pos=args.kb_pos, k_neg=args.kb_neg,
+                    null_restraint=(rng.random() < args.null_kb_prob), rng=rng,
+                )
+                comp_kb = {'z_kb': cz, 'k_kb': ck, 'w_kb': cw, 'kb_valid': cv}
             comp_loss_val = _compositional_step(
                 engine, head, sites, comp_row, adapter_id=adapter_id, basis_module=basis_module,
-                scale=args.comp_weight,
+                scale=args.comp_weight, kb_args=comp_kb,
             )
 
         grad_norm = float(torch.nn.utils.clip_grad_norm_(all_params, args.clip))
@@ -664,6 +718,7 @@ def main(argv=None):
     p = sub.add_parser('prepare')
     p.add_argument('--collections', nargs='*', default=[], help='collection directories (each with groups/g*/)')
     p.add_argument('--call-level', nargs='*', default=[], help='call_level_engine teach outputs (DIR or its call-level.jsonl.zst)')
+    p.add_argument('--cases', nargs='*', default=[], help='more case rows for call-level tasks (case JSONL, or an authored pool\'s authored.jsonl); held closure is checked over them')
     p.add_argument('--out', required=True)
     p.add_argument('--max-prompt-tokens', type=int, default=4096)
     p.add_argument('--per-site', type=int, default=8)
@@ -679,12 +734,13 @@ def main(argv=None):
     t.add_argument('--out', type=Path, required=True)
     t.add_argument('--device', default='cuda')
     t.add_argument('--dtype', default='bfloat16', help="the frozen policy's serving dtype")
-    t.add_argument('--steps', type=int, default=200)
+    t.add_argument('--steps', type=int, default=5000)
     t.add_argument('--batch', type=int, default=4)
     t.add_argument('--lr', type=float, default=2e-4)
+    t.add_argument('--warm-lr', type=float, default=2e-5)
     t.add_argument('--basis-lr', type=float, default=1e-4)
     t.add_argument('--weight-decay', type=float, default=.01)
-    t.add_argument('--warmup', type=int, default=20)
+    t.add_argument('--warmup', type=int, default=200)
     t.add_argument('--clip', type=float, default=1.)
     t.add_argument('--rank', type=int, default=16)
     t.add_argument('--inner-rank', type=int, default=4)
@@ -692,6 +748,12 @@ def main(argv=None):
     t.add_argument('--adapter-drop', type=float, default=0.1)
     t.add_argument('--learn-basis', action=argparse.BooleanOptionalAction, default=True)
     t.add_argument('--live-kb', action=argparse.BooleanOptionalAction, default=True)
+    t.add_argument('--writer-backend', choices=('pplx', 'embed'), default='pplx',
+                   help='pplx: hindsight-kb PPLXBlockEncoder H/Q warm-started from 000000002 (Stage C); embed: CPU unit-test stand-in')
+    t.add_argument('--warmstart-dir', type=Path, default=None, help='directory containing writer_H.pt and query_Q.pt from extract_lfm3_warmstart.py')
+    t.add_argument('--pplx-revision', default=None, help='pinned HF commit SHA for perplexity-ai/pplx-embed-v2-late-0.6b')
+    t.add_argument('--pplx-hf-kernels', action=argparse.BooleanOptionalAction, default=None,
+                   help="the pplx backbone's FLA/causal-conv/Liger kernels (default: on for CUDA, as 000000002 trained)")
     t.add_argument('--kb-pos', type=int, default=2)
     t.add_argument('--kb-neg', type=int, default=2)
     t.add_argument('--null-kb-prob', type=float, default=0.2, help='rows that see distractors only (plan: 20%%)')
