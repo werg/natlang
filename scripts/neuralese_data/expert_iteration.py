@@ -44,6 +44,7 @@ import argparse
 import collections
 import contextlib
 import json
+import hashlib
 import os
 import random
 import shutil
@@ -1655,6 +1656,42 @@ class Cycle:
         """Whether ``unit`` runs or the ledger holds it (waiting, or requeued after a preemption until its relaunch)."""
         return self.active(unit) or ledger_queued(unit)
 
+    def fill_unit_prefix(self, base):
+        """A reader change starts a distinct data consumer, never adopts old code."""
+        if os.environ.get('NATLANG_EI_FILL_SOURCE_UNITS', '1') == '0':
+            return base
+        from natlang_neuralese.common.code_provenance import code_provenance
+        repo = self.fill_repo().resolve()
+        identity = [str(repo), code_provenance(repo, fresh=True)]
+        key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:12]
+        return f'{base}-reader-{key}'
+
+    def fill_units(self, base):
+        """Only this exact fill role's admitted/queued units, including legacy."""
+        from scripts.memory_ledger import owned_units
+        pattern = re.compile(re.escape(base) + r'(?:-reader-[0-9a-f]{12}-[0-9a-f]{12})?')
+        units = {name.removesuffix('.service') for name in owned_units()}
+        return sorted({base} | {name for name in units if pattern.fullmatch(name)})
+
+    def current_fill_unit(self, base):
+        prefix = self.fill_unit_prefix(base)
+        for unit in self.fill_units(base):
+            matches = unit == base if prefix == base else unit.startswith(prefix + '-')
+            if matches and self.present(unit):
+                return unit
+        return None
+
+    def new_fill_unit(self, base):
+        prefix = self.fill_unit_prefix(base)
+        return base if prefix == base else prefix + '-' + os.urandom(6).hex()
+
+    def stop_fills(self, base, *, stale_only=False):
+        current = self.fill_unit_prefix(base) if stale_only else None
+        for unit in self.fill_units(base):
+            matches = unit == base if current == base else current is not None and unit.startswith(current + '-')
+            if not matches and self.present(unit):
+                self.stop_unit(unit)
+
     def wait(self, unit, poll=60, between=None):
         """Until ``unit`` ends (a preempted, requeued unit has not ended); a failed unit ends the cycle (its stage must
         not be marked done). ``between``: called every poll while it runs (a failure is logged, never the wait's end)."""
@@ -2064,7 +2101,7 @@ class Cycle:
             while self.present(unit):          # a preempted collection is requeued and resumes: it has not ended
                 if self.speculative and not self.gate() and self.recollect_due():
                     self.stop_unit(unit)          # the candidate failed held: its collection is not data (gate recollects)
-                    self.stop_unit(f'{self.a.name}-fill')
+                    self.stop_fills(f'{self.a.name}-fill')
                     self.note(stage='collect', stopped='previous candidate failed held: recollect at the gate')
                     return
                 time.sleep(60)
@@ -2072,7 +2109,7 @@ class Cycle:
             for host, _ in served:
                 self.stop_colab(host)
         if self.a.fill and not served:
-            self.stop_unit(f'{self.a.name}-fill')   # its actor is gone: the fill window takes over
+            self.stop_fills(f'{self.a.name}-fill')   # its actor is gone: the fill window takes over
         summary = json.loads((self.collect_dir / 'collect.json').read_text())
         name = 'colab' if served else 'dgx'
         self.record_cost('collect', name, time.time() - started, sessions=max(1, len(served)),
@@ -2344,9 +2381,14 @@ class Cycle:
         actor = json.loads((self.collect_dir / 'actor.json').read_text())
         if actor['checkpoint_sha256'] != (sha or self.start_sha):
             raise SystemExit('collect actor serves another policy')
-        self.ledger(f'{self.a.name}-fill', FILL_GB, 'medium', self.fill_command(actor), self.dir / 'fill.log', detach=True,
+        base = f'{self.a.name}-fill'
+        self.stop_fills(base, stale_only=True)
+        if self.current_fill_unit(base):
+            return
+        unit = self.new_fill_unit(base)
+        self.ledger(unit, FILL_GB, 'medium', self.fill_command(actor), self.dir / 'fill.log', detach=True,
                     repo=self.fill_repo())
-        self.note(stage='fill', started=f'{self.a.name}-fill', actor=actor['url'])
+        self.note(stage='fill', started=unit, actor=actor['url'], reader=str(self.fill_repo()))
 
     def fill_command(self, actor, window=False, pop=False, skip_trained=(), colab=False):
         """filled_reasoning.py generate: the seed WORKs then the grpo-sd-teacher role's (first WORK wins a key),
@@ -2758,7 +2800,7 @@ class Cycle:
             if name == 'sft':
                 self.fill_window_close()       # the SFT has the GPU to itself
             if name == 'data' and self.a.fill:
-                self.stop_unit(f'{self.a.name}-fill')
+                self.stop_fills(f'{self.a.name}-fill')
                 if getattr(self.a, 'pop_fill_stop_at_data', False):
                     self.pop_fill_close()   # default: Pop draws on for the next cycle until a Pop serve stops it
             stage()
@@ -3606,6 +3648,7 @@ class AsyncRoundDriver:
         self.c.collection_pending = self.collection_pending
         self.c.hold_clients = self.hold_clients
         self.clients_held = False
+        self.collections_held = False
         if self.argument_changes:
             self.note(arguments_reconciled=self.argument_changes)
         self.lock = threading.RLock()
@@ -3800,18 +3843,19 @@ class AsyncRoundDriver:
             other_unit = f'{self.a.name}-collect-{other.name.split("-")[0]}'
             if other_unit == unit:
                 continue
-            for u in (other_unit, f'{other_unit}-fill', *self.remote_units(other_unit)):
+            for u in (other_unit, *self.c.fill_units(f'{other_unit}-fill'), *self.remote_units(other_unit)):
                 if self.c.present(u):
                     self.c.stop_unit(u)
                     self.note(collection_stopped=u)
                     self.retain(f'collection {u} stopped')
         if self.c.present(unit):           # running, or preempted and requeued (the ledger relaunches it)
             if not self.collector_on_old_dir(unit, policy):
+                self.ensure_fill_keeper(unit, work, policy)
                 return unit
             # 2026-11-24: after the 19:12 rollback to r1, its collections (tiered to the HDD that morning) took the
             # live collectors' writes at ~15 MB/s of small files (sda 97% busy, the Pop collector in D state): the
             # collector moves to the NVMe continuation (it resumes there; what it scored stays readable)
-            for u in (unit, f'{unit}-fill'):
+            for u in (unit, *self.c.fill_units(f'{unit}-fill')):
                 if self.c.present(u):
                     self.c.stop_unit(u)
             self.note(collection_moved=unit, policy=policy['sha256'], work=str(work),
@@ -3830,9 +3874,20 @@ class AsyncRoundDriver:
                       host_max_gb=plan['cap'])
         self.note(collection_started=unit, policy=policy['sha256'], work=str(work), budget_gb=budget, full_gb=full,
                   slots=plan['slots'])
-        if self.a.fill:
-            threading.Thread(target=self._fill_beside, args=(unit, work, policy), daemon=True).start()
+        self.ensure_fill_keeper(unit, work, policy, wait_for_actor=True)
         return unit
+
+    def ensure_fill_keeper(self, unit, work, policy, *, wait_for_actor=False):
+        if not self.a.fill or (not wait_for_actor and not (work / 'actor.json').exists()):
+            return
+        keepers = getattr(self, '_fill_keepers', {})
+        self._fill_keepers = keepers
+        previous = keepers.get(unit)
+        if previous is not None and previous.is_alive():
+            return
+        thread = threading.Thread(target=self._fill_beside, args=(unit, work, policy), daemon=True)
+        keepers[unit] = thread
+        thread.start()
 
     def _fill_beside(self, unit, work, policy):
         deadline = time.time() + 7200
@@ -3849,18 +3904,23 @@ class AsyncRoundDriver:
         keep = os.environ.get('NATLANG_EI_FILL_KEEPER', '1') != '0'
         launches = 0
         while True:
-            if not self.c.present(f'{unit}-fill'):
-                subprocess.run(['systemctl', '--user', 'reset-failed', f'{unit}-fill.service'], capture_output=True)
-                self.c.ledger(f'{unit}-fill', FILL_GB, 'medium',
-                              self.c.fill_command(actor, skip_trained=self.trained_builds()),
-                              work / 'fill.log', detach=True, repo=self.c.fill_repo())
-                launches += 1
-                self.note(fill_started=f'{unit}-fill', policy=policy['sha256'], launch=launches)
+            # The same lock protects learner yield/policy retirement. A fill
+            # cannot reappear after that owner stopped its collection/clients.
+            with self.COLLECT_LOCK:
+                if self.collections_held or not self.c.active(unit):
+                    return
+                base = f'{unit}-fill'
+                self.c.stop_fills(base, stale_only=True)
+                if not self.c.current_fill_unit(base):
+                    fill = self.c.new_fill_unit(base)
+                    self.c.ledger(fill, FILL_GB, 'medium',
+                                  self.c.fill_command(actor, skip_trained=self.trained_builds()),
+                                  work / 'fill.log', detach=True, repo=self.c.fill_repo())
+                    launches += 1
+                    self.note(fill_started=fill, policy=policy['sha256'], launch=launches, reader=str(self.c.fill_repo()))
             if not keep:
                 return
             time.sleep(FILL_KEEPER_SECONDS)
-            if not self.c.active(unit):
-                return
 
     def remote_targets(self):
         """The ``--rebind-actor HOST@FRONT_URL[=SLOTS]`` targets: {index, host, front, slots, pop, suffix}. A target on
@@ -4045,8 +4105,8 @@ class AsyncRoundDriver:
             for target in self.remote_targets():
                 if target['pop'] or not target['host'] or target['host'] in busy:
                     continue
-                unit = self.colab_fill_unit(target)
-                if self.c.present(unit):
+                base = self.colab_fill_unit(target)
+                if self.c.current_fill_unit(base):
                     continue
                 endpoint = self.target_endpoint(target)
                 export = self.fill_export()
@@ -4055,6 +4115,8 @@ class AsyncRoundDriver:
                 sglang = pop_rl_actor.remote_endpoint(target['host'], urlparse(target['front']).port + 1000)
                 actor = {'url': endpoint, 'sglang': sglang, 'export': export, 'checkpoint_sha256': policy['sha256']}
                 self.c.work_tokenizer()
+                self.c.stop_fills(base, stale_only=True)
+                unit = self.c.new_fill_unit(base)
                 log_dir = self.root / 'colab-fill'
                 log_dir.mkdir(parents=True, exist_ok=True)
                 self.c.ledger(unit, COLAB_FILL_GB, 'medium',
@@ -4268,7 +4330,7 @@ class AsyncRoundDriver:
             self.collections_held = True    # until ensure_collection: the standing relaunch leaves them stopped
             for work in sorted((self.root / 'collect').glob('v*')) if (self.root / 'collect').exists() else ():
                 unit = f'{self.a.name}-collect-{work.name.split("-")[0]}'
-                for u in (unit, f'{unit}-fill', *(self.remote_units(unit) if remote else ())):
+                for u in (unit, *self.c.fill_units(f'{unit}-fill'), *(self.remote_units(unit) if remote else ())):
                     if self.c.present(u):          # a requeued one too, or the ledger relaunches it beside the learner
                         self.c.stop_unit(u)
 
