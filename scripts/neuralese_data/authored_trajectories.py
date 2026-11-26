@@ -199,10 +199,12 @@ def graph_calls(turns, renderer, stats):
             prompt, reply = [i for _, i in before], [i for _, i in rest]
             end = next((i for i, token in enumerate(reply) if token in stops), len(reply))
             if capture.get('select') is not None:
-                from natlang_neuralese.serve.engine import selected_span
+                from natlang_neuralese.serve.engine import select_search_start, selected_span
                 try:
+                    begin = select_search_start(reply[:end], think_close)    # the content, as Engine.capture_plan
                     start, stop = selected_span(lambda part: tokenizer.decode(part, skip_special_tokens=False),
-                                                reply[:end], capture['select'])
+                                                reply[begin:end], capture['select'])
+                    start, stop = begin + start, begin + stop
                 except Exception:
                     stats['authored_select_not_found'] += 1
                     return None

@@ -3,7 +3,22 @@ from __future__ import annotations
 import copy, hashlib, json, math, re
 from ..serve.chat import parse_xml_calls,scan_xml_calls
 
-POLICY_SHA256 = '1b2713adb032003d3522794fe65b75f03d9b31a1453bc86027f544f460bc315e'
+from functools import lru_cache
+from pathlib import Path
+
+# ts-host's parser policy file is the one source of truth: the hash it stamps on a capture (NATIVE_XML_POLICY_SHA256)
+# and every policy whose captures its parser reads identically (NATIVE_XML_POLICY_READS).
+POLICY_FILE = Path(__file__).resolve().parents[4] / 'ts-host/src/model/native-xml-policy.ts'
+
+@lru_cache(maxsize=1)
+def policy_reads(path=POLICY_FILE):
+    """(current policy, accepted policies) as ts-host declares them; fails closed when the file is missing or changed shape."""
+    text=Path(path).read_text()
+    current=re.search(r"NATIVE_XML_POLICY_SHA256\s*=\s*'([0-9a-f]{64})'",text)
+    reads=re.search(r"NATIVE_XML_POLICY_READS\s*=\s*new Set\(\[(.*?)\]\)",text,re.S)
+    if not current or not reads or 'NATIVE_XML_POLICY_SHA256' not in reads.group(1):
+        raise ValueError(f'native XML parser policy file {path} has no readable policy set')
+    return current.group(1),frozenset({current.group(1),*re.findall(r"'([0-9a-f]{64})'",reads.group(1))})
 _ANNOTATIONS={'description','title','default','examples','$schema','deprecated','readOnly','writeOnly'}
 _SUPPORTED={'type','properties','required','additionalProperties','items','enum','const','anyOf','oneOf','allOf','minimum','maximum','exclusiveMinimum','exclusiveMaximum','minLength','maxLength','pattern','minItems','maxItems','uniqueItems','$ref','$defs','definitions'}|_ANNOTATIONS
 
@@ -77,7 +92,7 @@ def authenticate(turn):
     try:
         response=turn['model_response'];proof=response['tool_parse'];request=turn['model_request'];raw=response['raw_response']
         if (proof['schema']!='natlang.native-xml-tool-parse/1' or proof['source']!='assistant-content' or
-            proof['schema_custody']!='response_tools' or proof['policy_sha256']!=POLICY_SHA256):raise ValueError('native XML parser policy differs')
+            proof['schema_custody']!='response_tools' or proof['policy_sha256'] not in policy_reads()[1]):raise ValueError('native XML parser policy differs')
         reqtext=turn['model_request_canonical'];rawtext=response['raw_response_canonical']
         if hashlib.sha256(reqtext.encode()).hexdigest()!=turn['request_sha256'] or hashlib.sha256(rawtext.encode()).hexdigest()!=turn['raw_response_sha256']:raise ValueError('native XML request or response digest differs')
         without={k:v for k,v in request.items() if k!='invocation_id'}

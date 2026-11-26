@@ -220,6 +220,15 @@ class Sequence:
     tool_grammar_prefix: list = field(default_factory=list)
 
 
+def select_search_start(reply_ids, think_close) -> int:
+    """Where a capture's ``select`` search starts: after the reply's last ``</think>`` (its reasoning is not the value's
+    view; a note drafted there would match twice). ts-host ``grammarCapture`` (model/native-operator.ts) starts at the
+    same token. ``NATLANG_CAPTURE_SELECT_IN_REASONING=1`` searches the whole reply (before 2026-11-26)."""
+    if os.environ.get('NATLANG_CAPTURE_SELECT_IN_REASONING', '0') == '1':
+        return 0
+    return max((i + 1 for i, token in enumerate(reply_ids) if token == think_close), default=0)
+
+
 def selected_span(decode, ids, text):
     """(start, stop) of the fewest whole tokens of ``ids`` whose decoded text covers the one occurrence of ``text`` as
     the reply spells it (raw or JSON-escaped: a tool call argument; ts-host grammarCapture spells it the same). RequestError when none or several."""
@@ -1360,9 +1369,10 @@ class Engine:
             end = len(reply)
         elif select is not None:
             # Exclude reasoning (<think>...</think>) from select search so drafting note text inside <think> does not
-            # create a duplicate match and break compact_history learned compaction.
+            # create a duplicate match and break compact_history learned compaction. The content starts after the
+            # last `</think>`, as the unselected capture below and ts-host `grammarCapture` read it.
             think_close = self.tokenizer.convert_tokens_to_ids("</think>")
-            search_from = next((i + 1 for i, token in enumerate(reply[:end]) if token == think_close), 0)
+            search_from = select_search_start(reply[:end], think_close)
             rel_start, rel_end = selected_span(
                 lambda part: self.tokenizer.decode(part, skip_special_tokens=False), reply[search_from:end], select)
             start, end = search_from + rel_start, search_from + rel_end

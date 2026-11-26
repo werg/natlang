@@ -224,3 +224,32 @@ def test_a_stop_returns_and_dumps_stacks_when_a_slot_thread_is_stuck(tmp_path, m
     stuck.set()
     assert clock.monotonic() - started < 6
     assert any('"stuck_slots": 1' in line and 'stuck.wait' in line for line in lines)
+
+
+def test_a_resume_on_another_series_reaches_result_json_and_compare_warns(tmp_path, monkeypatch):
+    """held_eval.measure records resumed_series/resumed_code in run.json; finalize copies them into result.json, and
+    compare warns on them (refuses under --strict-series): a result mixing two series is not one series."""
+    from natlang_neuralese.rl import task_rollouts
+    for name in ('sealed-queue.jsonl', 'packet.jsonl', 'rewards.jsonl'):
+        (tmp_path / name).write_text('')
+    monkeypatch.setattr(task_rollouts, 'score', lambda directory: {})
+    monkeypatch.setattr(held_eval, 'record_result', lambda directory, spec: None)
+    spec = {'policy_id': 'p', 'manifest_sha256': 'm', 'series': {'key': 's1'}, 'code': {'git_commit': 'c1'},
+            'endpoint': 'http://x', 'tasks': 0, 'samples': 1,
+            'resumed_code': {'git_commit': 'c2'}, 'resumed_series': {'key': 's2'}}
+    result = held_eval.finalize(tmp_path, spec, 0.0, complete=False)
+    on_disk = json.loads((tmp_path / 'result.json').read_text())
+    assert on_disk['resumed_series'] == {'key': 's2'} and on_disk['resumed_code'] == {'git_commit': 'c2'}
+    plain = held_eval.finalize(tmp_path, {k: v for k, v in spec.items() if not k.startswith('resumed_')}, 0.0,
+                               complete=False)
+    assert 'resumed_series' not in plain
+    row = {'samples': [{'task_id': 't', 'sample': 0, 'ran': True, 'reward': 1.0, 'outcome': 'task_success'}],
+           'policy_id': 'p', 'ran': 1, 'scored': 1, 'successes': 1, 'loop_rate': 0, 'complete': True,
+           'code': {'git_commit': 'c1'}, 'series': {'key': 's1'}}
+    resumed = {**row, 'resumed_series': result['resumed_series'], 'resumed_code': result['resumed_code']}
+    warnings = held_eval.compare(row, resumed, resamples=10)['warnings']
+    assert any('second result resumed on another series (s1 -> s2)' in w for w in warnings)
+    assert any('second result resumed on another commit' in w for w in warnings)
+    assert held_eval.compare(row, row, resamples=10)['warnings'] == []
+    with pytest.raises(ValueError, match='resumed on another series'):
+        held_eval.compare(row, resumed, strict_series=True)

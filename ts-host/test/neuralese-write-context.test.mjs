@@ -129,3 +129,36 @@ test('the store keeps a capture-kind state (a reply captured in its own context)
   assert.equal(decodeNativeState(capture.wire, capture.id).metadata.producer_kind, 'capture');
   assert.throws(() => kind('other'), /producer_kind/);
 });
+
+test('a selected capture searches the content after the last </think>, not the reasoning (engine.py parity)', async () => {
+  const { grammarCapture } = await import('../dist/model/native-operator.js');
+  const pieces = { 6: '<think>', 7: '</think>', 30: 'N', 31: 'ote', 32: ' x', 2: '<|im_end|>' };
+  const requests = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const body = init?.body ? JSON.parse(init.body) : undefined;
+    requests.push({ url: String(url), body });
+    if (String(url).endsWith('/tokenize'))
+      return new Response(JSON.stringify({ tokens: body.content === '<think>' ? [6] : body.content === '</think>' ? [7] :
+        body.content === '<|im_end|>' ? [2] : [1, 6] }));
+    if (String(url).endsWith('/detokenize'))
+      return new Response(JSON.stringify({ content: body.tokens.map(t => pieces[t]).join('') }));
+    return new Response(JSON.stringify({ error: 'stop here' }), { status: 500 });
+  };
+  const info = { native_state: { enabled: true, production: true, architecture: 'lfm3', role_marker_ids: [100, 101, 102, 103] } };
+  const forced = () => requests.filter(r => r.url.endsWith('/v1/chat/completions')).at(-1).body;
+  // The note is drafted in the reasoning and written again as the reply's content.
+  const call = { messages: [{ role: 'user', content: 'x' }], tools: [], prompt: [1, 6], reply: [30, 31, 32, 7, 30, 31, 2], select: 'Note' };
+  const previous = process.env.NATLANG_CAPTURE_SELECT_IN_REASONING;
+  try {
+    const capture = grammarCapture({ endpoint: 'http://fork', store: new MemoryNeuraleseStore(), info });
+    await assert.rejects(capture(call), /forced span failed \(500\)/);
+    assert.equal(forced().grammar, 'root ::= <[30]> <[31]> <[32]> <[7]> <[100]> <[30]> <[31]> <[101]>');
+    process.env.NATLANG_CAPTURE_SELECT_IN_REASONING = '1';
+    await assert.rejects(capture(call), /does not occur exactly once/);
+  } finally {
+    globalThis.fetch = realFetch;
+    if (previous === undefined) delete process.env.NATLANG_CAPTURE_SELECT_IN_REASONING;
+    else process.env.NATLANG_CAPTURE_SELECT_IN_REASONING = previous;
+  }
+});

@@ -256,6 +256,31 @@ def test_learner_mixed_rows():
     assert weights is None and np.allclose(behaviour.numpy(), [-0.1, -0.2])
 
 
+def test_tail_floor_exempts_targets_the_student_never_sampled():
+    """Review of ddd97a765: its exemption named a role ``rrl_action`` that no chain has. The teacher action rows of the
+    reasoning RL term (``rrl == 'action'``) and the carried chains' ``teacher`` rows read the learner's own logp, not a
+    sampling law: the floor no longer masks them (``--tail-floor-unsampled floor`` restores it); sampled rows keep it."""
+    import torch
+    reasoning = {'logp': np.array([-0.2, -8.0], np.float32), 'advantage': 1.5, 'rrl': 'reasoning'}
+    action = {'advantage': 0.05, 'rrl': 'action'}
+    chain = {'role': grpo.RRL_ROLE, 'advantage': 1., 'segs': [(3, 2, reasoning), (5, 2, action)]}
+    behaviour, _ = grpo.behaviour_logp(chain, torch.tensor([-0.1, -0.9, -3.0, -8.0]))
+    advantage = grpo.token_advantage(chain, 'cpu')
+    args = SimpleNamespace(tail_floor_unsampled='exempt')
+    weight, tail = grpo.policy_weight(torch.ones(4), behaviour, advantage, 2., -7., grpo.unsampled_tail_exempt(chain, args))
+    assert tail.tolist() == [False, True, False, False] and weight.tolist() == [1, 0, 1, 1]
+    args.tail_floor_unsampled = 'floor'
+    assert grpo.unsampled_tail_exempt(chain, args) is None
+    weight, tail = grpo.policy_weight(torch.ones(4), behaviour, advantage, 2., -7., grpo.unsampled_tail_exempt(chain, args))
+    assert tail.tolist() == [False, True, False, True]
+    carried = {'role': 'sd', 'advantage': 1., 'segs': [(0, 2, {'logp': np.array([-0.1, -0.2], np.float32)}),
+                                                      (2, 1, {'teacher': True})]}
+    assert grpo.unsampled_tail_exempt(carried, SimpleNamespace()).tolist() == [False, False, True]
+    plain = {'role': 'student', 'advantage': 1., 'segs': [(0, 2, {'logp': np.array([-0.1, -9.], np.float32)})]}
+    assert grpo.unsampled_tail_exempt(plain, SimpleNamespace()) is None     # every target sampled: the floor as before
+    assert grpo.unsampled_tail_exempt({'role': 'sd_teacher', 'segs': plain['segs']}, SimpleNamespace()) is None
+
+
 def sampler(**overrides):
     args = SimpleNamespace(reasoning_rl_sources='jolt,demos', seed=1, reasoning_rl_calls=0, reasoning_rl_horizon=4,
                            reasoning_rl_rewrite_share=0.0, reasoning_rl_rewrite_rounds=1,

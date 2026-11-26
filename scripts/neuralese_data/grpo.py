@@ -3989,24 +3989,40 @@ def twin_distributions(meta, close_id, count):
     return ids, logp, close
 
 
-def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor):
+def policy_weight(rho, actor_logp, advantage, rho_cap, tail_floor, exempt=None):
     """(weight of the policy term, tail mask): the truncated importance ratio, zero where the actor sampled a tail token
     (its sampling logp below ``tail_floor``) in an episode with a positive advantage. Untruncated T=1 sampling draws
     such tokens about once in 200 (p < e^-7: 0.5% of sampled tokens); raising them is the largest-norm part of a
     positive episode's gradient and never the reason it succeeded. The token stays context and keeps its KL term; a
     negative advantage still pushes it down. ``tail_floor`` 0 or None: no mask. ``advantage``: a number or a per-token
-    tensor (``token_advantage``)."""
+    tensor (``token_advantage``). ``exempt`` (bool tensor or None): targets the floor never masks
+    (``unsampled_tail_exempt``)."""
     import torch
     weight = rho.clamp(max=rho_cap)
-    if torch.is_tensor(advantage):
-        if not tail_floor:
-            return weight, torch.zeros_like(weight, dtype=torch.bool)
-        masked = (actor_logp < tail_floor) & (advantage > 0)
-        return weight.masked_fill(masked, 0.), masked
-    if not tail_floor or advantage <= 0:
+    if not tail_floor or (not torch.is_tensor(advantage) and advantage <= 0):
         return weight, torch.zeros_like(weight, dtype=torch.bool)
     masked = actor_logp < tail_floor
+    if torch.is_tensor(advantage):
+        masked = masked & (advantage > 0)
+    if exempt is not None:
+        masked = masked & ~exempt.to(masked.device)
     return weight.masked_fill(masked, 0.), masked
+
+
+def unsampled_tail_exempt(chain, args):
+    """Targets of a chain mixing actor samples with targets the student never sampled (the reasoning RL term's teacher
+    actions, rows ``rrl == 'action'``; the carried search chains' rows marked ``teacher``): their "actor" log-probability
+    is the learner's own (``behaviour_logp``), not a sampling law, so the tail floor's premise (the actor drew a tail
+    token) does not hold and it would mask exactly the teacher tokens the term exists to teach. ddd97a765 meant this
+    with a role ``rrl_action`` that no chain has. None when every target was sampled, or with
+    ``--tail-floor-unsampled floor`` (before 2026-11-26). Whole ratio-free chains (``sd_teacher``, ``replay``) are
+    exempted by role in the train loop."""
+    import torch
+    if getattr(args, 'tail_floor_unsampled', 'exempt') != 'exempt' or chain.get('role') in RATIO_FREE_ROLES:
+        return None
+    if not any(row.get('rrl') == 'action' or row.get('teacher') for _, _, row in chain['segs']):
+        return None
+    return torch.from_numpy(~student_sampled_targets(chain))
 
 
 RATIO_FREE_ROLES = ('sd_teacher', 'replay')   # chains without actor log-probabilities (rho = 1)
@@ -5652,8 +5668,9 @@ def train(args):
                         log_rho = logp.detach() - actor
                         rho = log_rho.clamp(max=20).exp()
                         advantage = token_advantage(chain, logp.device)
-                        tail_floor = None if chain.get('role') in ('replay', 'sd_teacher', 'rrl_action') else args.tail_logp_floor
-                        weight, tail = policy_weight(rho, actor, advantage, args.rho_cap, tail_floor)
+                        tail_floor = None if chain.get('role') in ('replay', 'sd_teacher') else args.tail_logp_floor
+                        weight, tail = policy_weight(rho, actor, advantage, args.rho_cap, tail_floor,
+                                                     unsampled_tail_exempt(chain, args))
                         if row_weight is not None:
                             weight = weight * row_weight
                         if args.second_close == 'context' and think_close is not None:
@@ -6366,6 +6383,11 @@ def build_parser():
     t.add_argument('--tail-logp-floor', type=float, default=-7.,
                    help='where the actor sampled a token (or decision option) with log-probability below this and the '
                         "episode's advantage is positive, the policy term has zero weight (the KL term stays); 0: off")
+    t.add_argument('--tail-floor-unsampled', choices=('exempt', 'floor'), default='exempt',
+                   help='targets the student never sampled inside a sampled chain (reasoning-RL teacher actions, carried '
+                        "search chains' teacher rows; grpo.unsampled_tail_exempt): exempt from --tail-logp-floor "
+                        '(default; their logp is the learner\'s own, not a sampling law), floor: masked like actor samples '
+                        '(before 2026-11-26)')
     t.add_argument('--decision-weight', choices=('call', 'token'), default='call',
                    help="units of one sampled decision in its episode's normalization. call: the episode's mean sampled "
                         'tokens per trained call (a decision is one model call whose reply is one categorical action, so it '

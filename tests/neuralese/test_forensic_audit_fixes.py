@@ -279,3 +279,15 @@ def test_filled_teacher_preference_keeps_producer_turns_at_the_task_cap():
         assert 'a-filled' in {c['key'] for c in two}             # A's turn takes its filled episode
         one = sft_sources.capped(eps[:2], random.Random(seed), funnel, lambda t: 1, 1.0, lambda c: 0, prefer=prefer)
         assert [c['key'] for c in one] == ['a-filled']
+
+
+def test_exp0_sft_stopped_round_never_exports_round_factors():
+    """Review of ddd97a765: with --keep-best-val a --stop-file round still exported factors labelled with its round id
+    (the early return was skipped once a best step existed). A stopped round exports nothing, best or not."""
+    import exp0_sft
+    assert exp0_sft.stopped_round(True, 'r0014') is True
+    assert exp0_sft.stopped_round(False, 'r0014') is False
+    assert exp0_sft.stopped_round(True, None) is False     # a run outside a round exports what it reached
+    source = Path(exp0_sft.__file__).read_text()
+    end = source[source.index('    save_state_now(completed_step)\n    if stopped_round('):]
+    assert end.index('if stopped_round(') < end.index('if best is not None:') < end.index('export_round(')

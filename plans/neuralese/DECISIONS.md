@@ -14673,3 +14673,48 @@ Policy changes of ddd97a765 that the review raised for the owner (not reverted):
 share from a floor into a ceiling (reverses DECISIONS r0009); ShapeQuota on the mix total lets one shape fill a small
 part; `--ambient-mode additive` default; `sd_teacher` exempt from the tail floor (the `rrl_action` exemption is dead:
 the role is `reasoning_rl`); leaked TOOL_MARKUP discards parsed calls.
+
+## 2026-11-26 15:30 Review of ddd97a765, remaining defects fixed (review follow-up agent)
+
+The nine items the reviews left open, each a default with targeted tests (opt-outs where behaviour changes):
+
+- **ts-host boolean subschemas.** `native-xml-calls.ts` `types()` threw `TypeError` on a `true`/`false` member of
+  `anyOf`/`oneOf` (`'const' in true`), so `chat-completion.ts` answered a valid call as malformed. A non-object schema
+  now declares no type, as `serve/chat.py` `_schema_types`. Parser policy 1beb37e1; 7729017b stays readable.
+- **Python native-XML custody read a stale policy hash.** `native_xml_custody.POLICY_SHA256` was 1b2713ad (the
+  pre-b7d0647e3 parser) checked with `!=`, so Python `authenticate()` refused every capture ts-host stamped since
+  2026-11-23 15:29 (c93dc767, then 7729017b). It now reads `ts-host/src/model/native-xml-policy.ts` (the stamped hash and
+  `NATIVE_XML_POLICY_READS`): one accepted set, failing closed if the file is unreadable; a test checks the stamped hash
+  against the parser source and that every policy ts-host reads authenticates in Python. **Impact checked on data:** a
+  `tool_parse` capture exists only for `program-header` rendering (`response_tools`; `native/agent.ts` 2613), and every
+  production path renders `full` (`expert_iteration.py` 2878, `grpo.py` 4495, `held_eval.py` 1410); the SGLang and
+  Python engines return calls as `raw_calls`. aei1 collections v0001, v0006, v0011 (local and remote0 samples) and
+  teacher-r0008 hold no `tool_parse`/`response_tools` capture, and no registry entry since 11-23 mentions one. So the
+  refusal dropped no aei1, held or GRPO data; it would have dropped any program-header capture (trajectory append,
+  `task_rollouts.rollout_turns`, `tune/rows`, `text_corpus` materialisation, episode-graph replay) made since 11-23.
+- **`tool_grammar.tokenizer_info_sha256`** checked and evicted its memo unlocked from request threads (KeyError race):
+  `_INFO_LOCK` around the reads and the eviction, the hash computed outside it. Threaded test.
+- **Capture `select` in the reasoning.** ts-host `grammarCapture` (managed llama-server) searched the whole reply; the
+  Python/SGLang `capture_plan` searched after the *first* `</think>` while its unselected capture and ts-host start after
+  the *last*. One helper `engine.select_search_start` (last `</think>`) serves `capture_plan` (Python engine and SGLang
+  front) and `authored_trajectories.py`; ts-host does the same. The fork receives forced ids only and the page has no
+  capture (ENGINE_PARITY "In-page wllama"), so no other engine computes a selection. Opt-out
+  `NATLANG_CAPTURE_SELECT_IN_REASONING=1` (both sides).
+- **Held series.** `serve/chat.py` (prompt rendering, reply parsing) and `common/tool_grammar.py` (decoding law) join
+  `held_eval.SCORING_SOURCES`: the next held eval on a pin with this commit is a new series (compare pairs with a
+  warning by default).
+- **`--stop-file` with `--keep-best-val`** still exported factors labelled with the round id. `exp0_sft.stopped_round`:
+  a stopped round exports nothing; the resumed run finishes and exports it. (No opt-out: a partial round's labelled
+  factors are never wanted.)
+- **Dead `rrl_action` tail-floor exemption.** No chain has that role. What was meant: targets the student never sampled
+  inside a sampled chain (reasoning-RL teacher actions, rows `rrl == 'action'`; carried search chains' `teacher` rows),
+  whose behaviour logp is the learner's own, so the floor would mask the teacher tokens the term teaches.
+  `grpo.unsampled_tail_exempt` exempts them per token; `--tail-floor-unsampled floor` restores the floor. The
+  `sd_teacher` exemption is unchanged (owner's call). Reasoning RL is off by default, so default runs are unaffected.
+- **`held_eval.finalize`** copies `resumed_code`/`resumed_series` into `result.json`; `compare` warns on a result
+  resumed on another series or commit and refuses one resumed on another series under `--strict-series`.
+- `plans/MODEL_FACING_CHANGES.md` records ddd97a765's model-facing changes (const/enum typing, reasoning escaping,
+  leading-`<think>` parsing without strip, leaked TOOL_MARKUP discarding parsed calls, `contextWindow` from the server)
+  and the select fix.
+- Seen on the way and fixed: `test_free_cuda_cache_returns_what_the_garbage_collection_frees` compared GiB figures
+  against a GB base (failed at 0.27 >= 0.271).

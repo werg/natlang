@@ -60,6 +60,24 @@ def test_capture_select_takes_the_note_tokens_in_place(tmp_path):
     assert ids[:capture['payload_start']] == [4, 9, 7, 12, engine.role_tokens.produce_open]
 
 
+def test_capture_select_searches_after_the_last_think_close(tmp_path, monkeypatch):
+    """The note drafted in the reasoning does not match: ``select`` searches the content after the reply's last
+    ``</think>`` (7), as the unselected capture and ts-host grammarCapture read it. The opt-out searches the whole reply."""
+    engine = actor(tmp_path, 'lfm', lexical=True, words=THINK)
+    stop = sorted(engine.stop_ids)[0]
+    reply = [13, 14, 7, 13, 14, 7, 13, 14, stop]
+    text = engine.tokenizer.decode([13, 14], skip_special_tokens=False)
+    capture = engine.native_capture([4, 9], reply, select=text)['source_capture']
+    ids = [t for segment in capture['segments'] for t in segment['token_ids']]
+    assert ids[:capture['payload_start']] == [4, 9, *reply[:6], engine.role_tokens.produce_open]
+    assert ids[capture['payload_start']:capture['payload_stop']] == [13, 14]
+    from natlang_neuralese.serve.engine import select_search_start
+    assert select_search_start(reply[:-1], 7) == 6 and select_search_start([13, 14], 7) == 0
+    monkeypatch.setenv('NATLANG_CAPTURE_SELECT_IN_REASONING', '1')
+    with pytest.raises(RequestError, match='exactly once'):
+        engine.native_capture([4, 9], reply, select=text)
+
+
 def test_capture_refuses_a_reply_that_ended_inside_its_reasoning(tmp_path):
     engine = actor(tmp_path, 'lfm', lexical=True, words=THINK)
     stop = sorted(engine.stop_ids)[0]

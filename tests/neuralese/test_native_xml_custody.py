@@ -1,7 +1,7 @@
 import copy,hashlib,json
 from pathlib import Path
 import pytest
-from natlang_neuralese.data.native_xml_custody import authenticate,derived_tool_calls,validate_replay_turn,render_packet,POLICY_SHA256
+from natlang_neuralese.data.native_xml_custody import authenticate,derived_tool_calls,validate_replay_turn,render_packet,policy_reads,POLICY_FILE
 from natlang_neuralese.rl.task_rollouts import rollout_turns
 from natlang_neuralese.common import paths
 
@@ -21,7 +21,7 @@ def fixture():
       'response_tools':copy.deepcopy(tools),'model_request':request,'model_request_canonical':req,'request_sha256':sha(req),
       'raw_response_sha256':sha(response),'model_response':{'calls':calls,'text':'','raw_calls':[],
         'raw_response':raw,'raw_response_canonical':response,'tool_parse':{'schema':'natlang.native-xml-tool-parse/1',
-         'source':'assistant-content','schema_custody':'response_tools','policy_sha256':POLICY_SHA256,'wire_tool_aliases':{}}},
+         'source':'assistant-content','schema_custody':'response_tools','policy_sha256':policy_reads()[0],'wire_tool_aliases':{}}},
       'assistant':{'content':'','reasoning':'thinking','calls':[{'tool':'eval','source_tool':'eval','arguments':calls[0][1],'call_id':None}]}}
 
 
@@ -107,3 +107,22 @@ def test_typed_additional_properties_match_native_parser():
     turn['model_response']['raw_response_canonical']=encoded;turn['raw_response_sha256']=hashlib.sha256(encoded.encode()).hexdigest()
     turn['model_response']['calls'][0][1]['count']=3;turn['assistant']['calls'][0]['arguments']['count']=3
     assert authenticate(turn)[0][1]['count']==3
+
+
+def test_policy_set_is_ts_hosts_and_tracks_the_parser_source():
+    """Python reads ts-host's policy file: the stamped hash is the live parser's, and every policy ts-host reads
+    authenticates here (a stale Python constant refused every ts-host capture from b7d0647e3 to this fix)."""
+    current,reads=policy_reads()
+    parser=POLICY_FILE.parent/'native-xml-calls.ts'
+    assert current==hashlib.sha256(parser.read_bytes()).hexdigest()
+    text=POLICY_FILE.read_text();declared=set(__import__('re').findall(r"'([0-9a-f]{64})'",text))
+    assert reads==declared and current in reads and len(reads)>=4
+    for policy in sorted(reads):
+        turn=fixture();turn['model_response']['tool_parse']['policy_sha256']=policy;assert authenticate(turn)
+    turn=fixture();turn['model_response']['tool_parse']['policy_sha256']='0'*64
+    with pytest.raises(ValueError):authenticate(turn)
+
+
+def test_policy_file_without_a_set_fails_closed(tmp_path):
+    bad=tmp_path/'native-xml-policy.ts';bad.write_text("export const NATIVE_XML_POLICY_SHA256 = '"+'a'*64+"';\n")
+    with pytest.raises(ValueError):policy_reads(bad)

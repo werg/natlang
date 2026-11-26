@@ -34,8 +34,10 @@ function jsonValueType(value: unknown): string | undefined {
   if (typeof value === 'object') return 'object';
   return undefined;
 }
-function types(schema: Schema, root: Schema = schema, depth=0): string[] | undefined {
+function types(schema: Schema | boolean, root: Schema = schema as Schema, depth=0): string[] | undefined {
   if (depth>64) throw new Error('recursive schema reference');
+  // A boolean (or otherwise non-object) subschema declares no type, as serve/chat.py's _schema_types.
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return undefined;
   if (schema.$ref !== undefined) { const target=resolveRef(schema.$ref,root); if(typeof target==='object') return types(target,root,depth+1); return undefined; }
   if (typeof schema.type === 'string') return [schema.type];
   if (Array.isArray(schema.type) && schema.type.every(x => typeof x === 'string')) return schema.type as string[];

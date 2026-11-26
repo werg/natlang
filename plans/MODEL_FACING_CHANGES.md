@@ -3,6 +3,46 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-26 — forensic audit (ddd97a765): tool-value typing, reasoning rendering and parsing, leaked markup, context window
+
+Recorded after the fact by the review of ddd97a765 (DECISIONS 2026-11-26 11:55 and 13:40). All are first-principles
+fixes of what the model sees or how its reply is read; the next held eval on a pin with them shows any regression.
+`serve/chat.py` and `common/tool_grammar.py` now join `held_eval.SCORING_SOURCES`, so these Python changes move the
+held series key as the ts-host ones already did.
+
+- **const/enum typing** (`serve/chat.py` `_schema_types`, ts-host `model/native-xml-calls.ts` `types`). A parameter
+  declared only by `const` or `enum` (no `type`), alone or as an `anyOf`/`oneOf` member, now has the JSON type of its
+  values. Before, it was untyped: the XML rendering of a training target and the client's XML parser read such a value
+  as raw text or JSON depending on what it looked like, while xgrammar's `qwen_xml` style constrained it as typed, so a
+  string literal enum could be constrained one way and parsed another (deadlock). Native XML policy 7729017b (the
+  earlier c93dc767 captures still authenticate). A boolean `anyOf` member (`true`/`false`) declares no type, as
+  `_schema_types` always had it; ts-host threw `TypeError` on one and answered the valid call as malformed until
+  2026-11-26 (review fix, policy 1beb37e1).
+- **Reasoning escaping** (`serve/chat.py` `render_messages`, `assistant_reply_segments`). `reasoning_content`,
+  `reasoning` and `thinking` of an assistant message are escaped like its content, so special-token text a model wrote
+  in its reasoning (`<|im_end|>`, `</think>`) renders as text in later turns' prompts and in training targets instead
+  of as the special tokens (which ended the turn or the think block early and shifted `think_end`/`mask_after_end`).
+  `render_with_empty_thought` treats any of the three fields as reasoning.
+- **Leading `<think>` parsing, no strip** (`serve/chat.py` `build_message`). A reply's reasoning is a leading
+  `<think>...</think>` block, else everything before the first `</think>` (thinking templates open the block in the
+  prompt), else, for a reply cut off after an explicit `<think>`, the unfinished thought (it no longer lands in the
+  content). A `<think>` later in the reply (e.g. inside an `eval` code string) is no longer taken for reasoning. The
+  reasoning keeps its whitespace (no `.strip()`), so the next turn's prompt renders it byte for byte as sampled and
+  prefix caches hit.
+- **Leaked tool markup discards parsed calls** (ts-host `model/chat-completion.ts`). A reply that holds tool-call markup
+  the server did not parse is a leaked call even when the server parsed another call from it: nothing runs, and the
+  model gets the leaked-call feedback (listing the response tools under `program-header` rendering). Before, the parsed
+  calls ran and the leaked one was silently dropped. Raised for the owner in DECISIONS 13:40 (not reverted).
+- **`contextWindow` from the server** (ts-host `model/neuralese-server.ts`). The Neuralese server driver reports the
+  context window its `/v1/neuralese/info` states, so `defaultContextBudget` sizes the prompt budget from it (window less
+  an eighth, at least 2048 tokens) instead of the 16,384-token default; compaction and page cuts move accordingly when no
+  budget is configured. `contextOverflow` reads the Python/SGLang engines' "prompt uses N positions, context is M", and
+  a compaction turn without a tool call now records `compactedTurn`.
+- **Capture `select` after the last `</think>`** (review fix, 2026-11-26): `serve/engine.py` `capture_plan` (Python
+  engine and SGLang front) and ts-host `grammarCapture` (managed llama-server) search a capture's selected text only in
+  the content after the reply's last `</think>`, so a note drafted in the reasoning no longer makes the selection
+  ambiguous (and the capture fail). Opt-out `NATLANG_CAPTURE_SELECT_IN_REASONING=1`.
+
 ### 2026-11-25 — learned compaction is on by default (`learned-compaction` adopted)
 
 - **What changed.** `learned-compaction` joins the adopted model-facing variants (`ts-host/src/runtime/model-facing.ts`

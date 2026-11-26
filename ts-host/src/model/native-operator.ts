@@ -25,6 +25,9 @@ import type { NeuralesePort } from '../native/neuralese-store.js';
  * readers splice it as stored, as on the Python engines (`serve/engine.py` `reads_in_context`); a write (a value's text
  * after its producing call) stays a 'span', read in context.
  */
+/** NATLANG_CAPTURE_SELECT_IN_REASONING=1: a capture's `select` searches the whole reply, reasoning included. */
+const selectInReasoning = (): boolean =>
+  typeof process !== 'undefined' && (process.env.NATLANG_CAPTURE_SELECT_IN_REASONING ?? '').trim() === '1';
 export function grammarCapture(options: { endpoint: string; headers?: Record<string, string>; store: NeuraleseStore;
   info: NeuraleseServerInfo }): NativeCapture {
   const base = options.endpoint.replace(/\/$/, '');
@@ -113,7 +116,14 @@ export function grammarCapture(options: { endpoint: string; headers?: Record<str
       const end = reply.findIndex(token => ends.has(token));
       let stop = end < 0 ? reply.length : end;
       let start = reply.slice(0, stop).lastIndexOf(thinkClose) + 1;
-      if (call.select !== undefined) [start, stop] = await selectedSpan(reply.slice(0, stop), call.select);
+      if (call.select !== undefined) {
+        // The selected text is searched in the content after the last `</think>` (serve/engine.py
+        // select_search_start): a note drafted in the reasoning would match twice. NATLANG_CAPTURE_SELECT_IN_REASONING=1
+        // searches the whole reply (before 2026-11-26).
+        const from = selectInReasoning() ? 0 : start;
+        const [a, b] = await selectedSpan(reply.slice(from, stop), call.select);
+        [start, stop] = [from + a, from + b];
+      }
       else if (!start && call.reply?.length && call.prompt?.at(-1) === thinkOpen)
         throw new Error('neuralese-native-capture: the reply ended inside its reasoning: no content to capture');
       lead = reply.slice(0, start);

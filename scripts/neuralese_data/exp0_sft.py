@@ -1505,8 +1505,7 @@ def train(args):
         log.flush()
         step += 1
     save_state_now(completed_step)
-    if stopped_early and round_id and best is None:
-        # Stopped early via --stop-file: keep resumable state without exporting a partial round or marking round_id done.
+    if stopped_round(stopped_early, round_id):
         return
     if args.max_steps and not args.checkpoint_at_max_steps:
         return
@@ -1533,6 +1532,13 @@ def train(args):
     export_round(factors=factors if args.export_factors_dir else None, checkpoint=checkpoint,
                  factors_only=args.factors_only, round_id=None if stopped_early else round_id,
                  mark_trained=lambda: save_state_now(completed_step, mark_round_done=True))
+
+
+def stopped_round(stopped_early, round_id):
+    """A round stopped via --stop-file keeps its resumable state and exports nothing: no partial round, no factors
+    labelled with its round id (with --keep-best-val too: its best step is of an unfinished round), no round marked done.
+    The resumed run finishes the round and exports it."""
+    return bool(stopped_early and round_id)
 
 
 def export_round(*, factors, checkpoint, factors_only, round_id, mark_trained):

@@ -615,6 +615,9 @@ def test_held_series_covers_scoring_sources():
     assert all(found['scoring_sources'].values())                     # every listed source exists in HEAD
     assert 'scripts/run_bonsai_queue.py' in held_eval.SCORING_SOURCES
     assert 'training/neuralese/natlang_neuralese/eval/task_packet.py' in held_eval.SCORING_SOURCES
+    # model-facing Python serving: prompt rendering/reply parsing and the tool-call decoding law (review of ddd97a765)
+    assert 'training/neuralese/natlang_neuralese/serve/chat.py' in held_eval.SCORING_SOURCES
+    assert 'training/neuralese/natlang_neuralese/common/tool_grammar.py' in held_eval.SCORING_SOURCES
 
 
 def test_a_prompt_state_build_is_its_own_held_series(tmp_path, monkeypatch):

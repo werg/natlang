@@ -644,7 +644,8 @@ def test_free_cuda_cache_returns_what_the_garbage_collection_frees(monkeypatch):
     import gc
     gc.collect()
     torch.cuda.empty_cache()
-    base = torch.cuda.memory_reserved() / 1e9   # what earlier tests of this process still hold live
+    # what earlier tests of this process still hold live, in free_cuda_cache's unit (GiB, rounded to 0.01: allow 0.005)
+    base = torch.cuda.memory_reserved() / 2**30 - 0.005
     gc.disable()
     try:
         cycle = [torch.empty(256 << 20, dtype=torch.uint8, device='cuda')]
@@ -653,7 +654,7 @@ def test_free_cuda_cache_returns_what_the_garbage_collection_frees(monkeypatch):
         legacy = grpo.free_cuda_cache(collect=False)           # the cycle is still alive: nothing to return
         assert legacy['gc_freed_gb'] == 0 and legacy['reserved_gb'] >= base + 0.25
         fixed = grpo.free_cuda_cache(collect=True)
-        assert fixed['gc_freed_gb'] >= 0.24 and fixed['reserved_gb'] < base + 0.1
+        assert fixed['gc_freed_gb'] >= 0.24 and fixed['reserved_gb'] < base + 0.11
     finally:
         gc.enable()
 

@@ -119,6 +119,7 @@ def tokenizer_info(tokenizer, vocab_size, stop_token_ids):
 
 
 _INFO_SHA, INFO_SHA_LIMIT = {}, 16
+_INFO_LOCK = threading.Lock()    # request threads of the SGLang front share the memo (check-then-evict races)
 
 
 def tokenizer_info_sha256(info) -> str:
@@ -127,14 +128,17 @@ def tokenizer_info_sha256(info) -> str:
     Python, and the SGLang front asked for it twice per chat call, which starved its 128 collection streams (aei1
     collection stall, 2026-11-24). ``NATLANG_TOOL_GRAMMAR_INFO_MEMO=0`` recomputes it on every call."""
     memo = os.environ.get('NATLANG_TOOL_GRAMMAR_INFO_MEMO', '1') != '0'
-    entry = _INFO_SHA.get(id(info)) if memo else None
-    if entry is not None and entry[0] is info:
-        return entry[1]
-    value = _tokenizer_info_sha256(info)
     if memo:
-        while len(_INFO_SHA) >= INFO_SHA_LIMIT:
-            _INFO_SHA.pop(next(iter(_INFO_SHA)))
-        _INFO_SHA[id(info)] = (info, value)    # the reference keeps the id from being reused while memoized
+        with _INFO_LOCK:
+            entry = _INFO_SHA.get(id(info))
+        if entry is not None and entry[0] is info:
+            return entry[1]
+    value = _tokenizer_info_sha256(info)    # outside the lock: two threads may both hash, never block each other
+    if memo:
+        with _INFO_LOCK:
+            while len(_INFO_SHA) >= INFO_SHA_LIMIT:
+                _INFO_SHA.pop(next(iter(_INFO_SHA)))
+            _INFO_SHA[id(info)] = (info, value)    # the reference keeps the id from being reused while memoized
     return value
 
 

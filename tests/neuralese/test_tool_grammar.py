@@ -223,6 +223,37 @@ def test_tokenizer_identity_is_hashed_once_per_info(monkeypatch):
     assert tool_grammar.tokenizer_info_sha256(info) == first and len(calls) == 3
 
 
+def test_tokenizer_identity_memo_is_thread_safe(monkeypatch):
+    """Request threads of the SGLang front share the memo: its check-then-evict ran unlocked, so two threads evicting
+    the same oldest key raised KeyError (review of ddd97a765). Many threads over more objects than the limit."""
+    import sys, threading
+    monkeypatch.setattr(tool_grammar, '_tokenizer_info_sha256', lambda i: str(i.n))
+    old = sys.getswitchinterval(); sys.setswitchinterval(1e-6)
+    tool_grammar._INFO_SHA.clear()
+    errors = []
+
+    class Info:
+        def __init__(self, n): self.n = n
+
+    infos = [Info(n) for n in range(64)]
+
+    def work(offset):
+        try:
+            for k in range(400):
+                info = infos[(offset + k) % len(infos)]
+                assert tool_grammar.tokenizer_info_sha256(info) == str(info.n)
+        except Exception as error:    # noqa: BLE001 -- the race surfaces as KeyError/RuntimeError
+            errors.append(error)
+    try:
+        threads = [threading.Thread(target=work, args=(i * 7,)) for i in range(16)]
+        for t in threads: t.start()
+        for t in threads: t.join()
+    finally:
+        sys.setswitchinterval(old)
+        tool_grammar._INFO_SHA.clear()
+    assert not errors and len(tool_grammar._INFO_SHA) <= tool_grammar.INFO_SHA_LIMIT
+
+
 def test_sglang_front_builds_the_export_tokenizer_info_once(monkeypatch):
     from natlang_neuralese.serve.sglang_actor import SglangEngine
     built = []

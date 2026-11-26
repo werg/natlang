@@ -52,7 +52,11 @@ EPISODE_MODEL_CALLS = 40
 SCORING_SOURCES = ('scripts/run_bonsai_queue.py', 'training/neuralese/natlang_neuralese/eval/task_packet.py',
                    'training/neuralese/natlang_neuralese/rl/task_rollouts.py',
                    'training/neuralese/natlang_neuralese/rl/rollout_math.py',
-                   'training/neuralese/natlang_neuralese/common/task_roots.py')
+                   'training/neuralese/natlang_neuralese/common/task_roots.py',
+                   # what the model sees and how its reply is read on the Python engines and the SGLang front: prompt
+                   # rendering and reply parsing (render_messages, build_message), and the tool-call decoding law
+                   'training/neuralese/natlang_neuralese/serve/chat.py',
+                   'training/neuralese/natlang_neuralese/common/tool_grammar.py')
 
 
 def sample_timed_out(sample):
@@ -817,6 +821,8 @@ def finalize(directory, spec, started, *, complete):
               'max_model_requests': spec.get('max_model_requests'), 'max_turns': spec.get('max_turns'),
               'context_tokens': spec.get('context_tokens', LEGACY_CONTEXT_TOKENS),
               'sampling': spec.get('sampling', LEGACY_SAMPLING),
+              # a resume on another checkout or series ran some episodes under it: compare warns on it
+              **{key: spec[key] for key in ('resumed_code', 'resumed_series') if spec.get(key) is not None},
               'started_at': started, 'finished_at': time.time(), 'elapsed_seconds': elapsed,
               **aggregate(samples, complete=complete, elapsed=elapsed),
               'score': {'groups_with_spread': report.get('groups_with_spread')}}
@@ -1200,6 +1206,18 @@ def compare(first, second, *, resamples=2000, trained_families=None, ignore_ids=
         warnings.append('different code or series (' + ', '.join(sorted(series_differences)) + ')')
     if engine_differences:
         warnings.append('engine differs in ' + ', '.join(sorted(engine_differences)))
+    for name, result in (('first', first), ('second', second)):
+        # a measurement resumed on another series or commit mixes episodes of two series within one result
+        resumed = result.get('resumed_series')
+        if resumed is not None:
+            if strict_series:
+                raise ValueError(f'the {name} result was resumed on another series ({result["series"].get("key")} -> '
+                                 f'{resumed.get("key")}) and is not one series (--strict-series)')
+            warnings.append(f'{name} result resumed on another series ({result["series"].get("key")} -> {resumed.get("key")})')
+        resumed_commit = (result.get('resumed_code') or {}).get('git_commit')
+        if resumed_commit and resumed_commit != (result.get('code') or {}).get('git_commit'):
+            warnings.append(f'{name} result resumed on another commit ({str((result.get("code") or {}).get("git_commit"))[:12]}'
+                            f' -> {resumed_commit[:12]})')
     incomplete = [name for name, result in (('first', first), ('second', second)) if not result.get('complete')]
     if incomplete:
         # a stopped measurement's partial result pairs only the tasks it reached (a fast-first subset): never a verdict
