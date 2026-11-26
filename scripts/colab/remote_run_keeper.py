@@ -16,10 +16,13 @@ its run directory. This keeper, a DGX process, makes that state survive the VM:
   restarted; ``--max-failures`` attempts ending in a traceback stop the keeper;
 - when ``--done`` exists in the run directory it syncs once more and exits 0.
 
-    remote_run_keeper.py --host colab-g4b --run-dir /content/natlang-work/compiler-t1/v2-contrast/run1 \\
-        --mirror /home/werg/data/compiler-t1-20261126/run1 --launch /content/natlang-work/compiler-t1/v2-contrast/train.sh \\
+    remote_run_keeper.py --host colab-g4b --run-dir "$REMOTE_RUN" \\
+        --mirror "$LOCAL_MIRROR" --launch "$REMOTE_LAUNCH_SCRIPT" \\
         --label cmp-t1-opsd-v2 --vram-gib 20 --host-ram-gib 24 --done receipt.json \\
         --ship LOCAL=REMOTE ... --setup 'cd ... && git checkout ...'
+
+Set the example variables to the selected session's run and launch paths and the
+local durable mirror; the keeper does not require a particular checkout or data root.
 """
 from __future__ import annotations
 
