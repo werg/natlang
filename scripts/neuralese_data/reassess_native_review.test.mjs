@@ -147,3 +147,31 @@ test('release case grouping may differ from canonical retained order when every 
  assert.equal(premiseRun(s,'system-release').projected.passed,true);
 });
 test('changing proof and reviewed sidecar together still cannot replace actual captured authority',()=>{const s=premiseFixture('installed-package'),p=s.packet.execution.diagnostics.openGoalVerification;p.assignment.scope.workingDigest='forged';s.review.input=structuredClone(p.semanticReviewInput);assert.throws(()=>premiseRun(s,'installed-package'));});
+
+
+function reconciliationFixture(){
+ const s=fixture(),p=s.packet.execution.diagnostics.openGoalVerification,n=s.packet.execution.diagnostics.natlangTeacher;
+ s.source=Buffer.from('if (token(workingHead) !== head) if ((await readWindow(workingHead)).window !== "open") if (newer) return remember("reconciliationNative", "apply", [head, edits], { status: "changed", head: newer }); const applied = await native.apply(head, edits); protectedNeighborAndMain: isDeepStrictEqual(finalFiles, initialFiles)');s.pins.validator_sha256=sha(s.source);
+ p.caseId='reconcile-withdrawn';p.checks=Object.fromEntries(['recoveredRetainedReconciliation','retainedOwnedIntegrationSource','verifiedNativeIntegration','protectedNeighborAndMain','honoredRevisionOrWindowRace','retainedVerifiedIntegrationEvidence','matchedReconciliationHandoff'].map(key=>[key,true]));
+ const files=[{path:'owned/settings.json',text:'{"notice":"paper","queue":"bay-2"}'}];
+ p.window={window:'closed',head:'withdrawn'};p.race={kind:'close-window',before:'opening',after:'withdrawn'};p.nativeHead='withdrawn';p.release=p.mergeHead=p.artifact=null;p.archiveRecheck=null;p.integrationOracle=null;
+ p.effects=[{service:'reconciliationNative',method:'apply',args:['opening',[{path:files[0].path,before:files[0].text,after:'requested but not committed'}]],result:{status:'changed',head:'withdrawn'}},{service:'reconciliationNative',method:'observe',args:[],result:{head:'withdrawn',window:p.window,files:files.map(file=>({path:file.path,local:file.text}))}}];
+ p.nativeReconciliation={opening:{head:'opening',files:structuredClone(files)},final:{head:'withdrawn',window:p.window,files:structuredClone(files)},sources:[],actorReadbacks:[p.effects[1]],protocol:'Original retained native facts.'};
+ n.calls[0].record.effects=p.effects.map(row=>({service:row.service,method:row.method,by:'crisp',args:ref(row.args),result:ref(row.result)}));
+ const keys=['effects','window','race','release','mergeHead','nativeHead','archiveRecheck','integrationOracle','nativeReconciliation'];
+ p.semanticReviewInput=s.checker.observedContentReview(p,p.outcomeContract,n.report,keys,['artifact']).semanticReviewInput;s.review.input=structuredClone(p.semanticReviewInput);
+ s.bindInput=proof=>{assert.deepEqual(proof.semanticReviewInput.actual.observations,Object.fromEntries(keys.map(key=>[key,proof[key]])));return proof.semanticReviewInput;};return s;
+}
+const reconciliationRun=s=>reassessNativeReview(s.packet,s.pins,s.task,s.review,s.source,'local-reconciliation',s.checker,entry=>entry,s.bindInput);
+test('withdrawn reconciliation preserves exact original refused attempt and native bytes for mandatory review',()=>{const s=reconciliationFixture(),before=structuredClone(s.packet),r=reconciliationRun(s);assert.deepEqual(s.packet,before);assert.deepEqual(r.projected.nativeReconciliation,before.execution.diagnostics.openGoalVerification.nativeReconciliation);assert.deepEqual(r.projected.checks,before.execution.diagnostics.openGoalVerification.checks);assert.match(r.reviewInput.rubric,/neither commits/);assert.equal(s.review.verdict.accepted,false);});
+for(const[label,change]of[
+ ['accepted edit',s=>{s.packet.execution.diagnostics.openGoalVerification.effects[0].result.status='accepted';}],
+ ['missing independent check',s=>{delete s.packet.execution.diagnostics.openGoalVerification.checks.protectedNeighborAndMain;}],
+ ['changed final native bytes',s=>{s.packet.execution.diagnostics.openGoalVerification.nativeReconciliation.final.files[0].text='new';}],
+ ['missing original native effect',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.pop();}],
+ ['duplicated observation',s=>{s.packet.execution.diagnostics.openGoalVerification.effects.push(structuredClone(s.packet.execution.diagnostics.openGoalVerification.effects[1]));}],
+ ['hidden additional native effect',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.push({service:'reconciliationNative',method:'merge',by:'agent',args:ref(['opening',[]]),result:ref({status:'accepted',head:'new'})});}],
+ ['foreign withdrawal head',s=>{s.packet.execution.diagnostics.openGoalVerification.race.after='foreign';}],
+ ['fabricated artifact',s=>{s.packet.execution.diagnostics.openGoalVerification.artifact='note';}],
+ ['no actual final readback',s=>{s.packet.execution.diagnostics.openGoalVerification.nativeReconciliation.actorReadbacks=[];}],
+])test(`refuses reconciliation recovery with ${label}`,()=>{const s=reconciliationFixture();change(s);assert.throws(()=>reconciliationRun(s));});
