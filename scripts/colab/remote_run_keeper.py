@@ -6,9 +6,9 @@ its run directory. This keeper, a DGX process, makes that state survive the VM:
 
 - every ``--sync-every`` seconds (default 15 min) it mirrors the run directory to ``--mirror`` on the DGX: a hardlink
   snapshot of the directory on the VM (atomically replaced files keep their old inode, so the snapshot holds whole
-  files) is rsynced into the mirror; ``--drive-file`` names (a large ``learner-state.pt``) travel through Google Drive
-  instead (the VM uploads inside Google's network; the DGX downloads at ~10 MB/s against the tunnel's 4.8), each one
-  only when it changed, and the Drive copy is itself a durable off-VM copy;
+  files) is rsynced into the mirror; ``--drive-file`` names (a large ``learner-state.pt``) go only to Google Drive
+  (the VM uploads inside Google's network, each one when it changed) and the mirror keeps a stamp of what Drive holds,
+  not the bytes; the mirror belongs on the HDD, never on the DGX root;
 - when the run is not running it (re)starts it detached under ``scripts/colab/admission.py run`` (``--preemptible``
   for a tenant that yields to aei1), after ``--ship`` inputs are present, ``--setup`` ran, and, on a VM without the
   run's state (a replaced session), the newest mirrored state is restored (Drive files fetched on the VM);
@@ -98,7 +98,7 @@ def restore(args):
             str(mirror) + '/', f'{args.host}:{args.run_dir}/'])
     cfg = P.host_config('colab', host=args.host)
     for name in args.drive_file or ():
-        if (mirror / name).exists():
+        if (mirror / f'.{name}.sig').exists():           # the mirror records it; Drive holds the bytes
             got = P.drive_vm(args.host, cfg, 'get', drive_key(args, name), f'{args.run_dir}/{name}')
             if got.get('event') != 'got':
                 raise RuntimeError(f'restore: {drive_key(args, name)} not on Drive ({got})')
@@ -153,13 +153,14 @@ def sync(args):
         if sig == 'absent':
             continue
         stamp = mirror / f'.{name}.sig'
-        if (mirror / name).exists() and stamp.exists() and stamp.read_text() == sig:
-            continue                                        # unchanged: the staged hardlink copy already holds it
+        if stamp.exists() and stamp.read_text() == sig:
+            continue                                        # unchanged since the last put
         started = time.time()
         put = P.drive_vm(args.host, cfg, 'put', f'{snap}/{name}', drive_key(args, name), timeout=4 * 3600)
-        from scripts import drive_tier
-        (staged / name).unlink(missing_ok=True)
-        drive_tier.main(['get', drive_key(args, name), str(staged / name)])
+        if put.get('event') != 'put':
+            raise RuntimeError(f'{drive_key(args, name)}: Drive put failed ({put})')
+        # Drive holds the bytes (a verified upload replaces the older copy); the DGX mirror keeps only the stamp, so a
+        # 14-17 GB state rewritten every sync never lands on a DGX disk (2026-11-26: root fell to 9 GB)
         (staged / f'.{name}.sig').write_text(sig)
         log(event='drive file synced', name=name, seconds=round(time.time() - started), put=put.get('seconds'))
     remote(args.host, f'rm -rf {q(snap)}', timeout=300)
@@ -193,7 +194,13 @@ def main(argv=None):
     p.add_argument('--sync-every', type=int, default=900)
     p.add_argument('--poll', type=int, default=60)
     p.add_argument('--max-failures', type=int, default=3)
+    p.add_argument('--allow-root-mirror', action='store_true', help='permit a mirror on the root filesystem')
     args = p.parse_args(argv)
+    anchor = Path(args.mirror)
+    while not anchor.exists():
+        anchor = anchor.parent
+    if anchor.stat().st_dev == Path('/').stat().st_dev and not args.allow_root_mirror:
+        raise SystemExit(f'{args.mirror} is on the root filesystem: mirrors live on the HDD')
     failures, last_sync, boot = 0, 0.0, None
     while True:
         try:
