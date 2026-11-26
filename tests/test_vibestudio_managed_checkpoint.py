@@ -110,3 +110,25 @@ signal.pause()
         result = owner.run([sys.executable, '-c', code, str(retained)], capture_output=True, text=True)
         assert owner.requested and result.returncode == 130
     assert owner.child is None and retained.read_text() == 'retained original IO'
+
+
+def test_same_owner_can_decide_post_collection_continuation_without_losing_io(tmp_path):
+    ready, decision = tmp_path/'ready', tmp_path/'decision'
+    code = '''import sys,time
+from pathlib import Path
+value=sys.stdin.read()
+Path(sys.argv[1]).write_text("actual paid export settled")
+while not Path(sys.argv[2]).exists():time.sleep(.01)
+print(value+":"+Path(sys.argv[2]).read_text())
+'''
+    calls=[]
+    def tick():
+        if ready.exists() and not decision.exists():
+            calls.append(ready.read_text())
+            decision.write_text('drain-native')
+    with checkpoint.CollectorCheckpoint() as owner:
+        result=owner.run([sys.executable,'-c',code,str(ready),str(decision)],
+                         input='preserved input',capture_output=True,text=True,on_tick=tick)
+    assert result.returncode==0 and result.stdout=='preserved input:drain-native\n'
+    assert calls==['actual paid export settled']
+    assert owner.child is None and not owner.requested
