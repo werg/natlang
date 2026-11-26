@@ -30,6 +30,7 @@ def test_drive_publishes_current_catalog_before_archival_work(tmp_path, monkeypa
         review_model=None, attempts=2, max_waves=0))
     assert ([catalog] in published) is sync_catalog
     assert published[-1] == [tmp_path/'status.json', tmp_path/'reused.json']
+    assert not (tmp_path/'ordinary-phase.json').exists()
 
 
 def test_new_release_fresh_coverage_precedes_historical_genuine_failures():
@@ -1360,3 +1361,25 @@ def test_explicit_campaign_hold_withdraws_a_concurrent_guard_queue(tmp_path,monk
     vibestudio_campaign.drive(SimpleNamespace(root=tmp_path))
     assert len(calls)==1 and calls[0][-3:]==['cancel','--unit','test-owner.service']
     assert (tmp_path/'stop-after-wave').read_text()=='owned runtime hold'
+
+
+@pytest.mark.parametrize('reason,count,requested,held,owned,expected', [
+    ('wave-limit', 1, False, False, True, True),
+    ('wave-limit', 0, False, False, True, False),
+    ('no-eligible-work', 0, False, False, True, True),
+    ('wave-limit', 1, True, False, True, False),
+    ('wave-limit', 1, False, True, True, False),
+    ('wave-limit', 1, False, False, False, False),
+])
+def test_ordinary_phase_requires_settled_owned_boundary(tmp_path, monkeypatch, reason, count, requested, held, owned, expected):
+    monkeypatch.setenv('INVOCATION_ID', 'actual-test-invocation')
+    checkpoint = SimpleNamespace(requested=requested, ledger_owner_unit=lambda: 'test-bulk.service' if owned else None)
+    if held:
+        (tmp_path / 'stop-after-wave').touch()
+    vibestudio_campaign.publish_ordinary_phase(tmp_path, checkpoint, 'epoch', {'source': 'actual'}, reason, count)
+    path = tmp_path / 'ordinary-phase.json'
+    assert path.exists() is expected
+    if expected:
+        value = json.loads(path.read_text())
+        assert value['unit'] == 'test-bulk.service' and value['invocation'] == 'actual-test-invocation'
+        assert value['attempt_epoch'] == 'epoch' and value['provenance'] == {'source': 'actual'}

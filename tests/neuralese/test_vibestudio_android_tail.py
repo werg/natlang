@@ -114,3 +114,38 @@ class ResumeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OrdinaryBoundaryTests(unittest.TestCase):
+    def test_pending_failed_goals_do_not_invalidate_settled_attempt_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proof = {'schema': 'vibestudio.ordinary-phase/1', 'unit': 'bulk.service',
+                     'invocation': 'owned-invocation', 'attempt_epoch': 'epoch',
+                     'provenance': {'pins': 'exact'}, 'reason': 'wave-limit', 'completed_waves': 1}
+            tail.save(root/'ordinary-phase.json', proof)
+            tail.save(root/'status.json', {'cases': {'genuine-failure': {'status': 'pending'}}})
+            check = lambda: tail.ordinary_phase_settled(root, 'bulk.service', 'epoch', {'pins': 'exact'}, 'owned-invocation')
+            self.assertTrue(check())
+            for field, value in [('unit', 'foreign.service'), ('invocation', 'previous-invocation'),
+                                 ('attempt_epoch', 'previous-epoch'), ('provenance', {'pins': 'other'}),
+                                 ('reason', 'checkpoint'), ('completed_waves', 0)]:
+                tail.save(root/'ordinary-phase.json', {**proof, field: value})
+                self.assertFalse(check(), field)
+            tail.save(root/'ordinary-phase.json', proof)
+            (root/'stop-after-wave').touch()
+            self.assertFalse(check())
+
+    def test_unadmitted_cancel_and_resumable_gap_do_not_launch_devices(self):
+        from unittest.mock import patch
+        from scripts import memory_ledger
+        with patch.object(tail, 'active', return_value=False), patch.object(tail.subprocess, 'run', return_value=SimpleNamespace(returncode=1, stdout='')), \
+             patch.object(memory_ledger, 'unit_owned', return_value=False):
+            self.assertFalse(tail.wait_unit('cancelled.service'))
+        ownership = iter([True, False])
+        sleeps = []
+        with patch.object(tail, 'active', return_value=False), patch.object(tail.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='success')), \
+             patch.object(memory_ledger, 'unit_owned', side_effect=lambda unit: next(ownership)), \
+             patch.object(tail.time, 'sleep', side_effect=lambda seconds: sleeps.append(seconds)):
+            self.assertTrue(tail.wait_unit('requeued.service'))
+        self.assertEqual(sleeps, [15])

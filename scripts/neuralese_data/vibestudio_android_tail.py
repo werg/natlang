@@ -42,12 +42,30 @@ def active(unit):
 
 
 def wait_unit(unit, checkpoint=None):
-    while active(unit) or active(unit.removesuffix('.service') + '-waiter.service'):
+    from scripts.memory_ledger import unit_owned
+    while True:
         if checkpoint is not None and checkpoint.requested:
             return False
+        if not (active(unit) or active(unit.removesuffix('.service') + '-waiter.service') or unit_owned(unit)):
+            break
         time.sleep(15)
-    assert output(['systemctl', '--user', 'show', unit, '-p', 'Result', '--value']) == 'success', unit
-    return True
+    # Missing/cancelled unadmitted services do not authorize Android work.
+    result = subprocess.run(['systemctl', '--user', 'show', unit, '-p', 'Result', '--value'],
+                            capture_output=True, text=True)
+    return result.returncode == 0 and result.stdout.strip() == 'success'
+
+
+def ordinary_phase_settled(root, unit, epoch, provenance, invocation):
+    path = root / 'ordinary-phase.json'
+    if (root / 'stop-after-wave').exists() or not path.is_file() or not invocation:
+        return False
+    value = read(path)
+    return (value.get('schema') == 'vibestudio.ordinary-phase/1'
+            and value.get('unit') == unit and value.get('invocation') == invocation
+            and value.get('attempt_epoch') == epoch and value.get('provenance') == provenance
+            and (value.get('reason') == 'no-eligible-work'
+                 or value.get('reason') == 'wave-limit' and type(value.get('completed_waves')) is int
+                 and value['completed_waves'] > 0))
 
 
 def owned_emulator_port(serial):
@@ -204,8 +222,11 @@ def run_tail(checkpoint):
         print('Campaign owner hold retained; no Android teacher started')
         return
     assert read(candidate / 'pins.json') == pins, 'Release changed while waiting; prepare a successor recipe'
-    status = read(root / 'status.json')['cases']
-    assert not any(row['status'] == 'pending' and not cases[name].get('requiresAndroidEmulator') for name, row in status.items())
+    epoch, provenance, _ = attempt_context(argparse.Namespace(release_pins=candidate/'pins.json', host=host, attempt_epoch=None), root/'catalog.jsonl')
+    invocation = output(['systemctl', '--user', 'show', args.bulk_unit, '-p', 'InvocationID', '--value'])
+    if not ordinary_phase_settled(root, args.bulk_unit, epoch, provenance, invocation):
+        print('Ordinary phase held or incomplete; no Android teacher started')
+        return
     assert sha(apk) == proof['fixtureApkSha256']
     # A teacher may rebuild the product APK in its normal output directory.
     # Retain these exact prerequisite bytes independently of that mutable path.

@@ -1018,8 +1018,22 @@ def refresh_completed_seeds(args, checkpoint, seeds, cases, held, training):
         sync_index(args, [args.root / 'reused.json', args.root / 'seed-feedback.json'], checkpoint=checkpoint)
 
 
+def publish_ordinary_phase(root, checkpoint, epoch, provenance, reason, completed_waves):
+    """A settled scheduling boundary, never a claim that failed goals passed."""
+    if checkpoint.requested or (root / 'stop-after-wave').exists() or completed_waves < 1 and reason == 'wave-limit':
+        return
+    unit = checkpoint.ledger_owner_unit()
+    invocation = os.environ.get('INVOCATION_ID')
+    if not unit or not invocation:
+        return  # An administrative/unowned call cannot authorize a device tail.
+    publish(root / 'ordinary-phase.json', {'schema': 'vibestudio.ordinary-phase/1',
+            'unit': unit, 'invocation': invocation, 'attempt_epoch': epoch, 'provenance': provenance,
+            'reason': reason, 'completed_waves': completed_waves})
+
+
 def _drive(args, checkpoint):
     root = args.root.resolve()
+    (root / 'ordinary-phase.json').unlink(missing_ok=True)
     held, training, cases = campaign_scope(root / 'catalog.jsonl', args.held)
     attempt_epoch, provenance, environment = attempt_context(args, root / 'catalog.jsonl')
     seeds = {}
@@ -1060,7 +1074,10 @@ def _drive(args, checkpoint):
         rows = publish_status(root, cases, seeds, receipts, args.review_model, args.attempts, holds,
                               attempt_epoch=attempt_epoch, receipt_epochs=epochs)
         sync_index(args, [root / 'status.json', root / 'reused.json'], checkpoint=checkpoint)
-        if checkpoint.requested or (root / 'stop-after-wave').exists() or completed_waves == args.max_waves:
+        if checkpoint.requested or (root / 'stop-after-wave').exists():
+            return
+        if completed_waves == args.max_waves:
+            publish_ordinary_phase(root, checkpoint, attempt_epoch, provenance, 'wave-limit', completed_waves)
             return
         started = unfinished_wave(plans, waves, attempt_epoch, provenance, rows)
         if not started:
@@ -1073,6 +1090,7 @@ def _drive(args, checkpoint):
             if not names:
                 if native_capable:
                     finish_native_references(args, checkpoint, environment, provenance, waves)
+                publish_ordinary_phase(root, checkpoint, attempt_epoch, provenance, 'no-eligible-work', completed_waves)
                 if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required', 'pending-review') for row in rows.values()):
                     return
                 publish(root / 'finished.json', {'collection_exhausted': True, 'attempt_epoch': attempt_epoch,
