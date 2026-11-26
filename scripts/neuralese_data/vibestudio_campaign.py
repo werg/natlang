@@ -201,7 +201,8 @@ def outcomes(capture, names, held, training, cases):
                         any(turn.get('kind') == 'generation' and turn.get('reply') for turn in record.get('model_turns') or []))
             sampled = any(map(sampled_record, records))
             model_sampled = True if sampled else False if records else None
-            results[name] = {'status': 'export-rejected' if test.get('passed') else 'test-failed',
+            review_pending = test.get('passed') is True and bool(export_diagnostic and export_diagnostic.get('review_transport_failure'))
+            results[name] = {'status': 'pending-review' if review_pending else 'export-rejected' if test.get('passed') else 'test-failed',
                              'raw': str(raw.relative_to(capture)), 'reason': reason,
                              'teacher_started': True if (teacher.get('rootCallIds') or teacher.get('calls'))
                              and not capture_integrity_errors(teacher.get('captureErrors')) else None,
@@ -688,6 +689,8 @@ def campaign_status(cases, seeds, receipts, review_model, attempts, holds, *,
                 if current:
                     epoch_interruptions[name] += 1
                 continue
+            if outcome['status'] == 'pending-review':
+                continue  # Actual teacher exposure remains, but the native-passed packet awaits review, not a new teacher.
             if infrastructure_failure(outcome, cases[name]):
                 infrastructure[name] += 1
                 if current:
@@ -708,6 +711,8 @@ def campaign_status(cases, seeds, receipts, review_model, attempts, holds, *,
             status = 'verified'
         elif name in holds:
             status = 'prerequisite-unavailable'
+        elif states.get(name) == 'pending-review':
+            status = 'pending-review'
         elif case.get('requiresReview') and not review_model:
             status = 'reviewer-required'
         elif counts[name] < attempts:
@@ -972,6 +977,44 @@ def drive(args):
 
 
 
+def refresh_completed_seeds(args, checkpoint, seeds, cases, held, training):
+    """Consume the canonical append-only recovery list at a settled wave boundary."""
+    if os.environ.get('NATLANG_CAMPAIGN_LIVE_COMPLETED_SEEDS') == '0':
+        return
+    source = args.root / 'candidate/recovered-campaign-seed-paths.txt'
+    if not source.is_file():
+        return
+    source_bytes = source.read_bytes()
+    paths = [Path(line.strip()) for line in source_bytes.decode().splitlines() if line.strip()]
+    by_id = {row['taskId']: name for name, row in cases.items()}
+    additions = {}
+    for path in paths:
+        resolved = str(path.resolve())
+        if resolved in seeds.values() or resolved in additions.values():
+            continue
+        episode = verified_episode(path, held, training)
+        if episode['trajectory_ir']['outcome'].get('task_completed') is not True:
+            raise ValueError('partial training evidence cannot complete a campaign goal')
+        name = by_id[episode['task_id']]
+        if name not in seeds and name not in additions:
+            additions[name] = resolved
+    # Validate every new source before any publication; existing mapping/order remains immutable.
+    records = []
+    for offset, (name, path) in enumerate(additions.items(), len(seeds)):
+        destination = args.archive / f'seed-{offset:04d}'
+        remote_archive(args, destination, {name: {'status': 'verified', 'manifest': 'manifest.json'}},
+                       Path(path).parent, checkpoint=checkpoint)
+        records.append({'name': name, 'manifest': path, 'manifestSha256': hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+                        'archive': str(destination)})
+    if additions:
+        seeds.update(additions)
+        publish(args.root / 'reused.json', seeds)
+        publish(args.root / 'seed-feedback.json', {'schema': 'vibestudio.completed-seed-feedback/1',
+                'source': str(source), 'sourceSha256': hashlib.sha256(source_bytes).hexdigest(),
+                'added': records, 'completedGoals': len(seeds)})
+        sync_index(args, [args.root / 'reused.json', args.root / 'seed-feedback.json'], checkpoint=checkpoint)
+
+
 def _drive(args, checkpoint):
     root = args.root.resolve()
     held, training, cases = campaign_scope(root / 'catalog.jsonl', args.held)
@@ -1008,6 +1051,7 @@ def _drive(args, checkpoint):
     holds = prerequisite_holds(cases, args.host)
     completed_waves = 0
     while True:
+        refresh_completed_seeds(args, checkpoint, seeds, cases, held, training)
         plans = sorted(jobs.glob('[0-9]*.json'))
         receipts, epochs = receipt_history(waves, jobs)
         rows = publish_status(root, cases, seeds, receipts, args.review_model, args.attempts, holds,
@@ -1026,7 +1070,7 @@ def _drive(args, checkpoint):
             if not names:
                 if native_capable:
                     finish_native_references(args, checkpoint, environment, provenance, waves)
-                if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required') for row in rows.values()):
+                if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required', 'pending-review') for row in rows.values()):
                     return
                 publish(root / 'finished.json', {'collection_exhausted': True, 'attempt_epoch': attempt_epoch,
                                                  'all_goals_verified': all(row['status'] == 'verified' for row in rows.values())})

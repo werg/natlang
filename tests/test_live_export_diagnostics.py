@@ -93,3 +93,48 @@ await recordExportRejection({...JSON.parse(process.argv[2]),error:new Error('Nat
                                 'pins': str(directory / 'source.json'), 'trajectory': str(raw)})], check=True)
     row, errors = export_rejection_diagnostic(directory, raw, 'case')
     assert errors == [] and row['error']['message'] == 'Error: Native review: 実際\nretained "bytes"'
+
+
+def review_fixture(tmp_path):
+    directory, raw, row = fixture(tmp_path)
+    pins = directory/'source.json'
+    pins.write_text(json.dumps({'teacher':'test-only:teacher'}))
+    row['pinsSha256'] = hashlib.sha256(pins.read_bytes()).hexdigest()
+    actual = {'schema':'natlang.live-workflow-review-failure/1','model':'test-only:reviewer','teacher':'test-only:teacher',
+              'input':{'actual':{'goal':'actual goal'}},'complete':False,
+              'failure':{'kind':'provider-transport','phase':'provider-turn','error':{'name':'Error','message':'fetch failed'}}}
+    path = directory/'review-failed.json'
+    path.write_text(json.dumps(actual))
+    row['reviewFailure'] = {k:actual[k] for k in ['schema','model','teacher','failure']}
+    row['reviewFailure']['capture'] = {'path':path.name,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    (raw.parent/'export-rejections.jsonl').write_text(json.dumps(row)+'\n')
+    return directory, raw, row, path, actual
+
+
+def test_transport_review_pending_is_source_and_capture_bound(tmp_path):
+    directory, raw, _, _, _ = review_fixture(tmp_path)
+    row, errors = export_rejection_diagnostic(directory,raw,'case')
+    assert not errors and row['review_transport_failure'] is True
+    assert 'task_completed' not in row
+
+
+def test_changed_review_capture_is_not_an_operational_excuse(tmp_path):
+    directory, raw, _, path, _ = review_fixture(tmp_path)
+    path.write_text('{}')
+    row, errors = export_rejection_diagnostic(directory,raw,'case')
+    assert row is None and errors
+
+
+def test_assessment_error_and_foreign_teacher_cannot_claim_transport(tmp_path):
+    directory, raw, row, path, actual = review_fixture(tmp_path)
+    actual['failure']['phase'] = 'assessment'
+    path.write_text(json.dumps(actual))
+    row['reviewFailure']['capture']['sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+    (raw.parent/'export-rejections.jsonl').write_text(json.dumps(row)+'\n')
+    result, errors = export_rejection_diagnostic(directory,raw,'case')
+    assert not errors and result['review_transport_failure'] is False
+    actual['teacher'] = 'foreign';path.write_text(json.dumps(actual))
+    row['reviewFailure']['capture']['sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+    (raw.parent/'export-rejections.jsonl').write_text(json.dumps(row)+'\n')
+    result, errors = export_rejection_diagnostic(directory,raw,'case')
+    assert result is None and errors

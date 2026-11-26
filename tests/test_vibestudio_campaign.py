@@ -1275,3 +1275,65 @@ def test_archival_recovery_only_holds_current_or_unidentified_release(tmp_path, 
     assert (waves/'0000-historical-infrastructure-hold.json').is_file() is not expected_hold
     assert len(archived)==1 and archived[0]['plan']==plan
     assert vibestudio_campaign.read(waves/'0000-result.json')['one']['status']=='no-capture'
+
+
+def test_review_transport_failure_preserves_teacher_exposure_without_new_teacher_selection():
+    cases={'goal':{'taskId':'goal-id','requiresReview':True}}
+    receipt={'goal':{'status':'pending-review','teacher_started':True,'teacher_model_sampled':True}}
+    rows,summary=vibestudio_campaign.campaign_status(cases,{},[receipt],'test-only:reviewer',2,{},attempt_epoch='e',receipt_epochs=['e'])
+    assert rows['goal']['status']=='pending-review' and rows['goal']['attempts']==0
+    assert rows['goal']['cumulative_teacher_attempts']==1 and summary['epoch_teacher_attempts']==1
+    assert vibestudio_campaign.next_wave(cases,rows,8)==[]
+    rows,_=vibestudio_campaign.campaign_status(cases,{'goal':'accepted-manifest'},[receipt],'test-only:reviewer',2,{})
+    assert rows['goal']['status']=='verified'
+
+
+def test_completed_seed_feedback_validates_before_append_and_preserves_ordinal_identity(tmp_path,monkeypatch):
+    source=tmp_path/'candidate/recovered-campaign-seed-paths.txt';source.parent.mkdir()
+    old=tmp_path/'old-manifest.json';new=tmp_path/'new-manifest.json';old.write_text('old');new.write_text('new')
+    source.write_text(str(old)+'\n'+str(new)+'\n')
+    seeds={'old':str(old.resolve())};calls=[]
+    def episode(path,*_):
+        return {'task_id':'new-id','trajectory_ir':{'outcome':{'task_completed':True}}}
+    monkeypatch.setattr(vibestudio_campaign,'verified_episode',episode)
+    monkeypatch.setattr(vibestudio_campaign,'remote_archive',lambda args,destination,receipt,capture,**kw:calls.append((destination,receipt,capture)))
+    monkeypatch.setattr(vibestudio_campaign,'sync_index',lambda *args,**kw:None)
+    args=SimpleNamespace(root=tmp_path,archive=Path('/durable/archive'))
+    cases={'old':{'taskId':'old-id'},'new':{'taskId':'new-id'}}
+    vibestudio_campaign.refresh_completed_seeds(args,None,seeds,cases,None,{})
+    assert list(seeds)==['old','new'] and seeds['old']==str(old.resolve())
+    assert calls==[(Path('/durable/archive/seed-0001'),{'new':{'status':'verified','manifest':'manifest.json'}},new.parent)]
+    receipt=json.loads((tmp_path/'seed-feedback.json').read_text())
+    assert receipt['sourceSha256']==__import__('hashlib').sha256(source.read_bytes()).hexdigest()
+    vibestudio_campaign.refresh_completed_seeds(args,None,seeds,cases,None,{})
+    assert len(calls)==1
+
+
+def test_partial_completed_seed_feedback_fails_before_archival_or_reused_mutation(tmp_path,monkeypatch):
+    source=tmp_path/'candidate/recovered-campaign-seed-paths.txt';source.parent.mkdir();source.write_text(str(tmp_path/'partial.json')+'\n')
+    monkeypatch.setattr(vibestudio_campaign,'verified_episode',lambda *_:{'task_id':'goal-id','trajectory_ir':{'outcome':{'task_completed':False}}})
+    monkeypatch.setattr(vibestudio_campaign,'remote_archive',lambda *a,**k:pytest.fail('must validate before publication'))
+    with pytest.raises(ValueError,match='partial training evidence'):
+        vibestudio_campaign.refresh_completed_seeds(SimpleNamespace(root=tmp_path),None,{}, {'goal':{'taskId':'goal-id'}},None,{})
+    assert not (tmp_path/'reused.json').exists()
+
+
+def test_native_passed_packet_with_bound_review_transport_waits_for_review(tmp_path):
+    import hashlib
+    run=tmp_path/'st_owned';run.mkdir()
+    raw=run/'trajectory-goal-full.json.gz'
+    packet={'result':{'passed':True},'execution':{'diagnostics':{'natlangTeacher':{'rootCallIds':['call'],'calls':[{'record':{'cost':{'model_requests':1}}}]}}}}
+    with gzip.open(raw,'wt') as f:json.dump(packet,f)
+    pins=tmp_path/'source.json';pins.write_text(json.dumps({'teacher':'test-only:teacher'}))
+    capture={'schema':'natlang.live-workflow-review-failure/1','model':'test-only:reviewer','teacher':'test-only:teacher',
+             'input':{'actual':{'goal':'the goal'}},'complete':False,'failure':{'kind':'provider-transport','phase':'provider-turn','error':{'name':'Error','message':'fetch failed'}}}
+    sidecar=tmp_path/'failed-review.json';sidecar.write_text(json.dumps(capture))
+    diagnostic={'schema':'vibestudio.teacher-export-rejection/1','scenario':'goal','runId':'st_owned',
+                'trajectory':{'path':raw.name,'sha256':hashlib.sha256(raw.read_bytes()).hexdigest()},'pinsSha256':hashlib.sha256(pins.read_bytes()).hexdigest(),
+                'error':{'message':'Error: fetch failed'},'reviewFailure':{k:capture[k] for k in ['schema','model','teacher','failure']}}
+    diagnostic['reviewFailure']['capture']={'path':sidecar.name,'sha256':hashlib.sha256(sidecar.read_bytes()).hexdigest()}
+    (run/'export-rejections.jsonl').write_text(json.dumps(diagnostic)+'\n')
+    outcomes=vibestudio_campaign.outcomes(tmp_path,['goal'],None,{}, {'goal':{'taskId':'goal-id'}})
+    assert outcomes['goal']['status']=='pending-review' and outcomes['goal']['teacher_model_sampled'] is True
+    sidecar.write_text('{}')
+    assert vibestudio_campaign.outcomes(tmp_path,['goal'],None,{}, {'goal':{'taskId':'goal-id'}})['goal']['status']=='export-rejected'
