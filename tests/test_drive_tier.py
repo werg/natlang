@@ -22,7 +22,7 @@ class FakeDrive:
     def __init__(self):
         self.files, self.next = {}, 0
 
-    def upload(self, path, key, rate=None, pause=None, properties=None):
+    def upload(self, path, key, rate=None, pause=None, properties=None, deadline=None):
         data = Path(path).read_bytes()
         self.next += 1
         ident = f'id{self.next}'
@@ -183,3 +183,36 @@ def test_no_file_starts_that_cannot_finish_before_the_hard_stop(tmp_path, monkey
                            rate_mb=0, min_mb=0, min_age_days=-1, links=[])
     assert m.archive(args, FakeDrive()) == 0
     assert big.exists() and not small.exists()
+
+
+def test_an_upload_paused_by_colab_transfers_ends_the_pass_at_its_deadline(tmp_path, monkeypatch):
+    """2026-11-26: remote collection pulls from Colab almost continuously; a paused upload ran into the unit's hard
+    timeout 21 times in 26 h. Paused past the deadline, the pass ends cleanly and keeps the file."""
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    monkeypatch.setattr(m, 'MANIFEST', tmp_path / 'state' / 'manifest.jsonl')
+    monkeypatch.setattr(m, 'registered', lambda path: False)
+    monkeypatch.setattr(m, 'held_paths', lambda: set())
+    monkeypatch.setattr(m, 'mirror_manifest', lambda drive: None)
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(m.time, 'sleep', lambda s: clock.__setitem__(0, clock[0] + s))
+    monkeypatch.setattr(m, 'colab_transfer_active', lambda: True)
+    monkeypatch.setattr(m, 'PAUSED_START_SECONDS', 0)
+    held = old_file(hdd / 'natlang-grpo-v1' / 'a' / 'f.bin', b'x' * 1000)
+
+    class Paused(FakeDrive):
+        def upload(self, path, key, rate=None, pause=None, properties=None, deadline=None):
+            while pause and pause():
+                if deadline is not None and m.time.time() > deadline:
+                    raise m.PassDeadline(key)
+                m.time.sleep(30)
+            raise AssertionError('never resumes')
+
+    args = SimpleNamespace(apply=True, root=['natlang-grpo-v1'], budget_gb=1, max_minutes=1, hard_minutes=2,
+                           rate_mb=0, min_mb=0, min_age_days=-1, links=[])
+    assert m.archive(args, Paused()) == 0
+    assert held.exists() and clock[0] - 1000.0 <= 60 + 30
+    monkeypatch.setattr(m, 'PAUSED_START_SECONDS', 600)        # paused now and near the deadline: no session opens
+    assert m.archive(args, Paused()) == 0 and held.exists()
