@@ -47,7 +47,7 @@ class CollectorCheckpoint:
         self.signal = signal.Signals(signum).name
         self._notify()
 
-    def run(self, argv, *, request_file=None, **kwargs):
+    def run(self, argv, *, request_file=None, on_tick=None, **kwargs):
         if self.requested:
             return subprocess.CompletedProcess(argv, 130)
         self.request_file = Path(request_file) if request_file is not None else None
@@ -66,7 +66,24 @@ class CollectorCheckpoint:
             self.child = subprocess.Popen(argv, **kwargs)
             if self.requested:
                 self._notify()
-            stdout, stderr = self.child.communicate(input=data)
+            if on_tick is None:
+                stdout, stderr = self.child.communicate(input=data)
+            else:
+                # The same owner can decide a post-collection continuation while
+                # its collector still owns the last runtime. No second launcher.
+                while True:
+                    if not self.requested:
+                        try:
+                            on_tick()
+                        except BaseException:
+                            self._request(signal.SIGTERM, None)
+                            self.child.communicate(input=data)
+                            raise
+                    try:
+                        stdout, stderr = self.child.communicate(input=data, timeout=0.25)
+                        break
+                    except subprocess.TimeoutExpired:
+                        data = None
             return subprocess.CompletedProcess(argv, self.child.returncode, stdout, stderr)
         finally:
             self.child = None

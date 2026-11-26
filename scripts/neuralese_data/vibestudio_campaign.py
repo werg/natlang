@@ -597,7 +597,7 @@ def _export_trajectories(archive, receipt, held, training):
     if output.rows:
         dataset = data_registry.record_dataset(f'vibestudio-{archive.parent.name}-{archive.name}'.lower(), archive,
                                                kind='teacher-demos', format='native Vibestudio Luna trajectories and capture evidence',
-                                               exclude=[] if native_state_referenced else ['capture/retained-state-*', 'capture/.retained-state-packs/**'],
+                                               exclude=['capture/native-reference-only/**', *([] if native_state_referenced else ['capture/retained-state-*', 'capture/.retained-state-packs/**'])],
                                                include=['capture/**', 'receipt.json', final.name, 'graph-metrics.json',
                                                         *(['wave.json'] if (archive / 'wave.json').is_file() else [])], rows=output.rows,
                                                extra={'trajectory_counts': counts, 'observed_graph_metrics': graph_summary,
@@ -605,7 +605,7 @@ def _export_trajectories(archive, receipt, held, training):
     publish(marker, {'verified': output.rows, 'dataset': dataset['id'] if dataset else None, **counts})
 
 
-def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, *,
+def campaign_status(cases, seeds, receipts, review_model, attempts, holds, *,
                    attempt_epoch=None, receipt_epochs=None):
     verified, counts, cumulative = set(seeds), Counter(), Counter()
     teacher_exposure, epoch_teacher_exposure = Counter(), Counter()
@@ -679,10 +679,17 @@ def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, 
                'infrastructure_failures': sum(infrastructure.values()),
                'interruptions': sum(interruptions.values()),
                'counts': dict(Counter(row['status'] for row in rows.values()))}
+    return rows, summary
+
+
+
+def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, *,
+                   attempt_epoch=None, receipt_epochs=None):
+    rows, summary = campaign_status(cases, seeds, receipts, review_model, attempts, holds,
+                                    attempt_epoch=attempt_epoch, receipt_epochs=receipt_epochs)
     publish(root / 'status.json', {'model': LUNA, **summary, 'cases': rows})
     print(json.dumps(summary), flush=True)
     return rows
-
 
 def next_wave(cases, rows, size, *, epoch_first_retries=False, concurrency=None,
               strict_priority_waves=False, deployment_concurrency=2, mixed_deployment_waves=False):
@@ -806,6 +813,100 @@ def unfinished_wave(plans, waves, attempt_epoch, provenance, rows=None):
     return None
 
 
+def native_reference_capable(host, environment):
+    """A metadata-only version query; older collectors remain ordinary collectors."""
+    if environment.get('NATLANG_NATIVE_REFERENCE_CONTINUATION', '1') == '0':
+        return False
+    script = Path(host) / 'scripts/collect-live-workflow-teacher.mjs'
+    if not script.is_file():
+        return False
+    result = subprocess.run(['node', '--import', 'tsx', str(script), '--capabilities'], cwd=host, env=environment,
+                            capture_output=True, text=True)
+    if result.returncode:
+        return False
+    try:
+        metadata = json.loads(result.stdout)
+    except ValueError:
+        return False
+    return (isinstance(metadata, dict) and metadata.get('schema') == 'vibestudio.native-reference-capabilities/1' and
+            metadata.get('completionControl') == 1 and metadata.get('nativeOnly') is True)
+
+
+def native_completion_decision(ready_path, capture, names, *, cases, held, training, seeds,
+                               receipts, receipt_epochs, attempt_epoch, review_model, attempts,
+                               holds, host_commit, stop_requested=False):
+    """Decide only after original paid packets pass the ordinary canonical reader."""
+    ready_bytes = Path(ready_path).read_bytes()
+    ready = json.loads(ready_bytes)
+    source_path = capture / 'source.json'
+    source_bytes = source_path.read_bytes()
+    source = json.loads(source_bytes)
+    if (ready.get('schema') != 'vibestudio.native-reference-continuation/1' or
+            ready.get('capture') != str(capture.resolve()) or
+            not isinstance(ready.get('nonce'), str) or not ready['nonce'] or
+            ready.get('sourceSha256') != hashlib.sha256(source_bytes).hexdigest() or
+            ready.get('repositories') != source.get('repositories') or
+            source.get('repositories', {}).get('vibestudio', {}).get('git_commit') != host_commit):
+        raise ValueError('native continuation must bind the actual owned capture and pinned source')
+    receipt = outcomes(capture, names, held, training, cases)
+    rows, summary = campaign_status(cases, seeds, [*receipts, receipt], review_model, attempts, holds,
+                                   attempt_epoch=attempt_epoch, receipt_epochs=[*receipt_epochs, attempt_epoch])
+    pending = [name for name, row in rows.items() if row['status'] == 'pending']
+    return {'schema': ready['schema'], 'requestSha256': hashlib.sha256(ready_bytes).hexdigest(),
+            'decision': 'continue-paid' if pending or stop_requested else 'drain-native',
+            'pendingPaidCases': len(pending), 'paidReceipt': receipt, 'paidStatus': summary,
+            'additionalTeacherCalls': 0}
+
+
+def finish_native_references(args, checkpoint, environment, provenance, waves):
+    """Resume only native references if an earlier final owner was interrupted.
+
+    The prior collector has already stopped; the canonical collector rotates one
+    owned instance at a time. No teacher/model flags or training manifests.
+    """
+    signature = hashlib.sha256(json.dumps(provenance, sort_keys=True).encode()).hexdigest()[:16]
+    marker = args.root / f'native-reference-{signature}-archived.json'
+    if marker.exists() and read(marker).get('coverage', {}).get('sweepCompleted') is True:
+        return
+    for retained in sorted(waves.glob(f'native-reference-{signature}-*-capture')):
+        destination = args.archive / retained.name.removesuffix('-capture')
+        remote_archive(args, destination, {}, retained,
+                       wave={'reference_only': True, 'provenance': provenance}, checkpoint=checkpoint)
+        coverage_path = retained / 'native-reference-only/coverage.json'
+        if coverage_path.is_file():
+            coverage = read(coverage_path)
+            publish(marker, {'schema': 'vibestudio.native-reference-archive/1', 'archive': str(destination),
+                             'coverage': coverage, 'interrupted': True, 'teacherCalls': 0})
+            sync_index(args, [marker], checkpoint=checkpoint)
+        shutil.rmtree(retained)
+        if checkpoint.requested or marker.exists() and read(marker).get('coverage', {}).get('sweepCompleted') is True:
+            return
+    name = f'native-reference-{signature}-{time.time_ns()}'
+    capture = waves / (name + '-capture')
+    command = ['node', '--import', 'tsx', 'scripts/collect-live-workflow-teacher.mjs',
+               '--native-reference-only', '--out', str(capture),
+               '--native-reference-state', str(waves / 'native-reference-qualification')]
+    with (waves / (name + '-collector.log')).open('ab') as log:
+        result = checkpoint.run(command, request_file=waves / (name + '-checkpoint.json'),
+                                cwd=args.host, env=environment, stdout=log, stderr=subprocess.STDOUT)
+    if not capture.is_dir():
+        if checkpoint.requested:
+            return
+        raise RuntimeError('native continuation failed before creating retained evidence')
+    coverage_path = capture / 'native-reference-only/coverage.json'
+    coverage = read(coverage_path) if coverage_path.is_file() else {'sweepCompleted': False, 'unchecked': None}
+    destination = args.archive / name
+    # An empty receipt publishes zero training rows and registers no dataset;
+    # the full native-only originals remain durable in the same canonical archive.
+    remote_archive(args, destination, {}, capture,
+                   wave={'reference_only': True, 'provenance': provenance}, checkpoint=checkpoint)
+    publish(marker, {'schema': 'vibestudio.native-reference-archive/1', 'archive': str(destination),
+                     'coverage': coverage, 'exitCode': result.returncode,
+                     'interrupted': checkpoint.requested, 'teacherCalls': 0})
+    sync_index(args, [marker], checkpoint=checkpoint)
+    shutil.rmtree(capture)
+
+
 def drive(args):
     with CollectorCheckpoint() as checkpoint:
         try:
@@ -828,6 +929,7 @@ def _drive(args, checkpoint):
         if episode['trajectory_ir']['outcome'].get('task_completed') is not True:
             raise ValueError('partial training evidence cannot complete a campaign goal')
         seeds[by_id[episode['task_id']]] = str(path.resolve())
+    native_capable = native_reference_capable(args.host, environment)
     # The archive's exporter and ingester consume this catalog too. Publishing
     # only status/reused.json leaves their metadata at the previous release.
     # Held identity is already checked by campaign_scope; ingestion separately
@@ -866,6 +968,8 @@ def _drive(args, checkpoint):
                               deployment_concurrency=getattr(args, 'deployment_concurrency', 2),
                               mixed_deployment_waves=getattr(args, 'mixed_deployment_waves', False))
             if not names:
+                if native_capable:
+                    finish_native_references(args, checkpoint, environment, provenance, waves)
                 if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required') for row in rows.values()):
                     return
                 publish(root / 'finished.json', {'collection_exhausted': True, 'attempt_epoch': attempt_epoch,
@@ -901,8 +1005,27 @@ def _drive(args, checkpoint):
                 collect += ['--review-model', args.review_model]
             for name in names:
                 collect += ['--case', name]
+            native_control = waves / f'{started.stem}-native-continuation'
+            tick = None
+            if native_capable:
+                collect += ['--native-reference-completion-control', str(native_control),
+                            '--native-reference-state', str(waves / 'native-reference-qualification')]
+                def tick():
+                    ready = Path(str(native_control) + '.ready.json')
+                    response = Path(str(native_control) + '.decision.json')
+                    if not ready.is_file() or response.exists():
+                        return
+                    decision = native_completion_decision(ready, capture, names, cases=cases,
+                        held=held, training=training, seeds=seeds, receipts=receipts,
+                        receipt_epochs=epochs, attempt_epoch=attempt_epoch, review_model=args.review_model,
+                        attempts=args.attempts, holds=holds, host_commit=provenance['host']['git_commit'],
+                        stop_requested=checkpoint.requested or (root / 'stop-after-wave').exists())
+                    publish_immutable(response, decision)
+                    publish_immutable(capture / 'native-continuation-decision.json', decision)
             with (waves / f'{started.stem}-collector.log').open('ab') as log:
-                completed = checkpoint.run(collect, request_file=checkpoint_request, cwd=args.host, env=environment, stdout=log, stderr=subprocess.STDOUT)
+                completed = checkpoint.run(collect, request_file=checkpoint_request,
+                    **({'on_tick': tick} if tick is not None else {}),
+                    cwd=args.host, env=environment, stdout=log, stderr=subprocess.STDOUT)
             publish(waves / f'{started.stem}-exit.json', {'status': completed.returncode})
             if checkpoint.requested and not capture.is_dir():
                 # No teacher started and there is no packet to archive. Leave
@@ -916,6 +1039,14 @@ def _drive(args, checkpoint):
         remote_archive(args, destination, receipt, capture,
                        wave={'plan': plan, 'execution': read(execution) if execution.exists() else None}, checkpoint=checkpoint)
         publish_immutable(waves / f'{started.stem}-result.json', receipt)
+        native_coverage = capture / 'native-reference-only/coverage.json'
+        if native_capable and native_coverage.is_file():
+            coverage = read(native_coverage)
+            signature = hashlib.sha256(json.dumps(provenance, sort_keys=True).encode()).hexdigest()[:16]
+            native_marker = root / f'native-reference-{signature}-archived.json'
+            publish(native_marker, {'schema': 'vibestudio.native-reference-archive/1',
+                                   'archive': str(destination), 'coverage': coverage, 'teacherCalls': 0})
+            sync_index(args, [native_marker], checkpoint=checkpoint)
         completed_waves += 1
         # The remote capture and receipt are durable. Deferred exports read those copies.
         shutil.rmtree(capture)

@@ -1112,3 +1112,36 @@ def test_unreadable_raw_capture_is_preserved_and_does_not_erase_other_results(tm
     rows = vibestudio_campaign.outcomes(tmp_path, ['bad', 'unstarted'], None, {}, {'bad': {}, 'unstarted': {}})
     assert rows['bad']['interrupted']
     assert vibestudio_campaign.wave_infrastructure_hold(rows, {}, 1) is None
+
+
+@pytest.mark.parametrize('outcome,attempts,stop,expected', [
+    ('verified',2,False,'drain-native'),('test-failed',2,False,'continue-paid'),
+    ('test-failed',1,False,'drain-native'),('verified',2,True,'continue-paid'),
+])
+def test_native_continuation_uses_actual_retry_queue_without_publishing_goal_success(tmp_path,monkeypatch,outcome,attempts,stop,expected):
+    import hashlib
+    capture=tmp_path/'capture';capture.mkdir();host='a'*40
+    repositories={'vibestudio':{'git_commit':host,'dirty':False}}
+    source=json.dumps({'repositories':repositories}).encode();(capture/'source.json').write_bytes(source)
+    ready=tmp_path/'ready.json';ready.write_text(json.dumps({'schema':'vibestudio.native-reference-continuation/1','nonce':'TEST-only','capture':str(capture),'sourceSha256':hashlib.sha256(source).hexdigest(),'repositories':repositories}))
+    monkeypatch.setattr(vibestudio_campaign,'outcomes',lambda *args:{'case':{'status':outcome}})
+    result=vibestudio_campaign.native_completion_decision(ready,capture,['case'],cases={'case':{}},held=set(),training={},seeds={},receipts=[],receipt_epochs=[],attempt_epoch='TEST-epoch',review_model=None,attempts=attempts,holds={},host_commit=host,stop_requested=stop)
+    assert result['decision']==expected and result['additionalTeacherCalls']==0
+    assert not (tmp_path/'status.json').exists()
+    assert result['requestSha256']==hashlib.sha256(ready.read_bytes()).hexdigest()
+    for key in ['capture','sourceSha256','repositories','nonce']:
+        original=json.loads(ready.read_text());mutated=dict(original);mutated[key]=None;ready.write_text(json.dumps(mutated))
+        with pytest.raises(ValueError,match='owned capture'):
+            vibestudio_campaign.native_completion_decision(ready,capture,['case'],cases={'case':{}},held=set(),training={},seeds={},receipts=[],receipt_epochs=[],attempt_epoch='TEST-epoch',review_model=None,attempts=attempts,holds={},host_commit=host)
+        ready.write_text(json.dumps(original))
+
+
+def test_native_reference_packets_are_excluded_from_training_snapshots(tmp_path,monkeypatch):
+    registrations=[]
+    episode={'trajectory_ir':{'outcome':{'status':'passed','task_completed':True}},'turns':[1]}
+    monkeypatch.setattr(vibestudio_campaign,'verified_episode',lambda *_:episode)
+    monkeypatch.setattr(vibestudio_campaign.data_registry,'record_dataset',lambda *args,**kwargs:registrations.append(kwargs) or {'id':'TEST-training-only'})
+    reference=tmp_path/'capture/native-reference-only/held-reference.json';reference.parent.mkdir(parents=True);reference.write_text('TEST-only held native reference original')
+    vibestudio_campaign.export_trajectories(tmp_path,{'teacher':{'status':'verified','manifest':'manifest.json'}},set(),set())
+    assert 'capture/native-reference-only/**' in registrations[0]['exclude']
+    assert reference.read_text()=='TEST-only held native reference original'
