@@ -14896,3 +14896,15 @@ into it); `t2-pplx-run1` moved aside on the VM (`t2-pplx-run1.aside-20261126`) u
 the compiled sites are site-specific. Success: at the first ablations `adapter_only` beats `mean_core` and `joint`
 beats the whole-site `shuffled` on most dev rows, with teacher-row gains no longer carried by `</think>`. Failure: joint
 no better than `mean_core` / `shuffled` by step 1000.
+
+**T2 relaunch state (2026-11-26 21:05).** Fixes in 35538c81c. `cmp-t2-keeper-3` stopped and its attempt (run1 at step
+500) stopped by PID. Run1 moved aside on the VM to `/content/natlang-work/cmp/t2-pplx-run1.aside-20261126`; its step-500
+`learner-state.pt` (sha256 5b11a13a...) was uploaded to Drive `compiler/cmp-t2-pplx-run1-aside/learner-state-step500.pt`
+and removed from the VM (disk: 33 GB free, run2 needs ~40 GB for its store and two copies of a 14 GB state); the rest of
+run1 stays mirrored at `/mnt/external/dgx-moved-data/compiler-t2-20261126/t2-pplx-run1`. New keeper `cmp-t2-keeper-4`
+(`launch/keeper.sh`, run1's spec kept as `keeper_run1.sh` / `t2_train_run1.sh`; log `launch/keeper-run2.log`): run dir
+`t2-pplx-run2`, label `cmp-t2-pplx-run2`, checkout 35538c81c538, same recipe from step 0 on the warm start. Its first
+attempt was admitted and then evicted by aei1's r0015 round SFT (77 GiB, started 20:55); it waits in admission and
+starts when that SFT ends (the r0014 SFT held the A100 ~3 h). Separate observation: the VM's pplx writer runs the
+reference PyTorch `causal_conv1d` / `chunk_gated_delta_rule` (neither `causal-conv1d` nor `flash-linear-attention` is
+installed in the VM venv), correct but slow; not changed here.
