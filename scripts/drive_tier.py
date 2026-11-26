@@ -490,12 +490,14 @@ PAUSED_START_SECONDS = 600
 
 
 def archive(args, drive=None) -> int:
+    # the clock starts at entry: the symlink scan below takes ~8 min on a full home (2026-11-26), and a clock started
+    # after it put the pass's own deadline past the unit's timeout (status 124 mid-upload)
+    began = time.time()
     drive = drive or Drive()
     exclude = [os.path.expanduser(line.strip()) for line in _lines(Path.home() / '.config/natlang/archive-exclude.txt')]
     links, held = set(symlink_targets() if args.links is None else args.links), held_paths()
     rate = args.rate_mb * 2**20 if args.rate_mb else None
     budget, moved, n, skipped_registry = args.budget_gb * GIB, 0, 0, 0
-    began = time.time()
     deadline = began + args.max_minutes * 60
     # The unit's timeout kills a pass at the hard stop; a file starts only when it can finish by then at a
     # conservative rate, else smaller ones fill the pass (a killed upload is wasted uplink).
