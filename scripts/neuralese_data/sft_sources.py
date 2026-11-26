@@ -1721,16 +1721,26 @@ def drifted_success(record, turns=None, ambiguous=None):
             and record.get('replayed_turns') == record.get('replay_calls', record.get('recorded_turns')))
 
 
-def derived_superset(current, stored, path=''):
+def derived_superset(current, stored, path='', *, strict_diagnostics=False):
     """The first path where ``current`` is not ``stored`` with fields added (None when it is): every field of the
     stored extraction is in ``current`` with the same value (recursively; lists element by element), and ``current``
     may carry fields a later loader derives from the same bytes (e.g. ``trajectory_ir.outcome.task_completed``,
-    ``graph_metrics``, ``invocation_ledger[].program_root``)."""
+    ``graph_metrics``, ``invocation_ledger[].program_root``). Native decision admission explanation strings may
+    change only with exactly the same boolean mask; strict_diagnostics retains forensic text comparison."""
     if isinstance(stored, dict) and isinstance(current, dict):
+        stable_admission = (
+            not strict_diagnostics and
+            re.fullmatch(r'/trajectory_ir/trajectory\[\d+\]/training_admission', path) is not None and
+            type(current.get('approved')) is bool and current.get('approved') is stored.get('approved') and
+            isinstance(current.get('reason'), str) and isinstance(stored.get('reason'), str))
         for k, v in stored.items():
+            # Diagnostic prose is derived; the exact approved mask and every
+            # captured value remain authoritative and are compared below.
+            if k == 'reason' and stable_admission:
+                continue
             if k not in current:
                 return f'{path}/{k} removed'
-            found = derived_superset(current[k], v, f'{path}/{k}')
+            found = derived_superset(current[k], v, f'{path}/{k}', strict_diagnostics=strict_diagnostics)
             if found:
                 return found
         return None
@@ -1738,7 +1748,7 @@ def derived_superset(current, stored, path=''):
         if len(stored) != len(current):
             return f'{path} length {len(stored)} -> {len(current)}'
         for i, (a, b) in enumerate(zip(current, stored)):
-            found = derived_superset(a, b, f'{path}[{i}]')
+            found = derived_superset(a, b, f'{path}[{i}]', strict_diagnostics=strict_diagnostics)
             if found:
                 return found
         return None
@@ -1769,7 +1779,8 @@ def recheck_live_episode(episode):
         return None, 'live_source_rejected', repr(error)[:300]
     if current == episode:
         return episode, None, None
-    found = derived_superset(current, episode)
+    found = derived_superset(current, episode,
+                             strict_diagnostics=os.environ.get('NATLANG_STRICT_LIVE_DIAGNOSTICS') == '1')
     if found:
         return None, 'live_episode_differs', found
     return current, None, None
