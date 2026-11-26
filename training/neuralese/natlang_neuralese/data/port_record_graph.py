@@ -289,6 +289,14 @@ def port_record_graph(row: PortRecordRow, *, source_tokenizer,
         source_span_id="source:" + raw_sha, edge_id=edge_id, chain_id="port-row:" + raw_sha,
         context_weight=context_weight)
     consumer_node = graph["nodes"][1]
+    # the record's reply is not the student's sample: its think block (a record's reasoning, or the template's empty
+    # one) and lead-in are context (serve.targets.target_context_end; NATLANG_TARGET_CONTEXT=train opts out)
+    from ..serve.targets import target_context_end
+    lead = target_context_end(source_tokenizer, target, target_ids, own=False)
+    if lead >= len(target_ids):
+        raise ValueError("port-record target has no tokens after its non-student context")
+    start = len(consumer_node["target_weights"]) - len(target_ids)
+    consumer_node["target_weights"][start:start + lead] = [0.0] * lead
     if not authorization or decision_hold_exclusions:
         consumer_node["target_weights"][-len(target_ids):] = [0.0] * len(target_ids)
     # The authorizing record outcome is exact and separate from the synthetic
@@ -302,8 +310,8 @@ def port_record_graph(row: PortRecordRow, *, source_tokenizer,
         "original_id": record.id, "source_groups": groups,
         "outcome_label": record.outcome_label, "outcome_checked": row.raw["outcome"].get("checked"),
         "consumer_target_authorization": authorization,
-        "consumer_target_positive_tokens": len(target_ids) if authorization and not decision_hold_exclusions else 0,
-        "consumer_target_context_tokens": 0 if authorization and not decision_hold_exclusions else len(target_ids),
+        "consumer_target_positive_tokens": len(target_ids) - lead if authorization and not decision_hold_exclusions else 0,
+        "consumer_target_context_tokens": lead if authorization and not decision_hold_exclusions else len(target_ids),
         "decision_hold_target_exclusions": [dict(item) for item in decision_hold_exclusions],
         "source_payload_sha256": payload_sha,
         "source_payload_tokens": len(source_ids),

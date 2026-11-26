@@ -14814,3 +14814,102 @@ Source55 genuinely ran Luna (fallback null), model-created nested lambdas and pr
 ## 2026-11-26 — Optional format-only readouts need separate training evidence
 
 A successful native goal and a true representation-only return check do not certify an extra unrequested semantic conclusion. Added explicit format-only source metadata and exact original-output training holds in both Python and Node, preserving every observed boolean and the useful earlier read/action decisions. Required answers retain their genuine meaning review; null and native receipt contracts do not inherit this hold. Paired OwnedOperations source annotations remain unpublished until this newer reader is actually selected downstream; native-reference bc407 compatibility alone is insufficient. No models or capture rewrites. See OPTIONAL_READOUT_TRAINING_EVIDENCE_20261126.md for mechanism/consumer scope and checked limits.
+
+## 2026-11-26 20:40 Compiler T2: non-student target context masked everywhere, KB eval/peer rule, ablation controls, token weighting; T2 restarted from the warm start
+
+**Observations (two independent investigations, step-250 ablation of `t2-pplx-run1`, 24 dev rows).** base 1.168, joint
+0.399, adapter_only 0.349, kv_only 0.896, shuffled 0.398, shuffled_kb 0.398. The whole gain was on the 10 teacher rows
+(2.15 -> 0.28); the 14 rollout rows did not move (0.468 -> 0.481) and their first 6 target tokens got worse (~0.5 ->
+1.1). The head learned one global adapter (cores across 33 sites cosine 0.9996; `z_site` cosine rose 0.947 -> 0.998
+during training); a site-averaged adapter matched joint on teacher rows.
+
+**Defects and fixes (all default on, each with an opt-out).**
+1. *Teacher `<think></think>` trained as a target* (the dominant term: its `</think>` carried ~all of a teacher row's
+   base CE). `compiled_site.items_graph` weighted every target token 1 through `tune.soft.soft_items_to_node`. One shared
+   rule now: `serve.targets.target_context_end(tokenizer, message, target_ids, own=)` = `non_student_context` for a
+   reply the student did not sample, `own_empty_think_context` for its own reply (`NATLANG_TUNE_OWN_EMPTY_THINK=train`
+   opts that half out; `NATLANG_TARGET_CONTEXT=train` opts the whole rule out). `tune.rows.turn_graph` and
+   `compiled_site.site_graph` (`own = source_kind == 'rollout'`, `run_t2 train --no-mask-non-student-context`) call it.
+2. *Eval KB identical for every dev row* (`rng=None` took the first k peers in pool order). Each dev row now draws its own
+   seeded sample (`run_t2.eval_rng(seed, row)`: the same draw at every eval), filled by similarity (defect 3). The
+   `shuffled_kb` donor must have a peer set different from the row's own; rows without one are listed in
+   `shuffled_kb_unavailable`.
+3. *KB data*: 71% of train rows had no same-family peer after closure exclusion (measured on rows-v0009-cl: 168/586 have
+   one; same-site adds none beyond that; same binding 14). First-principles choice: positives are labelled relatives
+   (same family or same site) where they exist, filled up to `--kb-pos` with the nearest peers by query similarity from
+   a stale key index of the train pool (`live_kb_writer.KbIndex`, refreshed every `--kb-index-every 250` steps, rebuilt
+   on resume; 0 turns the fill off). Retrieval by similarity is how the KB is read at serving, and a stale index is the
+   standard retrieval-augmented training device. Distractors are encoded with gradient (`--no-kb-neg-grad` opts out):
+   the writer's keys learn to score down what does not help; the extra memory is two short pplx encodes per row.
+4. *`shuffled` swapped only `z_slots`*. Renamed `shuffled_slots`; the new `shuffled` swaps the whole compiled site of
+   another dev site (site slots, slot weights and Live-KB slots). New `mean_core` site-blind control: no state residual,
+   the adapter-only cores averaged over the dev rows (`adapter_only_beats_mean_core` reports site specificity).
+   Ablation means are reported overall, by `source_kind` and token-weighted (`mean_ce_by_source`, `mean_ce_tokens`).
+5. *Rows weighed equally* (per-token mean per row: a 3-token label = a 3,000-token rollout). Rows now count by target
+   tokens, each at most `--row-token-cap 512` (`--loss-weighting rows` opts out): the batch loss is the standard token
+   mean, and the cap keeps one long reasoning trace from taking a 4-row batch.
+
+**Inventory: every path that lowers (prompt, reply) into weighted target ids, and whether it keeps non-student context
+out of the loss** (`git grep soft_items_to_node non_student_context _reasoning_text target_items target_weights`; HEAD
+line numbers before this change unless stated):
+- Fixed here (did not mask): `compiler/compiled_site.py:site_graph/items_graph` (T2; mixed own rollouts + teacher
+  call-level answers); `serve/native_recorded_objective.py:target_branch` (the `crossEntropy`/`selfDistill` terms of
+  the learning API, a caller-supplied target: masked unless it is the turn's own recorded reply);
+  `tune/learned/meta_bank.py:rollout_rows` (own rollouts, now `own=True`); `data/port_record_graph.py` consumer target
+  (a record's reasoning mapped to `reasoning_content` trained; now `own=False`, the operator rows' port-record path);
+  `scripts/neuralese_data/build_historical_luna_full_episode_graphs.py` (teacher Luna, every token after the boundary).
+- Masks already: `tune/rows.py:turn_graph` (now through the shared helper) and everything lowered through
+  `lower_rows` (`scripts/neuralese_data/program_tune.py:453`, `tune/distill.py:42`, `tune/build.py`, `tune/families.py`,
+  `tune/learned/program.py`, `tune/learned/__main__.py`, memetic `rl/memetic_workspace.py` refine -> `teacher:'rl'` ->
+  `tune.build`, `scripts/neuralese_data/operator_soft_states.py`); `scripts/neuralese_data/sft_sources.py:think_context`
+  (`render_call`, `rendered_row`); `authored_trajectories.py:247-249`; `subagent_neuralese.py:418,532`;
+  `filled_reasoning.py:291`; `operator_rows.py:227-230` -> `exp0_sft.context_masks` (empty think block);
+  `exp0_sft.context_masks` load-time net (empty `</think>` + next token).
+- Not applicable (cited): T1 `rl/opsd_privileged.py:74-77,128-133` (targets are exactly the sampled ids); T0
+  `train/step_verifier.py:187-212` (a classifier at boundaries, no token loss); `compiler/per_call_hkb.py:68-116`
+  (inference only); `compiler/train_compiler.py:99` (caller labels, no lowering of its own);
+  `scripts/neuralese_data/call_level_engine.py:769-781` (produces teacher targets with no reasoning,
+  `teacher_reasoning_weight 0`; lowered by run_t2, fixed above); `rl/native_replay.py:1812-1819` and `rl/jolt.py:455,476`
+  (weights only at sampled actions); `serve/native_learning.py:240-260` decision options (shared `</think>` moved into
+  the prompt), `serve/native_recorded_graph.py:99` and `data/decision_graph.py:508-552` (all-zero weights);
+  `tune/learned/controls.py:39-47` (raw prompt ids, no chat render); `lower_rollout_turns.py` (sampled ids, never
+  re-rendered); `train/own_output_supervision.py:643-645`, `train/native_supervision.py:203-216`,
+  `lower_sft_sources.py:94` (reweight or pass through upstream weights).
+- Left out, with reason: `data/text_corpus.py:2512` `target_with_teacher_reasoning` under `target_reasoning=True`
+  (callers `build_native_semantic_pairs_e2e.py:1095,1190`, `render_native_turn_corpus.py:1213`,
+  `native_chain_render.py:155`) and `data/native_graph.py:43`/`native_graph_conversion.py:127,648` boundary weights:
+  these builders put teacher reasoning into the target by design and weight from a gold-packet boundary that custody
+  receipts bind; masking needs a separate target-context boundary in that packet schema. Not done in this change; not
+  checked whether any current recipe consumes these corpora. `sft_sources` treatment `train@0.1` for Nemotron, Qwen3.6
+  and GLM (`teacher-reasoning-treatment-20261125`, DECISIONS 2026-11-25) trains real teacher reasoning at weight 0.1:
+  this conflicts with the AGENTS.md rule "teacher reasoning is never trained as a target", but it is aei1's live
+  build recipe (the brief excluded aei1); raised to the supervisor, unchanged.
+- Noted, not changed: `run_t2.prepare` and `meta_bank.rollout_rows` treat guided JOLT rollouts as own replies, as
+  `sft_sources` does (`OWN_SOURCES` includes `jolt-guided`).
+
+**Tests** (`tests/neuralese/test_compiler_compiled_site.py`): `test_site_graph_masks_a_teacher_empty_think_block_and_keeps_own_reasoning`,
+`test_row_loss_scales_count_target_tokens_with_a_cap`, `test_live_kb_fills_positives_by_similarity_and_trains_distractors`,
+`test_eval_kb_draw_is_per_row_and_repeatable`, `test_ablation_reports_site_blind_and_whole_site_controls_by_source`;
+the existing compiled-site, serving, tune-rows, sft-sources, recorded-derivative, typed-harness, operator-rows,
+historical-source and learned-optimizer suites pass.
+
+**T2 restart.** The head fit the old objective to one global adapter, so the run restarts from the warm start (the
+extracted 000000002 writer/query), not from its state: `run_t2` objective `/3`, and a state saved under another objective
+is refused on resume. Same recipe otherwise (`--writer-backend pplx --lr 2e-4 --warm-lr 2e-5 --steps 5000`). New run
+directory `t2-pplx-run2`, keeper label `cmp-t2-pplx-run2` (its own Drive key, so the old 17 GB state is never restored
+into it); `t2-pplx-run1` moved aside on the VM (`t2-pplx-run1.aside-20261126`) until run2's first ablation shows whether
+the compiled sites are site-specific. Success: at the first ablations `adapter_only` beats `mean_core` and `joint`
+beats the whole-site `shuffled` on most dev rows, with teacher-row gains no longer carried by `</think>`. Failure: joint
+no better than `mean_core` / `shuffled` by step 1000.
+
+**T2 relaunch state (2026-11-26 21:05).** Fixes in 35538c81c. `cmp-t2-keeper-3` stopped and its attempt (run1 at step
+500) stopped by PID. Run1 moved aside on the VM to `/content/natlang-work/cmp/t2-pplx-run1.aside-20261126`; its step-500
+`learner-state.pt` (sha256 5b11a13a...) was uploaded to Drive `compiler/cmp-t2-pplx-run1-aside/learner-state-step500.pt`
+and removed from the VM (disk: 33 GB free, run2 needs ~40 GB for its store and two copies of a 14 GB state); the rest of
+run1 stays mirrored at `/mnt/external/dgx-moved-data/compiler-t2-20261126/t2-pplx-run1`. New keeper `cmp-t2-keeper-4`
+(`launch/keeper.sh`, run1's spec kept as `keeper_run1.sh` / `t2_train_run1.sh`; log `launch/keeper-run2.log`): run dir
+`t2-pplx-run2`, label `cmp-t2-pplx-run2`, checkout 35538c81c538, same recipe from step 0 on the warm start. Its first
+attempt was admitted and then evicted by aei1's r0015 round SFT (77 GiB, started 20:55); it waits in admission and
+starts when that SFT ends (the r0014 SFT held the A100 ~3 h). Separate observation: the VM's pplx writer runs the
+reference PyTorch `causal_conv1d` / `chunk_gated_delta_rule` (neither `causal-conv1d` nor `flash-linear-attention` is
+installed in the VM venv), correct but slow; not changed here.

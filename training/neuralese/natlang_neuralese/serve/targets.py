@@ -146,6 +146,32 @@ def own_empty_think_context(tokenizer, target_message, target_ids):
     return max(think_end(tokenizer, target_ids), empty_think_first_end(tokenizer, target_message, target_ids))
 
 
+def train_own_empty_think():
+    """``NATLANG_TUNE_OWN_EMPTY_THINK=train`` opts back into training the empty think block of an own reply without
+    reasoning (``own_empty_think_context``) as a target."""
+    import os
+    return os.environ.get("NATLANG_TUNE_OWN_EMPTY_THINK", "context") == "train"
+
+
+def target_context_end(tokenizer, target_message, target_ids, *, own):
+    """How many leading tokens of one rendered reply are context, not loss: the one rule every trainer that lowers a
+    (prompt, reply) pair into weighted ids applies (``tune.rows.turn_graph``, ``compiler.compiled_site.site_graph``).
+    A reply the student did not sample (``own`` False: a teacher, a privileged run) masks ``non_student_context``
+    (its think block, empty or not, the first token after an empty one, and lead-in text before its first tool
+    call); the student's own reply masks only the template's empty think block when it has no reasoning
+    (``own_empty_think_context``; ``NATLANG_TUNE_OWN_EMPTY_THINK=train`` opts out), and its own reasoning stays a
+    target. AGENTS.md: teacher reasoning and empty think blocks are never trained as targets.
+    ``NATLANG_TARGET_CONTEXT=train`` opts out (every rendered reply token is a target)."""
+    import os
+    if os.environ.get("NATLANG_TARGET_CONTEXT", "context") == "train":
+        return 0
+    if not own:
+        return non_student_context(tokenizer, target_message, target_ids)
+    if train_own_empty_think():
+        return 0
+    return own_empty_think_context(tokenizer, target_message, target_ids)
+
+
 def _first(tokenizer, ids, *tokens):
     """The first position in ``ids`` of any of these vocabulary tokens (templates name them differently), or None."""
     found = [ids.index(i) for i in (tokenizer.convert_tokens_to_ids(t) for t in tokens)

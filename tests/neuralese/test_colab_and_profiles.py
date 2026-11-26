@@ -964,8 +964,29 @@ def test_stop_colab_kills_the_recorded_process_group_not_a_pattern(tmp_path, mon
     monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
     pop_rl_actor.colab_state_path('g4-1').write_text(json.dumps({'pid': 4242, 'policy_id': 'p'}))
     pop_rl_actor.stop_colab('g4-1')
-    assert sent and 'kill -TERM -- -4242' in sent[0] and 'pkill' not in sent[0]
+    kills = [c for c in sent if 'kill -TERM' in c]
+    assert kills and 'kill -TERM -- -4242' in kills[0] and not any('pkill' in c for c in sent)
     assert not pop_rl_actor.colab_state_path('g4-1').exists()
+
+
+def test_stop_colab_also_stops_a_live_actor_claim_the_record_lost(tmp_path, monkeypatch):
+    """aei1 r0015 (2026-11-26): the record named a dead actor (a later serve overwrote it) while the live one held
+    34 GB, and the round's learner waited out its admission. Every live non-preemptible actor- claim is stopped;
+    tenants and other claims are not."""
+    status = json.dumps({'actor-401be1c55949-919190': {'label': 'actor-401be1c55949', 'pid': 919190, 'preemptible': False},
+                         'tenant-measure-1': {'label': 'tenant-measure', 'pid': 5, 'preemptible': True},
+                         'sft-aei1-r0015-9': {'label': 'sft-aei1-r0015', 'pid': 9, 'preemptible': False},
+                         'waiting:x': {'label': 'actor-old', 'pid': 11}})
+    assert pop_rl_actor.actor_claim_pids(status) == [919190]
+    assert pop_rl_actor.actor_claim_pids('not json') == []
+    sent = []
+    monkeypatch.setattr(pop_rl_actor, 'ROOT', tmp_path)
+    monkeypatch.setattr(pop_rl_actor, 'ssh_host', lambda host, command, **kw: sent.append(command) or '')
+    monkeypatch.setattr(pop_rl_actor, 'log', lambda **e: None)
+    monkeypatch.setattr(pop_rl_actor, 'colab_actor_claims', lambda host: [919190])
+    pop_rl_actor.colab_state_path('g4-1').write_text(json.dumps({'pid': 915645, 'policy_id': 'p'}))
+    pop_rl_actor.stop_colab('g4-1')
+    assert any('kill -TERM -- -915645' in c for c in sent) and any('kill -TERM -- -919190' in c for c in sent)
 
 
 def test_run_remote_sft_of_a_round_maps_its_factor_dir_pulls_blob_first_and_starts_no_mps(tmp_path, remote, monkeypatch):

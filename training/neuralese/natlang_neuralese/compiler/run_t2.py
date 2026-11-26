@@ -15,9 +15,14 @@ header into train sites and unseen dev sites, and every train site leaves its la
 ``train``: the frozen policy as the Python native engine (serving dtype); per site the header's text state written in
 its real call (cached in RUN/store); one shared ``xs`` adapter basis, learned jointly by default (``LearnedBankBasis``,
 ``--no-learn-basis`` keeps the weight-SVD basis); ``CompiledSiteHead`` (FP32) trained with AdamW (FP32 masters) on the native graph CE
-of the verified reply under the compiled stack, with independent ``kv_drop`` / ``adapter_drop``. Alongside, by default:
-- Live-KB: each row gets slots from related same-family peers (never its own task or a source-group sibling) and
-  other-family distractors; ``--null-kb-prob`` of rows see distractors only (restraint). The writer is hindsight-kb's
+of the verified reply under the compiled stack, with independent ``kv_drop`` / ``adapter_drop``. A teacher reply's
+think block (empty or not) and lead-in, and an own reply's unsampled empty think block, are zero-weight context
+(``serve.targets.target_context_end``; ``--no-mask-non-student-context`` opts out). Each row of a batch counts by its
+target tokens up to ``--row-token-cap`` (``--loss-weighting rows``: equally). Alongside, by default:
+- Live-KB: each row gets slots from related peers (same family or same site; never its own task or a source-group
+  sibling), filled by similarity from the writer's key index of the train pool (``--kb-index-every``) where it has too
+  few, and unrelated distractors encoded with gradient (``--no-kb-neg-grad``); ``--null-kb-prob`` of rows see
+  distractors only (restraint). The writer is hindsight-kb's
   pplx ``H``/``Q`` warm-started from 000000002 (``--writer-backend pplx --warmstart-dir --pplx-revision``; fresh
   ``value_head`` and poolers at ``--lr``, warm encoders at ``--warm-lr``; FP32 masters via MasterAdamW); the embedding
   stand-in (``--writer-backend embed``) runs only on CPU, for unit tests.
@@ -26,7 +31,8 @@ of the verified reply under the compiled stack, with independent ``kv_drop`` / `
 - Compositional cores every ``--comp-every`` steps: a call compiled as ``C_scope + C_body`` (signature line and
   instructions body compiled separately, summed in the shared basis) with the full header's state residual.
 Receipts in RUN: ``train.jsonl`` (one line per step), ``ablation.jsonl`` (base / joint / kv-only / adapter-only /
-shuffled site slots / shuffled KB slots on dev calls of seen and unseen sites: the mandatory shuffled-memory check),
+site-blind mean core / whole shuffled site / shuffled site slots / shuffled KB slots on dev calls of seen and unseen
+sites, overall, by source kind and token-weighted: the mandatory shuffled-memory check),
 ``receipt.json`` (code and hindsight-kb provenance, engine identity, data digest, config, exclusion funnel) and a
 compiled release of one dev site (``release/``) for the engine parity check. ``learner-state.pt`` (head, basis, writer,
 optimizer, order, RNG) is saved atomically every ``--state-every`` steps and a rerun resumes from it.
@@ -46,6 +52,10 @@ from pathlib import Path
 import torch
 
 RECEIPT_SCHEMA = 'natlang.compiler.t2-receipt/2'
+# /3 (2026-11-26): non-student target context masked, token-weighted rows, similarity-filled Live-KB positives with
+# distractor gradients. A learner state saved under another objective is not resumed (a head fit to /2 learned one
+# global adapter under the wrong objective; T2 restarts from the warm start).
+OBJECTIVE = 'unified-compiler-live-kb-maml-compositional/3'
 
 
 def _sha(text: str) -> str:
@@ -257,8 +267,8 @@ class Sites:
     """Each site's text-initialized header state (and its scope/body part states) and each call's graph row, built
     once and cached in RUN/sites.json (the states themselves live in RUN/store)."""
 
-    def __init__(self, engine, run):
-        self.engine, self.path = engine, Path(run) / 'sites.json'
+    def __init__(self, engine, run, *, mask_context=True):
+        self.engine, self.path, self.mask_context = engine, Path(run) / 'sites.json', mask_context
         self.cache = json.loads(self.path.read_text()) if self.path.exists() else {'states': {}}
         self.cache.setdefault('part_states', {})
         self.graphs = {}
@@ -292,9 +302,12 @@ class Sites:
         if row['key'] not in self.graphs:
             state = self.state(row)
             block = self.engine.store.get_native_state(state).block
+            # a rollout's reply is the policy's own sample; a call-level row's is the teacher's (its empty think block
+            # and the token after it are context: serve.targets.target_context_end)
             graph = site_graph(self.engine, row['messages'], row['tools'], row['target'], row['header'], state,
                                len(block.token_ids), graph_id='t2:' + row['key'],
-                               source_groups=row['source_groups'] or [row['task_id']])
+                               source_groups=row['source_groups'] or [row['task_id']],
+                               own=row.get('source_kind') == 'rollout', mask_context=self.mask_context)
             self.graphs[row['key']] = {'graph': graph, 'state_id': state}
         return self.graphs[row['key']]
 
@@ -306,30 +319,95 @@ def _lr_scale(step: int, warmup: int, total_steps: int) -> float:
     return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * progress))
 
 
-def ablation(engine, head, sites, rows, adapter_id, step, others, *, basis_module=None, writer=None, peer_pool=()):
-    """Mean dev CE per arm. ``shuffled``: the slots of another dev site; ``shuffled_kb``: another row's experience
-    slots. A compiler whose real slots do not beat the shuffled ones is a defect (AGENTS.md: a span that ablation cannot
-    tell from shuffled state). ``base`` is the text state with a zero core (the uncompiled call)."""
+def target_tokens(site):
+    """The target weight mass of a site row's graph (its supervised reply tokens)."""
+    return float(sum(site['graph']['nodes'][0]['target_weights']))
+
+
+def row_loss_scales(counts, weighting, cap):
+    """Per-row loss scales of one batch (each row's loss is its per-token mean CE). ``tokens``: each row counts by its
+    target tokens, at most ``cap`` (0: no cap), so the batch loss is a token mean in which one long trace cannot take
+    the whole batch; ``rows``: every row counts equally (a 3-token label as much as a 3,000-token rollout)."""
+    if weighting == 'rows':
+        return [1. / len(counts)] * len(counts)
+    mass = [min(c, cap) if cap else c for c in counts]
+    total = sum(mass)
+    return [m / total for m in mass] if total > 0 else [1. / len(counts)] * len(counts)
+
+
+def eval_rng(seed, row):
+    """The Live-KB draw of one dev row: seeded by the run seed and the row, so every row sees its own peers and the
+    same ones at every eval."""
+    return random.Random(_sha(json.dumps([int(seed), row['key']])))
+
+
+def _means(per_row, arms, rows=None):
+    rows = per_row if rows is None else rows
+    out = {}
+    for arm in arms:
+        values = [r[arm] for r in rows if r.get(arm) is not None]
+        out[arm] = sum(values) / len(values) if values else None
+    return out
+
+
+def _token_means(per_row, arms):
+    out = {}
+    for arm in arms:
+        pairs = [(r[arm], r['target_tokens']) for r in per_row if r.get(arm) is not None]
+        mass = sum(n for _, n in pairs)
+        out[arm] = sum(v * n for v, n in pairs) / mass if mass else None
+    return out
+
+
+ABLATION_ARMS = ('base', 'joint', 'kv_only', 'adapter_only', 'mean_core', 'shuffled', 'shuffled_slots', 'shuffled_kb')
+
+
+def ablation(engine, head, sites, rows, adapter_id, step, others, *, basis_module=None, writer=None, peer_pool=(),
+             seed=0, index=None, k_pos=2, k_neg=2):
+    """Mean dev CE per arm, overall, by ``source_kind`` and token-weighted.
+
+    - ``base``: the text state with a zero core (the uncompiled call); ``joint``: the full compiled stack;
+      ``kv_only`` / ``adapter_only``: one reader half.
+    - ``mean_core``: the site-blind control: no state residual and the adapter-only cores averaged over the dev rows,
+      the same for every row. A compiler whose ``adapter_only`` does not beat it has learned one global adapter.
+    - ``shuffled``: the whole compiled site of another dev site swapped in (its site slots, slot weights and Live-KB
+      slots); ``shuffled_slots``: only its site slots (the row keeps its own slot weights and KB).
+    - ``shuffled_kb``: another row's Live-KB slots, from a row whose peers differ from this row's own; rows with no
+      such row are listed in ``shuffled_kb_unavailable``.
+    A compiler whose real slots do not beat the shuffled ones is a defect (AGENTS.md: a span that ablation cannot tell
+    from shuffled state). Each row's KB is drawn by ``eval_rng`` (its own seeded sample, filled by similarity from
+    ``index``)."""
     from .compiled_site import init_block_values, site_loss
     from .live_kb_writer import build_live_kb_slots
     head.eval()
     if writer is not None:
         writer.eval()
-    arms = {'base': [], 'joint': [], 'kv_only': [], 'adapter_only': [], 'shuffled': [], 'shuffled_kb': []}
     per_row = []
     with torch.no_grad():
-        encoded = {row['site']: head.encode(init_block_values(sites.block(row)))[0] for row in others}
-        # deterministic slots (first peers in pool order): the same arms at every eval
-        kb = {row['key']: build_live_kb_slots(engine, writer, row, list(peer_pool)) for row in rows} if writer else {}
-    for index, row in enumerate(rows):
+        encoded = {}
+        for row in others:
+            if row['site'] not in encoded:
+                z, _, w, _ = head.encode(init_block_values(sites.block(row)))
+                encoded[row['site']] = (z, w)
+        kb, peers = {}, {}
+        if writer is not None:
+            for row in rows:
+                chosen = []
+                kb[row['key']] = build_live_kb_slots(engine, writer, row, list(peer_pool), k_pos=k_pos, k_neg=k_neg,
+                                                     rng=eval_rng(seed, row), index=index, chosen=chosen)
+                peers[row['key']] = frozenset(chosen)
+        kb_args_of = {key: {'z_kb': z, 'k_kb': k, 'w_kb': w, 'kb_valid': v} for key, (z, k, w, v) in kb.items()}
+        # the site-blind core: adapter-only cores of every dev row, averaged
+        cores = [head(init_block_values(sites.block(row)), kv=False, apply_dropout=False,
+                      **kb_args_of.get(row['key'], {})).cores for row in rows]
+        mean_core = {name: sum(c[name] for c in cores) / len(cores) for name in cores[0]} if cores else None
+    unavailable = []
+    for index_row, row in enumerate(rows):
         site = sites.row(row)
         block = sites.block(row)
-        rotation = others[index + 1:] + others[:index + 1]
+        rotation = others[index_row + 1:] + others[:index_row + 1]
         other = next((o for o in rotation if o['site'] != row['site']), None)
-        kb_args = {}
-        if row['key'] in kb:
-            z_kb, k_kb, w_kb, v_kb = kb[row['key']]
-            kb_args = {'z_kb': z_kb, 'k_kb': k_kb, 'w_kb': w_kb, 'kb_valid': v_kb}
+        kb_args = kb_args_of.get(row['key'], {})
         common = dict(adapter_id=adapter_id, init_block=block, basis_module=basis_module, apply_dropout=False)
         losses = {
             'base': site_loss(engine, head, site, kv=False, adapter=False, **common),
@@ -337,32 +415,46 @@ def ablation(engine, head, sites, rows, adapter_id, step, others, *, basis_modul
             'kv_only': site_loss(engine, head, site, adapter=False, **common, **kb_args),
             'adapter_only': site_loss(engine, head, site, kv=False, **common, **kb_args),
         }
+        if mean_core is not None:
+            losses['mean_core'] = site_loss(engine, head, site, kv=False, adapter=False, extra_cores=mean_core, **common)
         if other is not None:
-            losses['shuffled'] = site_loss(engine, head, site, z_slots=encoded[other['site']], **common, **kb_args)
-        kb_other = next((o for o in rotation if o['key'] != row['key'] and o['key'] in kb
-                         and kb[o['key']][0].shape[1] > 0), None)
-        if kb_args and kb_other is not None:
-            oz, ok, ow, ov = kb[kb_other['key']]
-            losses['shuffled_kb'] = site_loss(engine, head, site, z_kb=oz, k_kb=ok, w_kb=ow, kb_valid=ov, **common)
-        for arm, value in losses.items():
-            arms[arm].append(value)
-        per_row.append({'key': row['key'], 'site': row['site'], 'split': row['split'], **losses})
+            z_other, w_other = encoded[other['site']]
+            losses['shuffled_slots'] = site_loss(engine, head, site, z_slots=z_other, **common, **kb_args)
+            losses['shuffled'] = site_loss(engine, head, site, z_slots=z_other, slot_weights=w_other, **common,
+                                           **kb_args_of.get(other['key'], {}))
+        if kb_args:
+            kb_other = next((o for o in rotation if o['key'] != row['key'] and o['key'] in kb
+                             and kb[o['key']][0].shape[1] > 0 and peers[o['key']] != peers[row['key']]), None)
+            if kb_other is None:
+                unavailable.append(row['key'])
+            else:
+                losses['shuffled_kb'] = site_loss(engine, head, site, **common, **kb_args_of[kb_other['key']])
+        per_row.append({'key': row['key'], 'site': row['site'], 'split': row['split'],
+                        'source_kind': row.get('source_kind'), 'target_tokens': target_tokens(site),
+                        'kb_peers': sorted(peers.get(row['key'], ())), **losses})
     head.train()
     if writer is not None:
         writer.train()
-    mean = {arm: (sum(values) / len(values) if values else None) for arm, values in arms.items()}
-    paired = [r for r in per_row if 'shuffled' in r]
-    paired_kb = [r for r in per_row if 'shuffled_kb' in r]
-    return {
-        'step': step, 'rows': len(rows), 'mean_ce': mean,
-        'base_minus_joint': None if mean['joint'] is None else mean['base'] - mean['joint'],
-        'shuffled_minus_joint': None if mean['shuffled'] is None else mean['shuffled'] - mean['joint'],
-        'shuffled_kb_minus_joint': None if mean['shuffled_kb'] is None else (
-            sum(r['shuffled_kb'] - r['joint'] for r in paired_kb) / len(paired_kb)),
-        'joint_beats_shuffled': f"{sum(1 for r in paired if r['joint'] < r['shuffled'])}/{len(paired)}",
-        'joint_beats_shuffled_kb': f"{sum(1 for r in paired_kb if r['joint'] < r['shuffled_kb'])}/{len(paired_kb)}",
-        'per_row': per_row,
-    }
+    mean = _means(per_row, ABLATION_ARMS)
+
+    def paired(arm):
+        rows_ = [r for r in per_row if r.get(arm) is not None]
+        return rows_, (sum(r[arm] - r['joint'] for r in rows_) / len(rows_) if rows_ else None)
+
+    out = {'step': step, 'rows': len(rows), 'mean_ce': mean,
+           'mean_ce_by_source': {kind: _means(per_row, ABLATION_ARMS, [r for r in per_row if (r['source_kind'] or 'unknown') == kind])
+                                 for kind in sorted({r['source_kind'] or 'unknown' for r in per_row})},
+           'mean_ce_tokens': _token_means(per_row, ABLATION_ARMS),
+           'base_minus_joint': None if mean['joint'] is None else mean['base'] - mean['joint'],
+           'shuffled_kb_unavailable': unavailable}
+    for arm in ('shuffled', 'shuffled_slots', 'shuffled_kb', 'mean_core'):
+        rows_, delta = paired(arm)
+        out[f'{arm}_minus_joint'] = delta
+        out[f'joint_beats_{arm}'] = f"{sum(1 for r in rows_ if r['joint'] < r[arm])}/{len(rows_)}"
+    rows_, _ = paired('mean_core')
+    out['adapter_only_beats_mean_core'] = f"{sum(1 for r in rows_ if r['adapter_only'] < r['mean_core'])}/{len(rows_)}"
+    out['per_row'] = per_row
+    return out
 
 
 def _frozen(*modules):
@@ -446,7 +538,8 @@ def train(args):
         CompiledSiteConfig, CompiledSiteHead, compile_release, create_compiler_adapter,
         create_learned_compiler_basis, site_loss, state_layout,
     )
-    from .live_kb_writer import LiveExperienceWriter, PplxWarmstartWriter, _engine_embedding_weight, build_live_kb_slots
+    from .live_kb_writer import (KbIndex, LiveExperienceWriter, PplxWarmstartWriter, _engine_embedding_weight,
+                                 build_live_kb_slots)
 
     run = Path(args.out)
     run.mkdir(parents=True, exist_ok=True)
@@ -467,10 +560,13 @@ def train(args):
     engine = load_native_engine(str(args.checkpoint), base=str(args.base), device=args.device,
                                 dtype=getattr(torch, args.dtype), training_state=False)
     engine.store = TensorStore(run / 'store')
-    sites = Sites(engine, run)
+    sites = Sites(engine, run, mask_context=args.mask_non_student_context)
     state_path = run / 'learner-state.pt'
     resumed = state_path.exists()
     saved = torch.load(state_path, map_location='cpu', weights_only=False) if resumed else None
+    if saved is not None and saved.get('objective') != OBJECTIVE:
+        raise ValueError(f"{state_path} was trained under objective {saved.get('objective')!r}, not {OBJECTIVE!r}: "
+                         'start a new run directory')
 
     if saved is not None:
         config = CompiledSiteConfig.from_dict(saved['config'])
@@ -579,17 +675,24 @@ def train(args):
         'parameters': sum(p.numel() for p in all_params),
         'parameter_dtypes': sorted({str(p.dtype) for p in all_params}),
         'resumed_at_step': step if resumed else None,
-        'objective': 'unified-compiler-live-kb-maml-compositional/2',
+        'objective': OBJECTIVE,
         'writer_backend': writer_backend if writer is not None else None,
         'writer_warmstart': getattr(writer, 'warmstart', None),
+        'target_context': 'masked' if args.mask_non_student_context else 'trained',
+        'loss_weighting': {'kind': args.loss_weighting, 'row_token_cap': args.row_token_cap},
+        'kb_rule': {'index_every': args.kb_index_every, 'neg_grad': args.kb_neg_grad},
     }
     _write_json(run / ('receipt.json' if not resumed else f'receipt-resume-{step}.json'), receipt)
     log = (run / 'train.jsonl').open('a', encoding='utf-8')
     abl = (run / 'ablation.jsonl').open('a', encoding='utf-8')
 
+    # the writer's keys of the train pool: positives are filled by similarity from it (rebuilt on a resume from the
+    # restored writer, refreshed every --kb-index-every steps)
+    index = KbIndex(engine, writer, train_rows) if writer is not None and args.kb_index_every > 0 else None
+    abl_args = dict(basis_module=basis_module, writer=writer, peer_pool=train_rows, seed=args.seed, index=index,
+                    k_pos=args.kb_pos, k_neg=args.kb_neg)
     if step == 0 and not resumed and dev_rows:
-        result = ablation(engine, head, sites, dev_rows, adapter_id, 0, dev_rows,
-                          basis_module=basis_module, writer=writer, peer_pool=train_rows)
+        result = ablation(engine, head, sites, dev_rows, adapter_id, 0, dev_rows, **abl_args)
         abl.write(json.dumps(result) + '\n'); abl.flush()
 
     head.train()
@@ -604,25 +707,28 @@ def train(args):
         losses, tokens = [], 0
         maml_loss_val, comp_loss_val = None, None
 
+        batch_rows = []
         for _ in range(args.batch):
             if position == len(order):
                 rng.shuffle(order)
                 position = 0
-            row = train_rows[order[position]]
+            batch_rows.append(train_rows[order[position]])
             position += 1
-            site = sites.row(row)
+        batch_sites = [sites.row(row) for row in batch_rows]
+        scales = row_loss_scales([target_tokens(site) for site in batch_sites], args.loss_weighting, args.row_token_cap)
+        for row, site, row_scale in zip(batch_rows, batch_sites, scales):
             tokens += len(site['graph']['nodes'][0]['token_ids'])
             kb_args = {}
             if writer is not None:
                 null_step = rng.random() < args.null_kb_prob
                 z_kb, k_kb, w_kb, v_kb = build_live_kb_slots(
                     engine, writer, row, train_rows, k_pos=args.kb_pos, k_neg=args.kb_neg,
-                    null_restraint=null_step, rng=rng,
+                    null_restraint=null_step, rng=rng, index=index, neg_grad=args.kb_neg_grad,
                 )
                 kb_args = {'z_kb': z_kb, 'k_kb': k_kb, 'w_kb': w_kb, 'kb_valid': v_kb}
             losses.append(site_loss(
                 engine, head, site, adapter_id=adapter_id, init_block=sites.block(row),
-                basis_module=basis_module, **kb_args, backward=True, scale=1.0 / args.batch,
+                basis_module=basis_module, **kb_args, backward=True, scale=row_scale,
             ))
 
         # FO-MAML episode: z_site meta-trained for few-shot Tier-1.5 refinement
@@ -642,7 +748,8 @@ def train(args):
             if writer is not None:
                 cz, ck, cw, cv = build_live_kb_slots(
                     engine, writer, comp_row, train_rows, k_pos=args.kb_pos, k_neg=args.kb_neg,
-                    null_restraint=(rng.random() < args.null_kb_prob), rng=rng,
+                    null_restraint=(rng.random() < args.null_kb_prob), rng=rng, index=index,
+                    neg_grad=args.kb_neg_grad,
                 )
                 comp_kb = {'z_kb': cz, 'k_kb': ck, 'w_kb': cw, 'kb_valid': cv}
             comp_loss_val = _compositional_step(
@@ -665,6 +772,7 @@ def train(args):
         )
         log.write(json.dumps({
             'step': step, 'loss': sum(losses) / len(losses), 'losses': losses,
+            'loss_tokens': sum(l * c for l, c in zip(losses, scales)), 'row_scales': scales,
             'maml_loss': maml_loss_val, 'comp_loss': comp_loss_val,
             'grad_norm': grad_norm, 'encoder_grad_norm': encoder_grad,
             'basis_grad_norm': basis_grad, 'writer_grad_norm': writer_grad,
@@ -682,11 +790,13 @@ def train(args):
                 'optimizer': optimizer.state_dict(),
                 'step': step, 'order': order, 'position': position,
                 'config': config.to_dict(), 'adapter_id': adapter_id, 'learn_basis': learn_basis,
+                'objective': OBJECTIVE,
                 'rng': {'torch': torch.get_rng_state(), 'python': random.getstate(), 'run': rng.getstate()},
             }, state_path)
+        if index is not None and step % args.kb_index_every == 0:
+            index = abl_args['index'] = KbIndex(engine, writer, train_rows)
         if dev_rows and (step % args.eval_every == 0 or step == args.steps):
-            result = ablation(engine, head, sites, dev_rows, adapter_id, step, dev_rows,
-                              basis_module=basis_module, writer=writer, peer_pool=train_rows)
+            result = ablation(engine, head, sites, dev_rows, adapter_id, step, dev_rows, **abl_args)
             abl.write(json.dumps(result) + '\n'); abl.flush()
 
     release_row = next((row for row in dev_rows if row['split'] == 'dev-seen'), dev_rows[0] if dev_rows else train_rows[0])
@@ -757,6 +867,18 @@ def main(argv=None):
                    help="the pplx backbone's FLA/causal-conv/Liger kernels (default: on for CUDA, as 000000002 trained)")
     t.add_argument('--kb-pos', type=int, default=2)
     t.add_argument('--kb-neg', type=int, default=2)
+    t.add_argument('--kb-index-every', type=int, default=250,
+                   help="refresh the writer's key index of the train pool every N steps; positives are filled by "
+                        'similarity from it where a row has too few same-family/same-site peers (0: no fill)')
+    t.add_argument('--kb-neg-grad', action=argparse.BooleanOptionalAction, default=True,
+                   help='encode Live-KB distractors with gradient into the writer (--no-kb-neg-grad: without)')
+    t.add_argument('--mask-non-student-context', action=argparse.BooleanOptionalAction, default=True,
+                   help="a teacher reply's think block (empty or not) and lead-in, and an own reply's unsampled empty "
+                        'think block, are zero-weight context (serve.targets.target_context_end)')
+    t.add_argument('--loss-weighting', choices=('tokens', 'rows'), default='tokens',
+                   help='tokens: each row counts by its target tokens (capped by --row-token-cap); rows: equally')
+    t.add_argument('--row-token-cap', type=int, default=512,
+                   help='with --loss-weighting tokens, a row counts as at most this many target tokens (0: no cap)')
     t.add_argument('--null-kb-prob', type=float, default=0.2, help='rows that see distractors only (plan: 20%%)')
     t.add_argument('--meta-every', type=int, default=4)
     t.add_argument('--meta-inner-steps', type=int, default=2)

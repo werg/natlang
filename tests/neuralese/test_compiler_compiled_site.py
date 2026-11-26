@@ -381,3 +381,145 @@ def test_step_verifier_progress_weighting_upweights_late_boundaries(tmp_path):
     receipt = train_t0(feat_dir, tmp_path / 'out', cfg=VerifierTrainConfig(epochs=5, batch_size=16), device='cpu',
                        progress_weighting=True)
     assert receipt['auroc']['validation'] > 0.65
+
+
+class _ThinkTokens:
+    """A tokenizer stand-in for a thinking template: ids index a fixed vocabulary."""
+    vocab = ['<|im_start|>', '<think>', '</think>', '"', '<|im_end|>', 'plan', '<tool_call>', 'yes']
+
+    def convert_tokens_to_ids(self, token):
+        return self.vocab.index(token) if token in self.vocab else None
+
+    def decode(self, ids):
+        return ''.join(self.vocab[i] for i in ids)
+
+
+def test_site_graph_masks_a_teacher_empty_think_block_and_keeps_own_reasoning(tmp_path, monkeypatch):
+    # 2026-11-26 T2: teacher rows' `<think></think>` was trained (compiled_site.items_graph weighted every target 1);
+    # its </think> carried ~all of a teacher row's base CE and the whole compiled gain
+    import natlang_neuralese.serve.targets as targets
+    from natlang_neuralese.compiler.compiled_site import site_graph
+    monkeypatch.delenv('NATLANG_EMPTY_THINK_FIRST', raising=False)
+    monkeypatch.delenv('NATLANG_TUNE_OWN_EMPTY_THINK', raising=False)
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    state = init_header_state(engine, call(), [], HEADER)
+    block = engine.store.get_native_state(state).block
+    rendered = {}
+    monkeypatch.setattr(targets, 'target_items', lambda engine, messages, tools, reply, **_: (
+        [('tok', 4), ('block', state), ('tok', 5)], [('tok', t) for t in rendered['ids']]))
+    monkeypatch.setattr(engine, 'tokenizer', _ThinkTokens())
+
+    def weights(reply, ids, own, **kw):
+        rendered['ids'] = ids
+        graph = site_graph(engine, call(), [], reply, HEADER, state, len(block.token_ids), graph_id='g',
+                           source_groups=['g'], own=own, **kw)
+        return graph['nodes'][0]['target_weights'][-len(ids):]
+
+    teacher = {'role': 'assistant', 'content': '"yes"'}
+    answer = [2, 3, 7, 3, 4]                          # </think> " yes " <|im_end|>
+    # the empty think block and the token predicted at its </think> are context; the answer trains
+    assert weights(teacher, answer, own=False) == [0., 0., 1., 1., 1.]
+    # the policy's own reasoning keeps its weight, think block included
+    own = {**teacher, 'reasoning_content': 'plan'}
+    assert weights(own, [5] + answer, own=True) == [1.] * 6
+    # an own reply without reasoning: the unsampled empty block is context too
+    assert weights(teacher, answer, own=True) == [0., 0., 1., 1., 1.]
+    # a teacher's reasoning is context
+    assert weights(own, [5] + answer, own=False) == [0., 0., 1., 1., 1., 1.]
+    # opt-out
+    assert weights(teacher, answer, own=False, mask_context=False) == [1.] * 5
+
+
+def test_row_loss_scales_count_target_tokens_with_a_cap():
+    from natlang_neuralese.compiler.run_t2 import row_loss_scales
+    assert row_loss_scales([3, 3000], 'rows', 512) == [.5, .5]
+    assert row_loss_scales([3, 3000], 'tokens', 0) == pytest.approx([3 / 3003, 3000 / 3003])
+    assert row_loss_scales([3, 3000], 'tokens', 512) == pytest.approx([3 / 515, 512 / 515])
+
+
+def _kb_fixture(tmp_path):
+    from natlang_neuralese.compiler.live_kb_writer import LiveExperienceWriter, _engine_embedding_weight
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    torch.manual_seed(3)
+    writer = LiveExperienceWriter(int(_engine_embedding_weight(engine).shape[-1]), value_dim=16, key_dim=8, num_heads=2,
+                                  hidden_dim=16)
+    pool = [{'key': f'p{i}', 'task_id': f'task{i}', 'family': f'fam{i % 3}', 'site': f's{i}', 'source_groups': [],
+             'experience_text': f't{30 + i} t{40 + i}', 'header': f't{20 + i}', 'split': 'train'} for i in range(9)]
+    return engine, writer, pool
+
+
+def test_live_kb_fills_positives_by_similarity_and_trains_distractors(tmp_path):
+    from natlang_neuralese.compiler.live_kb_writer import KbIndex, build_live_kb_slots
+    engine, writer, pool = _kb_fixture(tmp_path)
+    row = {'key': 'r', 'task_id': 'r', 'family': 'lonely', 'site': 'sr', 'source_groups': [], 'header': 't20 t21'}
+    index = KbIndex(engine, writer, pool)
+    chosen = []
+    z, _, _, _ = build_live_kb_slots(engine, writer, row, pool, k_pos=2, k_neg=2, index=index, chosen=chosen)
+    # no same-family or same-site peer: both positives come from the index (the nearest by query), then 2 distractors
+    q = writer.encode_query_texts(engine, [row['header']]).detach()
+    assert chosen[:2] == [p['key'] for p in index.nearest(q, pool, 2)]
+    assert z.shape[1] == 4 and len(set(chosen)) == 4
+    # distractors carry gradient into the writer unless opted out
+    writer.zero_grad()
+    z[:, 2:].sum().backward()
+    assert sum(float(p.grad.abs().sum()) for p in writer.parameters() if p.grad is not None) > 0
+    z_off, _, _, _ = build_live_kb_slots(engine, writer, row, pool, k_pos=0, k_neg=2, neg_grad=False)
+    assert not z_off.requires_grad
+    # a same-site peer is a labelled relative
+    sited = {**row, 'site': 's4'}
+    chosen = []
+    build_live_kb_slots(engine, writer, sited, pool, k_pos=1, k_neg=0, chosen=chosen)
+    assert chosen == ['p4']
+
+
+def test_eval_kb_draw_is_per_row_and_repeatable(tmp_path):
+    from natlang_neuralese.compiler.live_kb_writer import build_live_kb_slots
+    from natlang_neuralese.compiler.run_t2 import eval_rng
+    engine, writer, pool = _kb_fixture(tmp_path)
+    rows = [{'key': f'd{i}', 'task_id': f'dev{i}', 'family': 'fam0', 'site': f'ds{i}', 'source_groups': [],
+             'header': 't20'} for i in range(4)]
+    drawn = []
+    for row in rows:
+        chosen = []
+        build_live_kb_slots(engine, writer, row, pool, k_pos=2, k_neg=2, rng=eval_rng(0, row), chosen=chosen)
+        drawn.append(tuple(chosen))
+    # each row its own seeded sample (rng=None took the first peers in pool order for every row: identical KBs)
+    assert len(set(drawn)) > 1
+    again = []
+    build_live_kb_slots(engine, writer, rows[0], pool, k_pos=2, k_neg=2, rng=eval_rng(0, rows[0]), chosen=again)
+    assert tuple(again) == drawn[0]
+
+
+def test_ablation_reports_site_blind_and_whole_site_controls_by_source(tmp_path):
+    from natlang_neuralese.compiler.live_kb_writer import KbIndex
+    from natlang_neuralese.compiler.run_t2 import Sites, ablation
+    engine, writer, _ = _kb_fixture(tmp_path)
+    headers = ['t20\nt21 t22', 't23\nt24 t25']
+    rows = []
+    for i in range(6):
+        header = headers[i % 2]
+        messages = [{'role': 'system', 'content': 't10 t11'}, {'role': 'user', 'content': 't12 ' + header + ' t13'}]
+        rows.append({'key': f'k{i}', 'site': f's{i % 2}', 'header': header, 'messages': messages, 'tools': [],
+                     'task_id': f't{i}', 'family': f'f{i % 3}', 'source_groups': [], 'split': 'dev-seen',
+                     'source_kind': 'rollout' if i < 3 else 'call_level_teacher',
+                     'experience_text': f't{30 + i} t{31 + i}',
+                     'target': {'role': 'assistant', 'content': f't{8 + i % 2}'}})
+    sites = Sites(engine, tmp_path / 'run')
+    sites.path.parent.mkdir(parents=True, exist_ok=True)
+    block = sites.block(rows[0])
+    targets = tuple(sorted(target_parameters(engine.shared_model)))
+    config = CompiledSiteConfig(layout=tuple(state_layout(block)), targets=targets, rank=2, num_slots=4, value_dim=16,
+                                key_dim=8, num_heads=2, adapter_inner_rank=1)
+    head = CompiledSiteHead(config)
+    adapter = create_compiler_adapter(engine, targets, 2)
+    result = ablation(engine, head, sites, rows, adapter, 0, rows, writer=writer, peer_pool=rows, seed=0,
+                      index=KbIndex(engine, writer, rows), k_pos=1, k_neg=1)
+    assert set(result['mean_ce_by_source']) == {'rollout', 'call_level_teacher'}
+    for arm in ('base', 'joint', 'mean_core', 'shuffled', 'shuffled_slots'):
+        assert result['mean_ce'][arm] is not None and result['mean_ce_tokens'][arm] is not None
+    by_key = {r['key']: r for r in result['per_row']}
+    assert all(r['target_tokens'] > 0 for r in result['per_row'])
+    # shuffled_kb never reuses the row's own peers; a row without such a donor is listed
+    for r in result['per_row']:
+        assert ('shuffled_kb' in r) != (r['key'] in result['shuffled_kb_unavailable'])
+    assert len({tuple(r['kb_peers']) for r in by_key.values()}) > 1

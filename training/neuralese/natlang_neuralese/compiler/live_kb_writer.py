@@ -295,6 +295,41 @@ def _shares_closure(peer, row):
     return bool(set(peer.get('source_groups') or ()) & set(row.get('source_groups') or ()))
 
 
+def related_peer(peer, row):
+    """Whether ``peer`` is a labelled relative of ``row``: the same task family or the same compiled site."""
+    return (peer.get('family') == row.get('family')
+            or (row.get('site') is not None and peer.get('site') == row.get('site')))
+
+
+class KbIndex:
+    """The writer's keys of a peer pool, computed without gradient and refreshed by the trainer (a stale retrieval
+    index, as retrieval-augmented trainers keep one): ``build_live_kb_slots`` fills positives by query similarity from
+    it where a row has too few labelled relatives."""
+
+    def __init__(self, engine, writer, pool, *, batch=32):
+        self.keys = {}
+        texts = [(p['key'], p['experience_text']) for p in pool if p.get('experience_text')]
+        was_training = writer.training
+        writer.eval()
+        with torch.no_grad():
+            for start in range(0, len(texts), batch):
+                part = texts[start:start + batch]
+                _, k = writer.encode_experience_texts(engine, [text for _, text in part])
+                for (key, _), value in zip(part, k.float()):
+                    self.keys[key] = value.detach()
+        writer.train(was_training)
+
+    def nearest(self, query, peers, k):
+        """The ``k`` peers whose indexed key is most similar to ``query`` ([1, Dk] or [Dk], detached)."""
+        peers = [p for p in peers if p['key'] in self.keys]
+        if not peers or k <= 0:
+            return []
+        q = query.detach().float().reshape(-1)
+        keys = torch.stack([self.keys[p['key']].to(q.device) for p in peers])
+        order = torch.argsort(keys @ q, descending=True)[:k].tolist()
+        return [peers[i] for i in order]
+
+
 def build_live_kb_slots(
     engine,
     writer: LiveExperienceWriter,
@@ -307,34 +342,47 @@ def build_live_kb_slots(
     sim_threshold: float = -0.25,
     null_restraint: bool = False,
     rng=None,
+    index: KbIndex | None = None,
+    neg_grad: bool = True,
+    chosen: list | None = None,
 ):
     """Live-KB slots ``(z_kb [1, M, Dv], k_kb [1, M, Dk], w_kb [1, M], valid [1, M])`` for one training row.
 
-    - Positives: same-family peers' verified experience, encoded live (gradients reach ``writer``). A peer that is the
-      row itself, its task or a source-group sibling is never used: its experience text could carry this call's answer
+    - Positives: related peers' verified experience (``related_peer``: same task family or same site), encoded live
+      (gradients reach ``writer``). With an ``index``, a row with fewer than ``k_pos`` relatives is filled with the
+      peers nearest its query in the index (2026-11-26: 71% of T2 train rows had no same-family peer and saw no
+      positive at all; retrieval by similarity is how the KB is read at serving). A peer that is the row itself, its
+      task or a source-group sibling is never used: its experience text could carry this call's answer
       (``plans/NATLANG_COMPILER.md`` §9.4: related, non-identical peers, ``exclude_tasks`` enforced).
-    - Distractors: other-family peers under the same exclusion, encoded without gradient.
+    - Distractors: unrelated peers under the same exclusion, encoded with gradient (``neg_grad`` False encodes them
+      without), so the writer's keys also learn to score down what does not help.
     - ``null_restraint``: distractors only, at their real retrieval weights, so the head learns to leave memory that
       does not apply (plan: null-memory / already-solved examples train restraint). Zeroing the weights instead would
       only mask the slots and teach nothing.
+    - ``rng`` draws relatives and distractors (None: the first in pool order). ``chosen``, when given, receives the
+      keys of the peers used, positives first.
     Weights are a differentiable function of query-key similarity, so the keys and queries train too."""
     device = writer.pool_query.device
     query_text = row.get('experience_query') or row.get('header') or row.get('binding') or ''
     q = writer.encode_query_texts(engine, [query_text])  # [1, Dk]
-    family = row.get('family')
     usable = [p for p in peer_pool if p.get('experience_text') and not _shares_closure(p, row)]
-    same_family = [p for p in usable if p.get('family') == family]
-    diff_family = [p for p in usable if p.get('family') != family]
+    related = [p for p in usable if related_peer(p, row)]
+    unrelated = [p for p in usable if not related_peer(p, row)]
     pick = (lambda pool, k: rng.sample(pool, min(k, len(pool)))) if rng is not None else (lambda pool, k: pool[:k])
-    pos_rows = [] if null_restraint else pick(same_family, k_pos)
-    neg_rows = pick(diff_family, k_neg)
+    pos_rows = [] if null_restraint else pick(related, k_pos)
+    if not null_restraint and index is not None and len(pos_rows) < k_pos:
+        pos_rows += index.nearest(q, unrelated, k_pos - len(pos_rows))
+    taken = {p['key'] for p in pos_rows}
+    neg_rows = pick([p for p in unrelated if p['key'] not in taken], k_neg)
+    if chosen is not None:
+        chosen.extend(p['key'] for p in [*pos_rows, *neg_rows])
     z_parts, k_parts = [], []
     if pos_rows:
         z_live, k_live = writer.encode_experience_texts(engine, [p['experience_text'] for p in pos_rows])
         z_parts.append(z_live)
         k_parts.append(k_live)
     if neg_rows:
-        with torch.no_grad():
+        with torch.set_grad_enabled(torch.is_grad_enabled() and neg_grad):
             z_neg, k_neg_t = writer.encode_experience_texts(engine, [p['experience_text'] for p in neg_rows])
         z_parts.append(z_neg)
         k_parts.append(k_neg_t)
