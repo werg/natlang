@@ -931,6 +931,22 @@ def test_an_evicted_episode_runs_again_in_the_same_run(tmp_path, monkeypatch):
     assert grpo.slot_env({'A': '1'}, 17) == {'A': '1'}
 
 
+def test_a_dgx_side_client_yields_to_round_preparation_but_not_to_held_measurements(tmp_path, monkeypatch):
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(start=lambda: None))
+    claims = [{'pid': 1}]
+    monkeypatch.setattr(ei, 'held_priority_claims', lambda directory: list(claims))
+    collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    collector.active_slots = 64
+    collector.setup(['t1'], time.time() + 3600, endpoints=[('http://pop', 64)], priority_dir=tmp_path,
+                    ledger_unit='aei-collect-v0001-pop', prep_only=True)
+    collector._priority()
+    assert collector.active_slots == 64                       # a held measurement: not this client's business
+    claims.append({'pid': 1, 'share': 0.5, 'evict_seconds': 120})
+    collector.priority_read = 0
+    collector._priority()
+    assert collector.active_slots == 32 and collector.evict_at is not None
+
+
 def test_pop_rl_actor_profiles_keep_pop_settings():
     pop_settings, pop_fmt = pop_rl_actor.pop_sglang('fp8_e4m3', 20, profile='pop')
     assert pop_settings['max_running'] == 20 and pop_fmt == 'sglang-pop-rtx4060-bf16-vendor-projection-kv-fp8_e4m3'

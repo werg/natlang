@@ -14541,3 +14541,57 @@ Source48's Image-suite restore completed at its exact approved pre-action revisi
 Extended the existing native-review reassessor for these two domains with exact original source/entry/root-output/effect witnesses and source-owned projection hooks. Preparation passes both actual originals without inference. A related real reader defect was exposed: original `checks` is only the required projection, while `observedChecks` retains all observations. Strengthening a previously optional answer must validate the original exhaustive contract/dimensions and then partition against that complete immutable set. Python import/recovery, Python load_episode and independent Node disk verification now share that distinction. Historical unchanged required projections remain compatible; unknown checks, altered observations, missing source-bound contracts, foreign scopes and forged artifact custody remain rejected. No new schema or weaker admission path is introduced. The selected data/fill readers must upgrade before publishing a strengthened-role reassessment.
 
 Actual focused validation:147 Python controls and95 Node controls pass (one opt-in actual-archive control skipped), including full Python NativeIR→Node disk verifier→materializer→CLI promotion, existing whole/partial cohorts, legacy role compatibility and forgery negatives. Two setup/test failures were retained and corrected: the isolated worktree lacked its exact-source compiled graph-custody donor; an initial promotion test incorrectly conflated the old required projection with the full observations. Full pipeline testing caught the importer as a third check-only consumer and closed it via the shared validator. No models or registry writes occurred in these checks. Full2327 Native qualification remains a separate exact Source48 resumable owner;112 passed references are retained while source checks/production receive capacity. Broader InstalledPackage/SystemRelease model-owned Root conversion and remaining route/case gates remain open rather than being certified by this narrow repair.
+
+
+## 2026-11-26 08:45 aei1: a preparation step fits beside the DGX collection (collection-fit agent)
+
+**Where the collection's memory goes** (`aei1-collect-v0010`, anon RSS by process group plus CUDA; sampler
+`memsample-collect-1`). Fixed part ~29 GB: SGLang CUDA 19.4-20.3 GB (12 GB KV pool, weights, graphs), scheduler host
+2.2-5.4, main collector 3.0-5.4, front 1.0-1.4, launcher 0.8-1.1, detokenizer 0.7-1.0. Per-slot part ~0.12 GB:
+episode processes ~33-44 MB each, shared node episode servers ~0.7 GB per 8 slots. At 192 slots ~52-55 GB, so halving
+the slots frees ~11 GB at most. The fixed part cannot shrink without restarting the engine, which would kill the episodes.
+
+**What happened at 08:04.** At 06:38 r0013's prep yield and eviction worked: claim 70 -> 57 -> 47.8, and the data step was
+admitted after 181 s. During its 72 minutes the 96-slot collection grew from ~43.5 to 49.1 GB (above its yielded claim,
+which never rises). When the data step ended, the Pop client, queued in the ledger, took the freed room. The driver
+holds a stage outside the ledger queue while `wait_for_room` waits, so the client went first. The build then waited
+601 s and preempted the collection.
+
+**Changes (default on).**
+- While a stage waits for room (`hold_clients`): DGX-side collection clients queued in the ledger are withdrawn, and
+  none starts until the stage is admitted; the standing checks restart them afterwards. Running DGX-side clients
+  (`collect --prep-priority-only`) yield and evict on round-preparation claims, and they still ignore held
+  measurements. Opt-out: `--no-hold-clients`.
+- The data and build steps claim the newest three rounds' learned peak x 1.1, at most 24 GB: about 21.8 and 21.2
+  today. Opt-out: `--no-measured-stage-budget`.
+- A short round rebuilds when its measured supply rate (first to last build) projects the minimum: at least
+  `--supply-recheck-minutes`, twice that when nothing grew, never past the supply wait's end. r0013, short by 0.18M at
+  0.18M/h, waits ~1 h instead of rebuilding every 45 min. r0012 rebuilt 7 times for 0.9M. Each data + build pass is
+  ~1.5 h of 21-24 GB steps beside the collection. Opt-out: `--no-supply-rate-wait`.
+- Not done: shrinking the KV pool (SGLang's pool is static, so it needs an engine restart and kills the episodes).
+
+## 2026-11-26 09:45 Compiler T1/T2 survive Colab evictions and session replacements (integration agent)
+
+**Observation.** T1 (g4b, step ~100 of 404) went with the L4 session replaced around 07:55 UTC. T2 (g4a) had already
+died at step 14 (00:22): aei1's round SFT (77 GiB, normal claim) evicted the preemptible tenant before its first save
+(every 100 steps, ~75 min), and the VM-side keeper counted the next attempt's one-hour admission timeout as a second
+failure and stopped. T2 had been idle since.
+
+**Change.** `scripts/colab/remote_run_keeper.py` (c3f37e9d3 and two fixes), one DGX ledger unit per run: every 15 min
+it mirrors the run directory to the DGX (hardlink snapshot on the VM, rsync; `--drive-file` state through Drive, which
+is also the off-VM copy); when the run is not running it ships the inputs, refreshes the VM's Drive token, runs the
+setup (checkout at the pinned commit, hindsight-kb bundle, warm start from Drive) and, on a VM without the run's state,
+restores the newest mirror before restarting under admission; attempts that end without a traceback (eviction,
+admission timeout, lost session) restart indefinitely, three tracebacks stop it. Saves made denser so a lost session
+costs at most one interval: T1 `--state-every 4` (~16 min; new `opsd_privileged train --state-every`), T2
+`--state-every 25` (~19 min) and ablations every 250 steps (22 min each). The 000000002 warm start is on Drive
+(`compiler/warmstart-000000002`) and the DGX (`/home/werg/data/compiler-t2-20261126/warmstart-000000002`).
+
+**Limit.** T2's state is ~17 GB (BF16 pplx encoders plus FP32 masters and moments for 1.2B parameters). It reaches
+Drive within minutes of each save, but the DGX download runs at ~10.6 MB/s (measured), so the DGX copy of T2 trails by
+~30 min; a fresh VM restores T2 from Drive inside Google's network. T1's state goes over the tunnel each sync.
+
+**Runs (restarted from step 0; the old attempts saved nothing that survived).** T1: unit `cmp-t1-keeper-2`, g4b
+normal claim 20/24 GiB (program-tuning tenants yield), mirror `/home/werg/data/compiler-t1-20261126/run1`. T2: unit
+`cmp-t2-keeper-2`, g4a preemptible 36/40 GiB (waits for aei1's round SFT), mirror
+`/home/werg/data/compiler-t2-20261126/t2-pplx-run1`. Launch scripts and keeper logs in each `launch/`.
