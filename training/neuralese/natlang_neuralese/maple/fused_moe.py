@@ -781,6 +781,10 @@ class _InvariantLinear(torch.autograd.Function):
                         return invariant_weight_gradient(xx, gg)
                     if xx.dtype == torch.float32 and ctx.precision == 'bf16':
                         return gg.T @ xx.to(torch.bfloat16).float()
+                    if (xx.dtype == torch.float32 and gg.dtype == torch.float32 and ctx.precision == 'ieee'
+                            and xx.is_cuda and ieee_fp32_gradients_enabled()):
+                        # Declared IEEE FP32: cuBLAS would run this product in TF32 (configure_native_precision).
+                        return invariant_weight_gradient(xx, gg)
                     return gg.T @ xx
                 dw = reduce_parameter_rows(ctx.partitions, x.shape[0], contribution,
                     add=(lambda value: _scope_add(ctx.scope_weight, value, ctx.anchors, ctx.scope))
@@ -877,6 +881,16 @@ def vendor_projection_self_check(weights, *, rows=(1, 64, 4097, 20000), samples=
             'checks': checks}
 
 
+def ieee_fp32_gradients_enabled():
+    """``NATLANG_IEEE_FP32_GRAD`` (default on; ``0`` opts out): FP32 operands of ``invariant_linear`` declared ``ieee``
+    get IEEE FP32 adjoints. Before it the input adjoint was the exact fixed-tile kernel but the weight gradient
+    ``grad.T @ x`` and the plain/vendor training GEMMs ran in TF32 (``NATLANG_STOCK_ARITHMETIC`` defaults to tf32), so
+    the FP32 low-rank factors of ``native_adapters.FactoredLoRALinear`` (compiled-site and program-tuning fits) had a
+    TF32 gradient under an exact FP32 forward (2026-11-26)."""
+    import os
+    return os.environ.get('NATLANG_IEEE_FP32_GRAD', '1') != '0'
+
+
 def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forward_storage_dtype=None,
                      cotangent_anchors=(), allow_plain_fastpath=True, output_dtype=None) -> torch.Tensor:
     """``x @ wᵀ``. ``output_dtype`` (FP32 head logits, shared_state.logits): the product leaves the FP32 accumulator in
@@ -892,13 +906,16 @@ def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forw
     inference = torch.is_inference_mode_enabled()
     from ..model.native_weight_carrier import plain_training_active, vendor_projection_active
     weight = w.to(forward_storage_dtype) if forward_storage_dtype is not None else w
+    # FP32 operands declared IEEE keep the exact kernel under autograd too: the vendor GEMMs below would run them in
+    # TF32 (cuBLAS under configure_native_precision), forward, dX and dW alike.
+    exact_fp32 = x.dtype == torch.float32 and x.is_cuda and ieee_fp32_gradients_enabled()
     if allow_plain_fastpath and not cotangent_anchors and precision == "ieee" and plain_training_active() \
-            and weight.dtype == x.dtype:
+            and weight.dtype == x.dtype and not exact_fp32:
         # Plain training arithmetic: one vendor GEMM for the forward, dX and dW (FP32 accumulation, one rounding).
         wide = (lambda: torch.mm(x, weight.t(), out_dtype=output_dtype)) if widen and x.ndim == 2 else None
         return _widened(lambda: F.linear(x, weight), wide, inference, output_dtype)
     if not cotangent_anchors and precision == "ieee" and vendor_projection_active() and weight.dtype == x.dtype \
-            and x.ndim == 2:
+            and x.ndim == 2 and not exact_fp32:
         # Declared vendor projection arithmetic also replaces canonical (forced-invariant) projections in a plain
         # update, keeping the fixed-linear primal reuse of aliased prefix rows.
         wide = (lambda: torch.mm(x, weight.t(), out_dtype=output_dtype)) if widen else None

@@ -413,3 +413,26 @@ def test_adamw_kahan_accumulates_sub_ulp_updates_exactly_and_adopts_stochastic_s
     assert new.auxiliary.state[new_param]['exp_avg'].dtype == torch.float32
     with pytest.raises(ValueError, match='AdamW rounding differs'):
         port('stochastic', torch.nn.Parameter(torch.ones(4, dtype=torch.bfloat16))).load_state_dict(new.state_dict())
+
+
+def test_source_profile_runs_the_fixed_ffn_by_default(monkeypatch):
+    """``source-v1`` keeps its declared identity but its FFN projections run ``_fixed_ffn`` (batch-invariant);
+    ``NATLANG_INVARIANT_FFN=0`` restores HF ``nn.Linear``. Both validate against the declared profile."""
+    from natlang_neuralese.model.shared_execution import (_fixed_ffn, configure_shared_execution,
+                                                          validate_shared_execution)
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    port = tiny_lfm3(markers=False)
+    model = SharedStateModel(port, (58, 59, 60, 61), rank=4)
+    ffn = [module for name, module in model.port.named_modules()
+           if type(module) is torch.nn.Linear and '.feed_forward.' in name]
+    assert ffn
+    configure_shared_execution(model, 'source-v1')
+    validate_shared_execution(model, {})
+    assert all(getattr(module.forward, '__func__', None) is _fixed_ffn for module in ffn)
+    monkeypatch.setenv('NATLANG_INVARIANT_FFN', '0')
+    configure_shared_execution(model, 'source-v1')
+    validate_shared_execution(model, {'native_shared_execution': 'source-v1'})
+    assert all(getattr(module.forward, '__func__', None) is not _fixed_ffn for module in ffn)
+    configure_shared_execution(model, 'stable-v1')
+    validate_shared_execution(model, {'native_shared_execution': 'stable-v1'})
+    assert all(getattr(module.forward, '__func__', None) is _fixed_ffn for module in ffn)

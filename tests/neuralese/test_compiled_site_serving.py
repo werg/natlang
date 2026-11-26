@@ -150,3 +150,81 @@ def test_chunked_native_prefill_under_a_stack_equals_one_pass(tmp_path):
     whole = logits(())
     assert torch.equal(whole, logits((40, 41, 81)))
     assert torch.equal(whole, logits((len(ids) - 1,)))
+
+
+@cuda
+def test_chunked_native_base_decode_equals_one_pass(tmp_path):
+    """The unadapted arm: under the checkpoint's legacy ``source-v1`` profile the FFN projections ran HF ``nn.Linear``
+    (cuBLAS, reduction chosen by the row count), so the engine's chunked prefill and one-token decode drifted from the
+    graph's whole-prompt pass (0.12-0.22 nats per step on real weights); they run ``_fixed_ffn`` by default now."""
+    from natlang_neuralese.model.shared_execution import _fixed_ffn
+    from natlang_neuralese.model.shared_state import native_step
+    engine = bf16_engine(tmp_path)
+    assert engine.model_config.get('native_shared_execution', 'source-v1') == 'source-v1'
+    engine.shared_model.to('cuda')
+    ffn = [module for name, module in engine.shared_model.port.named_modules()
+           if type(module) is torch.nn.Linear and '.feed_forward.' in name]
+    assert ffn and all(getattr(module.forward, '__func__', None) is _fixed_ffn for module in ffn)
+    ids = [4, *range(10, 50), *range(10, 50), 5]
+
+    def logits(cuts):
+        cache, h = None, None
+        with torch.no_grad():
+            for start, stop in zip((0, *cuts), (*cuts, len(ids))):
+                out = native_step(engine.shared_model, torch.tensor([ids[start:stop]], device='cuda'), cache)
+                cache, h = out['cache'], out['h_final']
+            return engine.shared_model.logits(h[:, -1]).float()
+
+    whole = logits(())
+    assert torch.equal(whole, logits((40, 41, 81)))
+    assert torch.equal(whole, logits(tuple(range(70, len(ids)))))     # one-token steps, as decode runs
+
+
+@cuda
+def test_source_ffn_projection_is_row_invariant_at_lfm3_width():
+    """``_fixed_ffn`` at LFM3-1.7B's FFN shapes: a row's output is the same in a one-row call and a long prefill."""
+    from types import MethodType
+    from natlang_neuralese.model.shared_execution import _fixed_ffn
+    torch.manual_seed(0)
+    for width, out in ((2048, 8192), (8192, 2048)):
+        layer = torch.nn.Linear(width, out, bias=False).to('cuda', torch.bfloat16)
+        layer.forward = MethodType(_fixed_ffn, layer)
+        x = torch.randn(1, 513, width, device='cuda').to(torch.bfloat16)
+        with torch.no_grad():
+            whole = layer(x)
+            pieces = torch.cat([layer(x[:, :1]), layer(x[:, 1:200]), layer(x[:, 200:201]), layer(x[:, 201:])], dim=1)
+        assert torch.equal(whole, pieces)
+
+
+@cuda
+def test_factored_lora_factor_gradients_are_ieee_fp32():
+    """The adapter backward: dW of the FP32 factors ran ``grad.T @ x`` on cuBLAS in TF32 (relative error ~1e-3) under an
+    exact FP32 forward; in a plain (vendor) training update the forward and both adjoints did. All are IEEE FP32 now."""
+    from natlang_neuralese.model.native_adapters import FactoredLoRALinear
+    from natlang_neuralese.model.native_weight_carrier import (plain_training_arithmetic,
+                                                                set_training_projection_arithmetic,
+                                                                training_projection_arithmetic)
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.manual_seed(0)
+    base = torch.nn.Linear(1024, 768, bias=False).to('cuda', torch.bfloat16).requires_grad_(False)
+    x = torch.randn(1, 600, 1024, device='cuda').to(torch.bfloat16)
+    seed_a, seed_b = torch.randn(16, 1024, device='cuda') * 0.05, torch.randn(768, 16, device='cuda') * 0.05
+    weight = torch.randn(1, 600, 768, device='cuda').to(torch.bfloat16).float()   # the BF16 output's cotangent is exact
+    xd, wd = x.double()[0], weight.double()[0]
+    exact_b = wd.T @ (xd @ seed_a.double().T)                 # d/dB of sum(weight * (x A^T) B^T)
+    exact_a = (wd @ seed_b.double()).T @ xd                    # d/dA
+    previous = training_projection_arithmetic()
+    try:
+        for mode in ('invariant', 'vendor'):
+            for plain in (False, True):
+                set_training_projection_arithmetic(mode)
+                factor_a, factor_b = seed_a.clone().requires_grad_(), seed_b.clone().requires_grad_()
+                layer = FactoredLoRALinear(base, factor_b, factor_a)
+                context = plain_training_arithmetic() if plain else __import__('contextlib').nullcontext()
+                with context:
+                    (layer(x).float() * weight).sum().backward()
+                for got, exact in ((factor_b.grad, exact_b), (factor_a.grad, exact_a)):
+                    error = float((got.double() - exact).abs().max() / exact.abs().max())
+                    assert error < 1e-5, (mode, plain, error)
+    finally:
+        set_training_projection_arithmetic(previous)

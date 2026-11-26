@@ -8,10 +8,36 @@ NATIVE_SHARED_EXECUTIONS=('source-v1','stable-v1','ffn-stable-v1')
 _NORM_TYPES={'RMSNorm','Lfm2RMSNorm','Lfm3RMSNorm','Qwen2RMSNorm','Qwen3RMSNorm'}
 
 
+def source_invariant_ffn_enabled():
+    """``NATLANG_INVARIANT_FFN`` (default on; ``0`` opts out): under the legacy ``source-v1`` profile the FFN
+    projections also run ``_fixed_ffn`` (the batch-invariant IEEE kernel ``maple.fused_moe.invariant_linear``; plain
+    training updates keep their vendor GEMM fast path) instead of HF ``nn.Linear`` (cuBLAS, whose BF16 reduction is
+    chosen by the row count). Before it the Python native engine's chunked prefill and one-token decode drifted from the
+    graph executor's whole-prompt pass by 0.12-0.22 nats per decode step on the unadapted arm (2026-11-26,
+    compiled-site parity on cde55352685b); attention, convolution and head projections already ran the invariant kernel
+    (``shared_state._linear``) and LFM3 norms are row-invariant (``native_parameter_precision.rowwise_norm_forward``).
+    The profile's declared identity is unchanged: this selects the arithmetic of its FFN, not a new profile."""
+    import os
+    return os.environ.get('NATLANG_INVARIANT_FFN', '1') != '0'
+
+
+def _selected(model, profile, implementation):
+    """Whether a shared module of this ``implementation`` runs its fixed forward under ``profile``."""
+    if profile == 'stable-v1':
+        return True
+    if implementation is not _fixed_ffn:
+        return False
+    return profile == 'ffn-stable-v1' or bool(getattr(model, 'native_source_invariant_ffn', False))
+
+
 def _fixed_ffn(module,value):
     if hasattr(module,'native_fixed_forward'):
         return module.native_fixed_forward(value)
-    from ..maple.ternary import linear_precision
+    from ..maple.ternary import linear_precision, linear_precision_output
+    # An inline QAT point at lambda = 1 runs the real NVFP4 GEMM (as ``precision_linear_forward`` does).
+    real = linear_precision_output(module,value)
+    if real is not None:
+        return real
     value,weight=linear_precision(module,value)
     if not value.is_cuda:
         return F.linear(value,weight,module.bias)
@@ -48,6 +74,7 @@ def configure_shared_execution(model,profile='source-v1'):
     # The canonical FFN profile also prevents the plain learner from silently
     # replacing already-canonical shared projections with vendor GEMMs.
     # Adapter linears live outside port; they use shared_state._linear too.
+    model.native_source_invariant_ffn = profile == 'source-v1' and source_invariant_ffn_enabled()
     projection_modules = list(model.port.modules())
     if getattr(model, 'adapter', None) is not None:
         projection_modules += list(model.adapter.modules())
@@ -61,7 +88,7 @@ def configure_shared_execution(model,profile='source-v1'):
             else _fixed_norm if type(module).__name__ in _NORM_TYPES else None)
         if implementation is None:
             continue
-        selected = profile == 'stable-v1' or (profile == 'ffn-stable-v1' and implementation is _fixed_ffn)
+        selected = _selected(model, profile, implementation)
         if implementation is _fixed_ffn:
             module._native_ffn_force_invariant = profile == 'ffn-stable-v1'
         if selected:
@@ -111,7 +138,7 @@ def validate_shared_execution(model,config):
         if implementation is None:
             continue
         active=getattr(module.forward,'__func__',None)
-        selected = profile == 'stable-v1' or (profile == 'ffn-stable-v1' and implementation is _fixed_ffn)
+        selected = _selected(model, profile, implementation)
         if implementation is _fixed_ffn and bool(getattr(module,'_native_ffn_force_invariant',False)) != (profile == 'ffn-stable-v1'):
             raise ValueError('native shared execution FFN invariant policy differs from declared profile')
         if selected and (active is not implementation
