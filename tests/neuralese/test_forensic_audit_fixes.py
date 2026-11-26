@@ -214,3 +214,68 @@ def test_exp0_sft_additive_ambient_keeps_sft_gradient():
         model, lambda m, ids: m.embed(ids), [chain], 3.0, 0, 1.0, 0, fast=False, ambient=ambient)
     assert ambient['sft_nll'] > 0 and ambient['tm_nll'] > 0
     assert model.embed.weight.grad is not None and model.embed.weight.grad.abs().sum().item() > 0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='the FP32-output head mm is CUDA-only')
+def test_fp32_head_logits_are_differentiable_on_cuda():
+    """torch.mm(out_dtype=float32) has no autograd formula; _tm_ce (non-clean Ambient steps) backpropagates through
+    lfm3_fast._head_logits_chunk, so the FP32 head runs as _HeadMMFP32 (dh = d @ W, dW FP32-output) under grad."""
+    from natlang_neuralese.train import lfm3_fast
+    torch.manual_seed(0)
+    h = torch.randn(7, 64, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+    w = torch.randn(300, 64, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+    rows = torch.randn(3, 64, device='cuda', dtype=torch.float32, requires_grad=True)
+    ids = torch.tensor([5, 17, 250], device='cuda')
+    logits = lfm3_fast._head_logits_chunk(h, w, ids, rows)
+    assert logits.dtype == torch.float32
+    g = torch.randn_like(logits)
+    (logits * g).sum().backward()
+    ref_logits = h.detach().float() @ w.detach().float().t()
+    ref_logits[:, ids] = h.detach().float() @ rows.detach().to(torch.bfloat16).float().t()
+    assert torch.allclose(logits.detach(), ref_logits, rtol=1e-2, atol=1e-1)
+    gw = g.clone(); gw[:, ids] = 0
+    assert torch.allclose(w.grad.float(), (gw.t() @ h.detach().float()), rtol=5e-2, atol=5e-1)
+    assert h.grad is not None and rows.grad is not None and torch.isfinite(h.grad.float()).all()
+
+
+def test_a_resumed_sft_keeps_its_learner_states_ambient_mode(tmp_path):
+    """additive became the default in ddd97a765; a learner state saved before ambient_mode was recorded trained with
+    replace and resumes with it, a recorded mode is kept, a fresh run takes the requested one."""
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'neuralese_data'))
+    import exp0_sft
+    state = tmp_path / 'learner-state'
+    state.mkdir()
+    args = SimpleNamespace(state_dir=str(state), out_dir=str(tmp_path), resume=True)
+    assert exp0_sft.resumed_ambient_mode(args, 'additive') == 'additive'          # no state yet: requested
+    (state / 'learner_manifest.json').write_text('{}')
+    torch.save({'decision_objective': True}, state / 'trainer_state.pt')
+    assert exp0_sft.resumed_ambient_mode(args, 'additive') == 'replace'          # saved before the field existed
+    torch.save({'ambient_mode': 'additive'}, state / 'trainer_state.pt')
+    assert exp0_sft.resumed_ambient_mode(args, 'replace') == 'additive'
+    args.resume = False
+    assert exp0_sft.resumed_ambient_mode(args, 'additive') == 'additive'
+
+
+def test_filled_teacher_preference_keeps_producer_turns_at_the_task_cap():
+    """ddd97a765 passed the filled preference as capped's producer ``order``: producer A's filled and unfilled episodes
+    became two queues and took a cap of 2 before producer B's only solution. ``prefer`` orders inside a producer's
+    turn: different producers first, a producer's filled episode before its unfilled one."""
+    import collections
+    import random
+    import sys
+    sys.path.insert(0, str(REPO / 'scripts' / 'neuralese_data'))
+    import sft_sources
+    def ep(key, teacher):
+        return {'key': key, 'task_id': 't', 'family': 'f', 'source': 'teacher', 'teacher': teacher}
+    eps = [ep('a-filled', 'A'), ep('a-raw', 'A'), ep('b-raw', 'B')]
+    filled = {'a-filled'}
+    prefer = lambda c: 0 if c['key'] in filled else 1           # noqa: E731
+    for seed in range(20):
+        funnel = collections.defaultdict(collections.Counter)
+        two = sft_sources.capped(eps, random.Random(seed), funnel, lambda t: 2, 1.0, lambda c: 0, prefer=prefer)
+        assert {c['teacher'] for c in two} == {'A', 'B'}
+        assert 'a-filled' in {c['key'] for c in two}             # A's turn takes its filled episode
+        one = sft_sources.capped(eps[:2], random.Random(seed), funnel, lambda t: 1, 1.0, lambda c: 0, prefer=prefer)
+        assert [c['key'] for c in one] == ['a-filled']

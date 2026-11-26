@@ -1414,8 +1414,30 @@ def _ce(name):
 HEAD_LOGITS_FP32 = _os.environ.get('NATLANG_HEAD_LOGITS', 'fp32') != 'bf16'
 
 
+class _HeadMMFP32(torch.autograd.Function):
+    """``rows @ weight.T`` with FP32 output (BF16 operands): ``torch.mm(out_dtype=...)`` has no autograd formula
+    (``derivative for aten::mm is not implemented``: compiler T1 2026-11-25, and ddd97a765's ``exp0_sft._tm_ce`` on
+    every non-clean Ambient step). Backward as the core head's: ``dh = d @ W`` with ``d`` in the rows' dtype, ``dW`` an
+    FP32-output mm."""
+
+    @staticmethod
+    def forward(ctx, rows, weight):
+        ctx.save_for_backward(rows, weight)
+        return torch.mm(rows, weight.t(), out_dtype=torch.float32)
+
+    @staticmethod
+    def backward(ctx, grad):
+        rows, weight = ctx.saved_tensors
+        d = grad.to(rows.dtype)
+        dh = d @ weight if ctx.needs_input_grad[0] else None
+        dw = torch.mm(d.t(), rows, out_dtype=torch.float32).to(weight.dtype) if ctx.needs_input_grad[1] else None
+        return dh, dw
+
+
 def _head_linear(rows, weight):
     if HEAD_LOGITS_FP32 and rows.is_cuda and rows.dtype == torch.bfloat16 and weight.dtype == torch.bfloat16:
+        if torch.is_grad_enabled() and (rows.requires_grad or weight.requires_grad):
+            return _HeadMMFP32.apply(rows, weight)
         return torch.mm(rows, weight.t(), out_dtype=torch.float32)
     return F.linear(rows, weight)
 

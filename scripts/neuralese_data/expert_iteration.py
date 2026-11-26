@@ -4887,6 +4887,10 @@ class AsyncRoundDriver:
                 cur = policies[-1]
                 (round_dir / 'stages' / 'frontier.done').unlink(missing_ok=True)
                 (round_dir / 'stages' / 'frontier.exit').unlink(missing_ok=True)
+                # without the marker step_finished's journal fallback reads the old frontier.json as done (the r0012
+                # data/build failure): the build would read the old policy's frontier under the new frontier_policy
+                (round_dir / 'stages' / 'frontier.rerun').write_text(
+                    json.dumps({'at': time.time(), 'why': 'lineage advanced during supply wait'}) + '\n')
                 (round_dir / 'stages' / 'prepare.json').unlink(missing_ok=True)
                 self.note(round=round_dir.name, supply_wait_refreshed_policies=[p['sha256'] for p in policies])
         manifest = write_round_manifest(

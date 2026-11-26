@@ -1112,6 +1112,23 @@ def resumed_decision_objective(args, wanted, key='decision_objective'):
     return saved
 
 
+def resumed_ambient_mode(args, wanted):
+    """The Ambient mode this run trains with: ``wanted``, except that a ``--resume`` keeps its learner state's mode (a
+    state saved before ``ambient_mode`` was recorded trained with ``replace``: ddd97a765 made ``additive`` the default,
+    which changes the objective a resumed round continues; review 2026-11-26)."""
+    state_dir = Path(args.state_dir) if args.state_dir else Path(args.out_dir) / 'learner-state'
+    if not (args.resume and (state_dir / 'learner_manifest.json').is_file()):
+        return wanted
+    saved = 'replace'
+    if (state_dir / 'trainer_state.pt').is_file():
+        saved = (torch.load(state_dir / 'trainer_state.pt', map_location='cpu', weights_only=False) or {}).get(
+            'ambient_mode') or 'replace'
+    if saved != wanted:
+        print(json.dumps({'event': 'ambient mode kept from the resumed learner state', 'ambient_mode': saved,
+                          'state_dir': str(state_dir)}), flush=True)
+    return saved
+
+
 def decision_validation(model, forward, val_sets, pack_tokens=0, activation_gb=0.):
     """Per validation set with decision chains: the mean decision log score and the share of decisions whose top
     option is the target (``decision_backward`` without backward)."""
@@ -1182,6 +1199,7 @@ def train(args):
               flush=True)
     decision_on = resumed_decision_objective(args, not args.no_decision_objective)
     reasoning_on = resumed_decision_objective(args, not args.no_decision_reasoning, 'decision_reasoning')
+    ambient_mode = resumed_ambient_mode(args, getattr(args, 'ambient_mode', AMBIENT_MODE))
     decisions = mark_decision_objective(chains, decision_on, reasoning_on)
     for vc in val_sets.values():
         mark_decision_objective(vc, decision_on, reasoning_on)
@@ -1349,7 +1367,7 @@ def train(args):
             trained_rounds=rounds_now,
             ref_bundles=ref_bundles, ref_rows=ref_rows,
             trainer_state={'oom_plan': oom_plan.to_dict(), 'best': best, 'decision_objective': decision_on,
-                           'decision_reasoning': reasoning_on,
+                           'decision_reasoning': reasoning_on, 'ambient_mode': ambient_mode,
                            'schedule': {'total': total, 'steps': len(steps), 'replanned': replanned}},
         )
         last_state_save = time.time()
@@ -1358,7 +1376,6 @@ def train(args):
     replanned = bool((trainer_state or {}).get('schedule', {}).get('replanned'))
     completed_step = start_step
     stopped_early = False
-    ambient_mode = getattr(args, 'ambient_mode', AMBIENT_MODE)
     step = start_step
     while step < len(steps):
         group = steps[step]

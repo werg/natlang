@@ -2311,7 +2311,7 @@ def breadth_first(pool, key, trained_keys=frozenset(), scope='family'):
     return sorted(ordered, key=lambda c: (rank[c['key']], turn[c['key']]))
 
 
-def round_robin(members, rng, order):
+def round_robin(members, rng, order, prefer=None):
     """A task's episodes taking turns by producer (source and teacher model), the producers in `order`: a cap keeps
     different producers' solutions before a second one of any producer (no single teacher fills a task)."""
     producers = collections.defaultdict(list)
@@ -2320,6 +2320,8 @@ def round_robin(members, rng, order):
     queues = [producers[k] for k in sorted(producers, key=lambda k: (k[0], rng.random()))]
     for queue in queues:
         rng.shuffle(queue)
+        if prefer is not None:      # pop() takes the end: the preferred (lowest) last
+            queue.sort(key=prefer, reverse=True)
     out = []
     while any(queues):
         for queue in queues:
@@ -2329,19 +2331,21 @@ def round_robin(members, rng, order):
 
 
 def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozenset(), rank=lambda c: 0,
-           shape_of=None, shape_share=0.):
+           shape_of=None, shape_share=0., prefer=None):
     """Per-task caps (`cap_of(task_id)`, producers taking turns), then a per-family cap of `family_share` of the rest,
     then (``shape_of``, ``shape_share`` > 0) a per-program-shape cap of `shape_share` of what the family cap kept (at
     least ``diversity.SHAPE_CAP_FLOOR``): one template spanning many families (a reasoning-gym wrapper over 57) is held
     like one family (``--max-shape-share``). Episodes whose key is in `trained` (an earlier build the start checkpoint
     learned, ``--prefer-unseen``) go after every untrained one under each cap; with none the selection is unchanged.
-    ``rank`` orders tiers sharing one cap (own unguided successes 0 before JOLT+ guided 1) after that."""
+    ``rank`` orders tiers sharing one cap (own unguided successes 0 before JOLT+ guided 1) after that. ``prefer``
+    (lower first) orders episodes inside each producer's turn at the task cap, so producers keep their turns, and
+    breaks ties under the family and shape caps (a filled teacher episode before an unfilled one)."""
     by_task = collections.defaultdict(list)
     for c in candidates:     # a Neuralese variant shares its original's cap (``item``: the task it was made from)
         by_task[c.get('item') or c['task_id']].append(c)
     selected = []
     for task_id, members in sorted(by_task.items(), key=lambda item: str(item[0])):
-        members = round_robin(members, rng, order)
+        members = round_robin(members, rng, order, prefer)
         members.sort(key=lambda c: (c.get('key') in trained, rank(c)))   # stable: producers keep their turns
         cap = cap_of(task_id)
         selected += members[:cap]
@@ -2354,7 +2358,7 @@ def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozens
     final = []
     for family, members in sorted(by_family.items(), key=lambda item: str(item[0])):
         rng.shuffle(members)
-        members.sort(key=lambda c: (c.get('key') in trained, rank(c)))
+        members.sort(key=lambda c: (c.get('key') in trained, rank(c), prefer(c) if prefer else 0))
         final += members[:limit]
         for c in members[limit:]:
             funnel[c['source']]['over_family_cap'] += 1
@@ -2368,7 +2372,7 @@ def capped(candidates, rng, funnel, cap_of, family_share, order, trained=frozens
     kept = []
     for shape, members in sorted(by_shape.items(), key=lambda item: str(item[0])):
         rng.shuffle(members)
-        members.sort(key=lambda c: (c.get('key') in trained, rank(c)))
+        members.sort(key=lambda c: (c.get('key') in trained, rank(c), prefer(c) if prefer else 0))
         kept += members[:limit]
         for c in members[limit:]:
             funnel[c['source']]['over_shape_cap'] += 1
@@ -3392,8 +3396,11 @@ def build(args):
         key for part, units in loaded if part.get('replaces') == 'teacher'
         for key in (replaced_round(part, unit) for unit in units) if key is not None)
     prefer_filled = (lambda c: 0 if c['key'] in all_filled_keys else 1) if all_filled_keys else (lambda c: 0)
+    # prefer=, not the producer order: as ``order`` it split each producer's queue into filled/unfilled and let one
+    # producer take a task's cap before a second producer's first solution (review of ddd97a765)
     teacher_pool = wrapper_capped(capped(teacher_candidates, rng, funnel, core_cap, args.max_family_share,
-                                         prefer_filled, trained_keys, shape_of=shape_of, shape_share=shape_share),
+                                         lambda c: 0, trained_keys, shape_of=shape_of, shape_share=shape_share,
+                                         prefer=prefer_filled),
                                   rng, funnel, is_wrapper, args.wrapper_share, trained_keys, rank=prefer_filled)
     pool_keys = {c['key'] for c in teacher_pool}
     teacher_left_out |= {c['key'] for c in teacher_candidates if c['key'] not in pool_keys}

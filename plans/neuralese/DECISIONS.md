@@ -14650,3 +14650,26 @@ A full-stack forensic audit of the training, data-mixing, expert-iteration, serv
 - **Held eval, GRPO & curriculum (`held_eval.py`, `grpo.py`, `curriculum.py`):**
   14. `held_eval.py`: resolved compacted `results.jsonl.zst` via `episode_files.present()` in `infra_loss()`, persisted `max_model_requests`/`max_turns`, excluded `infra_lost` from `loop_rate`, added `prompt_states` to `pairing_differences()`, warned/refused on `manifest_sha256` & budget mismatches, validated all endpoints in `_measure()`, and recorded `resumed_series` on cross-series resumes.
   15. `grpo.py` & `curriculum.py`: skipped auxiliary-only `spread == 0` no-op steps (`lr=0, grad=0`), switched `load_group()` from `student_form()` to `student_episode()`, tracked per-call steps in `ExploreWalk.next()`, touched `RETIRED` before `reuse_scored()` on resume, exempted `sd_teacher`/`rrl_action` from `tail_logp_floor`, masked `kl_term` on zero-weight tokens, and fixed `curriculum.py` `visit_cap_window` off-by-one (`r >= now - window`).
+
+## 2026-11-26 13:40 Review of ddd97a765 (forensic audit): four defects fixed before r0014 trains (coordinator)
+
+The aei1 driver runs ddd97a765 since 12:49 (pin 67966a19c). Three independent reviews (data mix/driver, SFT/GRPO/eval,
+serving/ts-host) found these, fixed here:
+
+- **Ambient steps crash in backward.** `exp0_sft._tm_ce` now calls `lfm3_fast._head_logits_chunk`, whose CUDA BF16
+  path is `torch.mm(out_dtype=float32)` with no autograd formula (575366040's T1 failure); every non-clean Ambient step
+  (~25%) would raise. `lfm3_fast._head_linear` runs that path as `_HeadMMFP32` under grad (dh = d @ W in the rows'
+  dtype, dW FP32-output, as the core head backward). CUDA test.
+- **Ambient mode not in the learner state.** A round state saved under `replace` resumed silently under the new
+  `additive` default. `trainer_state['ambient_mode']`; `resumed_ambient_mode` keeps a state's mode (none recorded:
+  `replace`). Test.
+- **Filled preference in `capped`'s producer `order`.** It split each producer into filled/unfilled queues, so one
+  producer could take a task's cap before another's first solution. New `capped(prefer=)`: inside each producer's
+  turn at the task cap, and a tiebreak under the family and shape caps. Test.
+- **`supply_wait`'s policy refresh did not rerun the frontier** (journal fallback marked it done: the build read the
+  old policy's frontier under the new `frontier_policy`). Writes `stages/frontier.rerun`.
+
+Policy changes of ddd97a765 that the review raised for the owner (not reverted): `--own-share-of actual` turns the own
+share from a floor into a ceiling (reverses DECISIONS r0009); ShapeQuota on the mix total lets one shape fill a small
+part; `--ambient-mode additive` default; `sd_teacher` exempt from the tail floor (the `rrl_action` exemption is dead:
+the role is `reasoning_rl`); leaked TOOL_MARKUP discards parsed calls.
