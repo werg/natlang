@@ -360,6 +360,44 @@ def test_derived_superset_paths():
     assert s.derived_superset({'a': True}, {'a': 1}) == '/a changed'
 
 
+
+@pytest.mark.parametrize('mutation', ['reason', 'approved', 'target', 'task', 'source', 'strict'])
+def test_live_rederivation_changes_only_nonsemantic_admission_explanation(tmp_path, monkeypatch, mutation):
+    path, spec, _, verification = tree_fixture(tmp_path)
+    root = json.loads((tmp_path / 'call.json').read_text())
+    open_goal(root, spec, verification)
+    root['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
+    spec['calls'][0] = artifact(tmp_path, 'call.json', root)
+    spec['verification'] = artifact(tmp_path, 'verification.json', verification)
+    path.write_text(json.dumps(spec))
+    current = live.load_episode(path)
+    stored = copy.deepcopy(current)
+    decisions = stored['trajectory_ir']['trajectory']
+    denied = next(row for row in decisions if row['training_admission']['approved'] is False)
+    denied['training_admission']['reason'] = 'Older loader diagnostic wording'
+    if mutation == 'approved': denied['training_admission']['approved'] = True
+    elif mutation == 'target': decisions[0]['assistant']['content'] = 'Changed actual captured value'
+    elif mutation == 'task': stored['task_id'] = 'foreign-task'
+    elif mutation == 'source': stored['live_source']['sha256'] = '0' * 64
+    elif mutation == 'strict': monkeypatch.setenv('NATLANG_STRICT_LIVE_DIAGNOSTICS', '1')
+    episode, reason, detail = s.recheck_live_episode(stored)
+    if mutation == 'reason':
+        assert episode == current
+        assert reason is None and detail is None
+        assert episode['turns'] == stored['turns']
+    else:
+        assert episode is None
+        assert reason in ('live_episode_differs', 'live_source_changed')
+
+
+def test_diagnostic_equivalence_does_not_escape_exact_native_decision_path():
+    for before, after in [(False, True), (False, 0), (0, False)]:
+        old = {'trajectory_ir': {'trajectory': [{'training_admission': {'approved': before, 'reason': 'old'}}]}}
+        new = copy.deepcopy(old)
+        new['trajectory_ir']['trajectory'][0]['training_admission'] = {'approved': after, 'reason': 'new'}
+        assert s.derived_superset(new, old) is not None
+    assert s.derived_superset({'reason': 'new', 'approved': False}, {'reason': 'old', 'approved': False}) is not None
+
 def tree_fixture(root):
     path, spec, detail, verification = fixture(root)
     child = copy.deepcopy(detail)

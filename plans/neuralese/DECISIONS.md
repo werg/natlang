@@ -14769,3 +14769,9 @@ Inventory: meta/CERTIFIED_PARTIAL_ADMISSION.md. Bounded durable registry invento
   running pullers (older pins) keep their collections' rollouts raw until the driver moves to this commit.
 - Tests: `test_episode_files.py` (pass and markers, quiet rule, rescore, opt-outs, puller gate, registry record,
   every reader class on a compacted group, remote pull).
+
+### 2026-11-26 — Compare admission masks independently of derived diagnostic wording
+
+Actual r0014 logs skip12 immutable Vibe extractions during canonical revalidation. Seven first differences are changed NativeIR training_admission.reason text; five first differences are approved booleans. Revalidation already loads the original source and checks its hashes, values, effects and outcome. Compare a diagnostic reason string independently only when its exact approved boolean remains unchanged; keep all captured fields and mask changes strict. Return the current canonical episode. NATLANG_STRICT_LIVE_DIAGNOSTICS=1 retains exact diagnostic comparison for forensic reads. No original extraction or running mix is rewritten.171 Python/canonical-reader controls passed, including strict/foreign-source/task/value/mask negatives; historical recovery counts remain unchecked pending full snapshot comparisons.
+
+The separately investigated GAD partial and Notification recovery are already in r0013 as exact filled trained-units, with matching SFT input hash75d64bb... and published401be1... checkpoint. Their r0014 absence follows maximum1 prior exposure; no selection rule changed. Inventory: plans/neuralese/LIVE_ADMISSION_DIAGNOSTICS_20261126.md. No model requests, actor/learner resets or new data registration.
