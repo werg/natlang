@@ -1,0 +1,71 @@
+{
+  "observation": "Original API eval declared let review=null then assigned actual typed native receipt in same eval action; final binding admission rejected expected null after11semantic/native calls completed. Exact original retained separately.",
+  "mechanism": [
+    {
+      "path": "ts-host/src/native/runtime.ts:3069",
+      "role": "shared local extraction/inference/admission; storednull relaxes but null initializer reintroduces null type"
+    },
+    {
+      "path": "ts-host/src/native/runtime.ts:2654",
+      "role": "scopeInitializerType returns prim null for literal null"
+    },
+    {
+      "path": "ts-host/src/scope-compiler.ts:828",
+      "role": "records original initializer and mutability, unchanged compiled executable retains actual final binding"
+    },
+    {
+      "path": "ts-host/src/compiler/eval-check.ts:216",
+      "role": "existing field-level TS checker; no new unsafe assignment or annotation waiver"
+    },
+    {
+      "path": "ts-host/src/runtime/kernel.ts:877",
+      "role": "all model providers delegate actual eval to same NativeRuntime"
+    },
+    {
+      "path": "ts-host/src/node-runtime.ts:31",
+      "role": "NodeNativeRuntime extends shared NativeRuntime"
+    },
+    {
+      "path": "ts-host/src/core/workerd.ts:1",
+      "role": "Workerd explicitly uses shared evaluator with supplied Realm"
+    },
+    {
+      "path": "ts-host/src/browser/index.ts",
+      "role": "browser engine imports same shared runtime; actual browser end-to-end untested in focused controls"
+    },
+    {
+      "path": "docs/ENGINE_PARITY.md:9",
+      "role": "managed llama/wllama/Python native/SGLang are inference transports; TypeScript local binding admission remains ts-host shared runtime, not server-specific sampler"
+    }
+  ],
+  "changeBoundary": "Only unannotated mutable null-initialized binding with actual final nonnull value may evolve. Explicit null/other annotations and existing nonnull stable local types must reject incompatible values. No new grammar, service authority, casts, codec waiver, or target-return weakening.",
+  "checksPlanned": [
+    "real installed TypeScript semantic reference same-action null assignment",
+    "actual Node+Workerd scripted root/native receipt before/after await and saved-turn controls",
+    "explicit null annotation and incompatible stable type negatives",
+    "existing conditional-scope regression"
+  ],
+  "unchecked": [
+    "actual browser bundle execution",
+    "full original API public control replay under new SDK"
+  ],
+  "sourceBase": "ef3c724553a5499d80e80d6cc67d964375b1e4da",
+  "actualReference": {
+    "coreTypeScript": "5.9.3",
+    "nativeTypeScript": "7.0.2",
+    "nativeBinary": "/home/werg/vibestudio/node_modules/@typescript/typescript-linux-x64/lib/tsc",
+    "sameStrictSource": "/home/werg/vibe-evolving-null-local-ops/reference.ts",
+    "sourceSha256": "05f373935ea9304347e3b410b376be9db2972592540e2889e922bde544e30009",
+    "unit": "vibe-evolving-null-reference-20261126b",
+    "baseline": "4 actual Node/Workerd same-action rejections; canonical existing evaluator ef3",
+    "referenceExit": 0
+  },
+  "buildSetupFailure": "First official build lacked root-level node_modules read-only donor (TS2307+derivedimplicitany), corrected own symlink; no product weakening. Build-controls-b actual verdict pending.",
+  "verification": {
+    "officialNodeBuild": "PASS vibe-evolving-null-build-controls-20261126b",
+    "nativeControls": "24PASS:10new Node/Workerd evolving-null/negative controls+14 existing conditional-scope controls",
+    "durationSeconds": 34.095,
+    "peakGiB": 1.0,
+    "nativeWorkerdBinary": "Not exercised by this Core platform test; supplied Workerd Realm facade uses canonical shared evaluator. Installed Workerd full native references continue with unchanged Source46."
+  }
+}

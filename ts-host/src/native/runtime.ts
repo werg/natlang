@@ -3080,6 +3080,10 @@ export class NativeSession {
         const annotation = annotations.get(name);
         if (annotation) type = inlineDeclaredTypes(parseTypeCached(annotation), localTypes);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
+        // An unannotated let initialized to null can evolve before this same eval finishes, just as it can in a
+        // later eval. Its initializer describes the opening value, not a constraint on the computed final value.
+        if (!annotation && mutability.get(name) && type?.kind === 'prim' && type.name === 'null' && value !== null)
+          type = undefined;
         if (!type) type = await this.sourceCallableType(value, localTypes);
         if (!type) {
           try { type = parseType(this.inferScopeType(value)); }
