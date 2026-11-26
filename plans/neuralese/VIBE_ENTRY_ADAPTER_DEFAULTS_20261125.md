@@ -1,0 +1,11 @@
+# Entry adapter defaults versus task inputs
+
+Inventory before editing: `live_catalog_identity.py` owns catalog identity; `live_campaign_ingest.py:78-85` and `expert_iteration.py:1124-1134` share its compatibility check. Host catalog listing obtains Base `semanticTaskEntry`; Base entries.json / entriesGenerated.ts / entrypoints.ts supply fixed additionalArguments. The current descriptor inventory has 116 entries and exactly one nonempty default: nullable supplementary research. This is executable adapter arity, not an authored change to the five original user goals. Actual invocation bindings remain in captures and are never rewritten.
+
+Base producer successor emits explicit `entry.adapterDefaults` with exact descriptor-file SHA and relative source path. Identity recognizes only source-declared null defaults whose three actual argument representations agree. Non-null evidence, undeclared null inputs, original goal, task IDs, splits and held groups remain strict. Source declaration authenticity is established by the frozen/pinned catalog producer; this projection alone does not authenticate an arbitrary self-asserted source SHA.
+
+NativeIR, per-call prompt/completion records, engines, training targets and masks do not consume catalog adapter-default metadata and do not change. Python ingestion and EI selection use the same helper. Source38 predates the explicit producer metadata: its archive publication is an exact source-descriptor-checked execution-only projection preserving historical semantic input bindings, with raw publication disabled for that cutover. Future producer and reader must enter together before raw publication resumes. Existing immutable WORK catalogs and raw trajectories stay intact.
+
+Opt-out `NATLANG_CATALOG_ADAPTER_DEFAULTS=0` retains strict legacy comparison of the actual null input bindings; metadata validation remains enabled. Non-null fixed defaults always remain task identity.
+
+Compatibility also recognizes the identical already-enriched legacy null binding on the other catalog side, using the paired pinned producer declaration. It validates all legacy encodings before normalization; different/non-null evidence remains rejected. This closes the intermediate unannotated-null catalog case without task-ID exceptions or changing immutable snapshots. Actual45 tests pass.

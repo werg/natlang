@@ -83,6 +83,69 @@ def test_sft_sources_extracts_the_pool_as_teacher_episodes(tmp_path, monkeypatch
     assert answers == ['"remaining-urn"'] * 3 and replay.served.count(False) == 0
 
 
+def operator_turn():
+    """A learned operator's call (learned compaction): view's site, the authored summary as its reply."""
+    return {'invocation_id': 'call/1#operator-1', 'function': 'view', 'tools': [],
+            'messages': [{'role': 'system', 'content': 'view prompt'},
+                         {'role': 'user', 'content': 'instructions:\nThe call that receives this argument ...\n\nvalue:\n"..."'}],
+            'target': {'role': 'assistant', 'content': 'A heartbeat log; every line reports ok.'}}
+
+
+def test_an_operator_call_is_its_own_turn_not_a_readout_and_its_episode_replays_in_context(tmp_path, no_held):
+    """An operator call is one call (no reasoned-readout repeats), and the replay of an authored episode reads Neuralese
+    in context as its render did (run_bonsai_queue entry ``in_context_neuralese``)."""
+    assert at.operator_turn(operator_turn()) and not at.readout_turn(operator_turn()) and at.readout_turn(readout_turn())
+    at.write_pool([at.trajectory_row(task('ok'), source='t', turns=[operator_turn(), call_turn()])], tmp_path / 'pool')
+    manifest = at.read_jsonl(tmp_path / 'pool' / 'manifest.jsonl')
+    rollout = at.read_jsonl(manifest[0]['rollouts'])[0]
+    assert 'decision_reasoning' not in rollout['turns'][0] and rollout['turns'][0]['function'] == 'view'
+    assert s.authored_episode({'teacher': manifest[0]['teacher']})
+    assert not s.authored_episode({'teacher': {'model_id': 'gpt', 'provider': 'openai'}}) and not s.authored_episode({})
+
+
+def test_graph_calls_lower_an_operator_capture_as_a_pass_through_import(monkeypatch):
+    """A consumer of an operator's summary reads it spliced (engines splice captures): its row imports the state between
+    the consume markers, and the producer document is the operator call's prompt, its reply up to the content,
+    produce_open, then the content (Engine.capture_plan), which the learner computes in the consumer's forward."""
+    import numpy as np
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    from natlang_neuralese.serve import targets
+    ids = {**dict(zip(ROLE_MARKERS, (900, 901, 902, 903))), '</think>': 7, '<|im_end|>': 2}
+    tokenizer = SimpleNamespace(convert_tokens_to_ids=lambda t: ids[t],
+                                decode=lambda part, **_: ''.join(' ' if t == 50 else 'x' for t in part))
+    rendered = {'op': ([('tok', 1), ('tok', 3)], [('tok', 7), ('tok', 50), ('tok', 11), ('tok', 12), ('tok', 2)]),
+                'use': ([('tok', 1), ('block', 'S'), ('tok', 4)], [('tok', 20), ('tok', 2)])}
+    monkeypatch.setattr(targets, 'target_items', lambda engine, messages, tools, target: rendered[messages[0]['content']])
+    monkeypatch.setattr(s, 'think_context', lambda *a, **k: 0)
+    turns = [{'invocation_id': 'c#operator-1', 'messages': [{'role': 'user', 'content': 'op'}], 'tools': [],
+              'target': {'role': 'assistant', 'content': 'sum'}, 'captures': [{'id': 'S'}]},
+             {'invocation_id': 'c', 'messages': [{'role': 'user', 'content': 'use'}], 'tools': [],
+              'target': {'role': 'assistant', 'content': 'ok'}}]
+    stats = collections.Counter()
+    rows = at.graph_calls(turns, SimpleNamespace(tokenizer=tokenizer), stats)
+    source = rows[1]['sources']['S']
+    assert source['ids'].tolist() == [1, 3, 7, 50, 900, 11, 12] and (source['start'], source['stop']) == (5, 7)
+    assert rows[1]['prompt'].tolist() == [1, 902, 11, 12, 903, 4] and rows[1]['imports'] == [(2, 'S')]
+    assert rows[0]['imports'] == [] and rows[0]['sample'].tolist() == [7, 50, 11, 12, 2]
+    assert stats['authored_captures'] == 1 and stats['authored_consumer_calls'] == 1
+    # a state with no recorded producing call is not lowered
+    assert at.graph_calls(turns[1:], SimpleNamespace(tokenizer=tokenizer), stats) is None
+    # the operator turn keeps its captures through the pool and extraction
+    assert at.rollout_row(at.trajectory_row(task('ok'), source='t', turns=turns))['turns'][0]['captures'] == [{'id': 'S'}]
+    assert s.semantic_turn(turns[0], False)['captures'] == [{'id': 'S'}]
+    assert s.native_not_authored({'turns': []}) is False
+
+
+def test_operator_calls_are_not_reworded_matches_of_each_other():
+    """A view site's opening has no signature line: two operator calls with different instructions or values must not
+    match by their first line (``instructions:``), or one serves the other's summary."""
+    one = [{'role': 'system', 'content': 'view'}, {'role': 'user', 'content': 'instructions:\nfor A\n\nvalue:\n"a"'}]
+    two = [{'role': 'system', 'content': 'view'}, {'role': 'user', 'content': 'instructions:\nfor B\n\nvalue:\n"b"'}]
+    assert s.reworded_key(one) != s.reworded_key(two) and s.signature_key(one) != s.signature_key(two)
+    call = [{'role': 'user', 'content': 'You are inside this call: f(x)\nold wording'}]
+    assert s.reworded_key(call) == s.reworded_key([{'role': 'user', 'content': 'You are inside this call: f(x)\nnew'}])
+
+
 def test_a_drifted_success_with_reasoned_readout_repeats_is_admitted():
     """``group-repeat`` entries are a reasoned readout's matched entry answering its repeats (as in ``exact``): they do
     not keep a drifted success out, and the turn count compares with the replay's calls."""

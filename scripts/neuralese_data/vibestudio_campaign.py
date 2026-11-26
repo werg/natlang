@@ -15,6 +15,7 @@ import subprocess
 import time
 
 import archive_reuse
+from live_export_diagnostics import export_rejection_diagnostic
 from natlang_neuralese.common import data_registry
 from natlang_neuralese.common.code_provenance import code_provenance
 
@@ -27,6 +28,10 @@ from sft_sources import ZstdWriter, held_closure, held_hit, live_holdout_registr
 
 LUNA = 'openai-codex:gpt-6-luna'
 DEFAULT_TEACHER_TIMEOUT_MS = 3_600_000
+
+
+class CaptureValidationError(ValueError):
+    """One preserved capture cannot be admitted; other captures stay reviewable."""
 
 
 def collection_limits(args, selected_cases):
@@ -43,9 +48,8 @@ def read(path):
 
 
 def publish(path, value):
-    temporary = path.with_suffix('.tmp')
-    temporary.write_text(json.dumps(value, indent=2) + '\n')
-    temporary.replace(path)
+    from natlang_neuralese.common.jsonio import write_bytes_durable
+    write_bytes_durable(path, (json.dumps(value, indent=2) + '\n').encode('utf-8'))
 
 
 def publish_immutable(path, value):
@@ -58,7 +62,12 @@ def publish_immutable(path, value):
 
 
 def verified_episode(path, held, training):
-    episode = load_episode(path)
+    try:
+        episode = load_episode(path)
+    except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
+        raise CaptureValidationError(str(error)) from error
+    # Policy, held separation and task identity remain fail-closed for the
+    # campaign. Only the individual artifact parser is isolated above.
     task = episode['task']
     interaction = task.get('interaction')
     if episode['teacher']['model_id'] != LUNA or not interaction:
@@ -91,6 +100,41 @@ def capture_integrity_errors(errors):
             if error != 'Assigned authored root did not complete successfully']
 
 
+def authored_lifecycle(packet, expected_case_id=None):
+    """The outer runner RPC error carries its private, exact-Eval lifecycle.
+
+    Never search guest causes or infer a boundary from missing records, error
+    wording, or the generic orchestration phase. Older producers stay unknown.
+    """
+    execution = packet.get('execution') or {}
+    failure = execution.get('failure') if isinstance(execution, dict) else None
+    error = failure.get('error') if isinstance(failure, dict) else None
+    data = error.get('errorData') if isinstance(error, dict) else None
+    evidence = data.get('authoredLifecycle') if isinstance(data, dict) else None
+    if (isinstance(evidence, dict)
+            and evidence.get('schema') == 'vibestudio.authored-lifecycle/2'):
+        if (set(evidence) == {'schema', 'boundary', 'caseId', 'sourceContextId', 'teacherStarted'}
+                and evidence.get('boundary') == 'teacher-worker-dispatch'
+                and evidence.get('teacherStarted') is False
+                and isinstance(expected_case_id, str) and bool(expected_case_id)
+                and evidence.get('caseId') == expected_case_id
+                and isinstance(evidence.get('sourceContextId'), str) and evidence['sourceContextId'].strip()):
+            return evidence
+        return None
+    if not isinstance(evidence, dict) or set(evidence) != {
+            'schema', 'runId', 'runtimeId', 'boundary', 'teacherStarted'}:
+        return None
+    if (evidence['schema'] != 'vibestudio.authored-lifecycle/1'
+            or evidence['boundary'] != 'assigned-program-load'
+            or type(evidence['teacherStarted']) is not bool
+            or not isinstance(evidence['runId'], str)
+            or not re.fullmatch(r'system-test-runner:teacher:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', evidence['runId'])
+            or not isinstance(evidence['runtimeId'], str)
+            or not re.fullmatch(r'do:vibestudio/internal:EvalDO:[0-9a-f]{40}', evidence['runtimeId'])):
+        return None
+    return evidence
+
+
 def outcomes(capture, names, held, training, cases):
     results = {}
     interruption = capture / 'collection-interruption.json'
@@ -105,12 +149,38 @@ def outcomes(capture, names, held, training, cases):
         teacher = {}
         capture_errors = None
         if raw:
-            with gzip.open(raw, 'rt') as stream:
-                packet = json.load(stream)
+            try:
+                with gzip.open(raw, 'rt') as stream:
+                    packet = json.load(stream)
+            except (OSError, ValueError, EOFError) as error:
+                results[name] = {
+                    'status': 'interrupted' if name in interrupted else 'export-rejected',
+                    'raw': str(raw.relative_to(capture)), 'reason': str(error),
+                    'capture_errors': [f'Raw capture decoding: {error}'],
+                    'teacher_started': None, 'teacher_model_sampled': None,
+                    **({'interrupted': True} if name in interrupted else {}),
+                    **({'rejected_manifest': str(manifest.relative_to(capture))} if manifest.is_file() else {}),
+                }
+                continue
             teacher = (((packet.get('execution') or {}).get('diagnostics') or {}).get('natlangTeacher') or {})
             capture_errors = teacher.get('captureErrors')
         if manifest.is_file():
-            episode = verified_episode(manifest, held, training)
+            try:
+                episode = verified_episode(manifest, held, training)
+            except CaptureValidationError as error:
+                results[name] = {
+                    'status': 'interrupted' if name in interrupted else 'export-rejected', 'reason': str(error),
+                    'rejected_manifest': str(manifest.relative_to(capture)),
+                    'capture_errors': [f'Canonical capture validation: {error}'],
+                    'teacher_started': True if teacher.get('calls') else None,
+                    'teacher_model_sampled': True if any(
+                        any(turn.get('kind') == 'generation' and turn.get('reply')
+                            for turn in (call.get('record') or {}).get('model_turns') or [])
+                        for call in teacher.get('calls') or []) else None,
+                    **({'raw': str(raw.relative_to(capture))} if raw else {}),
+                    **({'interrupted': True} if name in interrupted else {}),
+                }
+                continue
             if episode['task_id'] != cases[name]['taskId']:
                 raise ValueError(f'verified capture identifies another task: {manifest}')
             completed = episode['trajectory_ir']['outcome'].get('task_completed') is True
@@ -121,7 +191,9 @@ def outcomes(capture, names, held, training, cases):
             entry = packet.get('execution') or {}
             teacher = (entry.get('diagnostics') or {}).get('natlangTeacher') or {}
             transport = (teacher.get('executionError') or {}).get('message')
-            reason = transport or entry.get('error') or test.get('reason')
+            export_diagnostic, diagnostic_errors = export_rejection_diagnostic(directory, raw, name)
+            reason = transport or entry.get('error') or test.get('reason') or (
+                export_diagnostic['error']['message'] if export_diagnostic else None)
             records = [call.get('record') or {} for call in teacher.get('calls') or []]
             def sampled_record(record):
                 requests = (record.get('cost') or {}).get('model_requests')
@@ -133,13 +205,28 @@ def outcomes(capture, names, held, training, cases):
                              'raw': str(raw.relative_to(capture)), 'reason': reason,
                              'teacher_started': True if (teacher.get('rootCallIds') or teacher.get('calls'))
                              and not capture_integrity_errors(teacher.get('captureErrors')) else None,
-                             'teacher_model_sampled': model_sampled}
+                             'teacher_model_sampled': model_sampled,
+                             **({'export_rejection': export_diagnostic} if export_diagnostic else {}),
+                             **({'export_diagnostic_errors': diagnostic_errors} if diagnostic_errors else {})}
         else:
             results[name] = {'status': 'no-capture', 'teacher_started': None}
         if name in interrupted and results[name]['status'] != 'verified':
             results[name]['interrupted'] = True
             if not has_training_manifest(results[name]):
                 results[name]['status'] = 'interrupted'
+        if packet is not None:
+            lifecycle = authored_lifecycle(packet, name.removeprefix("open-goal-"))
+            if lifecycle is not None:
+                # A retained actual call is stronger than a contradictory no-start
+                # marker. Preserve the contradiction as failed evidence, not a waiver.
+                observed_calls = teacher.get('rootCallIds') or teacher.get('calls')
+                if lifecycle['teacherStarted'] is False and observed_calls:
+                    capture_errors = [*(capture_errors or []), 'Authored lifecycle contradicts retained teacher calls']
+                elif not manifest.is_file():
+                    results[name]['authored_lifecycle'] = lifecycle
+                    results[name]['teacher_started'] = lifecycle['teacherStarted']
+                    if lifecycle['teacherStarted'] is False:
+                        results[name]['teacher_model_sampled'] = False
         if capture_errors:
             results[name]['capture_errors'] = capture_errors
         if results[name]['status'] in ('test-failed', 'partial'):
@@ -167,6 +254,36 @@ def provider_transport_cause(cause):
         r'|getaddrinfo (?:EAI_AGAIN|ETIMEDOUT)\b|upstream HTTP (?:408|429|5[0-9]{2})\b'
         r'|socket hang up(?: \(record |$))',
         cause))
+
+
+def captured_provider_deadline(call, exchange, teacher):
+    """A failed native provider request, never an authored/tool timeout or quoted reply.
+
+    Some provider SDKs flatten TimeoutError to Error.message. Require its original
+    request identity and the runtime's failed model-request event in that case.
+    This identifies the operational boundary, not DNS/connect/stream causality.
+    """
+    record = call.get('record') or {}
+    error = exchange.get('error') or {}
+    request = exchange.get('request') or {}
+    executor = record.get('executor') or {}
+    terminal = teacher.get('executionError') or {}
+    if (exchange.get('schema') != 'natlang.model-exchange/1'
+            or exchange.get('reply') is not None
+            or error.get('name') not in ('Error', 'TimeoutError')
+            or error.get('message') != 'The operation was aborted due to timeout'
+            or terminal.get('name') in ('AbortError', 'NatlangAbortError', 'NatlangTimeoutError',
+                                        'NatlangBudgetError', 'NatlangModelBudgetError',
+                                        'NatlangCancelledError')
+            or request.get('invocation_id') != record.get('call_id')
+            or not isinstance(request.get('messages'), list) or not request['messages']
+            or executor.get('kind') != 'agent'
+            or not isinstance(executor.get('model_id'), str) or not executor['model_id']):
+        return False
+    return any(event.get('kind') == 'model_request' and event.get('phase') == 'error'
+               and event.get('call_id') == record['call_id']
+               and (event.get('actor') or {}).get('id') == executor['model_id']
+               for event in call.get('events') or [])
 
 
 def captured_provider_transport_errors(teacher):
@@ -219,7 +336,8 @@ def captured_provider_transport_errors(teacher):
             continue
         last = exchanges[-1]
         message = (last.get('error') or {}).get('message')
-        if last.get('reply') is None and provider_transport_cause(message):
+        if last.get('reply') is None and (provider_transport_cause(message)
+                                         or captured_provider_deadline(call, last, teacher)):
             failures.append({'call_id': call_id, 'kind': last['kind'],
                              'error_sha256': hashlib.sha256(json.dumps(last['error'], sort_keys=True,
                                  separators=(',', ':'), ensure_ascii=True).encode('ascii')).hexdigest()})
@@ -255,6 +373,9 @@ def infrastructure_failure(outcome, case, *, include_provider_transport=True):
             and provider_transport_failure(outcome)):
         return True
     if outcome['status'] == 'no-capture':
+        return True
+    if (outcome.get('teacher_started') is False
+            and (outcome.get('authored_lifecycle') or {}).get('teacherStarted') is False):
         return True
     reason = outcome.get('reason') or ''
     if outcome.get('teacher_started') is False and (
@@ -532,7 +653,7 @@ def _export_trajectories(archive, receipt, held, training):
     if output.rows:
         dataset = data_registry.record_dataset(f'vibestudio-{archive.parent.name}-{archive.name}'.lower(), archive,
                                                kind='teacher-demos', format='native Vibestudio Luna trajectories and capture evidence',
-                                               exclude=[] if native_state_referenced else ['capture/retained-state-*', 'capture/.retained-state-packs/**'],
+                                               exclude=['capture/native-reference-only/**', *([] if native_state_referenced else ['capture/retained-state-*', 'capture/.retained-state-packs/**'])],
                                                include=['capture/**', 'receipt.json', final.name, 'graph-metrics.json',
                                                         *(['wave.json'] if (archive / 'wave.json').is_file() else [])], rows=output.rows,
                                                extra={'trajectory_counts': counts, 'observed_graph_metrics': graph_summary,
@@ -540,7 +661,7 @@ def _export_trajectories(archive, receipt, held, training):
     publish(marker, {'verified': output.rows, 'dataset': dataset['id'] if dataset else None, **counts})
 
 
-def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, *,
+def campaign_status(cases, seeds, receipts, review_model, attempts, holds, *,
                    attempt_epoch=None, receipt_epochs=None):
     verified, counts, cumulative = set(seeds), Counter(), Counter()
     teacher_exposure, epoch_teacher_exposure = Counter(), Counter()
@@ -614,10 +735,17 @@ def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, 
                'infrastructure_failures': sum(infrastructure.values()),
                'interruptions': sum(interruptions.values()),
                'counts': dict(Counter(row['status'] for row in rows.values()))}
+    return rows, summary
+
+
+
+def publish_status(root, cases, seeds, receipts, review_model, attempts, holds, *,
+                   attempt_epoch=None, receipt_epochs=None):
+    rows, summary = campaign_status(cases, seeds, receipts, review_model, attempts, holds,
+                                    attempt_epoch=attempt_epoch, receipt_epochs=receipt_epochs)
     publish(root / 'status.json', {'model': LUNA, **summary, 'cases': rows})
     print(json.dumps(summary), flush=True)
     return rows
-
 
 def next_wave(cases, rows, size, *, epoch_first_retries=False, concurrency=None,
               strict_priority_waves=False, deployment_concurrency=2, mixed_deployment_waves=False):
@@ -741,6 +869,100 @@ def unfinished_wave(plans, waves, attempt_epoch, provenance, rows=None):
     return None
 
 
+def native_reference_capable(host, environment):
+    """A metadata-only version query; older collectors remain ordinary collectors."""
+    if environment.get('NATLANG_NATIVE_REFERENCE_CONTINUATION', '1') == '0':
+        return False
+    script = Path(host) / 'scripts/collect-live-workflow-teacher.mjs'
+    if not script.is_file():
+        return False
+    result = subprocess.run(['node', '--import', 'tsx', str(script), '--capabilities'], cwd=host, env=environment,
+                            capture_output=True, text=True)
+    if result.returncode:
+        return False
+    try:
+        metadata = json.loads(result.stdout)
+    except ValueError:
+        return False
+    return (isinstance(metadata, dict) and metadata.get('schema') == 'vibestudio.native-reference-capabilities/1' and
+            metadata.get('completionControl') == 1 and metadata.get('nativeOnly') is True)
+
+
+def native_completion_decision(ready_path, capture, names, *, cases, held, training, seeds,
+                               receipts, receipt_epochs, attempt_epoch, review_model, attempts,
+                               holds, host_commit, stop_requested=False):
+    """Decide only after original paid packets pass the ordinary canonical reader."""
+    ready_bytes = Path(ready_path).read_bytes()
+    ready = json.loads(ready_bytes)
+    source_path = capture / 'source.json'
+    source_bytes = source_path.read_bytes()
+    source = json.loads(source_bytes)
+    if (ready.get('schema') != 'vibestudio.native-reference-continuation/1' or
+            ready.get('capture') != str(capture.resolve()) or
+            not isinstance(ready.get('nonce'), str) or not ready['nonce'] or
+            ready.get('sourceSha256') != hashlib.sha256(source_bytes).hexdigest() or
+            ready.get('repositories') != source.get('repositories') or
+            source.get('repositories', {}).get('vibestudio', {}).get('git_commit') != host_commit):
+        raise ValueError('native continuation must bind the actual owned capture and pinned source')
+    receipt = outcomes(capture, names, held, training, cases)
+    rows, summary = campaign_status(cases, seeds, [*receipts, receipt], review_model, attempts, holds,
+                                   attempt_epoch=attempt_epoch, receipt_epochs=[*receipt_epochs, attempt_epoch])
+    pending = [name for name, row in rows.items() if row['status'] == 'pending']
+    return {'schema': ready['schema'], 'requestSha256': hashlib.sha256(ready_bytes).hexdigest(),
+            'decision': 'continue-paid' if pending or stop_requested else 'drain-native',
+            'pendingPaidCases': len(pending), 'paidReceipt': receipt, 'paidStatus': summary,
+            'additionalTeacherCalls': 0}
+
+
+def finish_native_references(args, checkpoint, environment, provenance, waves):
+    """Resume only native references if an earlier final owner was interrupted.
+
+    The prior collector has already stopped; the canonical collector rotates one
+    owned instance at a time. No teacher/model flags or training manifests.
+    """
+    signature = hashlib.sha256(json.dumps(provenance, sort_keys=True).encode()).hexdigest()[:16]
+    marker = args.root / f'native-reference-{signature}-archived.json'
+    if marker.exists() and read(marker).get('coverage', {}).get('sweepCompleted') is True:
+        return
+    for retained in sorted(waves.glob(f'native-reference-{signature}-*-capture')):
+        destination = args.archive / retained.name.removesuffix('-capture')
+        remote_archive(args, destination, {}, retained,
+                       wave={'reference_only': True, 'provenance': provenance}, checkpoint=checkpoint)
+        coverage_path = retained / 'native-reference-only/coverage.json'
+        if coverage_path.is_file():
+            coverage = read(coverage_path)
+            publish(marker, {'schema': 'vibestudio.native-reference-archive/1', 'archive': str(destination),
+                             'coverage': coverage, 'interrupted': True, 'teacherCalls': 0})
+            sync_index(args, [marker], checkpoint=checkpoint)
+        shutil.rmtree(retained)
+        if checkpoint.requested or marker.exists() and read(marker).get('coverage', {}).get('sweepCompleted') is True:
+            return
+    name = f'native-reference-{signature}-{time.time_ns()}'
+    capture = waves / (name + '-capture')
+    command = ['node', '--import', 'tsx', 'scripts/collect-live-workflow-teacher.mjs',
+               '--native-reference-only', '--out', str(capture),
+               '--native-reference-state', str(waves / 'native-reference-qualification')]
+    with (waves / (name + '-collector.log')).open('ab') as log:
+        result = checkpoint.run(command, request_file=waves / (name + '-checkpoint.json'),
+                                cwd=args.host, env=environment, stdout=log, stderr=subprocess.STDOUT)
+    if not capture.is_dir():
+        if checkpoint.requested:
+            return
+        raise RuntimeError('native continuation failed before creating retained evidence')
+    coverage_path = capture / 'native-reference-only/coverage.json'
+    coverage = read(coverage_path) if coverage_path.is_file() else {'sweepCompleted': False, 'unchecked': None}
+    destination = args.archive / name
+    # An empty receipt publishes zero training rows and registers no dataset;
+    # the full native-only originals remain durable in the same canonical archive.
+    remote_archive(args, destination, {}, capture,
+                   wave={'reference_only': True, 'provenance': provenance}, checkpoint=checkpoint)
+    publish(marker, {'schema': 'vibestudio.native-reference-archive/1', 'archive': str(destination),
+                     'coverage': coverage, 'exitCode': result.returncode,
+                     'interrupted': checkpoint.requested, 'teacherCalls': 0})
+    sync_index(args, [marker], checkpoint=checkpoint)
+    shutil.rmtree(capture)
+
+
 def drive(args):
     with CollectorCheckpoint() as checkpoint:
         try:
@@ -763,10 +985,17 @@ def _drive(args, checkpoint):
         if episode['trajectory_ir']['outcome'].get('task_completed') is not True:
             raise ValueError('partial training evidence cannot complete a campaign goal')
         seeds[by_id[episode['task_id']]] = str(path.resolve())
+    native_capable = native_reference_capable(args.host, environment)
+    # The archive's exporter and ingester consume this catalog too. Publishing
+    # only status/reused.json leaves their metadata at the previous release.
+    # Held identity is already checked by campaign_scope; ingestion separately
+    # retains and verifies its immutable held registry snapshot.
+    if os.environ.get('NATLANG_CAMPAIGN_SYNC_CATALOG', '1') != '0':
+        sync_index(args, [root / 'catalog.jsonl'], checkpoint=checkpoint)
     publish(saved_seeds, seeds)
     waves = root / 'waves'
     jobs = waves / 'jobs'
-    jobs.mkdir(exist_ok=True)
+    jobs.mkdir(parents=True, exist_ok=True)
     initial = root / 'initial-wave.txt'
     starter = jobs / '0000.json'
     if initial.is_file() and not starter.exists():
@@ -795,6 +1024,8 @@ def _drive(args, checkpoint):
                               deployment_concurrency=getattr(args, 'deployment_concurrency', 2),
                               mixed_deployment_waves=getattr(args, 'mixed_deployment_waves', False))
             if not names:
+                if native_capable:
+                    finish_native_references(args, checkpoint, environment, provenance, waves)
                 if any(row['status'] in ('prerequisite-unavailable', 'reviewer-required') for row in rows.values()):
                     return
                 publish(root / 'finished.json', {'collection_exhausted': True, 'attempt_epoch': attempt_epoch,
@@ -824,14 +1055,35 @@ def _drive(args, checkpoint):
             collect = ['node', '--import', 'tsx', 'scripts/collect-live-workflow-teacher.mjs', '--model', LUNA, '--approve-codex-session',
                        '--cases-per-instance', str(limits['cases_per_instance']), '--test-timeout-ms', str(args.teacher_timeout_ms), '--out', str(capture)]
             collect += ['--checkpoint-request', str(checkpoint_request)]
+            if not getattr(args, 'finish_archive_wave', False):
+                collect += ['--drain-request', str(root / 'stop-after-wave')]
             if limits['concurrency'] > 1:
                 collect += ['--concurrency', str(limits['concurrency'])]
             if first.get('requiresReview'):
                 collect += ['--review-model', args.review_model]
             for name in names:
                 collect += ['--case', name]
+            native_control = waves / f'{started.stem}-native-continuation'
+            tick = None
+            if native_capable:
+                collect += ['--native-reference-completion-control', str(native_control),
+                            '--native-reference-state', str(waves / 'native-reference-qualification')]
+                def tick():
+                    ready = Path(str(native_control) + '.ready.json')
+                    response = Path(str(native_control) + '.decision.json')
+                    if not ready.is_file() or response.exists():
+                        return
+                    decision = native_completion_decision(ready, capture, names, cases=cases,
+                        held=held, training=training, seeds=seeds, receipts=receipts,
+                        receipt_epochs=epochs, attempt_epoch=attempt_epoch, review_model=args.review_model,
+                        attempts=args.attempts, holds=holds, host_commit=provenance['host']['git_commit'],
+                        stop_requested=checkpoint.requested or (root / 'stop-after-wave').exists())
+                    publish_immutable(response, decision)
+                    publish_immutable(capture / 'native-continuation-decision.json', decision)
             with (waves / f'{started.stem}-collector.log').open('ab') as log:
-                completed = checkpoint.run(collect, request_file=checkpoint_request, cwd=args.host, env=environment, stdout=log, stderr=subprocess.STDOUT)
+                completed = checkpoint.run(collect, request_file=checkpoint_request,
+                    **({'on_tick': tick} if tick is not None else {}),
+                    cwd=args.host, env=environment, stdout=log, stderr=subprocess.STDOUT)
             publish(waves / f'{started.stem}-exit.json', {'status': completed.returncode})
             if checkpoint.requested and not capture.is_dir():
                 # No teacher started and there is no packet to archive. Leave
@@ -845,6 +1097,14 @@ def _drive(args, checkpoint):
         remote_archive(args, destination, receipt, capture,
                        wave={'plan': plan, 'execution': read(execution) if execution.exists() else None}, checkpoint=checkpoint)
         publish_immutable(waves / f'{started.stem}-result.json', receipt)
+        native_coverage = capture / 'native-reference-only/coverage.json'
+        if native_capable and native_coverage.is_file():
+            coverage = read(native_coverage)
+            signature = hashlib.sha256(json.dumps(provenance, sort_keys=True).encode()).hexdigest()[:16]
+            native_marker = root / f'native-reference-{signature}-archived.json'
+            publish(native_marker, {'schema': 'vibestudio.native-reference-archive/1',
+                                   'archive': str(destination), 'coverage': coverage, 'teacherCalls': 0})
+            sync_index(args, [native_marker], checkpoint=checkpoint)
         completed_waves += 1
         # The remote capture and receipt are durable. Deferred exports read those copies.
         shutil.rmtree(capture)
@@ -857,8 +1117,21 @@ def _drive(args, checkpoint):
             receipt, cases, getattr(args, 'infrastructure_hold_threshold', 2),
             getattr(args, 'provider_transport_hold_fraction', 0.5))
         if runtime_hold is not None:
-            publish(root / 'runtime-hold.json', {'wave': started.stem, **runtime_hold})
-            (root / 'stop-after-wave').touch()
+            previous_provenance = plan.get('provenance')
+            previous_info = previous_provenance.get('release') if isinstance(previous_provenance, dict) else None
+            current_info = provenance.get('release')
+            previous_release = previous_info.get('sha256') if isinstance(previous_info, dict) else None
+            current_release = current_info.get('sha256') if isinstance(current_info, dict) else None
+            historical = (isinstance(previous_release, str) and bool(previous_release) and
+                          isinstance(current_release, str) and bool(current_release) and previous_release != current_release)
+            if historical and not getattr(args, 'hold_historical_infrastructure', False):
+                publish(waves / f'{started.stem}-historical-infrastructure-hold.json', {
+                    'wave': started.stem, 'recorded_release': previous_release,
+                    'current_release': current_release, **runtime_hold,
+                    'reason': 'Retained historical failures do not describe the current repaired release'})
+            else:
+                publish(root / 'runtime-hold.json', {'wave': started.stem, **runtime_hold})
+                (root / 'stop-after-wave').touch()
 
 
 def main():
@@ -899,6 +1172,10 @@ def main():
                      help='maximum concurrency for waves containing nested installed hubs; raise explicitly when memory permits')
     run.add_argument('--teacher-timeout-ms', type=int, default=DEFAULT_TEACHER_TIMEOUT_MS,
                      help='per-teacher episode wall time, including native preparation; default 3600000ms; explicit override leaves normal test budgets unchanged')
+    run.add_argument('--hold-historical-infrastructure', action='store_true',
+                     help='Also stop a new release when archiving failures captured by an older release')
+    run.add_argument('--finish-archive-wave', action='store_true',
+                     help='Defer graceful source/user stops until the whole archival wave finishes instead of the next settled runtime')
     run.add_argument('--reserve-disk-gib', type=float, default=8)
     export = sub.add_parser('export-wave')
     export.add_argument('--archive', type=Path, required=True)

@@ -34,6 +34,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from unicodedata import normalize
 
@@ -115,7 +116,7 @@ def exact_tokens(turn):
 
 def semantic_turn(turn, keep_exact):
     out = {k: turn.get(k) for k in ('messages', 'tools', 'target', 'invocation_id')}
-    for key in ('function', 'definition_id', 'parent_invocation', 'invocation_role', 'decision_reasoning'):
+    for key in ('function', 'definition_id', 'parent_invocation', 'invocation_role', 'decision_reasoning', 'captures'):
         if key in turn:
             out[key] = turn[key]
     out['completion_tokens'] = (turn.get('usage') or {}).get('completion_tokens')
@@ -878,12 +879,22 @@ def frontier_drop(task_id, tiers, own_tasks, guided_tasks=()):
     return None
 
 
-def own_policy_tier(candidate, frontier_policy, previous_policy=None):
+def load_frontier_equivalents(path):
+    """A frontier's ``equivalent_policies`` ({alias sha: policy sha}: file shas of the same weights as the frontier
+    or previous policy, e.g. a rebuilt checkpoint's earlier sha; ``expert_iteration frontier --equivalent-policy``)."""
+    if not path:
+        return {}
+    return dict(json.loads(Path(path).read_text()).get('equivalent_policies') or {})
+
+
+def own_policy_tier(candidate, frontier_policy, previous_policy=None, equivalents=None):
     """0 for own successes from ``frontier_policy`` or ``previous_policy`` (including rebind-straddling episodes
-    whose per-call policies all lie within that adjacent pair, async-train §3); 1 for older policies."""
+    whose per-call policies all lie within that adjacent pair, async-train §3), each under its file sha or an
+    equivalent one (``equivalents``: {alias: sha}, the same weights); 1 for older policies."""
     if not frontier_policy:
         return 0
     allowed = {p for p in (frontier_policy, previous_policy) if p}
+    allowed |= {a for a, c in (equivalents or {}).items() if c in allowed}
     policies = [p for p in (candidate.get('policies') or ()) if p]
     if not policies:
         p = candidate.get('policy')
@@ -914,8 +925,8 @@ def student_selection(unique, rng, funnel, cap_of, family_share, is_wrapper, wra
     (``frontier_drop``). Returns (pool, own tasks, guided-only tasks); the guided-only tasks' teacher data waits for
     the own share (``build`` step 5: it trains unless their guided successes enter the mix).
 
-    ``recent`` (frontier policy, previous policy): under each cap the successes of the trained (or adjacent previous)
-    policy go before older policies' (``own_policy_tier``), as the step-4 priority orders them across tasks; without
+    ``recent`` (frontier policy, previous policy[, {equivalent sha: policy sha}]): under each cap the successes of
+    the trained (or adjacent previous) policy go before older policies' (``own_policy_tier``), as the step-4 priority orders them across tasks; without
     it the cap picked producers at random, and in aei1 round 7 55% of the own target tokens came from grpo-v3/v4/v5
     and sft-v7..v9 collections (DECISIONS 2026-11-24 aei1 ran-out). ``--own-cap-order any`` restores the random pick."""
     own = [c for c in unique if c['source'] == 'rl-own']
@@ -1015,6 +1026,17 @@ def visible_key(messages):
     return json.dumps(out, ensure_ascii=False)
 
 
+VIEW_SITE_OPENING = 'instructions:\n'
+
+
+def signature_line(content):
+    """The opening message's signature line, which ``reworded_key`` and ``signature_key`` keep: a call's first line
+    (``You are inside this call: f(...)``). A learned operator's view site (``instructions:``, then its instructions and
+    the value: ts-host native/operator-frames.ts viewSiteMessages) has no signature line, so all of it is kept; cut to
+    ``instructions:`` every operator call would match every other."""
+    return content if content.startswith(VIEW_SITE_OPENING) else content.split('\n', 1)[0]
+
+
 def reworded_key(messages):
     """``visible_key`` with the invocation's opening message cut to its first line (the call's signature): the runtime
     rewords the rest (call notes, protocol sentences; e.g. 1cb19e291 made return_result the only way to answer), and a
@@ -1023,7 +1045,7 @@ def reworded_key(messages):
     out, opening = [], True
     for role, content, calls in json.loads(visible_key(messages)):
         if opening and role == 'user':
-            content, opening = content.split('\n', 1)[0], False
+            content, opening = signature_line(content), False
         out.append((role, content, calls))
     return json.dumps(out, ensure_ascii=False)
 
@@ -1041,7 +1063,7 @@ def signature_key(messages):
     for m in messages:
         if m.get('role') != 'system':
             content = m.get('content')
-            return json.dumps([m.get('role'), content.split('\n', 1)[0] if isinstance(content, str) else content],
+            return json.dumps([m.get('role'), signature_line(content) if isinstance(content, str) else content],
                               ensure_ascii=False)
     return ''
 
@@ -1238,6 +1260,73 @@ def safe_name(key):
     return hashlib.sha256(key.encode()).hexdigest()[:20]
 
 
+def authored_episode(episode):
+    """An authored trajectory's teacher episode (authored_trajectories.py pool: teacher provider ``authored``). Its turns
+    were rendered with Neuralese read in context (learned compaction's operator calls, ``Neuralese<T>`` values as their
+    text in place: ts-host model/in-context-neuralese.ts), so its replay reads them the same way."""
+    return (episode.get('teacher') or {}).get('provider') == 'authored'
+
+
+def authored_graph(args, work, episodes, held, rows_out, sft_episodes, tasks, per_task, funnel, stats):
+    """``neuralese_graph``'s authored episodes: teacher episodes of authored trajectories whose consumers read spliced
+    states (an operator's summary). Their replay re-ran them under this runtime (``replay_episode``, in-context
+    transport) and its verdict admits them (exact, or a drifted success); each call is rendered by the serving engine's
+    rendering and every state is a pass-through import of its producing call's document
+    (``authored_trajectories.graph_calls``)."""
+    from natlang_neuralese.rl.held_eval import training_exclusion_ids
+    from exp0_sft import source_tokens, chains_of
+    import authored_trajectories
+    replays = {}
+    path = work / 'replay.jsonl'
+    for line in path.open() if path.exists() else ():
+        if line.strip():
+            record = json.loads(line)
+            replays[record.get('key')] = record
+    renderer = TemplateRenderer(args.tokenizer or work / 'tokenizer')
+    excluded = training_exclusion_ids([e['task'] for e in episodes], args.held_manifest)
+    funnel['authored_native_state_episodes'] = len(episodes)
+    for e in episodes:
+        task = e['task']
+        groups = list(task.get('source_groups') or ()) + [(task.get('curriculum') or {}).get('split_group') or task['id']]
+        if e['task_id'] in excluded or held_hit(e['task_id'], task.get('source_ids') or (), groups, held):
+            funnel['authored_held_excluded'] += 1
+            continue
+        record = replays.get(e['key'])
+        if record is None or record.get('outcome') != SUCCESS or not (record.get('exact') or drifted_success(record, e['turns'])):
+            funnel['authored_not_replayed' if record is None else 'authored_replay_failed'] += 1
+            continue
+        if per_task[e['task_id']] >= args.max_per_task:
+            funnel['over_task_cap'] += 1
+            continue
+        counters = collections.Counter()
+        calls = authored_trajectories.graph_calls(e['turns'], renderer, counters)
+        stats.update(counters)
+        if calls is None:
+            funnel['authored_not_lowerable'] += 1
+            continue
+        episode = {'task_id': e['task_id'], 'round': f"authored-neuralese-graph:{e['key']}", 'rows': calls}
+        chains = chains_of([episode])
+        per_task[e['task_id']] += 1
+        funnel['authored_admitted'] += 1
+        tasks[e['task_id']] = task
+        stats['authored:episodes'] += 1
+        stats['authored:calls'] += len(calls)
+        stats['authored:consumer_calls'] += sum(1 for c in calls if c['imports'])
+        stats['authored:producer_document_tokens'] += sum(source_tokens(c) for c in chains)
+        for call in calls:
+            rows_out.write({'episode': e['key'], 'source': 'authored-neuralese-graph', 'run': e.get('run'),
+                            'task_id': e['task_id'], 'family': e.get('family') or task.get('family'),
+                            'generator': 'authored', 'call': call['index'], 'invocation': call['invocation'],
+                            'imports': [list(i) for i in call['imports']], 'prompt_tokens': len(call['prompt']),
+                            'target_tokens': len(call['sample'])})
+        sft_episodes.append(episode)
+
+
+def native_not_authored(episode):
+    """``neuralese_text``'s episodes: own episodes with imported state (authored ones train whole, ``authored_graph``)."""
+    return has_native_state(episode) and not authored_episode(episode)
+
+
 def has_native_state(episode):
     return any(isinstance(m.get('content'), list) and any(isinstance(part, dict) and part.get('type') == 'native_state'
                                                            for part in m['content'])
@@ -1260,7 +1349,9 @@ def replay_episode(args, server, episode, env):
     done = directory / 'replay.json'
     if done.exists():
         return json.loads(done.read_text())
-    if has_native_state(episode):   # its imported states came from the actor's store: no text endpoint can replay them
+    # its imported states came from the actor's store: no text endpoint can replay them. An authored episode's states
+    # are its operator calls' replies (authored_trajectories.py graph_calls): its replay re-runs them in place.
+    if has_native_state(episode) and not authored_episode(episode):
         return {'key': episode['key'], 'name': name, 'source': episode['source'], 'task_id': episode['task_id'],
                 'outcome': 'skipped_native_state', 'exact': False, 'recorded_turns': len(episode['turns'])}
     if directory.exists():
@@ -1287,6 +1378,8 @@ def replay_episode(args, server, episode, env):
     entry = list(read_jsonl(directory / 'queue.jsonl'))[0]
     entry.update(seed=episode.get('seed') or entry['seed'], prompt_rendering='full', request_retries=0,
                  context_tokens=replay_context_tokens(episode['source']))
+    if authored_episode(episode):   # its trajectory was rendered reading Neuralese in context (reference_episodes.mjs)
+        entry['in_context_neuralese'] = True
     (directory / 'queue.jsonl').write_text(json.dumps(entry, sort_keys=True) + '\n')
     queue_file = directory / f"{entry['key']}.queue.jsonl"
     queue_file.write_text(json.dumps(entry, sort_keys=True) + '\n')
@@ -1332,6 +1425,8 @@ def replay_episode(args, server, episode, env):
     # (a reasoned readout's recorded samples are one call: ReplayEpisode.calls)
     matched = {k: v for k, v in kinds.items() if k not in ('scoring-declined', 'group-repeat')}
     record['replay_calls'] = replay.calls
+    if has_native_state(episode):   # an authored episode with spliced states: whole-graph rows only (neuralese-graph)
+        record['graph_only'] = True
     record['exact'] = (outcome == SUCCESS and record['unserved'] == 0 and set(matched) <= {'exact', 'reworded'}
                        and sum(matched.values()) == replay.calls and turns == replay.calls)
     for path in directory.iterdir():   # keep the verdict, the replayed record and the logs; drop the job scratch
@@ -1518,8 +1613,8 @@ def live_holdout_registry(path, held):
     task_ids = set()
     test_cases = 0
     ids, groups, sources = held
-    for line in zstd_lines(path):
-        row = json.loads(line)
+    from live_catalog_identity import catalog_rows
+    for row in catalog_rows(path, lines=zstd_lines(path)):
         if row.get('interaction') != 'open-user-goal':
             continue
         task_id, split, relatives = row.get('taskId'), row.get('split'), row.get('sourceGroups')
@@ -1737,7 +1832,7 @@ def verified_episodes(work, funnel, extracted=None, sources=None, drifted=DRIFTE
         if record is None:
             f['not_replayed'] += 1
             continue
-        if record['outcome'] == 'skipped_native_state':
+        if record['outcome'] == 'skipped_native_state' or record.get('graph_only'):
             f['native_state'] += 1
             continue
         if record['outcome'] != SUCCESS:
@@ -1944,6 +2039,11 @@ def _trained_in_build(build):
     return keys, tasks
 
 
+# own successes of a task the student solves at least this often train only as --anchor-per-task anchors
+# (``--own-solved-rate``; 0: only the frontier's solved tier counts)
+OWN_SOLVED_RATE = 0.75
+
+
 # An episode the lineage already trained in this many earlier builds (``--prefer-unseen``) is not trained again
 # (``--max-prior-exposures``; 0: no bound). 1: nothing trains twice, the owner's decision for the aei1 rounds
 # (2026-11-24: "I don't want to train on repetition at all"); rounds 2-8 had re-trained the fixed teacher pool every
@@ -1970,9 +2070,22 @@ class Exposures:
         self.replaced = frozenset().union(*(r for _, _, r in self.per_build))
         self.tasks = frozenset().union(*(t for _, t, _ in per_build))
 
+    # a stand-in (fill) unit counts only earlier fills of its episode, not the episode's raw training: its filled
+    # reasoning is new supervision, and the actions the raw episode trained go in at zero weight
+    # (``reasoning_after_raw``; coordinator 2026-11-25). False: one exposure per episode whichever part trained it.
+    fill_after_raw = False
+
+    def raw_trained(self, task, episode_key):
+        """Whether an earlier build trained the episode ``episode_key`` itself (raw: its rows or its unit)."""
+        return episode_key in self.keys or (task, episode_key) in self.units
+
     def __call__(self, key):
         task, round_ = key[1], key[2]
         stood = stand_in((task, round_))[1]     # the episode this unit stands in for, if it is a stand-in
+        if stood is not None and self.fill_after_raw:
+            if key[1:] not in self.units and (task, stood) not in self.replaced:
+                return 0
+            return sum(1 for _, units, replaced in self.per_build if key[1:] in units or (task, stood) in replaced)
         if (round_ not in self.keys and key[1:] not in self.units and (task, round_) not in self.replaced
                 and (stood is None or (stood not in self.keys and (task, stood) not in self.units))):
             return 0
@@ -1989,9 +2102,36 @@ def stand_in(unit):
     return (task, rest) if rest.count(':') >= 2 else (task, None)
 
 
-def trained_exposures(builds):
+def trained_exposures(builds, fill_after_raw=False):
     """``Exposures`` of the earlier builds (each read once: rows.jsonl.zst and trained-units.json)."""
-    return Exposures([(*_trained_in_build(build), trained_units([build])) for build in builds])
+    exposure = Exposures([(*_trained_in_build(build), trained_units([build])) for build in builds])
+    exposure.fill_after_raw = fill_after_raw
+    return exposure
+
+
+FILL_AFTER_RAW = 'reasoning'     # --fill-after-raw default
+
+
+def reasoning_after_raw(chains, close_id):
+    """Zero the weight of every target token after the first ``</think>`` of each row of ``chains`` (in place): the
+    actions a raw episode already trained, leaving its filled reasoning (through ``</think>``, which the raw episode
+    trained as zero-weight context) as the only targets, so no target token trains twice. A row without ``</think>``
+    is all action (weight 0); a decision readout (``chain['decision']``: an option choice the raw episode trained) is
+    dropped. Returns (kept chains, weighted target tokens)."""
+    import numpy as np
+    kept, total = [], 0.
+    for chain in chains:
+        if chain.get('decision') is not None:
+            continue
+        for _, length, row in chain['segs']:
+            weight = np.array(row['weight'], np.float32) if 'weight' in row else np.ones(length, np.float32)
+            sample = np.asarray(row['sample'])
+            closes = np.flatnonzero(sample[:length] == close_id)
+            weight[(int(closes[0]) + 1) if len(closes) else 0:] = 0.
+            row['weight'] = weight
+            total += float(weight.sum())
+        kept.append(chain)
+    return kept, total
 
 
 def drop_overexposed(chains, exposure, max_prior):
@@ -2734,6 +2874,175 @@ def mark_open_goal(chains, goal, turns):
             chain['open_goal_depth'] = depths[invocation]
 
 
+def drop_solved_own(candidates, tiers, rates, rate, funnel):
+    """``candidates`` less the own successes (OWN_SOURCES) of tasks the policy solves: the frontier's ``solved`` tier
+    (``tiers``), else for a task the frontier did not measure a recorded pass rate (``rates``: (successes, scored), >= 2
+    samples) of at least ``rate`` (0: the frontier tier alone). Counted as ``own_task_solved``."""
+    def solved(task_id):
+        if task_id in tiers:
+            return tiers[task_id] == 'solved'
+        s, n = rates.get(task_id, (0, 0))
+        return bool(rate) and n >= 2 and s / n >= rate
+    kept = []
+    for c in candidates:
+        if c['source'] in OWN_SOURCES and solved(c['task_id']):
+            funnel[c['source']]['own_task_solved'] += 1
+        else:
+            kept.append(c)
+    return kept
+
+
+FIXED_VAL_TASKS = 40
+FIXED_VAL_SCHEMA = 'natlang.ei-fixed-val/1'
+
+
+class FixedVal:
+    """A fixed held-like validation set (``--fixed-val DIR``): one verified success each on up to ``per_kind`` tasks per
+    kind (own: ``rl-own``; teacher: ``teacher``) of the held set's families, never a held task or its source-group
+    sibling (the build's candidates already exclude the held closure: ``held_eval.exclusion_ids``' separation), chosen
+    once by task-id hash among tasks no earlier build trained, then frozen: DIR/tasks.json names them and
+    DIR/val-fixed-{own,teacher}.pkl hold their chains. Every build naming DIR leaves those tasks (and their Neuralese
+    variants) out of training, so the same rows measure every round of a lineage (aei1 r4-r7's per-round val-teacher
+    sets moved 1-4% at loss 0.003-0.03 and r9 on built none: the per-round set is drawn from left-over untrained
+    tasks, which the no-repetition rule emptied)."""
+
+    def __init__(self, directory, families, per_kind, tasks=None):
+        self.dir, self.families, self.per_kind = Path(directory), frozenset(families), per_kind
+        self.tasks, self.new, self.chosen = tasks, False, {}
+
+    @classmethod
+    def open(cls, directory, held_manifest, per_kind=None):
+        if not directory:
+            return None
+        directory = Path(directory)
+        record = directory / 'tasks.json'
+        families = {t.get('family') for t in json.loads(Path(held_manifest).read_text())['tasks']} - {None}
+        if record.exists():
+            data = json.loads(record.read_text())
+            return cls(directory, families, data.get('per_kind'), {k: list(v) for k, v in data['tasks'].items()})
+        return cls(directory, families, per_kind or FIXED_VAL_TASKS)
+
+    @staticmethod
+    def rank(task_id):
+        return hashlib.sha256(('fixed-val:' + str(task_id)).encode()).hexdigest()
+
+    def choose(self, candidates, trained_tasks):
+        """Pick the set from this build's candidates (verified, held closure out): per kind, held-family tasks no
+        earlier build trained, by hash; one candidate each (lowest key), distinct tasks across kinds."""
+        by_kind = {'own': collections.defaultdict(list), 'teacher': collections.defaultdict(list)}
+        for c in candidates:
+            kind = {'rl-own': 'own', 'teacher': 'teacher'}.get(c['source'])
+            if kind and c.get('family') in self.families and c['task_id'] not in trained_tasks \
+                    and not c.get('open_goal'):
+                by_kind[kind][c['task_id']].append(c)
+        taken = set()
+        for kind in ('own', 'teacher'):
+            picks = []
+            for task_id in sorted(by_kind[kind], key=self.rank):
+                if len(picks) >= self.per_kind:
+                    break
+                if task_id not in taken:
+                    picks.append(min(by_kind[kind][task_id], key=lambda c: str(c['key'])))
+                    taken.add(task_id)
+            self.chosen[kind] = picks
+        self.tasks = {kind: [c['task_id'] for c in picks] for kind, picks in self.chosen.items()}
+        self.new = True
+
+    def closure(self, variant_of):
+        """The task ids that never train: the set's tasks and every variant made from one (``variant_of``)."""
+        ids = {t for tasks in self.tasks.values() for t in tasks}
+        return ids | {t for t, item in variant_of.items() if item in ids}
+
+    def write(self, rendered, rendered_row, chains_of, backend_workarounds, ahead=None):
+        """Render the chosen candidates and freeze the set (the pickles, then DIR/tasks.json last). A candidate that
+        does not render leaves its task out of the set (still never trained by this build)."""
+        import pickle
+        self.dir.mkdir(parents=True, exist_ok=True)
+        if ahead is not None:
+            ahead.walk([c for picks in self.chosen.values() for c in picks])
+        kept = {}
+        for kind, picks in self.chosen.items():
+            chains, tasks = [], []
+            for c in picks:
+                turns, calls = rendered(c)
+                if isinstance(turns, Exception) or any(isinstance(call, str) for call in calls):
+                    continue
+                try:
+                    rows = [rendered_row(call, c['source'], c['key'], index, turn, backend_workarounds)[0]
+                            for index, (turn, call) in enumerate(zip(turns, calls))]
+                except Exception:
+                    continue
+                chains += chains_of([{'task_id': c['task_id'], 'round': c['key'], 'rows': rows}])
+                tasks.append(c['task_id'])
+            for chain in chains:
+                for _, _, row in chain['segs']:
+                    row.pop('prompt', None)
+            if chains:
+                tmp = self.dir / f'val-fixed-{kind}.pkl.partial'
+                with tmp.open('wb') as handle:
+                    pickle.dump({'chains': chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
+                os.replace(tmp, self.dir / f'val-fixed-{kind}.pkl')
+            kept[kind] = tasks
+        self.tasks = kept
+        tmp = self.dir / 'tasks.json.partial'
+        tmp.write_text(json.dumps({'schema': FIXED_VAL_SCHEMA, 'per_kind': self.per_kind, 'tasks': kept,
+                                   'families': sorted(self.families), 'time': time.time()}, indent=1) + '\n')
+        os.replace(tmp, self.dir / 'tasks.json')
+        # registered like every other output: exp0_sft consumes these as --val-chains and refuses unregistered data
+        # (2026-11-26 aei1 r0012: four SFT launches failed on the unregistered set)
+        data_registry.record_dataset(data_registry.dataset_id(self.dir, 'sft-rows'), self.dir, kind='sft-rows',
+                                     format=f'{FIXED_VAL_SCHEMA}: val-fixed-{{own,teacher}}.pkl (exp0_sft --val-chains), '
+                                            'tasks.json', include=['val-fixed-*.pkl', 'tasks.json'],
+                                     note='fixed held-like validation set (sft_sources --fixed-val)')
+
+    def report(self):
+        return {'dir': str(self.dir), 'new': self.new, 'tasks': {k: len(v) for k, v in (self.tasks or {}).items()}}
+
+
+class FillPending:
+    """Whether a new teacher campaign episode waits for its fill instead of training raw this round
+    (``--defer-unfilled-hours``): an episode of a ``--campaign-work`` WORK (key ``teacher:<last two path parts of the
+    WORK>:<episode dir>:<sample>``) younger than the hours (its ``episodes/<dir>/rollouts.jsonl`` mtime) that the
+    standing fill (``--fill-out``: filled_reasoning OUT) has not attempted yet. Raw, it trains only its actions (the
+    teacher's reasoning is zero-weight context, ~800 weighted tokens an episode in aei1 r0011); filled, the student's
+    reasoning before the same actions trains too (~5k), and once an episode trained raw its fill never trains
+    (``Exposures``: one exposure per episode). An episode the fill attempted and could not fill, or older than the
+    hours, trains raw."""
+
+    def __init__(self, works, done, hours, now=None):
+        self.works = {'teacher:' + '/'.join(Path(w).parts[-2:]): Path(w) for w in works}
+        self.done, self.seconds, self.now = frozenset(done), 3600 * hours, now or time.time()
+
+    @classmethod
+    def from_args(cls, args):
+        hours = getattr(args, 'defer_unfilled_hours', 0) or 0
+        works, out = getattr(args, 'campaign_work', None) or [], getattr(args, 'fill_out', None)
+        if hours <= 0 or not works or not out:
+            return None
+        done = set()
+        path = Path(out) / 'fills.jsonl'
+        if path.exists():
+            for line in path.open():
+                try:
+                    done.add(json.loads(line)['key'])
+                except (ValueError, KeyError):      # a line cut by a kill: that episode is not done
+                    pass
+        return cls(works, done, hours)
+
+    def __call__(self, key):
+        parts = str(key).split(':')
+        if len(parts) != 4 or key in self.done:
+            return False
+        work = self.works.get(':'.join(parts[:2]))
+        if work is None:
+            return False
+        try:
+            age = self.now - (work / 'episodes' / parts[2] / 'rollouts.jsonl').stat().st_mtime
+        except OSError:
+            return False
+        return age < self.seconds
+
+
 def drop_unfilled_live(chains, mode, aux_parts):
     """(chains, episodes dropped) for the observed-live teacher episodes (rounds ``live:...``) that no filled-reasoning
     unit replaced. ``train`` and ``auto`` (default) keep them: the teacher's think block (or an empty one) stays
@@ -2922,6 +3231,8 @@ def build(args):
     # the frontier: the trained policy's own measured rates replace every other rate of its tasks
     frontier_policy, frontier_prev_policy, frontier = load_frontier_full(getattr(args, 'frontier', None))
     previous_policy = getattr(args, 'previous_policy', None) or frontier_prev_policy
+    # file shas of the same weights as the frontier / previous policy (a rebuilt checkpoint's earlier sha)
+    policy_equivalents = load_frontier_equivalents(getattr(args, 'frontier', None))
     rates.update({k: (v['successes'], v['scored']) for k, v in frontier.items() if v.get('scored')})
     tiers = {k: v.get('tier') for k, v in frontier.items()}
     treatment = ThinkTreatment.load(getattr(args, 'think_treatment', None), args.teacher_think,
@@ -2988,7 +3299,8 @@ def build(args):
 
     def is_wrapper(c):
         return constructs.get(c['task_id'], ((), False))[1]
-    exposure = trained_exposures(getattr(args, 'prefer_unseen', None) or [])
+    fill_after_raw = getattr(args, 'fill_after_raw', FILL_AFTER_RAW) == 'reasoning'
+    exposure = trained_exposures(getattr(args, 'prefer_unseen', None) or [], fill_after_raw)
     trained_keys, trained_before, trained_unit_keys = exposure.keys, exposure.tasks, exposure.units
     max_prior = getattr(args, 'max_prior_exposures', MAX_PRIOR_EXPOSURES) or 0
     if max_prior:   # an episode the lineage trained max_prior times already is no candidate (``drop_overexposed``)
@@ -2999,13 +3311,36 @@ def build(args):
             else:
                 fresh.append(c)
         unique = fresh
+    # own successes of tasks the policy already solves (pass rate >= --own-solved-rate: the frontier's tier, else for a
+    # task the frontier did not measure its newest recorded rate over >= 2 samples) keep only --anchor-per-task
+    # episodes; with 0 none (aei1 r0009: 131 of 625 own episodes were tasks r1 solves at >= 0.75, self-imitation that
+    # adds no supervision). The frontier-solved tasks follow ``core_cap``; this covers the tasks it did not measure.
+    if getattr(args, 'anchor_per_task', 1) == 0:
+        unique = drop_solved_own(unique, tiers, rates, getattr(args, 'own_solved_rate', OWN_SOLVED_RATE) or 0, funnel)
+    # the fixed held-like validation set (``--fixed-val``): its tasks never train (core candidates here, aux units
+    # through the held closure, which load_aux applies)
+    fixed_val = FixedVal.open(getattr(args, 'fixed_val', None), args.held_manifest,
+                              getattr(args, 'fixed_val_tasks', FIXED_VAL_TASKS))
+    if fixed_val is not None:
+        if fixed_val.tasks is None:
+            fixed_val.choose(unique, exposure.tasks)
+        excluded_val = fixed_val.closure(variant_of)
+        kept = []
+        for c in unique:
+            if c['task_id'] in excluded_val:
+                funnel[c['source']]['fixed_val'] += 1
+            else:
+                kept.append(c)
+        unique = kept
+        held[0].update(excluded_val)
     # the student's own distribution: unguided own successes and leak-checked JOLT+ guided successes share one per-task
     # cap, one family share and one wrapper share (own first under each); a frontier build drops a task's guided
     # successes where it has unguided ones (``frontier_drop``: own > jolt-guided > teacher, async-train §8)
     student_pool, own_tasks, guided_tasks = student_selection(
         unique, rng, funnel, core_cap, args.max_family_share, is_wrapper, args.wrapper_share, trained_keys,
         tiers if frontier else None,
-        (frontier_policy, previous_policy) if getattr(args, 'own_cap_order', 'recent') == 'recent' else None,
+        (frontier_policy, previous_policy, policy_equivalents)
+        if getattr(args, 'own_cap_order', 'recent') == 'recent' else None,
         shape_of=shape_of, shape_share=shape_share)
     deferred = {'teacher': [], 'aux': []}
     teacher_candidates = []
@@ -3202,7 +3537,7 @@ def build(args):
     def priority(c):
         p = base_rate(c['task_id'])
         # a frontier build takes the trained (or adjacent previous) policy's own successes before older policies' (async-train §3)
-        return (not bool(c.get('open_goal')), own_policy_tier(c, frontier_policy, previous_policy),
+        return (not bool(c.get('open_goal')), own_policy_tier(c, frontier_policy, previous_policy, policy_equivalents),
                 not bool(constructs.get(c['task_id'], ((), False))[0]), 0.5 if p is None else p, rng.random())
 
     # the prebuilt parts (``--aux``), loaded before the teacher admission: a teacher episode that a share=all part
@@ -3212,6 +3547,17 @@ def build(args):
     # after it took budget from teacher episodes that have no fill (r0002: 2,811 such episodes, ~36% of 180M)
     aux_parts = [parse_aux(spec) for spec in args.aux]
     loaded = [(part, load_aux(part, renderer.tokenizer, held)) for part in aux_parts]
+    if fill_after_raw:      # a fill of an episode that trained raw trains its filled reasoning only
+        close_id = int(renderer.tokenizer.convert_tokens_to_ids('</think>'))
+        for part, units in loaded:
+            if part.get('replaces') != 'teacher':
+                continue
+            for unit in units:
+                episode_key = replaced_round(part, unit)
+                if episode_key is not None and exposure.raw_trained(unit['task'], episode_key):
+                    unit['chains'], unit['weighted'] = reasoning_after_raw(unit['chains'], close_id)
+                    part['reasoning_after_raw'] = part.get('reasoning_after_raw', 0) + 1
+            units[:] = [u for u in units if u['chains'] and u['weighted'] > 0]
     filled_keys = frozenset(
         key for part, units in loaded if part.get('replaces') == 'teacher' and part['share'] == 'all'
         for key in (replaced_round(part, unit) for unit in units) if key is not None) \
@@ -3243,9 +3589,13 @@ def build(args):
         teacher_forward += sft_episodes[-1]['forward_tokens']
         task_tokens[item_of(c['task_id'])] += sft_episodes[-1]['weighted_target_tokens']
 
+    pending = FillPending.from_args(args)
     for c in ordered:
         if c['key'] in filled_keys:
             funnel[c['source']]['filled_instead'] += 1      # its fill unit trains (step 3), budget-free here
+            continue
+        if pending is not None and pending(c['key']):
+            funnel[c['source']]['fill_pending'] += 1        # trains as its fill in a later round (FillPending)
             continue
         if c['task_id'] in guided_tasks:
             deferred['teacher'].append(c)
@@ -3594,6 +3944,8 @@ def build(args):
                 pickle.dump({'chains': val_chains, 'schema': 'natlang.sft-chains/1'}, handle, protocol=4)
             validation[kind] = {'episodes': len(val_tasks), 'chains': len(val_chains),
                                 'forward_tokens': int(sum(len(chain['ids']) for chain in val_chains))}
+    if fixed_val is not None and fixed_val.new:
+        fixed_val.write(rendered, rendered_row, chains_of, args.backend_workarounds, ahead)
     ahead.close()
     rated = [base_rate(e['task_id']) for e in sft_episodes if e['round'].split(':')[0] in ('rl', 'teacher')]
     rated = [p for p in rated if p is not None]
@@ -3621,6 +3973,7 @@ def build(args):
                    'teacher_think': args.teacher_think, 'think_treatment': treatment.report(),
                    'frontier': {'path': getattr(args, 'frontier', None), 'policy': frontier_policy,
                                 'previous_policy': previous_policy,
+                                **({'equivalent_policies': policy_equivalents} if policy_equivalents else {}),
                                 'sha256': sha256_file(args.frontier) if getattr(args, 'frontier', None) else None,
                                 'tiers': dict(collections.Counter(tiers.values())),
                                 'anchor_per_task': getattr(args, 'anchor_per_task', 1),
@@ -3633,6 +3986,12 @@ def build(args):
                                      'units': len(trained_unit_keys), 'scope': unseen_scope,
                                      'max_prior_exposures': max_prior},
                    'filled_teacher': getattr(args, 'filled_teacher', 'skip'),
+                   'defer_unfilled': {'hours': getattr(args, 'defer_unfilled_hours', 0) or 0,
+                                      'campaign_works': len(getattr(args, 'campaign_work', None) or ()),
+                                      'fill_out': getattr(args, 'fill_out', None)},
+                   'fill_after_raw': getattr(args, 'fill_after_raw', FILL_AFTER_RAW),
+                   'own_solved': {'anchor_per_task': getattr(args, 'anchor_per_task', 1),
+                                  'rate': getattr(args, 'own_solved_rate', OWN_SOLVED_RATE)},
                    'max_forward_tokens': getattr(args, 'max_forward_tokens', 0) or 0,
                    'backend_workarounds': args.backend_workarounds, 'own_empty_think': args.own_empty_think,
                    'teacher_forward_budget': args.teacher_forward_budget, 'own_loss_share': args.own_loss_share,
@@ -3647,6 +4006,7 @@ def build(args):
         'october': october_report,
         'mix': mix,
         'validation': validation,
+        **({'fixed_validation': fixed_val.report()} if fixed_val is not None else {}),
         'funnel': {k: dict(v) for k, v in funnel.items()},
         'stats': {k: dict(v) for k, v in stats.items()},
         'episodes': len(sft_episodes), 'tasks': len({e['task_id'] for e in sft_episodes}),
@@ -3686,7 +4046,7 @@ def recap(args):
     out.mkdir(parents=True, exist_ok=True)
     with (src / 'chains.pkl').open('rb') as handle:
         payload = pickle.load(handle)
-    exposure = trained_exposures(args.prefer_unseen or [])
+    exposure = trained_exposures(args.prefer_unseen or [], getattr(args, 'fill_after_raw', FILL_AFTER_RAW) == 'reasoning')
     chains, cap = cap_target_tokens(payload['chains'], args.max_target_tokens, exposure.keys, exposure.units,
                                     args.max_forward_tokens, exposure=exposure)
     report = json.loads((src / 'build.json').read_text())
@@ -3794,7 +4154,7 @@ def neuralese_text(args):
     funnel = collections.Counter()
     workers = getattr(args, 'workers', None) or 1
     surfaces = replay_surfaces(work, workers)    # the current runtime's surfaces: every call of every exact replay
-    episodes = list(all_episodes(work, workers, keep=has_native_state))
+    episodes = list(all_episodes(work, workers, keep=native_not_authored))
     funnel['native_state_episodes'] = len(episodes)
     excluded = training_exclusion_ids([e['task'] for e in episodes], args.held_manifest)
     kept = []
@@ -3975,7 +4335,11 @@ def neuralese_graph(args):
     excluded_runs = [re.compile(pattern) for pattern in getattr(args, 'exclude_run', None) or ()]
     window = [] if getattr(args, 'no_window_surfaces', False) else list(getattr(args, 'current_surface_run', None) or ())
     episodes, window_surfaces = [], set()
+    authored = []   # authored teacher episodes with spliced states (authored_trajectories.py graph_calls)
     for e in all_episodes(work, workers, keep=NativeOrRun(window)):
+        if authored_episode(e) and has_native_state(e):
+            authored.append(e)
+            continue
         if e.get('source') not in OWN_SOURCES:
             continue
         if window and current_surface_run(args, e):
@@ -4076,6 +4440,8 @@ def neuralese_graph(args):
                             'invocation': call['invocation'], 'imports': [list(i) for i in call['imports']],
                             'prompt_tokens': len(call['prompt']), 'target_tokens': len(call['sample'])})
         sft_episodes.append(episode)
+    if authored and not getattr(args, 'no_authored', False):
+        authored_graph(args, work, authored, held, rows_out, sft_episodes, tasks, per_task, funnel, stats)
     rows_out.close()
     chains = chains_of(sft_episodes)
     rng.shuffle(chains)
@@ -4252,6 +4618,12 @@ def main():
                         'its turn, then tasks an earlier build trained (a second epoch where a family has nothing '
                         'fresh); global: every untrained episode before any trained one (sft-v7: the budget went to '
                         'the unseen tail of 20 generator families; DECISIONS 2026-11-22)')
+    b.add_argument('--fixed-val', metavar='DIR',
+                   help='a fixed held-like validation set (FixedVal): DIR/val-fixed-{own,teacher}.pkl on non-held tasks of '
+                        'held-v3 families, chosen by the first build that names DIR and never trained by any build that '
+                        'names it; the learner scores it before and after each round')
+    b.add_argument('--fixed-val-tasks', type=int, default=None,
+                   help=f'tasks per kind (own, teacher) when the set is chosen (default {40})')
     b.add_argument('--val-episodes', type=int, default=40,
                    help='left-over own and teacher successes on untrained tasks written as OUT/val-{own,teacher}.pkl')
     b.add_argument('--aux', action='append', default=[],
@@ -4282,7 +4654,21 @@ def main():
                    help='an observed-live episode whose bound source no longer hashes, loads or matches its extraction '
                         '(recheck_live_episode): skip it with its reason in the funnel (default) or fail the build')
     b.add_argument('--anchor-per-task', type=int, default=1,
-                   help='own episodes of a task the frontier marks solved (a light anchor)')
+                   help='own episodes of a task the frontier marks solved (a light anchor); 0: none, and with '
+                        '--own-solved-rate also none of a task the frontier did not measure whose newest rate is solved')
+    b.add_argument('--fill-after-raw', choices=('reasoning', 'skip'), default=FILL_AFTER_RAW,
+                   help='a filled-reasoning unit of a teacher episode an earlier build trained raw: reasoning (default) '
+                        'trains its filled reasoning only, the actions at zero weight (reasoning_after_raw); skip: '
+                        'one exposure per episode, the fill never trains (before 2026-11-25)')
+    b.add_argument('--defer-unfilled-hours', type=float, default=0.,
+                   help='a --campaign-work teacher episode younger than this that --fill-out has not attempted is not '
+                        'admitted raw: it waits for its fill (FillPending; 0: off)')
+    b.add_argument('--campaign-work', action='append', default=[], metavar='WORK',
+                   help='a teacher campaign WORK (teacher_gen.py) whose new episodes --defer-unfilled-hours holds back')
+    b.add_argument('--fill-out', help='the standing fill\'s filled_reasoning OUT (its fills.jsonl: attempted episodes)')
+    b.add_argument('--own-solved-rate', type=float, default=OWN_SOLVED_RATE,
+                   help='with --anchor-per-task 0: own successes of a task the frontier did not measure whose recorded '
+                        'pass rate (>= 2 samples) is at least this are left out (0: the frontier tier alone)')
     b.add_argument('--workers', type=int, default=default_workers(),
                    help='processes rendering candidates ahead of the sequential selection (RenderAhead; the output is '
                         'identical for every value); 1: the serial build')
@@ -4319,6 +4705,8 @@ def main():
     g.add_argument('--exclude-run', action='append', default=[], metavar='REGEX',
                    help='own runs left out (as build --exclude-run), matched against the episode run label')
     g.add_argument('--seed', type=int, default=20261117)
+    g.add_argument('--no-authored', action='store_true',
+                   help='leave out authored episodes whose consumers read spliced states (authored_graph)')
     g.add_argument('--empty-replies', choices=('drop', 'train'), default='drop',
                    help='own calls whose reply has neither text nor a tool call: drop (default) or train (opt-out)')
     g.add_argument('--tokenizer', default=None,

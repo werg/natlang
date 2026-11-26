@@ -527,3 +527,122 @@ def test_promotion_loads_invoking_helper_not_stale_owner_or_cached_module(roots,
     assert actual['helper'] == str(target)
     assert actual['ref'] == reg.git_ref
     assert actual['entries'][0]['id'] == 'new'
+
+
+def test_absolute_scratch_opt_out_requires_a_separate_explicit_registry(roots, monkeypatch):
+    scratch = roots/'scratch'
+    monkeypatch.setenv(dr.ALLOW_ENV, '1')
+    assert dr.portable(scratch) == str(scratch)
+    assert dr.absolute(str(scratch)) == scratch
+    for override in (None, str(roots/'data_nvme/data-registry')):
+        if override is None: monkeypatch.delenv('NATLANG_DATA_REGISTRY')
+        else: monkeypatch.setenv('NATLANG_DATA_REGISTRY', override)
+        with pytest.raises(ValueError): dr.portable(scratch)
+        with pytest.raises(ValueError): dr.absolute(str(scratch))
+        with pytest.raises(ValueError): dr.declare_dataset('bad-global', scratch, kind='step-chains', format='test')
+        assert not dr.journal_path().exists()
+
+
+@pytest.mark.parametrize('value', ['data_nvme:../escape', 'data_hdd:/absolute', 'repo:foo/../../escape'])
+def test_portable_root_paths_cannot_escape_their_anchor(roots, value):
+    with pytest.raises(ValueError, match='escapes its root'):
+        dr.absolute(value)
+
+
+def legacy_orphan(roots):
+    import hashlib
+    from natlang_neuralese.common.jsonio import canonical_json_bytes
+    path = roots/'scratch/old-work/step-chains'
+    records = [{'schema': dr.RECORD_SCHEMA, 'op': 'dataset', 'id': 'legacy-orphan', 'path': str(path),
+                'kind': 'step-chains', 'machine': dr.machine(), 'time': f'old-{i}',
+                'producer': {'script': 'grpo.py', 'code': {'git_commit': 'a'*40}}} for i in range(2)]
+    # TEST ONLY immutable historical bytes, deliberately predating the writer guard.
+    for record in records: dr._append_line(dr.journal_path(), record)
+    for i in range(2):
+        dr._append_line(dr.journal_path(), {'op':'files','id':'legacy-orphan',
+            'files':[{'path':f'step-{i}.pkl.zst','sha256':'a'*64,'bytes':1}]})
+    hashes = [hashlib.sha256(canonical_json_bytes(r)).hexdigest() for r in records]
+    return path, records, hashes
+
+
+def test_quarantine_exact_orphan_declarations_preserves_history_and_future_identity(roots):
+    path, records, hashes = legacy_orphan(roots)
+    original = dr.journal_path().read_bytes()
+    before = dr.load(repo=roots/'repo', fresh=True)
+    with pytest.raises(ValueError): dr.absolute(before.datasets['legacy-orphan']['path'])
+    result = dr.quarantine_missing_dataset('legacy-orphan', declaration_sha256=hashes,
+        note='Original scratch artifacts absent; no consumers or downstream references.', repo=roots/'repo')
+    assert dr.journal_path().read_bytes().startswith(original)
+    assert result['evidence']['source_sha256']
+    after = dr.load(repo=roots/'repo', fresh=True)
+    assert 'legacy-orphan' not in after.datasets and 'legacy-orphan' not in after.snapshots
+    assert sum(r.get('op')=='dataset' for r in after.journal) == 2
+    assert after.quarantines == [result]
+    assert len(after.extra_files['legacy-orphan']) == result['evidence']['file_records_retained'] == 2
+    # A new valid declaration is not hidden by a blanket ID tombstone.
+    new = roots/'data_nvme/new-chains'
+    dr.declare_dataset('legacy-orphan', new, kind='step-chains', format='new')
+    latest = dr.load(repo=roots/'repo', fresh=True)
+    assert latest.datasets['legacy-orphan']['path'] == 'data_nvme:new-chains'
+    assert len(latest.snapshots['legacy-orphan']) == 1
+
+
+@pytest.mark.parametrize('blocker', ['exists', 'symlink', 'manifest', 'protected', 'roles', 'git',
+                                    'consumer-id', 'consumer-path', 'input-id', 'input-path', 'overlap',
+                                    'foreign', 'held-kind', 'escaping-file', 'wrong-hash', 'no-note', 'race'])
+def test_quarantine_refuses_useful_or_unproven_metadata_and_concurrent_journal_changes(roots, monkeypatch, blocker):
+    path, records, hashes = legacy_orphan(roots)
+    note = 'Exact orphan metadata cleanup'
+    if blocker == 'exists': path.mkdir(parents=True)
+    elif blocker == 'symlink': path.parent.mkdir(parents=True);path.symlink_to(roots/'absent-target')
+    elif blocker in ('manifest', 'protected', 'roles', 'foreign', 'held-kind'):
+        record = {**records[-1], **{'manifest': {'manifest_sha256': '1'*64}, 'protected': {'protected': True},
+                  'roles': {'roles': {'held-eval': {'file': 'manifest.json'}}}, 'foreign': {'machine': 'foreign'}, 'held-kind': {'kind':'held-eval'}}[blocker]}
+        dr._append_line(dr.journal_path(), record)
+        import hashlib
+        hashes.append(hashlib.sha256(dr.canonical_json_bytes(record)).hexdigest())
+    elif blocker == 'git': git_entries(roots/'repo', [{'id':'legacy-orphan','path':'data_nvme:protected','roles':{}}])
+    elif blocker.startswith('consumer'):
+        item = {'id':'legacy-orphan'} if blocker.endswith('id') else {'path':str(path/'step.pkl')}
+        dr._append({'op':'consume','items':[item]})
+    elif blocker.startswith('input'):
+        item = {'id':'legacy-orphan'} if blocker.endswith('id') else {'path':str(path/'step.pkl')}
+        dr._append({'op':'dataset','id':'downstream','path':'data_nvme:downstream','inputs':[item]})
+    elif blocker == 'overlap':
+        dr._append_line(dr.journal_path(), {'op':'dataset','id':'other','path':str(path.parent)})
+    elif blocker == 'escaping-file':
+        dr._append_line(dr.journal_path(), {'op':'files','id':'legacy-orphan','files':[{'path':'../actual-evidence'}]})
+    elif blocker == 'wrong-hash': hashes[-1] = 'b'*64
+    elif blocker == 'no-note': note = ' '
+    elif blocker == 'race':
+        append = dr._append
+        def race(record, **kwargs):
+            append({'op':'consume','items':[]})
+            return append(record, **kwargs)
+        monkeypatch.setattr(dr, '_append', race)
+    with pytest.raises(ValueError):
+        dr.quarantine_missing_dataset('legacy-orphan', declaration_sha256=hashes, note=note, repo=roots/'repo')
+    assert not any(r.get('op')=='quarantine' for r in dr._read_journal())
+
+
+def test_quarantine_loader_rejects_unbound_history_hashes(roots):
+    _, records, _ = legacy_orphan(roots)
+    forged = {'op':'quarantine','id':'legacy-orphan','reason':'missing-unreferenced-journal-artifact/1',
+              'declaration_sha256':['b'*64],'evidence':{'journal_sha256':'c'*64}}
+    with pytest.raises(ValueError, match='exact unprotected'):
+        dr.Registry([], [*records,forged], repo=roots/'repo')
+
+
+def test_recall_relocates_active_siblings_without_resurrecting_quarantined_history(roots, monkeypatch):
+    import importlib.util
+    path, _, hashes = legacy_orphan(roots)
+    dr.quarantine_missing_dataset('legacy-orphan', declaration_sha256=hashes, note='Missing orphan metadata', repo=roots/'repo')
+    monkeypatch.setenv(dr.ALLOW_ENV, '1')  # explicit isolated fixture registry only
+    dr.declare_dataset('active-sibling', path.parent/'active', kind='step-chains', format='test')
+    spec=importlib.util.spec_from_file_location('recall_active_fixture', REPO/'scripts/recall_to_nvme.py')
+    recall=importlib.util.module_from_spec(spec);spec.loader.exec_module(recall)
+    link=roots/'data_nvme/recalled'
+    assert recall.update_registry(link, path.parent) == ['active-sibling']
+    current=dr.load(repo=roots/'repo',fresh=True)
+    assert 'legacy-orphan' not in current.datasets
+    assert current.datasets['active-sibling']['path'] == 'data_nvme:recalled/active'

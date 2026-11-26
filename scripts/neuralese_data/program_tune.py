@@ -358,6 +358,7 @@ def rows(args):
             out.extend(made)
     stats['tasks'] = len(stats['tasks'])
     stats['support_tasks'] = len(support)
+    stats['system_prompts'] = system_prompt_counts(row['messages'] for row in out)
     if not out:
         raise SystemExit(f'no verified support successes of {record["family"]}: {stats}')
     with open(directory / 'rows.jsonl', 'w', encoding='utf-8') as handle:
@@ -365,6 +366,32 @@ def rows(args):
             handle.write(json.dumps(row, ensure_ascii=False) + '\n')
     (directory / 'rows.json').write_text(json.dumps(stats, indent=1) + '\n')
     print(json.dumps({k: v for k, v in stats.items() if k != 'sources'}))
+
+
+def system_prompt_counts(requests):
+    """{sha256 of a request's system prompt (first 16 hex): count} over requests (message lists)."""
+    counts = {}
+    for messages in requests:
+        first = (messages or [{}])[0]
+        if first.get('role') == 'system':
+            key = hashlib.sha256(message_text(first).encode()).hexdigest()[:16]
+            counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: -item[1]))
+
+
+def prompt_parity(directory, arm_dir):
+    """How many of DIR's fit rows were rendered with a system prompt the arm's episodes saw (first request of each):
+    the fit trains on the runtime its rows were replayed with, the arm serves the episodes' pin. 2026-11-25: every
+    program's rows (replayed 11-17..11-20) carried an 18.2k-character system prompt, the dev arms (pin de2b36add) a
+    14.8k one: 0% parity. Rows rebuilt from a replay at the arm's pin restore it (``rows``)."""
+    rows = [json.loads(line) for line in (directory / 'rows.jsonl').open() if line.strip()]
+    trained = system_prompt_counts(row['messages'] for row in rows)
+    served = system_prompt_counts(step['context'] for path in sorted(Path(arm_dir).glob('row-*/sample-*/results.jsonl'))
+                                  for line in path.open() if line.strip()
+                                  for step in json.loads(line).get('trajectory', [])[:1] if step.get('context'))
+    same = sum(count for key, count in trained.items() if key in served)
+    return {'schema': 'natlang.program-prompt-parity/1', 'rows': len(rows), 'rows_with_served_prompt': same,
+            'share': same / len(rows) if rows else None, 'trained': trained, 'served': served}
 
 
 # ---- plan ------------------------------------------------------------------------------------------------------------
@@ -869,6 +896,14 @@ def colab_measure(args):
         while subprocess.run(['systemctl', '--user', 'is-active', '-q', f'{unit}.service']).returncode == 0:
             time.sleep(30)
         result = json.loads((out / 'result.json').read_text()) if (out / 'result.json').exists() else {}
+        if (directory / 'rows.jsonl').exists():
+            parity = prompt_parity(directory, out)
+            (out / 'prompt-parity.json').write_text(json.dumps(parity, indent=1) + '\n')
+            if parity['share'] is not None and parity['share'] < .5:
+                print(json.dumps({'event': 'prompt parity', 'program': directory.name, 'arm': args.arm,
+                                  'warning': 'most fit rows were rendered with a system prompt this arm never saw; '
+                                             'rebuild the rows from a replay at the arm pin',
+                                  **{k: parity[k] for k in ('rows', 'rows_with_served_prompt', 'share')}}), flush=True)
         results[directory.name] = {k: result.get(k) for k in ('policy_id', 'complete', 'scored', 'successes',
                                                               'success_rate', 'samples_per_task')}
         print(json.dumps({'event': 'arm measured', 'program': directory.name, 'arm': args.arm, **results[directory.name]}),

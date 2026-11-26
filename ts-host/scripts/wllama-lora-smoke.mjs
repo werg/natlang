@@ -14,6 +14,11 @@
  * Parity mode (scripts/neuralese_data/check_tuned_lora_llama_parity.py writes prompts.json and scores the output against
  * the native adapted model): each prompt's token ids are completed greedily through `createCompletion` with `logprobs`,
  * the adapter at scale 0 and at scale 1, as the managed llama-server run is; the output is that script's candidate file.
+ *
+ * `--native-state FILE.nzs` (repeatable) loads natlang native states with the model (`native_states` blobs, the page's
+ * counterpart of llama-server's `--native-state`); a prompt then names a state where it stands with its marker
+ * `<__natlang_native_state:ID__>` and the fork adds the consume markers (a compiled site's release: the header state
+ * and its LoRA, scripts/neuralese_data/check_compiled_site_parity.py).
  */
 import { createServer } from 'node:http';
 import { createReadStream, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -25,23 +30,32 @@ import { chromiumPath } from './chromium-path.mjs';
 
 const { values } = parseArgs({ options: { wllama: { type: 'string' }, base: { type: 'string' }, lora: { type: 'string', multiple: true },
   prompt: { type: 'string', default: 'The three most important things about a lighthouse are' }, tokens: { type: 'string', default: '24' },
-  parity: { type: 'string' }, out: { type: 'string' }, top: { type: 'string', default: '5' } } });
+  parity: { type: 'string' }, out: { type: 'string' }, top: { type: 'string', default: '5' },
+  'native-state': { type: 'string', multiple: true } } });
 const parity = values.parity ? JSON.parse(readFileSync(values.parity, 'utf8')) : null;
 if (!values.wllama || !values.base || (values.lora?.length ?? 0) < (parity ? 1 : 2) || (parity && !values.out)) {
   console.error('usage: wllama-lora-smoke.mjs --wllama DIR --base BASE.gguf --lora A.gguf --lora B.gguf\n' +
     '       wllama-lora-smoke.mjs --wllama DIR --base BASE.gguf --lora RELEASE.gguf --parity prompts.json --out page.json');
   process.exit(2);
 }
-const files = { '/base.gguf': resolve(values.base), ...Object.fromEntries(values.lora.map((path, i) => [`/lora-${i}.gguf`, resolve(path)])) };
+const states = values['native-state'] ?? [];
+const files = { '/base.gguf': resolve(values.base), ...Object.fromEntries(values.lora.map((path, i) => [`/lora-${i}.gguf`, resolve(path)])),
+  ...Object.fromEntries(states.map((path, i) => [`/state-${i}.nzs`, resolve(path)])) };
 const wllamaDir = resolve(values.wllama);
 const page = `<!doctype html><meta charset="utf-8"><script type="module">
 import { Wllama } from '/wllama/esm/index.js';
-window.run = async ({ loras, prompt, tokens }) => {
+const nativeStates = async (wllama, blob, count) => {
+  if (!count) return {};
+  if (!wllama.capabilities?.nativeStates) throw new Error('this wllama build cannot load native states');
+  return { native_states: await Promise.all(Array.from({ length: count }, async (_, i) => ({ blob: await blob('/state-' + i + '.nzs') }))) };
+};
+window.run = async ({ loras, prompt, tokens, states }) => {
   const wllama = new Wllama({ default: '/wllama/esm/wasm/wllama.wasm' }, { allowOffline: true });
   if (!wllama.capabilities?.loraBlobs) throw new Error('this wllama build cannot load LoRA blobs');
   const blob = async path => (await fetch(path)).blob();
   await wllama.loadModel([await blob('/base.gguf')], { n_ctx: 512, n_gpu_layers: 0, n_parallel: 1,
-    lora_adapters: await Promise.all(loras.map(async path => ({ blob: await blob(path), scale: 0 }))), lora_init_without_apply: true });
+    lora_adapters: await Promise.all(loras.map(async path => ({ blob: await blob(path), scale: 0 }))), lora_init_without_apply: true,
+    ...await nativeStates(wllama, blob, states) });
   const off = loras.map((_, id) => ({ id, scale: 0 }));
   const complete = async lora => {
     const response = await wllama.createCompletion({ prompt, n_predict: tokens, temperature: 0, top_k: 1, cache_prompt: true,
@@ -60,12 +74,13 @@ window.run = async ({ loras, prompt, tokens }) => {
   return out;
 };
 // One candidate run per prompt and scale, in check_tuned_lora_llama_parity.py's candidate format.
-window.parity = async ({ prompts, tokens, top, nCtx }) => {
+window.parity = async ({ prompts, tokens, top, nCtx, states }) => {
   const wllama = new Wllama({ default: '/wllama/esm/wasm/wllama.wasm' }, { allowOffline: true });
   if (!wllama.capabilities?.loraBlobs) throw new Error('this wllama build cannot load LoRA blobs');
   const blob = async path => (await fetch(path)).blob();
   await wllama.loadModel([await blob('/base.gguf')], { n_ctx: nCtx, n_batch: 512, n_gpu_layers: 0, n_parallel: 1,
-    lora_adapters: [{ blob: await blob('/lora-0.gguf'), scale: 0 }], lora_init_without_apply: true });
+    lora_adapters: [{ blob: await blob('/lora-0.gguf'), scale: 0 }], lora_init_without_apply: true,
+    ...await nativeStates(wllama, blob, states) });
   const runs = [];
   for (const prompt of prompts) for (const scale of [0, 1]) {
     const started = performance.now();
@@ -110,7 +125,7 @@ try {
     const tokens = Number(values.tokens);
     const nCtx = Math.max(...parity.prompts.map(prompt => prompt.ids.length)) + tokens + 64;
     const runs = await tab.evaluate(options => window.parity(options),
-      { prompts: parity.prompts, tokens, top: Number(values.top), nCtx });
+      { prompts: parity.prompts, tokens, top: Number(values.top), nCtx, states: states.length });
     writeFileSync(values.out, JSON.stringify({ engine: `wllama (page) ${values.base.split('/').at(-1)}`, wllama: wllamaDir, runs }));
     console.log(`wrote ${values.out} (${runs.length} runs)`);
     await browser.close(); server.close();
@@ -118,7 +133,7 @@ try {
   }
   const started = Date.now();
   const out = await tab.evaluate(options => window.run(options),
-    { loras: values.lora.map((_, i) => `/lora-${i}.gguf`), prompt: values.prompt, tokens: Number(values.tokens) });
+    { loras: values.lora.map((_, i) => `/lora-${i}.gguf`), prompt: values.prompt, tokens: Number(values.tokens), states: states.length });
   console.log(JSON.stringify({ seconds: (Date.now() - started) / 1000, out }, null, 1));
   const checks = {
     'adapter 0 changes the output': out.lora0 !== out.base,

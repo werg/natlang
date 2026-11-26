@@ -3,6 +3,7 @@
 
   record   --id ID --path PATH --kind KIND --format TEXT [--include GLOB].. [--input ID|PATH].. [--license TEXT]
            [--protected] [--open] [--note TEXT] [--supersedes ID]        a producer snapshot (shell producers, by hand)
+  quarantine-missing --id ID --declaration-sha256 SHA.. --note TEXT       exact missing unreferenced journal declarations
   consume  --run RUN --how TEXT ITEM..                                   a consumer record (shell consumers)
   show ID | find PATH | consumers ID | list [--kind K] [--layer L] | role NAME | protected
   check    [PATH..]       exit 1 when a data path (default: the registry roles and the data directories of the roots)
@@ -100,6 +101,10 @@ def main(argv=None) -> int:
     r.add_argument('--supersedes')
     r.add_argument('--rows', type=int)
     r.add_argument('--producer-script', help='the producing script, when this records for one (shell builds)')
+    q = sub.add_parser('quarantine-missing')
+    q.add_argument('--id', required=True)
+    q.add_argument('--declaration-sha256', action='append', required=True)
+    q.add_argument('--note', required=True)
     c = sub.add_parser('consume')
     c.add_argument('--run', required=True)
     c.add_argument('--how', required=True)
@@ -133,6 +138,9 @@ def main(argv=None) -> int:
                                 closed=not a.open, note=a.note, supersedes=a.supersedes, rows=a.rows,
                                 producer={'script': a.producer_script} if a.producer_script else None)
         _print({k: rec.get(k) for k in ('id', 'path', 'manifest_sha256', 'files', 'bytes', 'rows')})
+        return 0
+    if a.cmd == 'quarantine-missing':
+        _print(dr.quarantine_missing_dataset(a.id, declaration_sha256=a.declaration_sha256, note=a.note))
         return 0
     if a.cmd == 'consume':
         _print(dr.consume(a.items, run=a.run, how=a.how, amount=a.amount))

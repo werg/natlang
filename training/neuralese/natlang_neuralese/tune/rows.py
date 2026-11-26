@@ -169,8 +169,14 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None, prefix=None):
         # a reply the student did not sample: its think block and the text before its first tool call are context
         from ..serve.targets import non_student_context
         lead = non_student_context(engine.tokenizer, reply_message(turn['reply']), [value for _, value in target])
-        for position in range(len(ids) - len(target), len(ids) - len(target) + lead):
-            weights[position] = 0.
+    elif not train_own_empty_think():
+        # an own reply without reasoning: the template's empty think block was never sampled (a scored readout)
+        from ..serve.targets import own_empty_think_context
+        lead = own_empty_think_context(engine.tokenizer, reply_message(turn['reply']), [value for _, value in target])
+    else:
+        lead = 0
+    for position in range(len(ids) - len(target), len(ids) - len(target) + lead):
+        weights[position] = 0.
     occurrence = f"{turn['root']}:{turn.get('call') or 'root'}:{turn['turn']}"
     import dataclasses
     graph = {'schema': GRAPH_SCHEMA, 'id': 'tune:' + occurrence, 'split': 'train',
@@ -292,6 +298,13 @@ def train_empty_replies():
     """``NATLANG_TUNE_EMPTY_REPLIES=train`` opts back into training empty replies (``empty_reply``) as targets."""
     import os
     return os.environ.get('NATLANG_TUNE_EMPTY_REPLIES', 'drop') == 'train'
+
+
+def train_own_empty_think():
+    """``NATLANG_TUNE_OWN_EMPTY_THINK=train`` opts back into training the empty think block of an own reply without
+    reasoning (``serve.targets.own_empty_think_context``) as a target."""
+    import os
+    return os.environ.get('NATLANG_TUNE_OWN_EMPTY_THINK', 'context') == 'train'
 
 
 def decision_reasoning_text(turn):

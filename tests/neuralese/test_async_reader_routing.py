@@ -19,7 +19,7 @@ def driver(tmp_path,monkeypatch,extra=()):
     captured={}
     monkeypatch.setattr(sys,'argv',['expert_iteration.py','async-drive','--root',str(tmp_path/'loop'),
         '--name','aei','--start','/checkpoint/start.pt','--start-sha','a'*64,'--commit','b'*40,
-        '--pin',str(tmp_path/'runtime'),'--sft-work',str(tmp_path/'work'),*map(str,extra)])
+        '--pin',str(tmp_path/'runtime'),'--sft-work',str(tmp_path/'work'),'--min-new-tokens','0',*map(str,extra)])
     monkeypatch.setattr(ei,'async_drive',lambda args:captured.setdefault('args',args) and 0)
     ei.main()
     return ei.AsyncRoundDriver(captured['args'])
@@ -55,7 +55,14 @@ def test_async_readers_preserve_runtime_and_route_every_data_consumer(tmp_path,m
     launched=[]
     monkeypatch.setattr(d.c,'work_tokenizer',lambda:None)
     monkeypatch.setattr(d.c,'ledger',lambda *args,**kwargs:launched.append((args,kwargs)))
+    # the fill is standing: gone while the collection runs, it is launched again (2026-11-25 22:22 OOM)
+    monkeypatch.setattr(d.c,'present',lambda unit:False)
+    alive=iter([True,False])
+    monkeypatch.setattr(d.c,'active',lambda unit:next(alive))
+    monkeypatch.setattr(ei.time,'sleep',lambda s:None)
+    monkeypatch.setattr(ei.subprocess,'run',lambda *a,**k:None)
     d._fill_beside('aei-collect-v0000',work,d.controller.current)
+    assert len(launched)==2
     args,kwargs=launched[0]
     assert kwargs['repo']==fill and args[3][1]==str(fill/'scripts/neuralese_data/filled_reasoning.py')
     assert d.controller.current['checkpoint']=='/checkpoint/start.pt'

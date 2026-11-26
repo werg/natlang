@@ -31,3 +31,67 @@ for(const[label,change]of[
  ['held split',s=>{s.task.split='test';}],
  ['review waiver',s=>{s.checker.observedContentReview=()=>({semanticReviewRequired:false});}],
 ])test(`refuses ${label}`,()=>{const s=fixture();change(s);assert.throws(()=>run(s));});
+
+function authorityFixture(){
+ const s=fixture(), prior=s.packet.execution.diagnostics.openGoalVerification, native=s.packet.execution.diagnostics.natlangTeacher;
+ s.source=Buffer.from('binding.services.assignedAuthorityRead.preflight(operationId) snapshots.push(observation)');s.pins.validator_sha256=sha(s.source);
+ const observation={operationId:'site',decision:'acquirable',leaves:[{capability:'external.open',resourceKey:'https://review.example.invalid',tier:'gated',status:'acquirable'}]};
+ prior.caseId='route-authority-case';prior.offer={request:{operations:[{id:'site'}],ceiling:[{capability:'external.open',resourceKey:'https://review.example.invalid'}]}};prior.snapshots=[observation];
+ prior.authority={status:'needs-acquisition',protectedLeaves:prior.offer.request.ceiling,held:[],reviews:[{observation,outside:[],disposition:'needs-acquisition'}]};prior.choice=null;prior.readback=null;prior.artifact=null;
+ const report={outcome:{status:'needs-approval',summary:'Native approval remains acquirable; no visit occurred.'},readback:null,handoff:null};prior.actualResult=native.report=report;native.calls[0].record.output=ref(report);
+ native.calls[0].record.effects=[['routeEvidenceRead','discover',[],prior.offer],['assignedAuthorityRead','preflight',['site'],observation]].map(([service,method,args,result])=>({service,method,by:'crisp',args:ref(args),result:ref(result)}));
+ s.checker.observedRouteAuthority=(rows,ceiling)=>({status:'needs-acquisition',protectedLeaves:ceiling,held:[],reviews:rows.map(observation=>({observation,outside:[],disposition:'needs-acquisition'}))});s.checker.routeAuthorityReviewGuidance='Exact acquirable preflight requires approval; do not visit to report it.';
+ const keys=['offer','snapshots','authority','choice','readback'];
+ prior.semanticReviewInput=s.checker.observedContentReview(prior,prior.outcomeContract,report,keys,['artifact']).semanticReviewInput;s.review.input=structuredClone(prior.semanticReviewInput);
+ s.bindInput=proof=>{assert.deepEqual(proof.semanticReviewInput.actual.observations,Object.fromEntries(keys.map(key=>[key,proof[key]])));return proof.semanticReviewInput;};return s;
+}
+const authorityRun=s=>reassessNativeReview(s.packet,s.pins,s.task,s.review,s.source,'route-authority',s.checker,entry=>entry,s.bindInput);
+test('binds an approval-state query to actual native offer, exact preflights and unchanged answer without a visit',()=>{const s=authorityFixture(),before=structuredClone(s.packet),r=authorityRun(s);assert.deepEqual(s.packet,before);assert.deepEqual(r.projected.checks, before.execution.diagnostics.openGoalVerification.checks);assert.deepEqual(r.reviewInput.actual.requestedReturn,s.packet.execution.diagnostics.natlangTeacher.report);assert.match(r.reviewInput.rubric,/do not visit/);assert.equal(s.review.verdict.accepted,false);});
+for(const[label,change]of[
+ ['missing native offer',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.shift();}],
+ ['missing native preflight',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.pop();}],
+ ['unobserved approval',s=>{s.packet.execution.diagnostics.openGoalVerification.snapshots[0].decision='allowed';}],
+ ['forged aggregate authority',s=>{s.packet.execution.diagnostics.openGoalVerification.authority.status='eligible';}],
+ ['duplicate preflight',s=>{const p=s.packet.execution.diagnostics.openGoalVerification;p.snapshots.push(structuredClone(p.snapshots[0]));}],
+ ['foreign operation',s=>{s.packet.execution.diagnostics.openGoalVerification.offer.request.operations=[];}],
+ ['missing domain guidance',s=>{delete s.checker.routeAuthorityReviewGuidance;}],
+])test(`rejects approval reassessment with ${label}`,()=>{const s=authorityFixture();change(s);assert.throws(()=>authorityRun(s));});
+
+function councilFixture(note=false){
+ const s=fixture(),p=s.packet.execution.diagnostics.openGoalVerification,n=s.packet.execution.diagnostics.natlangTeacher;
+ s.source=Buffer.from('Regency forecast basis changed during observation verifiedRegencyAdvance: verifiedPrivateRegencyNote: preservedRegencyWorkspace:');s.pins.validator_sha256=sha(s.source);
+ p.caseId='regency-briefing-case';p.index={realm:'realm',memo:null};p.frontiers=[{realm:'realm',revision:'saved',accounts:{month:3},pending:'existing-turn'}];p.forecasts=[];p.witnesses=[];p.advance=null;p.note=null;p.artifact=null;
+ if(note){p.artifact=JSON.stringify({realm:'realm',opening:p.frontiers[0],current:p.frontiers[0],advance:null});p.note={realm:'realm',revision:'saved',path:'/.tmp/owned/note.json',digest:sha(p.artifact)};}
+ n.calls[0].record.effects=[['regencyAssignment','list',[],p.index],['regencySaved','read',['realm'],p.frontiers[0]],...(note?[['regencyNote','stage',[{}],p.note]]:[])].map(([service,method,args,result])=>({service,method,by:'crisp',args:ref(args),result:ref(result)}));
+ s.checker.observedRegencyEvidence=(current,note,body)=>({currentCouncil:{revision:current.revision,pendingSettlement:current.pending},retainedPrivateNote:{receipt:note,bytesSha256:body===null?null:sha(body)}});s.checker.regencyReviewGuidance='Native current pending settlement and newly retained note bytes differ from an old instruction memo.';
+ const keys=['index','frontiers','forecasts','witnesses','advance'];
+ p.semanticReviewInput=s.checker.observedContentReview(p,p.outcomeContract,n.report,keys,['artifact']).semanticReviewInput;s.review.input=structuredClone(p.semanticReviewInput);
+ s.oldBinder=proof=>{assert.deepEqual(proof.semanticReviewInput.actual.observations,Object.fromEntries(keys.map(key=>[key,proof[key]])));return proof.semanticReviewInput;};
+ s.bindInput=proof=>{assert.deepEqual(proof.semanticReviewInput.actual.observations,Object.fromEntries([...keys,'nativeFacts'].map(key=>[key,proof[key]])));return proof.semanticReviewInput;};return s;
+}
+const councilRun=s=>reassessNativeReview(s.packet,s.pins,s.task,s.review,s.source,'regency-briefing',s.checker,entry=>entry,s.bindInput,s.oldBinder);
+test('adds source-derived council pending and actual retained-note roles without changing original evidence',()=>{for(const note of [false,true]){const s=councilFixture(note),before=structuredClone(s.packet),r=councilRun(s);assert.deepEqual(s.packet,before);assert.equal(r.projected.nativeFacts.currentCouncil.pendingSettlement,'existing-turn');assert.equal(r.projected.nativeFacts.retainedPrivateNote.bytesSha256,note?sha(r.prior.artifact):null);assert.equal(s.review.verdict.accepted,false);}});
+for(const[label,change]of[
+ ['missing saved native call',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.splice(1,1);}],
+ ['missing retained native call',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.pop();}],
+ ['changed note bytes',s=>{s.packet.execution.diagnostics.openGoalVerification.artifact+=' ';}],
+ ['forged note revision',s=>{s.packet.execution.diagnostics.openGoalVerification.note.revision='other';}],
+ ['unobserved advance',s=>{s.packet.execution.diagnostics.openGoalVerification.advance={realm:'realm',basis:'saved',months:1,committed:{revision:'new'}};}],
+])test(`refuses council recovery with ${label}`,()=>{const s=councilFixture(true);change(s);assert.throws(()=>councilRun(s));});
+function gardenFixture(){
+ const s=fixture(),p=s.packet.execution.diagnostics.openGoalVerification,n=s.packet.execution.diagnostics.natlangTeacher;
+ s.source=Buffer.from('boundOwnedScene: keptCurrentAnchor: independentlyReadPrivateDraft: preservedNativeWorld:');s.pins.validator_sha256=sha(s.source);
+ p.caseId='grimoire-scene-case';p.docket={id:'garden'};p.scope={ownerId:'owner',frontier:'old'};p.view={ownerId:'owner',frontier:'new'};p.current=structuredClone(p.view);p.gate={status:'current',frontier:'new'};p.receipt=null;p.readback={fileDigest:null};p.body=null;
+ p.journal=[{service:'grimoireScene',method:'readScope',args:['garden'],result:p.scope},{service:'grimoireScene',method:'view',args:['garden'],result:p.view},{service:'grimoireScene',method:'confirm',args:['garden','new'],result:p.gate}];n.calls[0].record.effects=p.journal.map(row=>({...row,by:'crisp',args:ref(row.args),result:ref(row.result)}));
+ s.checker.observedGrimoireAuthority=(scope,view,current,gate)=>({scopeFrontierMatchesCurrent:scope.frontier===current.frontier,viewedFrontierMatchesCurrent:view.frontier===current.frontier,gateConfirmsViewedFrontier:gate.frontier===view.frontier});s.checker.grimoireReviewGuidance='A current view does not renew the older scoped write authority.';
+ const keys=['docket','view','current','scope','gate','readback','journal'];p.semanticReviewInput=s.checker.observedContentReview(p,p.outcomeContract,n.report,keys,['body']).semanticReviewInput;s.review.input=structuredClone(p.semanticReviewInput);
+ s.oldBinder=proof=>{assert.deepEqual(proof.semanticReviewInput.actual.observations,Object.fromEntries(keys.map(key=>[key,proof[key]])));return proof.semanticReviewInput;};s.bindInput=proof=>{assert.deepEqual(proof.semanticReviewInput.actual.observations,Object.fromEntries([...keys,'nativeFacts'].map(key=>[key,proof[key]])));return proof.semanticReviewInput;};return s;
+}
+const gardenRun=s=>reassessNativeReview(s.packet,s.pins,s.task,s.review,s.source,'grimoire-scene',s.checker,entry=>entry,s.bindInput,s.oldBinder);
+test('preserves stale caretaker scope while distinguishing current view confirmation',()=>{const s=gardenFixture(),before=structuredClone(s.packet),r=gardenRun(s);assert.deepEqual(s.packet,before);assert.deepEqual(r.projected.nativeFacts,{scopeFrontierMatchesCurrent:false,viewedFrontierMatchesCurrent:true,gateConfirmsViewedFrontier:true});});
+for(const[label,change]of[
+ ['missing native scope call',s=>{s.packet.execution.diagnostics.natlangTeacher.calls[0].record.effects.shift();}],
+ ['foreign scope owner',s=>{s.packet.execution.diagnostics.openGoalVerification.scope.ownerId='foreign';}],
+ ['invented hold artifact',s=>{s.packet.execution.diagnostics.openGoalVerification.body='invented';}],
+ ['unobserved confirmation',s=>{s.packet.execution.diagnostics.openGoalVerification.gate.status='changed';}],
+])test(`refuses caretaker recovery with ${label}`,()=>{const s=gardenFixture();change(s);assert.throws(()=>gardenRun(s));});

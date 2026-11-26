@@ -31,6 +31,9 @@ test('collector invokes the declared TypeScript controller and retains its Natla
     ['start', 'completed']);
   const controller = run.trace.find(event => event.kind === 'application_controller_call' && event.phase === 'completed');
   assert.ok(controller.child_invocation_count > 0);
+  // The controller runs as the episode's root invocation: its first Natlang operation is a child of the run.
+  assert.ok(controller.child_invocations.some(call => call.parent_call_id === 'application-controller-fixture'),
+    JSON.stringify(controller.child_invocations));
   assert.ok(run.invocationTraces?.length > 0);
   assert.ok(run.outcome.execution_graph.some(event => event.definition?.id === 'nl:entry/advance/step.nl'));
 });
@@ -53,4 +56,14 @@ test('collector rejects a controller that completes without invoking its declare
   assert.equal(run.outcome.value, 9);
   assert.equal(run.outcome.accepted, false);
   assert.ok(run.outcome.rejection_reasons.includes('application_controller'));
+});
+
+test('NodeNativeRuntime.runHosted owns the run invocation only while host code runs', async () => {
+  const { NodeNativeRuntime } = await import('../dist/node-runtime.js');
+  const runtime = new NodeNativeRuntime({ runId: 'hosted-invocation-fixture' });
+  const task = runtime.frame.task;
+  assert.equal(task.isInvocationActive('hosted-invocation-fixture'), false);
+  const seen = await runtime.runHosted(async () => { await Promise.resolve(); return task.isInvocationActive('hosted-invocation-fixture'); });
+  assert.equal(seen, true);
+  assert.equal(task.isInvocationActive('hosted-invocation-fixture'), false);
 });

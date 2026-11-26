@@ -19,6 +19,11 @@ the authored reply (tool calls, or a decision readout's JSON text). With ``turns
 trajectory enters training only after ``sft_sources replay`` re-ran its task under the training pin's runtime with those
 replies and the task's oracle accepted the result.
 
+Neuralese is rendered as the serving engines read it by default (ts-host ``model/in-context-neuralese.ts``): a learned
+compaction site's operator call (``<call>#operator-<n>``, function ``view``) is a turn of its own whose target is the
+authored summary, and every consumer's messages carry each state's text in place (no sentinel, no markers). The replay
+of these episodes (``sft_sources replay``, ``authored_episode``) reads Neuralese the same way.
+
 Turns carry no reasoning. The reasoning between actions is the student's, filled by ``filled_reasoning.py`` (the
 ``filled`` tier, ``replaces=teacher``); until a fill exists the episode trains as a teacher episode: its empty think
 block is zero-weight context and its actions are targets (sft_sources ThinkTreatment default).
@@ -43,6 +48,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -155,9 +161,99 @@ def episode_name(row):
 READOUT_REPEATS = 16
 
 
+def operator_turn(turn):
+    """A learned operator's call (``<call>#operator-<n>``, learned compaction): its own per-call chain, the authored
+    summary as its target, never a decision readout (it is asked once and its reply is captured in place)."""
+    return bool(re.search(r'#operator-\d+$', turn.get('invocation_id') or ''))
+
+
+def graph_calls(turns, renderer, stats):
+    """The learner rows of an authored episode whose consumers read spliced states (an operator's summary, a
+    ``compact_history`` note: ``captures`` on the producing turn), as ``lower_rollout_turns.episode_turns`` lowers an own
+    episode: every call rendered by the serving engine's own rendering (``sft_sources.TemplateRenderer``), each state a
+    pass-through import whose producer document the learner computes in the consumer's forward (``exp0_sft.row_inputs``),
+    so no engine or store is needed. The document is the one ``Engine.capture_plan`` writes for a reply captured in its
+    own context: the producing call's prompt, its reply up to the content (an empty thought closed), ``produce_open``,
+    the content (``select``: that text inside the reply), ``produce_close``; the state is the content's rows. A consumer
+    reads it between ``consume_open`` and ``consume_close``. A reply that is not the student's (all authored turns)
+    trains after its think block (``sft_sources.think_context``). Returns the rows, or None when a state cannot be
+    lowered (counted in ``stats``)."""
+    import numpy as np
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    from natlang_neuralese.serve.targets import target_items
+    from sft_sources import think_context
+    tokenizer = renderer.tokenizer
+    produce_open, produce_close, consume_open, consume_close = (int(tokenizer.convert_tokens_to_ids(m)) for m in ROLE_MARKERS)
+    think_close = int(tokenizer.convert_tokens_to_ids('</think>'))
+    stops = {int(tokenizer.convert_tokens_to_ids('<|im_end|>'))}
+    rendered = []
+    for turn in turns:
+        target = {k: v for k, v in turn['target'].items() if v is not None}
+        rendered.append(target_items(renderer, list(turn['messages']), turn.get('tools') or [], target))
+    sources = {}
+    for turn, (before, rest) in zip(turns, rendered):
+        for capture in turn.get('captures') or ():
+            if any(kind != 'tok' for kind, _ in before + rest):
+                stats['authored_capture_after_import'] += 1
+                return None
+            prompt, reply = [i for _, i in before], [i for _, i in rest]
+            end = next((i for i, token in enumerate(reply) if token in stops), len(reply))
+            if capture.get('select') is not None:
+                from natlang_neuralese.serve.engine import selected_span
+                try:
+                    start, stop = selected_span(lambda part: tokenizer.decode(part, skip_special_tokens=False),
+                                                reply[:end], capture['select'])
+                except Exception:
+                    stats['authored_select_not_found'] += 1
+                    return None
+            else:
+                start = max((i + 1 for i, token in enumerate(reply[:end]) if token == think_close), default=0)
+                while start < end and not tokenizer.decode([reply[start]]).strip():
+                    start += 1   # the whitespace after the thought is context, as the thinking-off operator prompt has it
+                stop = end
+            if start >= stop:
+                stats['authored_capture_empty'] += 1
+                return None
+            prefix = [*prompt, *reply[:start], produce_open]
+            span = reply[start:stop]
+            sources[capture['id']] = {'ids': np.array(prefix + span, dtype=np.int32), 'start': len(prefix),
+                                      'stop': len(prefix) + len(span)}
+            stats['authored_captures'] += 1
+    rows = []
+    for index, (turn, (before, rest)) in enumerate(zip(turns, rendered)):
+        ids, imports, used = [], [], {}
+        for kind, value in before:
+            if kind == 'tok':
+                ids.append(int(value))
+                continue
+            block = value['id'] if isinstance(value, dict) else value
+            source = sources.get(block)
+            if source is None:
+                stats['authored_import_without_producer'] += 1
+                return None
+            ids.append(consume_open)
+            imports.append((len(ids), block))
+            used[block] = source
+            ids.extend(int(i) for i in source['ids'][source['start']:source['stop']])
+            ids.append(consume_close)
+        if any(kind != 'tok' for kind, _ in rest):
+            stats['authored_state_in_reply'] += 1
+            return None
+        sample = np.array([i for _, i in rest], dtype=np.int32)
+        row = {'invocation': turn.get('invocation_id') or '', 'index': index, 'prompt': np.array(ids, dtype=np.int32),
+               'sample': sample, 'imports': imports, 'sources': used}
+        context = think_context(renderer, 'teacher', turn['target'], sample)
+        if context:
+            row['weight'] = (np.arange(len(sample)) >= int(context)).astype(np.float32)
+        stats['authored_consumer_calls' if imports else 'authored_calls'] += 1
+        rows.append(row)
+    return rows
+
+
 def readout_turn(turn):
     """A tool-free request answered with text: a decision readout (or a generated value)."""
-    return not (turn.get('tools') or []) and not (turn.get('target') or {}).get('tool_calls')
+    return (not (turn.get('tools') or []) and not (turn.get('target') or {}).get('tool_calls')
+            and not operator_turn(turn))
 
 
 def rollout_row(row):
@@ -165,6 +261,7 @@ def rollout_row(row):
     task = row['task']
     turns = [{'messages': t['messages'], 'tools': t.get('tools') or [], 'target': t['target'],
               'invocation_id': t.get('invocation_id'), 'function': t.get('function') or 'unknown',
+              **({'captures': t['captures']} if t.get('captures') else {}),
               'usage': {'completion_tokens': None},
               **({'decision_reasoning': t.get('decision_reasoning') or
                   {'index': 0, 'samples': READOUT_REPEATS, 'action': True}} if readout_turn(t) else {})}

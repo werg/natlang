@@ -21,6 +21,12 @@ prompt token ids of every call), and drops only exact copies and dead writers' t
 ``read_bytes`` reads such a file raw or compacted; ``evidence_files`` lists a jobs directory's evidence either way.
 ``NATLANG_EPISODE_COMPACT=0`` opts out (nothing is touched).
 
+``compact_results`` does the same for a sample's ``results.jsonl`` (the collector's output, 1-6 MB per episode, ~8x
+smaller compacted: 16 GB of aei1's v9 collections on 2026-11-25), and only once the sample's group is scored and kept
+(``score.json``: a scored group is reused, never scored again, ``grpo.Collector.reuse_scored``). Its readers resolve
+the file with ``present`` (``task_rollouts`` scoring, ``collection_health``, ``recorded_policies``; ``jsonio.read_jsonl``
+reads the ``.zst``). ``NATLANG_RESULTS_COMPACT=0`` opts out of this step alone.
+
     python -m natlang_neuralese.rl.episode_files compact DIR [--apply] [--quiet-minutes 30]
 
 compacts every sample under DIR (a collection, a group, a teacher campaign, a held measurement) whose files are all
@@ -46,8 +52,25 @@ LEVEL = 3
 MIN_BYTES = 4096    # smaller files stay raw: compression would save nothing
 
 
+RESULTS = 'results.jsonl'
+RESULTS_ENV = 'NATLANG_RESULTS_COMPACT'
+
+
 def enabled():
     return os.environ.get(ENV, '1') != '0'
+
+
+def results_enabled():
+    return enabled() and os.environ.get(RESULTS_ENV, '1') != '0'
+
+
+def present(path):
+    """``path`` if it is a file, else its compacted ``<path>.zst`` if that is one, else None."""
+    path = Path(path)
+    if path.is_file():
+        return path
+    packed = path.with_name(path.name + SUFFIX)
+    return packed if packed.is_file() else None
 
 
 def _pid_alive(pid):
@@ -136,14 +159,14 @@ def compact_sample(sample):
     jobs = Path(sample) / 'jobs'
     if not enabled() or not jobs.is_dir() or jobs.is_symlink():
         return stats
-    results = Path(sample) / 'results.jsonl'
+    results = Path(sample) / RESULTS
     for path in sorted(jobs.iterdir()):
         name = path.name
         try:
             if path.is_symlink() or not path.is_file():
                 continue
             if name.endswith('.result.json'):
-                if results.is_file() and not results.is_symlink() and _same_bytes(path, results):
+                if _same_as_results(path, results):
                     stats['duplicate_result_bytes'] += path.stat().st_size
                     path.unlink()
                     stats['duplicate_result_files'] += 1
@@ -161,6 +184,38 @@ def compact_sample(sample):
             stats['errors'] += 1
             print(json.dumps({'event': 'episode compaction error', 'path': str(path), 'error': repr(error)[:300]}),
                   file=sys.stderr, flush=True)
+    return stats
+
+
+def _same_as_results(path, results):
+    """``path`` holds the bytes of the sample's ``results.jsonl``, raw or compacted (never through a link)."""
+    if results.is_file() and not results.is_symlink():
+        return _same_bytes(path, results)
+    packed = results.with_name(results.name + SUFFIX)
+    if packed.is_file() and not packed.is_symlink():
+        return path.read_bytes() == read_bytes(packed)
+    return False
+
+
+def compact_results(sample):
+    """A finished sample's ``results.jsonl`` replaced by ``results.jsonl.zst`` (verified round trip, mtime kept; see the
+    module doc: call only once its group is scored for the last time). Returns a Counter like ``compact_sample``."""
+    stats = collections.Counter()
+    path = Path(sample) / RESULTS
+    if not results_enabled():
+        return stats
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size < MIN_BYTES:
+            return stats
+        raw, packed = compress_file(path)
+        stats['compressed_files'] += 1
+        stats['compressed_raw_bytes'] += raw
+        stats['compressed_bytes'] += packed
+        stats['results_files'] += 1
+    except Exception as error:      # the file stays as it was
+        stats['errors'] += 1
+        print(json.dumps({'event': 'results compaction error', 'path': str(path), 'error': repr(error)[:300]}),
+              file=sys.stderr, flush=True)
     return stats
 
 

@@ -3,6 +3,34 @@
 A record of model-facing variants and the measurements made of them. Measuring a model-facing change before adopting it
 is not required (owner, 2026-11-12: that rule did not come from the owner and was removed from AGENTS.md).
 
+### 2026-11-25 — learned compaction is on by default (`learned-compaction` adopted)
+
+- **What changed.** `learned-compaction` joins the adopted model-facing variants (`ts-host/src/runtime/model-facing.ts`
+  ADOPTED), so the `compaction` part resolves to `nl` in collection, held eval and the product runtime whenever the
+  model server reads Neuralese and serves a capture (`native.capture`, or the grammar capture on the fork and the
+  page). Owner 2026-11-25: "Are long values not summarized and encoded using neuralese? That is such an important
+  opportunity." Opt-outs: `NATLANG_NEURALESE_COMPACTION=crisp`, or `NATLANG_MODEL_FACING` without the variant. It
+  enters the held series key (`held_eval.series` reads ADOPTED), so the first held eval on a pin with it re-measures
+  the base.
+- **What the model sees.** A tool output or argument longer than 8,000 characters is cut at 8,000 (before: at the
+  budget's page, ~57k characters at 131k tokens), and every cut-off tool output or argument listing of at least 800
+  characters gets one extra model call at view's site (`<call>#operator-<n>`), whose reply is captured in its own
+  context and shown beside the cut (`Compacted value: <state>`; an argument as `name: type = <state>  // view of the
+  value; name holds all of it`). A `compact_history` note carries its own state captured in place. The full value
+  stays in scope, `read_page` and `transcript`.
+- **How the consumer reads the state.** A capture is a new `producer_kind` (`capture`) that splices as stored instead
+  of being read as its tokens inline (opt-out `NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1`). Use ablation on aei1's policy
+  8e634a0f (DECISIONS 2026-11-25 "Learned compaction on by default"): the spliced state beats the same reply read
+  inline on 10 of 11 sources (7 at p < 0.05; up to 0.61 nats per consumer target token), and the inline reply beats
+  the text cut alone on 10 of 11 (6 at p < 0.05; one source significantly the other way).
+- **Product fix found on the way.** Outside collection the operator call's reply carried no exact ids, so every
+  product-runtime operator write failed ("native.capture needs the call's exact prompt and sampled reply ids") and
+  silently kept the cut. Operator calls and the compaction turn now ask a native server for them (`exact_ids` ->
+  `x_natlang_rl_capture`).
+- **Sampling law fix.** The operator call carried no temperature, and the native engines read a missing temperature as
+  0, so every operator reply was greedy, also in collection (the collector passes its temperature to the agent's own
+  turns only). The operator call now samples under the call's temperature (temperature 1, top-p 0.95 in collection).
+
 ### 2026-11-25 — a call that cannot read its scope sees its values whole
 
 - **What changed.** A call answered by a decision readout (`readout: decision` / `instant`, `decisionReadout:
@@ -3527,3 +3555,19 @@ Found by the authored-program wave 1 builders (`/home/werg/data/natlang-novel-pr
 ### 2026-11-25 — retain nested TypeScript entries without stale invocation scopes
 
 Fresh loaded TypeScript entries now retain their typed crisp child records and actual NL descendants; ordinary same-task helpers remain native implementation. Causal trace links are checked at actual entry and expire when the owning invocation ends, including crisp/strict/error paths. Expired invocation-bound callbacks receive a context error directing hosts to start a new task; task-scope callbacks remain valid. No fallback widens expired service/source grants. Existing `traceParent:false` and `recording.nativeRoots:false` remain explicit independent-trace/root-recording choices. Integration skill and host reference explain recovery. Node/Workerd actual compiled-entry, callback and standalone-root tests use no model calls; original0064 records remain immutable. Inventory: `plans/neuralese/NESTED_INVOCATION_LIFETIME_20261125.md`.
+### 2026-11-25 — learned operator calls render without reasoning, as the operator rows train them
+
+A learned operator's call (ts-host `native/agent.ts` `operatorWrite`, on by default with learned compaction) rendered
+with the chat template's default `enable_thinking: true`: its prompt ended in `<think>` and the call allowed 2048
+reasoning tokens before the span cap. The operator rows (`scripts/neuralese_data/operator_rows.py`, the `operators`
+tier of every expert-iteration SFT mix) train the reply as an empty think block (zero-weight context) and then the
+summary, so the trained operator never reasons; live on the Colab actor (policy 6f19fe3a, 28k-character argument) the
+reply twice spent all 2432 tokens reasoning and the capture refused it, leaving the consumer the text cut. Now the call
+sets `ModelTurnRequest.thinking: false`, sent by the Neuralese transport as `chat_template_kwargs.enable_thinking:
+false` (merged into the profile's switches): the prompt ends in `<think></think>`, token for token the rows' prompt
+plus their first (zero-weight) reply token, and `max_tokens` is the span cap alone (384/512). Every engine renders the
+switch: the Python native engine and the SGLang actor front (`Engine.template_kwargs`, threaded through every
+rendering of the request: prompt plan, guidance span, write-template prefix, forced reply, text-write context, recorded
+objective replay; unknown switches are refused), the fork's llama-server (`server-common.cpp` per-request
+`chat_template_kwargs`) and wllama (`createChatCompletion` merges them). The grammar capture re-renders and forces the
+call with the same switch. Opt-out: none needed beyond the call site (a request without `thinking` renders as before).

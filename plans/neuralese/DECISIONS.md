@@ -13300,6 +13300,708 @@ still previews as "live value, use it in eval" (no std judgment takes one). Pyth
 `sealed` (no sealed rows are generated; readouts with cut values were not compacted before).
 Tests: `ts-host/test/sealed-readout-values.test.mjs` (8). MODEL_FACING_CHANGES 2026-11-25.
 
+## 2026-11-25 14:20 aei1: why rounds after round 1 show no held gain; clean re-measurement launched; zero-call rows left out of pass rates (ei-diagnosis agent)
+
+**Observation (brief).** Held-v3 verdicts on Pop (2 samples): r1 8e634a0f +4.47 vs base e15b (p 0.05, success);
+3eb3f435 (rounds 2-5) +2.15 vs r1 (p 0.39, 18 lost); 6f19fe3a (round 9 from r1) -1.83 vs r1 (p 0.49, 56 lost). Both
+later ones rolled back to r1. Raw successes /512: base 294, r1 293, 3eb3 307, 6f19 312.
+
+**1. The raw counts and the 56 lost pairs.** All 52 of r1's lost episodes never called the model (18
+`infrastructure_error`, 34 `unresolved`, 0 model calls): the Pop actor was lost at the start, one resume crashed on an
+engine-identity refusal, and the rest ran on a second pin (0076be6 then a034dbf: r1's result spans two code pins).
+The 52 are a random draw (base solved 25 of them, 3eb3 22, 6f19 28), so r1's raw 293 has 52 automatic zeros, and that
+gap explains the raw 293 vs 307/312. The 56 in 6f19's compare are those 52 plus 4 budget stops spent on resends,
+relabelled from the episodes (DECISIONS 11-24 19:00). The 3eb3 compare read the 34 `unresolved` as r1 failures, which
+inflates its +2.15. On the 456 pairs every policy measured: base 267, r1 291, 3eb3 284, 6f19 283.
+**2. All three trained policies are indistinguishable; r1's lead is selection on noise.** Same 456 pairs (245 tasks),
+mean per-task change, task bootstrap, sign-flip p: base->r1 +4.90 (CI +0.2..+9.8, p 0.05), base->3eb3 +3.47 (p 0.16),
+base->6f19 +4.08 (p 0.06), r1->3eb3 -1.43 (p 0.57), r1->6f19 -0.82 (p 0.79), 3eb3->6f19 +0.61 (p 0.87). SE of a
+paired delta at 2 samples is 2.2-2.5 pts. Per task, the changes regress to the mean: on the 47 tasks where r1 beat the
+base (0.19 -> 0.84), 3eb3 and 6f19 score 0.56/0.52; on the 30 where r1 lost (0.85 -> 0.23) they score 0.55/0.58;
+corr(r1-base, r9-r1) = -0.56, corr(r1-base, r5-r1) = -0.50 (-0.5 is the value for pure noise). So r1 was adopted on a
+favourable draw, and later rounds were judged against that draw. Each of r1, 3eb3 and 6f19 is about +4 vs the base.
+After r1, no round measurably added to it. Held does not show that any round lost ground either. Per family (456
+pairs; base/r1/3eb3/6f19): auth 0.49/0.58/0.54/0.54 (175), ext_codebase 0.69/0.81/0.73/0.69 (48), curriculum
+0.60/0.62/0.68/0.72 (40), natlang-codebase 0.44/0.49/0.51/0.46 (39); the rest are flat. At these n the family moves
+are within noise.
+**3. The update reaches the model (ruled out: merge, LR, nothing trained).** Exact FP32 LoRA delta vs what the BF16
+merge (`merge_policy_state`) kept: r1 |dW|/|W| 9.98e-3, projection of realized on exact 0.999, cos 0.987; r9 6.35e-3,
+projection 0.995, cos 0.969 (w2 the weakest: 0.961/0.920), so >= 96% of each update survives. Rounding adds orthogonal noise of
+0.16-0.25 of |dW|, at BF16-ULP level. Checkpoint deltas: |r1->r9| = 0.64 x |base->r1|, cos(base->r1, r1->r9) = 0.008
+(new direction); r9->r10 another 0.58 x. LR reaches 5e-5 in every round (cosine to 5e-6). r1 ran 1,150 steps,
+rounds 2-7 ran 439-576, and rounds 9-10 ran 332-353, all at about 32k loss tokens per step. The 3eb3 checkpoint
+(deleted as off-lineage) was rebuilt from r0004 (Drive) + r0005 factors: sha 3eb3f435 exactly.
+**4. What later rounds trained on: new supervision collapsed after r1.** Weighted target tokens by part:
+r1 37.4M (filled 16.8M, rl-own 12.5M, teacher 2.8M); r2-r7 14-19M (filled 6.4-8.1M, but 78-98% of the filled and
+up to 93% of the teacher repeats, DECISIONS 11-24 19:00); with no repetition (max-prior-exposures 1) r9 11.6M (rl-own
+4.97M 43%, operators 2.69M, teacher 1.42M, filled 1.07M), r10 11.0M (teacher 0.39M), r11 6.2M (rl-own 4.83M, 78%).
+Teacher-derived tokens never seen before: r1 19.6M, r9 2.5M, r11 1.2M. Fresh teacher successes per round are
+16-1,002 episodes, run on 124 frontier tasks a round. Of r9's 625 own episodes, 131 come from tasks r1 already solves
+(>= 0.75), 359 from 'sometimes' (median r1 rate 0.56) and 105 from pre-aei1 runs. So with repetition (r2-7) a round
+re-trained what r1 had already learned. Without it (r9 on), a round is mostly self-imitation of successes the policy
+already gets about half the time, plus 1-2.5M fresh teacher tokens. Neither gives a gain that 2-sample held resolves.
+**5. On its own training distribution: the same picture once phantom failures are left out.** Matched-task
+collection pass rates (per-task mean change, task bootstrap; rows with 0 model calls left out, the defect below):
+base -> r1 +5.1 pts (257 tasks, CI +1.2..+8.8), r1 -> 3eb3 +0.4 (47, CI -6.0..+7.9), r1 -> 6f19 -3.9 (95, CI
+-10.3..+2.6), 6f19 -> r10 +3.4 (84, CI -2.9..+9.9). Read as recorded, the same data showed base -> r1 at -10.6 and every
+later round at +12 to +17. Caveat: each collection ran on its own pin (the ts-host tree changed every round), and
+selection draws tasks by earlier rates.
+**Defect found and fixed: phantom failures in training pass rates.** r1's main DGX collection (v0001-hdd0, pin
+edb3cba) has 686 of 1,142 student rows `unresolved` with 0 model calls (actor outages, written before the scorer
+labelled transport failures `infrastructure_error`); v0000 has 168 more. `task_rollouts.infra_lost` left only
+`infrastructure_error` out, so `pass_rate_counts` counted them as failures. In r0009's frontier, 853 phantom failures
+on 257 of 782 tasks: 34 'sometimes' tasks are really solved and 26 have no real measurement. The frontier picks the
+teacher's tasks and the own-success exclusions. Fix (default on, `NATLANG_ZERO_CALL_UNSCORED_LOST=0` opts out): an
+unscored row with 0 model calls is lost to infrastructure. Consumers: `expert_iteration.group_outcomes` (frontier),
+`grpo._record_outcome` (pass band), `exp1_pass_rates`. Not affected: `sft_sources._extract_rl_group` (leaves every
+unscored row out, sft_sources.py L321-324), held (`held_eval.infra_loss` classifies from the journals; `relabel` for
+legacy results). Test `test_group_outcomes_leave_unscored_rows_without_a_model_call_out`. Enters at the driver's next pin.
+**Also observed.** (a) Validation is uninformative: r4-r7's `val-teacher` loss is 0.003-0.03 and moves 1-4% a round,
+and r9/r10 log no validation at all, though `--val-episodes 40` was passed. (b) The driver's `aei1-r0012-grpo` asks
+100 GB: need 115 with the reserve, while at most 110.9 is obtainable (8.3 GB outside the ledger). It cannot start,
+and as queue head it holds 0.1 GB of backfill, so every medium job waits behind it.
+
+**Clean re-measurement (running).** base e15b, r1 8e63, 3eb3 (rebuilt) and 6f19 on one pin (edd23ec451d3), the DGX
+held series (`dgx-held`), 4 samples, 32 slots, KV 6 GB, medium priority. Results in
+`ops/ei/aei1-remeasure-20261125/policy-*`. Ledger unit `aeirm-compare2` pairs them with `held_eval compare
+--strict-series` as they complete: r1 vs 6f19 first, then the pairs with 3eb3, then each against the base, which
+`aeirm-chain-base` starts once two of the trained policies are done. The summary goes to `compare-summary.txt`.
+Throughput beside the other GB10 engines is about 1.6 episodes/min per engine (300-500 tok/s at 32 running), so r1 and
+6f19 take about 10 h, and all four about a day. Predicted from (2): r1, 3eb3 and 6f19 within
+about 2 pts of each other, all 2-6 pts over the base. If instead r1 leads by > 4 pts (p < 0.05), the rounds after r1
+lost ground, which would point at a learner or data defect.
+
+**Recommendations (ranked by expected held gain per machine-hour).**
+1. Measurement, at no training cost. Adopt neutral rounds (`NATLANG_EI_NEUTRAL_ADOPT`, in the working tree 11-25).
+   Re-measure the reference on the candidate's pin, in the same window, at 4 samples on the DGX series, never against a
+   stored draw. Judge cumulatively against the base every 3 rounds. At SE 2.3 pts, a per-round gate rolls back real
+   +2-3 pt rounds about 70% of the time.
+2. Fresh teacher-derived supply per round, at least 5-10M weighted tokens of supervision the policy has not seen
+   (r1's gain came with 19.6M; r9 had 2.5M). Widen the teacher frontier beyond 124 tasks a round, keep filled reasoning
+   in production, and put the fixed frontier to work choosing the tasks. Until supply keeps up, make rounds larger
+   and less frequent instead of 2.5 h rounds of 6-11M dominated by self-imitation.
+3. Own successes: drop or down-weight episodes from tasks the policy solves at >= 0.75 (21% of r9's own episodes).
+   Prefer the newest policy's successes on 'sometimes' and 'never' tasks.
+4. Telemetry: a fixed held-like validation set (non-held siblings of held families; teacher and own), scored before
+   and after every round. Restore validation on Colab rounds.
+5. Not recommended now: LR or rank changes (the update is there, 0.6% relative a round); FP32 residual across merges
+   (rounding noise about 1 BF16 ULP a round, predicted negligible). Neither has evidence behind it.
+
+**Dragnet.** Checked: held pairing and infrastructure (1), noise and regression (2), LoRA merge and precision (3), LR
+schedule and steps (3), mix composition, repetition and freshness (4), held-family coverage of the mix (44-63% of
+target mass on held families, 84-104 of 111 covered), pass-rate bookkeeping (defect fixed). Not checked: forward-only
+NLL of each policy on held-like rows and KL to the start policy (no fixed row set exists; see 4), one-pin
+train-distribution pass rates, the content quality of filled and operator units, and the GRPO phase now queued.
+
+## 2026-11-25 15:00 Learned compaction on by default; compaction captures splice; product operator writes fixed (compaction strand)
+
+Owner, 2026-11-25: "Wait. Are long values not summarized and encoded using neuralese? That is such an important
+opportunity." AGENTS.md: "learned operators compact and summarize large values … and carry compressed state between
+model runs."
+
+**State of the operator inventory (OPERATORS_RESTORE_20261117.md §1) today.** Everything the 11-17 inventory listed as
+stale was closed on 11-17..11-20 and never switched on:
+- R1/R2 runtime sites and frames: current (agent.ts `compactRef`, `views`, `noteRef`; operator-frames.ts). Crisp by
+  default until today.
+- R3 operator client: an ordinary sampled call at view's site (`<call>#operator-<n>`, RL-captured), then the in-context
+  capture of its reply as a `block_write` with `source_capture` (d306de499). The greedy `/v1/neuralese/operator`
+  endpoint is gone, so the unlearned close marker plays no part: the reply ends at the ordinary end of turn.
+- E1 Python and E2 SGLang: `native.capture` (SGLang through the fork's capture request, no resident model).
+- E3/E4 managed llama-server and page: the grammar capture (`native-operator.ts grammarCapture`), parity at the Q8
+  floor (11-17 §7).
+- M1 use ablation: `operator_ablation.py` (now also an `inline` arm: what the engines served). M2 held: the variant is
+  in the series key.
+- Training: operator rows v2 (runtime-rendered sites, held-filtered) are the `operators` aux tier of every round mix;
+  the learners lower an operator call as a call of the episode and its capture document through the pass-through.
+
+**Use ablation on aei1's policy 8e634a0f** (unit `opabl-8e63-1`, 48 test consumers per source of
+`natlang-operator-rows-20261117-v2`, consumer-target NLL in nats/token; report
+`/home/werg/data/natlang-operator-rows-20261117-v2/ablation-8e634a0f-20261125.json`). Arms: actual = the in-context
+state spliced; inline = the same reply tokens read in the consumer's context (what every engine served since 11-23,
+`reads_in_context`); standalone = the reply written context-free and spliced; text-cut = the cut text alone; shuffled =
+another case's state. Differences are paired (sign-flip p).
+
+| source | n | actual | inline | standalone | text-cut | shuffled | inline-actual | text-cut-inline | shuffled-actual |
+|---|---|---|---|---|---|---|---|---|---|
+| compact-params/s1-qa-long-context | 48 | 4.56 | 5.16 | 5.52 | 6.05 | 6.14 | +0.61 (p 0.000) | +0.88 (p 0.000) | +1.59 (p 0.000) |
+| compact-params/s1-qa-mcq | 48 | 7.89 | 8.46 | 7.11 | 9.19 | 7.73 | +0.57 (p 0.000) | +0.73 (p 0.000) | -0.15 (p 0.146) |
+| compact-params/s1-qa-multihop | 27 | 4.54 | 4.58 | 5.02 | 5.27 | 6.23 | +0.04 (p 0.736) | +0.69 (p 0.000) | +1.68 (p 0.000) |
+| compact-params/s1-qa-trivia | 48 | 5.68 | 5.61 | 5.82 | 6.15 | 6.80 | -0.08 (p 0.251) | +0.54 (p 0.000) | +1.12 (p 0.000) |
+| compact-params/s1-repo-qa | 48 | 3.88 | 4.15 | 4.42 | 4.79 | 4.94 | +0.27 (p 0.000) | +0.64 (p 0.000) | +1.06 (p 0.000) |
+| compact-value/agent-tool-slots-repo-qa | 48 | 5.53 | 5.73 | 4.79 | 5.54 | 5.63 | +0.20 (p 0.001) | -0.19 (p 0.004) | +0.10 (p 0.176) |
+| compact-value/tool-digest | 48 | 0.32 | 0.37 | 0.60 | 0.75 | 0.79 | +0.05 (p 0.000) | +0.37 (p 0.000) | +0.47 (p 0.000) |
+| compact-value/web-miroverse | 48 | 4.63 | 4.85 | 4.53 | 4.93 | 4.73 | +0.22 (p 0.000) | +0.08 (p 0.104) | +0.10 (p 0.146) |
+| compact-value/web-openresearcher | 9 | 5.34 | 5.76 | 4.67 | 5.99 | 5.42 | +0.43 (p 0.098) | +0.22 (p 0.111) | +0.08 (p 0.760) |
+| compact-value/web-openseeker | 26 | 5.29 | 5.79 | 4.94 | 6.08 | 6.25 | +0.50 (p 0.000) | +0.29 (p 0.069) | +0.96 (p 0.000) |
+| compact-value/web-sds | 2 | 5.15 | 5.35 | 4.95 | 6.32 | 6.15 | +0.20 (p 0.488) | +0.97 (p 0.488) | +1.00 (p 0.488) |
+
+- The consumer uses the state: shuffled is worse than actual on 10 of 11 sources (6 at p < 0.05; mcq the exception).
+- The spliced in-context state beats the same reply read inline on 10 of 11 (7 at p < 0.05): the in-context-text read
+  threw away what the capture's rows carry from the value they attend to.
+- The reply read inline beats the text cut alone on 10 of 11 (6 at p < 0.05); agent-tool-slots-repo-qa is the
+  exception (-0.19, p 0.004).
+- Caveats: the replies are the rows' seeds (checked or mechanical summaries), not the policy's own operator replies;
+  mechanical seeds carry answer lines.
+- **Open surprise, not diagnosed:** the context-free standalone write beats the in-context state on 6 sources (mcq,
+  agent-tool-slots and the web sources), where shuffled is also close to actual. The 11-17 step-0 ablation on 5ff07638
+  had in-context ahead of standalone on 17 of 21. Not checked: RoPE positions of rows captured at ~8k positions and read
+  at another position, the operators tier's actual exposure per source, the seed provenance per source.
+
+**Decisions.**
+1. `learned-compaction` is adopted (model-facing.ts ADOPTED): `nl` compaction by default in collection, held eval
+   and the product runtime. Opt-outs `NATLANG_NEURALESE_COMPACTION=crisp` or `NATLANG_MODEL_FACING` without it.
+   MODEL_FACING_CHANGES 2026-11-25. It enters aei1 at its next pin; the series key changes, so the base is re-measured
+   there, and the next held eval shows any regression.
+2. A reply captured in its own context is a new `producer_kind`, `capture` (state_block.py), stored by
+   `native.capture` on the Python engine and SGLang; it splices as stored (`reads_in_context`; opt-out
+   `NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1`). A value's text written after its producing call stays a `span`, read in
+   context. The learners already lower a spliced capture through the pass-through (graph_replay binds `block_read`s
+   that are not `in-context-text`), so GRPO and SFT now train the operator's state through the consumer.
+   The fork and the page: a capture-kind strand is changing the fork (validation, read rule, a request field for the
+   grammar capture) with a release and pin move; until it lands their grammar captures stay `span` and read inline
+   (ENGINE_PARITY row).
+3. Bug fixed: outside collection an operator call's reply carried no exact ids, so every product-runtime operator
+   write failed ("native.capture needs the call's exact prompt and sampled reply ids", found by the live smoke on
+   8e634a0f) and silently kept the cut. Operator calls and the compaction turn now carry `exact_ids`, which a native
+   transport sends as `x_natlang_rl_capture` (contracts.ts, chat-completion.ts, agent.ts).
+   Second bug: the operator call carried no temperature, and the engines read a missing temperature as 0, so operator
+   replies were greedy, also in collection. It now samples under the call's temperature (the run's law).
+4. Leaf judges (separate strand, 7ecfac2d8): a decision readout sees its values whole up to half the context, and under
+   `nl` a value past that gets its compact-params state.
+
+## 2026-11-25 14:50 Neutral rounds continue; the SFT <-> GRPO switch is a deliberate choice
+
+Owner 2026-11-25: the rollback rule is not to be followed slavishly ("we keep rolling back"); "if it's neutral, at
+least we are training up some Neuralese capabilities. Please implement this."
+
+- Evidence: aei1 rolled back twice to r1 (8e634a0f) on neutral verdicts while raw held successes rose 293 (r1, 18
+  infrastructure errors) -> 307 (3eb3f435, rounds 2-5) -> 312 (6f19fe3a, round 9) of 512. Both paired comparisons ran
+  on a different code and scoring series than r1's measurement (`same_code: false, same_series: false`), at 2 samples
+  per task, and the second lost 56 pairs to infrastructure errors. The second rollback also switched to GRPO
+  (two consecutive neutrals), restarting from r1 and discarding rounds 9-10 (6f19, 4dec7ca9).
+- Change (`expert_iteration.judge`, `PhaseController.record_verdict`): a neutral verdict adopts the candidate; only a
+  significant regression (failure: below -fail_pts with p < 0.05) rolls back and halts for a bug hunt. Opt-out
+  `NATLANG_EI_NEUTRAL_ADOPT=0`. The automatic phase switch after two neutral rounds is off; opt in with
+  `NATLANG_EI_AUTO_PHASE_SWITCH=1`. The phase is chosen deliberately in DECISIONS from evidence.
+- Live state: the phase state is set to what the new rule gives: reference 6f19 (round 9, neutral -> adopted),
+  lineage head 4dec7ca9 (v9, round 10, trained from 6f19), phase sft; round 11 (prepared from 4dec) continues. The
+  GRPO round 12 from r1 (never started training: queued for memory) is dropped. Backup: `phase-state.json.pre-neutral-20261125`.
+- Measurement: r1, 3eb3 and 6f19 are being re-measured side by side on one pin and series at 4 samples (diagnosis
+  agent, units `aeirm-*`); the 56 lost pairs are being explained. If a policy other than the lineage's measures
+  clearly best, the loop moves to it.
+- Teacher campaign ledger budget 6 -> 10 GB: the standing unit was OOM-killed at 14:21 (6.1 GB peak after 6 h).
+
+## 2026-11-25 15:20 Operator calls render without reasoning, as trained (operator-thinking strand)
+
+- Observation: with learned compaction on by default, the operator call (`operatorWrite`: view's site, `max_tokens` =
+  2048 reasoning + span cap) ran live on the Colab actor (6f19fe3a) with a 28k-character argument; twice the reply used
+  all 2432 tokens reasoning and `native.capture` refused it ("ended inside its reasoning"), so the consumer kept the
+  text cut. The operator rows train an empty think block (context) then the summary: serving did not match training.
+- Change: the operator call renders with `enable_thinking: false` on every engine (request field
+  `ModelTurnRequest.thinking: false` -> `chat_template_kwargs`; Python engine/SGLang front `Engine.template_kwargs`,
+  refusing unknown switches; fork and wllama already honour per-request kwargs; grammar capture re-renders with the
+  call's switches) and `max_tokens` drops the reasoning room (span cap 384/512 only). The prompt then equals the rows'
+  prompt plus their first reply token `</think>`; the capture's content starts at reply token 0. Model-facing entry in
+  `plans/MODEL_FACING_CHANGES.md`. The Colab actor gets the engine change at its next restart (it serves the ts change
+  only once its engine honours the kwarg).
+
+## 2026-11-25 — escaped higher-order functions retain actual training decisions
+
+A zero-inference TEST-only Base capture executed creator → returned callable → later consumer → scalar ten through the official Workerd SDK and real NativeRecordsDO. Canonical Python live admission and Node disk verification/materialization retained all four original model decisions, including prompts with the consumer's live function binding and escaped lexical capture. Exact LFM3 tokenizer-only rendering confirmed prompt context and action loss masks. Keep the existing honest nonportable function snapshots; no codec or admission waiver is needed for this observed training path. Add real capture/bridge regressions, leave portable replay and training/held gains explicitly unchecked, and never register these scripted fixtures as teacher data. Details and source/evidence identities: `plans/neuralese/HIGHER_ORDER_TRAINING_PROOF_20261125.md`. Source35 collection was not gated or modified.
+
+## 2026-11-25 16:30 aei1 supply: the fills reach the campaigns, unfilled campaign episodes wait for their fill, solved own episodes leave, rounds wait for 5M new tokens, a fixed held-like validation set (ei-supply agent)
+
+**Observation (DECISIONS 14:20).** New supervision per round collapsed after r1: r1 trained 19.6M teacher-derived
+tokens, r9 2.5M, r11 1.2M (own successes 78% of r11's 6.2M).
+
+**Why the supply was small (measured on r0011's inputs: its build.json, rows.jsonl.zst and frontier, the campaign manifests and fills.jsonl).**
+- **No campaign episode was ever filled.** The standing fills list only the seed WORKs, the live WORK and the
+  `grpo-sd-teacher` role (`Cycle.fill_command`). The loop's own sources WORK (`/home/werg/data/ei-sources`, where every
+  round extracts the teacher campaigns) was never a fill source. Of the 5,294 campaign successes (teacher-r0001..r0011),
+  0 had a fill when r0011 was built.
+- **The fills spent their time on episodes that can never train.** Under `--max-prior-exposures 1` a fill and the
+  episode it stands in for share one exposure (`Exposures`, 2026-11-24). 32,515 of the build's 43,321 teacher successes
+  had already trained raw, and the seed WORKs the fills worked through are mostly those. Fill capacity is 3,942 fills in
+  the last 24 h (all generators).
+- **The Colab backlog fill was dead.** `colab-g4a-fill-backlog-polite-20261123` was OOM-killed at 10:45 (3.6 GB peak)
+  and nothing relaunched it. The Colab actor's only fill (`vibe-student-fill-*`) has 14 Vibestudio episodes left.
+- **Raw campaign episodes are small.** A raw teacher episode trains its actions only (the teacher's reasoning is
+  zero-weight context): 680-1,050 weighted tokens per episode (r5-r11). A filled unit trains 1,600-2,300. Once an
+  episode trained raw, its fill never trains. r0011 admitted 992 campaign episodes raw (1.02M tokens). 843 of them were
+  under 12 h old and not yet tried by the fill.
+- **Own successes of solved tasks.** 109 of r0011's 594 own episodes (18.4%, 0.69M target tokens) are tasks the policy
+  solves at >= 0.75 (frontier tier, else the recorded rate). The frontier tier alone missed most of them, because the
+  frontier measures only the tasks the newest collection drew.
+- **The other parts are exhausted.** operators (18,924 units over-exposed), fallow22 (7,072) and the Neuralese graphs
+  have trained once. Unseen campaign successes not yet in any build: 2,175.
+- **Caps.** The family share (0.05) dropped 2,089 unseen teacher episodes from r0011 (~2M raw tokens). It is left
+  unchanged: it is the owner-endorsed diversity rule, and a lineage-cumulative family share would change what
+  diversity means. This is listed as a lever.
+
+**Changes (default on, each with an opt-out; enter at the driver's next restart).**
+1. **The fills fill the campaigns first and skip trained episodes** (`expert_iteration.Cycle.fill_command`,
+   `filled_reasoning generate --skip-trained BUILD`). The loop's sources WORK is a `--prefer-work`: it comes after the
+   live WORKs, before the seed WORKs, and is rescanned every 30 min as rounds extract new campaign successes. Every
+   episode an earlier build trained is left out of the queue (`filled_reasoning.untrained`, `sft_sources.Exposures`).
+   The async driver passes its lineage's trained mixes and every prepared round mix (`trained_builds`). Opt-out:
+   `--no-fill-campaigns`.
+2. **New campaign episodes wait for their fill** (`sft_sources build --defer-unfilled-hours 12 --fill-out FILL
+   --campaign-work WORK...`, `FillPending`). A campaign episode younger than 12 h (its `rollouts.jsonl` mtime) that
+   the fill has not attempted is not admitted raw (funnel `fill_pending`). It trains as its fill in a later round, or
+   raw once it is older than 12 h or the fill declined it. Opt-out: `--defer-unfilled-hours 0`.
+3. **No own episodes from solved tasks** (`--anchor-per-task 0`, new `--own-solved-rate 0.75`,
+   `sft_sources.drop_solved_own`). The frontier tier decides where the frontier measured the task. Otherwise the
+   recorded rate decides, at >= 0.75 over >= 2 samples (fixed rates: the 5312e06c3 zero-call rule). Funnel:
+   `own_task_solved`. Opt-out: `--own-solved-anchor 1` (the old light anchor).
+4. **Round size: larger and fewer** (`AsyncRoundDriver.supply_wait`, `mix_supply`). The rule: a round trains once its
+   mix holds >= 5M weighted target tokens outside the own successes (`--min-new-tokens`). Every unit counted there is
+   new, because the no-repetition rule drops anything an earlier build trained. A shorter build waits 45 min
+   (`--supply-recheck-minutes`) while collection, teacher campaign and fills run on, then reruns data and build. After
+   12 h from the first short build (`--max-supply-wait-hours`) it trains anyway. Each pass is in
+   `rNNNN/stages/supply.json`, and the decision goes to round.json (`supply`) and the drive log. Opt-out:
+   `--min-new-tokens 0`.
+5. **A fixed held-like validation set** (`sft_sources build --fixed-val ROOT/val-fixed`, `FixedVal`). It holds one
+   verified success on each of up to 40 own and 40 teacher tasks from held-v3's families. These are never a held task
+   or a source-group sibling (the build's candidates already exclude the held closure) and never a task an earlier
+   build trained. The tasks are chosen once by hash and then frozen (`tasks.json`, `val-fixed-{own,teacher}.pkl`). No
+   build that names the set trains those tasks or their Neuralese variants (core candidates, and aux units through the
+   held closure). The learner scores the sets before step 1 and after its last step, beside the round's own left-over
+   sets (`sft_env`: VAL and `--val-chains`). The driver records before, after and change per set in round.json
+   (`validation`) and the drive log (`round_validation`). Opt-out: `--no-fixed-val`. This replaces the per-round
+   `val-teacher` sets. r4-r7's moved 1-4% at loss 0.003-0.03, and from r9 on they were empty, because the
+   no-repetition rule leaves no untrained left-overs.
+
+**Expected supply (from the measured rates).** The campaigns score about 150-200 successes an hour. If the fill keeps
+up, each one carries ~2K filled tokens instead of ~0.9K raw, so roughly 0.3-0.4M new tokens an hour. That is 5M in
+about 13-17 h. Rounds therefore wait up to the 12 h cap unless teacher throughput or fill capacity rises. Also, once:
+2,175 untrained campaign successes (~4M once filled) and the 28 authored programs (role `ei-authored-teacher`, extracted
+since adf901c52).
+
+**Ops actions.** The Colab fill was relaunched from the new pin (ei-sources first, `--skip-trained` with the lineage's
+builds). Also found:
+- r0011's `mix/chains.pkl`, `filled/chains.pkl` and `neuralese-graph-own/chains.pkl` were deleted at 14:23 by
+  retention (`ei_round_tier.drop_plan`: "r0011 trained"). At that time the active round was r0012 (the GRPO round the
+  14:50 entry dropped), so r0011 counted as older than the active round. r0011 never trained. Its mix has to be
+  rebuilt (`--rebuild-round r0011`) before it can train.
+- The ledger queue was stuck behind `aeirm-held-3eb3f435b14b` (40 GB; needs 55 with the reserve, 44 obtainable). The
+  aei1 teacher campaign (10 GB) and collection v0009 (70 GB) waited behind it, so neither was running.
+
+**Still supply-limited, and what would raise it.**
+- Teacher throughput (successes per hour): more Luna/Sol slots, the paid Vertex Gemini teachers (paused by the owner
+  until credits are refilled), Haiku (no Anthropic credit).
+- Fill capacity (~160 fills an hour across all generators): a dedicated fill window on the Colab actor between SFT
+  rounds, and a keeper for the Colab fill unit.
+- The one-exposure rule for fills (owner 2026-11-24, no repetition): ~30k teacher episodes trained raw. Their fills
+  would add ~1.0-1.3K new reasoning tokens each (~30-40M in all); about 0.9K of each fill's ~2K weighted tokens are
+  the actions that already trained. This is the owner's call.
+- The per-round family share: 2,089 unseen teacher episodes left out in r0011.
+
+## 2026-11-25 15:40 Compaction captures splice on the fork and the page (capture-kind strand)
+
+The Python engines store a reply captured in its own context as `producer_kind` 'capture' and splice it when read
+(15:00 "Learned compaction on by default", item 2). The managed llama-server and the page now do the same:
+- Fork b536c7379 (`neuralese`): 'capture' is valid native-state metadata; it splices as stored (`exact-native-state`)
+  unless `NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1` (read per request); a chat completion's
+  `x_natlang_producer_kind: "capture"` stamps the spans that request produces (any value but "capture"/"span" refused);
+  `/v1/neuralese/info` lists `native.producer-kind.capture`. Release natlang-b12094 (dispatched, quick archives and
+  the page's wllama); natlang pinned to it with `update_llama_runtime.mjs --fork` (page build vendored from the same
+  release), `llama-fork-source.ts` to b536c7379.
+- Client: `grammarCapture` sends the field for a reply capture (never for a write, which stays 'span' and is read in
+  context) when the server lists the capability, and refuses a stored kind other than 'capture'. The ts-host stores
+  refused 'capture' (`validateNativeState` knew only text/span), so a Python-engine capture archived to a ts-host store
+  failed; fixed in the same commit.
+- Checks: fork unit tests `test_natlang_native_state.py` 7/7 on the 8e634a0f Q8_0 GGUF (CPU build); live
+  `check_llama_native_state_protocol.py` passes with the new capture leg: stored kind 'capture', id equal to the
+  reference codec's (`serve/store.native_state_id`) for the same tensors with that kind, consumer receipt
+  `exact-native-state`. Content ids match the Python engines' rule; the literal ids differ across engines only through
+  the tensors (Q8_0 vs BF16). ts-host targeted tests pass. The page has no capture of its own yet (ENGINE_PARITY
+  text-write table), so it gains only the read rule and validation; no page smoke ran.
+
+## 2026-11-25 15:22 Authored trajectories carry learned compaction and Neuralese values (authored-neuralese strand)
+
+- **Why.** A builder reported that BUILD_BRIEF has no Neuralese row and `check` cannot author a Neuralese value. Owner
+  direction: Neuralese compaction is the intended runtime design, and learned compaction (`compaction: nl`) is on by
+  default as of today (model-facing `learned-compaction`). Authored trajectories must teach what collection rollouts
+  contain.
+- **Before.** `curriculum.replayReference` ran with no Neuralese runtime and a driver without `neuralese: true`.
+  - A `Neuralese<string>` result failed with `NeuraleseNoWriterError` ("plain-text Neuralese<string> cannot be
+    written"), so `check` could not finish such a program.
+  - A long value kept the crisp cut: `compactRef` needs `neuralese.capture` and a Neuralese driver, so there was no
+    operator call and no state. The trajectory therefore differed from collection.
+  - The `sft_sources replay` of authored teacher episodes ran over the remote HTTP default with teacher-text emulation.
+    A Neuralese value would have rendered as `[[teacher-text Neuralese id=… body=…]]`, which is not the serving form.
+- **Now (one mechanism, `ts-host/src/model/in-context-neuralese.ts`).** It is a scripted transport for the engines'
+  default read (`in-context-text`: a state written in its producing context is read as its tokens in place, with no
+  markers). It has an in-memory store, a `capture` (operator replies, `compact_history` notes) and a `port` (typed
+  `Neuralese<T>` writes) that keep each state's text. Its `wrap(driver)` gives every request, `decide` included, the
+  consumer's messages with each state's text in place, and adds the engines' `in-context-text` import receipts. Under
+  replay the runtime's own paths run (`compactRef` → `operatorWrite` → capture; `writeNeuraleseText` → port), the same
+  code as in collection. The compaction setting is the agent's own (env, model-facing), as in collection.
+  - `replayReference(..., { neuralese })`. In `referenceDriver`, an operator request (`<call>#operator-<n>`) is a call
+    of `view` (`OPERATOR_CALL`): it is matched by its opening (instructions and value), and its entry's `value` is the
+    reply text.
+  - `authored_replay.mjs` (`check`/`dump`/`admit`) and `reference_episodes.mjs` (render) use it by default (opt-out
+    `--no-neuralese`). An operator call with no entry is `NO ENTRY … view` and gets a placeholder summary. The
+    statistics count `operator_calls` (construct `compaction`).
+  - `authored_trajectories.py`: an operator turn is its own per-call chain (function `view`, target = the summary) and
+    never a reasoned-readout group. Consumer turns carry the summary in place (plain text, as the learner sees an
+    in-context read).
+  - Replay for training: `sft_sources.replay_episode` marks authored episodes (teacher provider `authored`) with entry
+    `in_context_neuralese`. `run_bonsai_queue` passes `--in-context-neuralese` (in place of teacher-text emulation),
+    and the collector (`inContextNeuralese`) wraps its driver and records the inlined messages. The replay therefore
+    renders what the authored render did.
+  - BUILD_BRIEF: construct rows "Long value (learned compaction)" and "Neuralese value", plus `check`'s behaviour.
+- **Replay of a sample program** (`authored_programs.py check`/`dump`, `authored_trajectories.py render` on a
+  three-function program with a 15,890-character log input and a `Neuralese<string>` gist): the root's and the
+  receiving leaf's listings each made a `view` call. The root's had no entry, so it was listed as `NO ENTRY ... view`
+  with suggested fragment `The call that receives this argument as log (string) answers: ...`. The leaf's listing showed
+  `log: string = <summary>  // view of the value; log holds all of it`. The consumer of the gist showed
+  `gist: Neuralese<string> = <gist text>`, and no request carried a sentinel. The rendered rows came out as
+  [root, view (target: the summary, no tools), gistLog, writeBriefing].
+- **Interplay.** The operator-thinking strand renders operator calls with `thinking: false`. Authored operator turns
+  carry no reasoning, so they already match operator rows (empty think block, then the summary).
+- **Left out.**
+  - Other scripted replays (`verifyCases`, handoffs `build-handoffs.mjs`, native-forced replay) keep no Neuralese
+    transport. Their recorded turns have no operator replies to serve, so a run with operators would only drift.
+  - In-page wllama, the engines and the learners are unchanged: this mirrors the engines' existing default read and
+    adds no serving feature.
+  - A state inside tool-call `arguments` is inlined JSON-escaped, so the arguments stay valid JSON. The engine feeds
+    the raw tokens there. No authored path produces this today.
+- Tests: `ts-host/test/authored-in-context-neuralese.test.mjs` (2),
+  `tests/neuralese/test_authored_trajectories.py::test_an_operator_call_is_its_own_turn_not_a_readout_...`,
+  `tests/test_bonsai_queue.py::test_entry_in_context_neuralese_replaces_the_text_transport`. The ledger units
+  `authnz-tests-1` and `authnz-tests-2` ran them, plus `test_authored_programs.py`. In `test_bonsai_queue.py`, four
+  shared-collector tests fail because `cli.js --capabilities json` throws in its application-controller probe:
+  `NatlangContextError: The invocation that owns this callback has finished`, raised from `runtime-capabilities.ts` →
+  `executeProgram` → `callable.js invokeExport` (the invocation-lifetime check). This change does not touch that path.
+  Reported for the runtime strand.
+
+- **Update 15:35: operator states are spliced, as in collection.** Since 3d8037571 and 5269b1a5a, a compaction capture
+  (an operator reply, a `compact_history` note) has `producer_kind` `capture`, and every engine splices it rather than
+  reading it in context (the use ablation: the spliced state beats the inline reply by up to 0.6 nats/token). Plain
+  `Neuralese<T>` value writes stay `span` and are read inline.
+  - The in-context transport now records captures as `capture`. A request shows a capture as a
+    `{type: "native_state", id}` content part and a span as its text.
+  - The render (`reference_episodes.mjs`) marks the producing turn with `captures: [{id, select?}]`. Pool, extract
+    and `semantic_turn` keep that field.
+  - `sft_sources replay` now replays authored episodes that carry states (it used to skip every episode with native
+    state) and marks their verdict `graph_only`. The text build skips them.
+  - `neuralese-graph` lowers them (`authored_graph` → `authored_trajectories.graph_calls`):
+    - Each call is rendered by the engine's own rendering (`TemplateRenderer`, `target_items`).
+    - Each state is a pass-through import placed between `consume_open` and `consume_close`.
+    - Its producer document is the one `Engine.capture_plan` writes: the operator call's prompt, its reply up to the
+      content (the empty thought, and the whitespace after it), `produce_open`, then the content. The learner computes
+      the state in the consumer's forward, so no engine is needed.
+    - Teacher think blocks stay zero-weight.
+    - Opt-out: `--no-authored`. `neuralese-text` leaves authored episodes out (`native_not_authored`).
+  - **Fixed on the way.** `reworded_key` and `signature_key` cut an opening to its first line. A view site's first
+    line is `instructions:`, so every operator call matched every other, and one call's summary could be served to
+    another (seen in the end-to-end replay). A view site's opening is now kept whole (`signature_line`).
+  - **End to end.** Scratch program, ledger unit `authnz-tests-5`. `check` ok. The render gives two `view` turns with
+    captures. The replay was exact (5/5, `graph_only`). Graph rows: 5 calls, 2 consumer imports. A decoded consumer
+    reads `log: string = <|neuralese_consume|><summary><|/neuralese_consume|>  // view of the value`. The document ends
+    `<|im_start|>assistant\n<think></think><|neuralese_produce|><summary>`.
+  - **Still left out.** An authored decision readout in a graph episode trains as plain token CE, without the
+    decision objective that `build` gives text rows.
+  - Tests: `test_graph_calls_lower_an_operator_capture_as_a_pass_through_import` and
+    `test_operator_calls_are_not_reworded_matches_of_each_other` (`test_authored_trajectories.py`); the updated
+    `ts-host/test/authored-in-context-neuralese.test.mjs`.
+
+## 2026-11-25 18:00 aei1 supply, coordinator decisions: fills of raw-trained episodes train their reasoning only; a Colab fill keeper; retention protects rounds still to train (ei-supply agent)
+
+Coordinator decisions on the 16:30 entry: (1) allow fills of episodes that already trained raw, with the actions at
+zero weight so no target token trains twice; (2) keep the family cap at 0.05; (3) the Colab fill gets an owner that
+relaunches it; (4) fix the retention bug that deleted r0011's chains; (5) update the `test_native_prefill_chunks` stub
+once the engine change is on main.
+
+1. **Reasoning after raw** (`sft_sources build --fill-after-raw reasoning`, default; `skip` opts out). A fill unit
+   counts only earlier *fills* of its episode (`Exposures.fill_after_raw`), not the episode's raw training. When the
+   episode trained raw (`Exposures.raw_trained`), `reasoning_after_raw` zeroes every target token after the row's
+   first `</think>`. Those are the actions the raw episode trained; the filled reasoning through `</think>` was
+   zero-weight context in the raw episode and now trains. A row without `</think>` is all action (weight 0). A
+   decision readout (an option choice the raw episode trained) is dropped. So one exposure per target token holds
+   exactly. The raw episode never trains again after its fill. The fills (`filled_reasoning --skip-trained`) now skip
+   only episodes whose fill trained, and they fill raw-trained episodes after every never-trained one
+   (`raw_trained`, last group of `ordered`). This unlocks the ~30k raw-trained teacher episodes at ~1.0-1.3K new
+   reasoning tokens each. Their teacher episodes passed the core caps when they trained raw, so the fills enter as the
+   `filled` aux part (shape share and per-task tokens apply).
+2. Family cap unchanged (0.05).
+3. **Colab fill keeper** (`AsyncRoundDriver.colab_fill_check`, every 5 min in the remote-collection loop;
+   `--no-colab-fill` opts out). Every Colab session actor that serves the lineage head gets a unit
+   `<name>-colab-fill<suffix>`: `fill_command(colab=True)`, polite, campaigns first, `--skip-trained` with the lineage's
+   builds, `--expect-policy` the head, 8 GB. It is relaunched whenever it is gone: it died, or it exited because the
+   actor moved to a newer policy. It never starts on a session that a round's SFT holds. Log:
+   `ROOT/colab-fill/<unit>.log`. The hand-launched `colab-fill-campaigns-20261125` should stop when the driver starts
+   on this pin, because the keeper replaces it.
+4. **Retention** (`ei_round_tier.round_pending`, used by `drop_plan` and the tier moves `_tier_plan`, the callers of
+   both `retain` and `plan`). A round that is not discarded and not trained (not in `trained_rounds`, no
+   `policy/published.json`, no factors manifest) is never touched when it is prepared (`stages/prepared.done`) or
+   prepared from the lineage head (round.json `base_policy_sha`/`trained_from`), whatever `active_round` says. Test:
+   `test_a_round_still_to_train_keeps_its_mix_whatever_active_round_says`.
+5. Already on main: 348d7574d updated the stub with the engine change.
+
+Also: `test_async_driver_retention_pass_and_opt_out` failed when run after another driver test whose background
+retention pass still held the class-wide lock. The test now waits for the lock.
+
+## 2026-11-25 16:30 Free teacher providers, round 2: the free check qualifies and admits on its own; a free-tier quota window no longer retires a teacher (teacher-providers agent)
+
+Owner (2026-11-25): "are we running with open code and other free API providers? It's always worth checking for free
+API models."
+
+**Built (3d6825385 and follow-up).**
+- `scripts/teacher_free_models.py daily` (timer `natlang-teacher-free-models`, now every 6 h at 01/07/13/19:30)
+  runs four steps:
+  1. **List** the providers in `PROVIDER_SPECS`.
+  2. **Probe** each new candidate after a name screen. The screen keeps chat models of at least 30B when the name gives
+     a size, and only free tiers whose TPM holds one request. The probe sends one tool-call request.
+  3. **Adopt** finished qualifications into `ops/ei/teachers.json`. A model qualifies with yield >= 25% over at least
+     12 verdicts, at most 900 s per episode and at most half its attempts deferred. Slots are sized from the
+     provider's RPM and its quota group's cap: NIM 3 for the account, OpenRouter free 1 for its 1,000 requests a day,
+     AI Studio 1 per model. A full group leaves the model `qualified`, and the dashboard lists it as a swap decision.
+     A model that is already a teacher through another gateway is not added twice, which covers the Kilo/OpenRouter
+     overlap. A free tier that names a daily limit under 4 episodes (152 requests) stops its qualification
+     immediately and is rejected.
+  4. **Qualify** probed candidates. Each runs `teacher_gen` with one slot on the 20-task set
+     (`ops/ei/teacher-qual-20261124/qual-tasks.jsonl`), at the campaign's pin, as low-priority ledger units `tq-*`
+     (1.5 GB), in `ops/ei/teacher-qual/<provider>--<model>`. At most 6 run at once, one per quota group.
+
+  Other commands: `add PROVIDER MODEL` enqueues a model that was in a baseline listing, and `signups` prints the
+  owner's steps.
+- `teacher_gen`:
+  - AI Studio's free-tier 429 uses OpenAI's spent-account text ("You exceeded your current quota"). When it carries a
+    nonzero free-tier limit, it is now a temporary limit (`provider_limit`: cooldown, no verdict) instead of a refusal
+    that retires the teacher for the whole launch. Gemini 3.5 Flash-Lite was retired that way in r0011's 08:02 launch;
+    the measured limits are 15 RPM and 500 RPD. "limit: 0" still retires the teacher.
+  - An `api_key_env` that the launch script did not source is read from `~/.config/natlang/*.env`
+    (`config_env_key`).
+  - Both reach production at the driver's next pin. Until then `teacher_spec` gives every provider whose key file
+    `TEACHER_ENV_FILES` does not source an `api_key_command` that reads the file; this works at every pin.
+
+**Providers checked today (keys from `~/.config/natlang`).**
+
+| Provider | Result |
+|---|---|
+| OpenCode Zen | Our key lists 11 free models (`deepseek-v4.1-flash-free`, `big-pickle`, `mimo-v2.6-flash-free`, `beam-free`, `nemotron-3.5-super-vl-free`, ...). Every direct request answers 429 `FreeUsageLimitError` "Free models work in OpenCode": they are free only through the official client (plans/OPENCODE_GENERATION.md; the client is never spoofed). All 11 rejected. |
+| AI Studio Gemini 3.5 Flash, 3.6 Flash, 3 Flash preview | Answer tool calls, but the free tier allows **20 requests/day and 5 RPM per model** (about half an episode a day). Rejected after 1 verdict each. |
+| AI Studio Gemini 3.8 Flash | 20 requests/day as well: rejected. 3.7 Flash: 503 "high demand", qualification running. |
+| AI Studio Gemma 4 31B | Probed ok, but 16,000 input tokens/min on the free tier: below one request. Rejected (the check now also rejects a free tier whose named input-token limit cannot hold a request). |
+| AI Studio Gemini 3.1 Flash-Lite, 4 Hydrogen | 503 today; probed again every 6 h. 3.1 Flash-Lite would be a second independent ~500 RPD quota. |
+| AI Studio 3.1 Pro, 4.x, Omni | limit 0 on the free tier. Rejected. |
+| Z.ai GLM-5.3 Flash/FlashX | 1113 "Insufficient balance". Rejected. |
+| Groq | gpt-oss-120b and Qwen 3.8 27B, still 8k TPM: below one request. Screened out. |
+| LLM7 | Now needs a key; free tier is MiMo-V2.6-Pro plus small models (needs-key). |
+| Mistral | Our key: 401. Mistral's Free mode has no API access. |
+| Cerebras | One-time $5 trial that needs a verified payment method (gpt-oss-120b 5 RPM, 30k TPM, 1M TPD). No permanent free tier. |
+| SambaNova, Chutes, Hugging Face (free users) | No free API tier (their pricing pages). Public listings are watched for zero-priced models (0 today). |
+| GitHub Models | Retired 2026-07-30. Dropped from the check. |
+| Cloudflare Workers AI | Confirmed free: 10,000 neurons/day, about 2-13 episodes a day (gpt-oss-120b, GLM-4.7 Flash, Kimi K2.5). Needs a signup. |
+| ModelScope | Reported: 2,000 calls/day, 500 per model, about 13 episodes/day per model (DeepSeek V4, GLM-5.x, Qwen3.5). Needs a signup (unconfirmed). |
+| Kilo | A free account lifts the keyless allowance (Beam, Nemotron, ERNIE, GLM; account limits unpublished). |
+| Others (Together, Fireworks, DeepInfra, Nebius, Novita, SiliconFlow, OVH, Vercel, Moonshot, Alibaba intl) | No usable free API for 100k-token episodes (research agent, sources in its report). |
+
+**Added to `teachers.json` today:** nothing new. No model with our keys passed: the strong new free models are either
+client-only (OpenCode) or capped at 20 requests/day (AI Studio Flash). The running Gemini 3.7 Flash qualification and the 6-hourly probes of 3.1 Flash-Lite and Hydrogen are admitted automatically if they
+qualify.
+
+**Free-teacher supply in production** (r0010/r0011): Nemotron 3.5 Super about 3-6 successes/h, Nemotron 3 Ultra
+about 3-12/h, ERNIE (OpenRouter free) at most about 26 episodes/day, Gemini 3.5 Flash-Lite about 13 episodes/day
+(500 RPD). Luna and Sol carry about 140-600 successes/h.
+
+**Signups that would add the most (owner):**
+1. ModelScope token: about 13 episodes/day per model across several strong open models.
+2. Kilo account: unknown, possibly tens a day.
+3. LLM7 token: MiMo-V2.6-Pro.
+4. Cloudflare account and token: 2-13 a day.
+
+`teacher_free_models.py signups` prints the exact steps. Once a key file exists, the next 6-hourly run lists the
+provider, probes it, qualifies its models and admits the ones that pass.
+
+## 2026-11-25 16:10 Collector application controllers run as the episode's root invocation (capabilities-probe fix)
+
+Observation: `ts-host/dist/teacher/cli.js --capabilities json` threw `NatlangContextError: The invocation that owns
+this callback has finished` from its application-controller probe; four shared-collector tests in
+`tests/test_bonsai_queue.py` failed with it. Cause: 7f4bafb63 (invocation-bound liveness) made `resolveFrame` refuse a
+frame whose `parentCallId` is not a live invocation. `NodeNativeRuntime.frame` names the run id as its parent, but that
+invocation is begun only inside `run()`/`evaluate()`. The collector's controller path (`executeProgramInEpisode`)
+entered `runtime.frame` directly with `runInFrame`, so the controller's first Natlang operation ran under an invocation
+that never began. db4aa4b4e is not the cause (it only reroutes through the same check). Fix: `NodeNativeRuntime.runHosted`
+begins and ends the run invocation around host code (shared with `evaluate`); the collector controller path uses it.
+Inventory: the only out-of-`run()` entry into a native runtime's frame is that collector path (`git grep
+"runInFrame(.*runtime\.frame"`; `native/agent.ts` uses run inside `run()`). Tests: `ts-host/test/application-controller.test.mjs`
+(child is parented under the run; `runHosted` owns the invocation only while it runs), the capabilities probe, and the
+shared-collector tests. Production: `--capabilities` is called only by `scripts/run_reviewed_luna_dispatcher.py`, not by
+the expert-iteration collectors. Pin exposure: pins with 7f4bafb63 (ee84247cab9a, the v0009 collections and teacher;
+8b06ad22876b, the driver and Colab fill; 35a778eb9bc1; edd23ec451d3) fail any task with `application_controller`.
+The v0009 collections hold no such case (0 of 171 group `cases.jsonl`) and their logs never show the error, so aei1
+data is unaffected; the fix enters at the next pin. The driver was not restarted.
+
+## 2026-11-25 17:30 Program-tuning merged arms far below the base: the fits taught the policy to skip its reasoning (program-tuning strand)
+
+**Observation.** `progtune-l4-seq-*` (dev64, l4 series d5a5e29de5e6, 2 samples): merged arm vs base verdict -23.4,
+tally -46.1, tree -40.6, apigen retail -78.1 (all p 0.0005), route -3.9 (p 0.29), pubmed +9.4 (p 0.11).
+
+**What the merged arms do.** They stop reasoning. Share of model turns with a non-empty think block, base -> merged
+(mean reasoning chars): tally 100% -> 0.0% (2,127 -> 1), apigen 100% -> 3.7% (1,741 -> 24), tree 99.9% -> 7.3%,
+route 100% -> 56% (2,624 -> 146), verdict 99.7% -> 95% (3,377 -> 1,217), pubmed 98% -> 74%. Episodes get shorter and
+answer blind: a tally episode writes `intent.map(...)` (intent is a function), gets a TypeError and returns all zeros;
+apigen's arm writes prose and half-formed calls with no `</think>` (380 of 1,121 replies with text and no call).
+The degradation orders with the rows' share of replies without reasoning: apigen 64% (teacher only), tally 65%
+(incl. 153 own), tree 67% (incl. 96 own), route 26%, verdict 16%, pubmed 12%.
+
+**Localized (forward-only, DGX, base 5ff07638 vs adapter applied unmerged vs merged checkpoint).** At the generation
+position of dev serving prompts (prompt ends `<think>`):
+- tally: P(`</think>`) 3e-9 (base) -> 0.977 (adapter) / 0.977 (merged); the fit's own row NLL equal under adapter and
+  merged (teacher-noR 2.03 -> 0.13, own readouts 4.93 -> 0.09, own reasoned 0.54 -> 0.79: it got worse at its own
+  reasoning).
+- apigen: P(`</think>`) 3e-9 -> 2e-4, but P(`<tool_call>`) ~0 -> 0.28 (top token; "We" 0.96 -> <0.11).
+So the merge, export and SGLang are not the cause: the unmerged adapter does the same.
+
+**Causes.**
+1. *Own readouts trained `</think>` (bug).* Own decision readouts ("Answer this call now, without tools"; recorded
+   `sample_ids` empty: scored, never sampled) render as `</think>"label"<|im_end|>`; `tune.rows.turn_graph` trains
+   every token of an own (`rl`) reply, so `</think>` right after `<think>` trained at full weight (tally 153 rows,
+   tree 96, pubmed 105, searchqa 25). `sft_sources.think_context` already masked this for EI builds
+   (`own_empty_think`, sft-v4-run1); the tune path did not share the rule. Fixed in 1ff53eec6
+   (`serve.targets.own_empty_think_context`, opt-out `NATLANG_TUNE_OWN_EMPTY_THINK=train`).
+2. *The token after an empty think block trains acting at the think tag.* Teacher replies without reasoning
+   (Luna/Gemini: hidden reasoning) render `<think></think><tool_call>...`; the think block is context, but
+   `<tool_call>` is predicted at the `</think>` position adjacent to `<think>`. First-order attribution at the start
+   weights (gradient of the trainer's row loss vs gradient of log P(tok | serving prompt) on the top layers'
+   targets, 6 rows per class): that first token's gradient has cosine 0.19 (apigen) / 0.31 (tally) with raising
+   P(`<tool_call>` | `<think>`) and lowers the reasoning start "We"; the rest of the action 0.02-0.03; teacher rows
+   with reasoning 0.03-0.09; own reasoned rows push the other way (-0.05, "We" +0.11). Readout answers after an empty
+   block (`"label"`, NLL 11-16 nats at the base) push "We" down hardest. Fixed in c1abc6a47
+   (`serve.targets.empty_think_first_end`): that token is context in tune rows, `sft_sources.think_context` (EI
+   builds) and `exp0_sft.mask_empty_think` (aux parts, operator rows, grpo replay corpora); opt-out
+   `NATLANG_EMPTY_THINK_FIRST=train`. EI picks it up at its next pin.
+3. *Rows at a stale system prompt.* Every program's rows were replayed 11-17..11-20 (18.2k-character system prompt);
+   the arms (pin de2b36add) serve a 14.8k one: 0% of rows carry the served prompt. `program_tune rows` now records
+   `system_prompts`, `colab-measure` writes `DIR/eval/ARM/prompt-parity.json` and warns below 50% (1ff53eec6).
+4. *Amplifier, not cause:* Adam 2e-3 on the only (tree) node at scale 1 (the Recipe default for tree is 0.25;
+   program_tune sets 1), 60 x 8 rows, row losses driven to 0.1-0.2. The diffuse push of the remaining action tokens
+   (the "rest" term above) stays; own reasoned rows are the counterweight, and apigen has none.
+
+**Dragnet.**
+| Item | Status | Evidence |
+|---|---|---|
+| Rows and masking | bug found (1, 2) | lowered-row layout dumps; own readouts weight 1 on `</think>` |
+| Rendering/templates | checked | serving prompts end `<think>` (all 24 probed); training generation prompt identical |
+| Base trained on vs merged into | checked | fits' `base_native_identity` 5ff07638 = plan = merge base = base arm policy |
+| LoRA scale/alpha, dtype, merge precision | ruled out | alpha = rank (scale 1) in fit and merge; served/true delta 1.001, cos >= 0.987; adapter == merged on row NLL and P(`</think>`) to 3 digits |
+| Export and SGLang config | ruled out | unmerged adapter on the native engine reproduces the merged arm's first-token distribution |
+| Prompt at serving vs training | defect found (3) | system prompt sha 372ea75e (rows) vs 485a2aad (arms), 0% overlap; tool schemas match for apigen |
+| LR, steps, overfitting | amplifier (4) | 2e-3 x 60 steps, row NLL to 0.1-0.2; not changed (recipe choice, measured by the rerun) |
+| Eval code and series | ruled out | base and merged arms: one series d5a5e29de5e6, code de2b36add, seed 4200000, 2 samples |
+| Parser on unclosed think | found, not fixed | a reply without `</think>` is all content (`serve.chat.build_message`), so the history renders `<think></think>` + text that was sampled inside the think block; only hit by policies that never close the block (base: ~0). Cross-engine (SGLang, native, llama-server, wllama); open item, not done here |
+| Not checked | - | dev-split row NLL (no held-out rows lowered); whether 2 is fully removed by the mask (the rerun measures it); the A100 searchqa fit beyond its rows |
+
+An independent static read (subagent, briefed with observations only) reached 2 and 4 and flagged 3 and the parser.
+
+**Invalid.** Every program-tuning fit, merged checkpoint and merged/adapter arm: route (11-18 fit), verdict, tally,
+tree, apigen retail, pubmed, multihop, plus the in-progress searchqa and neuralese_iterate fits (stopped 15:35 with
+lanes `progtune-l4-fits4-a/b` and their VM learners; `progtune-l4-seq-4` stopped 15:40). Base arms stay valid (same
+series). The multihop base arm completes on its own.
+
+**Rerun (running).** `program-tune-20261117/rows-20261125.sh` (`progtune-rows-20261125c`, medium: low was preempted every 5 min): the nine programs'
+4,013 support episodes replayed with the arms' runtime (pin-de2b36add32f, so base arms stay one series), rows rebuilt
+(old rows kept as `rows.jsonl.replay-20261117`). Then `rerun-20261125.sh PIN TENANT_COMMIT`: old fits/merged/arms to
+`fit/invalid-reasoning-20261125/`, VM fit state deleted, fresh plans (same recipe), fit lanes `progtune-l4-fits5-a/b`
+at a tenant commit with c1abc6a47, measurement lane `progtune-l4-seq-5` (episodes pin de2b36add). Success per
+program: merged > base with p < 0.05; failure: a regression with p < 0.05, after which the merged arm's reasoning
+share is read first. If reasoning still falls (> 10 points of turns), the next change is own reasoned support
+samples in the rows (`program_tune rows --rollouts`) and the Recipe's tree scale 0.25.
+
+## 2026-11-25 — Preserve completed collection across individual capture parser failures
+
+Source35 produced 24 locally verified captures before host memory pressure checkpointed collection. Its automatic resume then failed in `outcomes`: a truthful independently scoped nested task met a stale same-task child predicate. Python and Node now accept authenticated cross-task causal children while retaining exact declared membership, own-task custody and digest/owner/run checks; the original untouched 21-call capture materialized all 26 decisions. No teacher rerun or invented graph edge is needed.
+
+The controller must also retain other completed cases if an individual artifact is genuinely malformed. Canonical parser errors now produce the existing structural `export-rejected` receipt with original artifact paths preserved; model/held/registered-task identity errors still stop the campaign. Corrupt raw gzip/JSON is isolated similarly, and interrupted incomplete packets do not manufacture a hold. All 103 campaign controls passed, including per-case corruption and fail-closed policy negatives. The independent native graph/read-side fix remains required; this containment does not relax verification.
+
+Resume the captured wave from a fresh official driver/reader pin and archive its existing successes before further collection. Keep workspace builds and teacher execution local, Luna only with no fallback, and preserve all 1748 training goals. The native cold-build watcher path remains under repair (39 focused coordinator/schema controls passed); do not call that quota attribution closed or activate the diagnostics-only Source36 as if it solved cold watcher admission. The broader native-bound goal-meaning review and unrequested report/length/route gate removal proceed in parallel on separate coherent sources.
+
+## 2026-11-25 17:35 aei1: policy identity is the weights; a rebuilt checkpoint's earlier sha selects its collections (policy-identity agent)
+
+**Evidence (excluded today).** r0010 published v9 as 4dec7ca9; retention deleted the file and the rebuild (r0009 +
+r0010/sft/factors) is cde55352 with the same effective policy f005e7f6 (`r0010/policy/published.json` `rebuilt`). The
+lineage names cde5 only, and every reader selected collections by `collect/vNNNN-<sha12>`: r0012's `frontier.json`
+lists `v0008-6f19*` and `v0009-cde55352685b*` only, and `episodes-aei1-r0012-extract.json` (16:38) has no
+`v0009-4dec7ca9c301*` source; r0011's extraction (11:01, prepared from 8e63/6f19) had none either, so the 595 groups
+collected 08:50-13:45 under 4dec (DGX 246, remote0 349) were never extracted into `/home/werg/data/ei-sources`.
+Passing them alone would also have failed: `expert_iteration frontier` refuses a collection whose `runs.jsonl`
+policy is outside {policy, previous}, the build's own-policy tier (`sft_sources.own_policy_tier`) ranks their
+episodes as an older policy's, and `ei_round_tier` protected only the lineage file shas (the 4dec dirs are being
+tiered to `/mnt/external`). The fill build excludes only failed policies, so 4dec fills were not affected.
+
+**Change (default on, opt-out `NATLANG_EI_POLICY_EQUIVALENTS=0`).** `natlang_neuralese/common/policy_identity.py`:
+a lineage entry's `equivalent_sha256` comes from its `published.json` `rebuilt.previous_checkpoint_sha256` when the
+rebuilt record's effective sha equals the publication's; `PhaseController` attaches it on load (saved with the next
+state write). Matched everywhere a policy sha selects collections or attests episodes: `collections_of` and
+`collection_dirs` (frontier, extraction, own Neuralese graph, selection rates, teacher campaign, health report,
+round manifest, snapshot), `in_lineage`, `prepare_policies`, `failed_policies` (a failed policy under every file
+sha), `frontier --equivalent-policy ALIAS=SHA` (allowed set; recorded as `equivalent_policies` in frontier.json),
+the build's own-policy tier and cap order (read from frontier.json), and `ei_round_tier` protection (keep, keep12,
+on_lineage). Not applicable: actor binding and serving checks (`endpoint_alive`, `pop_rl_actor` rebind attestation,
+`filled_reasoning --expect-policy`) compare what an actor serves now with the canonical file it was given;
+`ops_dashboard/ei_export.collection_dirs` selects by version (lines 548-557), which already includes 4dec. New
+collections are still written under the canonical sha (`collection_base`). Test:
+`test_a_rebuilt_policys_earlier_file_sha_counts_as_the_policy_everywhere`.
+
+### 2026-11-25 — isolate scratch registrations and quarantine exact missing orphan declarations
+
+The live campaign ingested all402 useful episodes; later native-state housekeeping exposed two November23 GRPO benchmark declarations with absolute scratch paths in the shared DGX journal. ALLOW_UNREGISTERED_DATA had also relaxed producer path registration, poisoning later strict readers. Require an explicit separate scratch registry for that opt-out and validate final dataset paths. Add exact-hash append-only quarantine for owner-local missing unreferenced declarations, retaining immutable journal/file provenance and all held/protected/reference guards. Active projection deactivates only checked declarations; future registrations remain active. Apply the public operation to these exact orphans after source-bound closure checks, rather than rewrite history or waive retirement validation. See REGISTRY_ORPHAN_DECLARATIONS_20261125.md; collection remains independent.
+
+### 2026-11-25 — publish current live catalog and isolate atomic state writers
+
+The active Vibe source cutover strengthened review declarations while remote catalog metadata stayed at its prior release: drive synchronized status/reused but never catalog.jsonl. Publish the validated current catalog before archival/model work through the existing checkpoint-aware idempotent transport; the WORK held registry stays immutable and its explicit compatibility check owns metadata evolution. NATLANG_CAMPAIGN_SYNC_CATALOG=0 is the externally-managed-index opt-out. Fresh campaigns now create their owned waves/jobs parents.
+
+The same inventory found fixed temporary names in both campaign publish and common durable JSON publication. Concurrent derivative/live archive-health writers can clobber the same pending inode or unlink another publisher's file. Use operation-unique O_EXCL files in the shared byte writer, preserve original encodings/fsync/rename, and clean up only a file actually created by this operation. Campaign publication uses that shared primitive. All23 Python helper consumers inherit the correction; unrelated independent writers are not claimed audited. Actual139 campaign/provider/JSON controls passed, including forced concurrent writes, failed-writer cleanup and temporary collision refusal. No model calls; live immutable drivers remain unchanged until their normal resume. Inventories: VIBE_CATALOG_PUBLICATION_20261125.md and ATOMIC_STATE_OWNERSHIP_20261125.md.
+
+
+## 2026-11-25 — Explicit adapter defaults preserve held task identity
+
+The current catalog gained a source-declared nullable supplementary-research argument on five existing entries. Strict ingestion correctly refused treating an unknown non-goal input change as metadata. The Base producer now records descriptor-backed adapter defaults separately; the shared Python catalog projection validates all three actual argument encodings and source-path/hash structure, and removes only explicitly declared null adapter context from task identity. Actual invocation arguments stay unchanged. Non-null evidence, undeclared null fields, goals, splits, IDs and source groups remain strict; opt-out NATLANG_CATALOG_ADAPTER_DEFAULTS=0 restores strict old input comparison. This is not authentication of a self-asserted source hash: the pinned producer supplies provenance. NativeIR/engines/masks do not consume this catalog-only field. Source38 predates the new producer field and uses source-descriptor-checked execution-only archive metadata projection, preserving historical user-input bindings while captures retain actual runtime bindings. No raw or immutable WORK snapshot is rewritten. Inventory VIBE_ENTRY_ADAPTER_DEFAULTS_20261125.md. All41 meaningful ingestion/held/forgery/opt-out controls passed (1.61s,443MB); required quick passed.
+
+## 2026-11-25 18:45 Natlang compiler: review fixes, first real-data runs (compiler-owner agent)
+
+Owner (2026-11-25): "review the implementation and improve it." The first implementation (another agent, committed
+unchanged as 454e70353 / hindsight-kb 084a43d) was reviewed; decisions taken and why:
+
+- **Mode P is the native state the engines splice** (fork agent, af7f47e6c..603f5d541, hindsight-kb 29b952a). The first
+  version trained a tanh-gated memory at positions -M..-1 that no engine splice computes. Now a compiled site is the
+  header's text-initialized native state (written in its real call, `native_init_body`) plus a zero-init residual from
+  Z, trained through `native_graph_gradient` (the executor the engines match), released in the `tune.build` layout;
+  hindsight-kb keeps only Mode W (research). ENGINE_PARITY row rewritten to what is measured (1cf4fe16d); the old
+  "already serves on all four engines" claim was unverified.
+- **Top-k distillation keeps a tail bucket on both sides** (`stable_softmax.topk_tail_divergence`, default of
+  `topk_forward_kl`, `tail=False` opts out); compiler context distillation uses full distributions by default. The
+  renormalized top-k forms let the student put mass outside the teacher's head for free.
+- **OPSD is the shared privileged-context mechanism** (`privileged_context.case_facts(answers='withhold')`, the declared
+  guidance turn after the leading system turn, i.e. JOLT+'s text-twin placement), per call, forward KL by default (JOLT+
+  students since 2026-11-20), CE only on verified continuations. A wrong-answer verdict never becomes feedback: the first
+  real build had twins saying `verifier detail: "pass"` on pass/fail decisions (412c525fb).
+- **FO-MAML** returns `z_init + sg(z_K - z_init)`: the query loss reaches HeaderEncoder (tested).
+- **Experience KB** is hindsight-kb's SQLiteKB behind scopes + `training_exclusion_ids` admission (1471ac656); the TS
+  parallel store was removed. **Call-level engine** reads real rollouts and authored pools (921f560ea).
+- hindsight-kb is a declared dependency (`NATLANG_HINDSIGHT_KB` / logical root), no machine paths.
+- Plan corrections the owner approved are in `plans/NATLANG_COMPILER.md` (bbe8c6fc7).
+
+**Runs (real data, policy r0010 cde55352685b, v0009 collections).** T0 build (DGX `cmp-t0-build-2`): 1,518 scored
+rollouts, 3,869 sequences, 18,022 boundaries, 0 held-excluded. Features on g4b: 1 of ~5 shards (4,097 boundaries) before
+the L4 went to program tuning's rerun (an unadmitted job of mine there was stopped; resume is queued as a preemptible
+admission claim `cmp-t0-features`). Head on that shard: train AUROC 0.69, validation 0.48 (347 boundaries, ~2
+families; label-permuted control 0.53): no signal yet; the validation slice is too narrow to judge, and per-boundary
+episode labels are weak early in an episode. Criterion (0.78) not met; diagnosis waits for the full features. T1 build
+(DGX `cmp-t1-build-4`): 2,052 rollouts, 178 twins / 47 episodes after removing answer-verdict feedback (681 failed
+episodes have no diagnostic fact): OPSD supply from these worlds is thin; richer diagnostic facts (verifier diffs that
+name no answer) are the lever. T1 training queued on g4b (`cmp-t1-opsd`).
+
+
+### 2026-11-25 — Preserve already enriched empty adapter bindings
+
+Source39 correctly declares its nullable research adapter default, but Source38 already contained the same actual null input without provenance. Pairwise compatibility must apply the same checked declaration to those identical legacy encodings as well as to absent old enrichment. Validate all three legacy representations, retain strict non-null/different data and the opt-out, and leave immutable snapshots untouched. Actual45 ingestion/held/encoding/opt-out controls passed1.54s/448MiB. This is catalog identity metadata, not changed runtime arguments or a retroactive trajectory rewrite.
+## 2026-11-25: retain independently native-certified calls from failed live goals
+
+Failed aggregate summaries previously prevented export of every call, including native-proven useful subinvocations; cancellation without progress names also hid actual completed per-case packets. Fix shared collector/exporter admission to inspect every retained packet, retaining whole-goal failure and all raw evidence. Automatic scope/2 requires complete source/native/capture-bound closed return proof, initially GAD question/participant judgments; arbitrary successful prefixes are not sufficient. Both readers enforce certificates and old reader 2a877 rejects the new schema. Deploy the new reader before registering a new partial cohort. Actual archived failed GAD raw yields exactly one correct interpretQuestion decision; incorrect roster and whole goal remain failed. Host135/Python203/Node63 controls plus quick passed; one existing optional archived test skipped. See INDEPENDENT_NATIVE_PARTIAL_20261125.md. No model calls or registry writes.
 ### 2026-11-25 — Correct conditional eval local binding types
 
 Actual joint-program replay on frozen Core7091 completed a native draft, then rejected `const handoff = await predicate(...) ? await stage(...) : null` as boolean. The runtime inferred the first call-like prefix's return type for the entire initializer. Replace that prefix match with the complete TypeScript expression boundary, infer conditional types from their branches rather than predicate, preserve explicit annotations and existing actual-value fallback. This is a first-principles interpreter correction for all TS-host platforms, independent of model quality or original Workerd OOM. Official Node build and19 Node/Workerd/field controls passed without inference; SDKs and the exact application replay enter the next coherent source boundary while current collection continues. No serving policy/retry/model changes or original trajectory rewrites.
@@ -13310,3 +14012,516 @@ Actual joint-program replay on frozen Core7091 completed a native draft, then re
 The actual API readiness scripted control completed its native calls, then rejected an unannotated `let review = null` after assigning an actual request/result object within the same eval action. Core already supported this evolution across actions, but reapplied the original null initializer type at same-action binding admission. Preserve the final computed type for unannotated mutable null-initialized locals, while retaining explicit annotations and established non-null types. This is shared NativeRuntime behavior across model transports and Node/Workerd/browser platforms; no service/call/return authority is relaxed.
 
 Actual installed TypeScript5.9.3 and native TypeScript7.0.2 strict references accept the source. Pinned ef3 Node/Workerd facades reproduce four original rejections; the corrected official Node build plus24 actual controls pass (10new,14conditional regressions),34.1s/1GiB peak through ledger. Browser end-to-end and original API public replay under a successor SDK remain unchecked. Full inventory: EVOLVING_NULL_LOCALS_INVENTORY.json. Source47/current paid collection are not gated.
+## 2026-11-25 21:30 aei1: the DGX collection runs at what fits (collection-fit agent)
+
+**Observation.** Twice today (18:44-19:48, 20:20-21:18+) `aei1-collect-v0009` (192 slots), preempted by a round's
+data/build step (24 GB, high), waited in the ledger at its full 70 GB claim (need 85 with the 15 GB reserve; 58.6 GB
+headroom) for about an hour, DGX GPU at 0%. The prep-share requeue ran only from `wait_for_room`, before a stage
+launched; once the stage ran, nothing resized the waiting collection.
+
+**Change (default on, `scripts/neuralese_data/expert_iteration.py`).**
+- Whenever the driver's DGX collection waits in the ledger (a `collection_fit_loop` thread every 60 s, every
+  `wait_for_room` poll, and each launch), it is requeued at the largest slot count whose budget fits `ledger_room_gb`
+  (ledger headroom less the reserve and the budgets of waiting jobs of at least its priority queued ahead of it), at
+  least 32 slots. The collector starts with `--room-slots N` (no yield on its first check: its launch budget already
+  matches), and once the ledger has room for the growth to `--ledger-full-gb` it takes its full slots and restores its
+  claim (`memory_ledger resize restore`, the existing path). `stop_collections` and the requeue share `COLLECT_LOCK`, so
+  a DGX SFT's stop is never undone by a requeue. Opt-out: `--collect-fit-min-slots 0` / `NATLANG_EI_COLLECT_FIT_MIN_SLOTS=0`.
+- The full claim follows measured use: the largest ledger-learned peak of the newest three `<name>-collect-vNNNN`
+  units x 1.1, capped by `dgx_collection_budget_gb`. Opt-out: `--no-measured-collection-claim` /
+  `NATLANG_EI_MEASURED_COLLECT_CLAIM=0`. With today's peaks (v0007 61.8, v0008 56.1, v0009 65.5 GiB) this is 72 ->
+  capped at 70, so it changes nothing until the peaks fall; the room fit is the operative fix.
+- Fixed along the way: a collection launched below its full size (shrunk, or now a measured claim) got MemoryMax =
+  its launch budget whenever its family (one per version) had no learned peak yet, so restoring the claim to 70 GB left
+  a cgroup cap at the shrunk size. Every DGX collection launch (async driver and `cycle` collect/recollect) now passes
+  `--host-max-gb` = the formula cap.
+
+## 2026-11-25 21:30 Natlang compiler: the second agent's uncommitted work reviewed and integrated (integration agent)
+
+Owner (2026-11-25): the other compiler agent's uncommitted work "can be reviewed, improved, and integrated". Two agents
+had edited the compiler at once; the coordinator's review fixes (18:45 entry) restored committed files over the other
+agent's edits, whose later versions were saved (`compiled_site.py`, `run_t2.py`, the compiled-site test) and are now
+merged onto those fixes. Both sides kept: Mode P stays the header's native state plus a residual with no gate, losses,
+OPSD, the FO-MAML gradient path, the real hindsight-kb store and the declared dependency are unchanged.
+
+**Integrated (with changes):**
+- `compiled_site`: unified slots `Z = [z_site, z_kb, null]` (evidence gate `w/(null_mass+w)` on retrieved slots,
+  `log w` on the logits, a learned null slot), AdapterReader V2 cores `tanh(diag + U V^T)` (`adapter_inner_rank`,
+  0 = dense), learned per-family core scale, independent `kv_drop`/`adapter_drop`, `compose_site_cores`,
+  `LearnedBankBasis` (tune/learned/bank.py's bank basis as live FP32 leaves, `native_grad` passes an adapter's basis
+  leaves through `adapter_leaves_override`), `split_compositional_header`.
+- `run_t2`: Live-KB slots per row (`LiveExperienceWriter`), FO-MAML episodes, compositional `C_scope + C_body` steps,
+  call-level (Engine A) rows in `prepare`, a learned basis and writer in the resumable state, `shuffled_kb` ablation arm.
+- `per_call_hkb.PerCallNeuralHKBCompiler`, `latent_ttt.refine_compiled_site` (Tier 1.5 on Mode P),
+  `train_compiler`/T2 recipe default to Mode W (hindsight-kb refuses `positioned` since 29b952a) and full-vocabulary KL.
+- ts-host: `compiledDecisions` (one calibrated scoring pass settles a confident `readout: decision`, else the reasoned
+  readout), `branchSearch` (prefix-shared branch@N, crisp-first ranking), `contract-hoist.ts` (structural return checks
+  via `coerce`). Off unless configured.
+- hindsight-kb: fused single-pass Mode-W attention (exact LSE merge; Triton on CUDA inference) and the fused `B C A`
+  linear, default on with `HKB_FUSED_MODE_W=0` opt-out and a CUDA parity test against the reference.
+
+**Defects found and fixed in the integrated code:**
+- Factorized cores sat on a saddle: with `U = V = 0` neither gets gradient, so only the diagonal ever trained. U now
+  starts nonzero, V at zero (core still 0 at step 0); test checks V's gradient at step 0.
+- `LearnedBankBasis.orthonormalize_` every 50 steps replaced `B` by `Q` (`B = QR`) without re-expressing the cores the
+  head emits (`bank.transform_core`), changing every compiled site's update at once; removed (`--ortho-every` gone).
+- Live-KB positives excluded only the row's own task id: a source-group sibling's experience text (signature + verified
+  reply) could carry the answer, in training and in the dev ablation. Peers now exclude the row, its task and every
+  source-group sibling.
+- Null-memory restraint zeroed the weights, which only masks the slots (identical to "no memory") and teaches nothing;
+  restraint rows now see distractors only at their real weights (plan: 20%, the new default).
+- `LiveExperienceWriter`'s 000000002 warm start was a silent no-op (it read `writer_warmstart.pt`, the extractor writes
+  `writer_H.pt`; keys were matched by name across a pplx-embed 0.6B and a 2-layer pooler) while the receipt reported a
+  warm start; removed with the dual-LR groups. Its byte-as-token-id fallback for a missing tokenizer is gone.
+- Hard negatives from a `ScopedExperienceKB` mixed records of another writer's value space into this writer's slots;
+  removed (cross-family peers encoded by the same writer remain). `per_call_hkb` documents the one-space requirement.
+- `prepare` fabricated case rows (`{id, source_groups}`) for call-level tasks missing from the collections and ran the
+  held check over them; now fail closed (`call_level_unknown_case`). The funnel lacked `imports_native_state` (KeyError
+  on the first state-importing call); call-level rows are also checked for native-state imports.
+- The compositional step summed the signature's core with the full header's core (no algebra learned); it now compiles
+  scope and body separately (their text states written in the real call) and trains `C_scope + C_body` alone.
+- FO-MAML crashed whenever the Reptile weight was nonzero (the default 0.1): the Reptile term backpropagated through
+  `z0`'s graph after the query backward had freed it (the episode was never exercised by a test). The pull now
+  re-encodes the header. Support was one call; it is now every call but the last, query the last.
+- Resume was not exact: the run's `random.Random` (peers, null rows, episodes) was not saved and dropout drew from the
+  CUDA generator; both are now restored (CPU generator draws).
+- `CompiledSiteConfig.from_dict` silently dropped unknown keys; strict again. `compose_site_cores` refuses mismatched
+  targets. `PerCallCompileRequest` had placeholder `compiler_sha='compiler-v2'`/`policy_sha='base'` defaults and a cache
+  key missing `exclude_tasks` and the base; both identities are now required and the key covers them. Swallowed
+  exceptions in the KB generation lookup removed.
+- ts-host: the decision fast path swallowed scoring errors; branch 0 of branch search got `seed 0` when the request had
+  no seed (it is now the exact pass@1 request).
+
+**Dropped, and why:**
+- The positioned `soft:kb` span: a fixed "[KB] [KB] ..." text state spliced after the header, so step 0 was not the
+  uncompiled call (extra tokens) and the span did not start from input-specific text (AGENTS.md "Learned operators
+  start from text"); no engine or ts-host release binding places a second soft state, so a release carrying it would
+  serve something other than what was trained. Retrieved experience enters through `Z` into the header state residual
+  and the cores (plan §4.1/§4.3). A KB span initialized from the Stage-A record text, with a serving placement, is the
+  route if Stage C needs more bandwidth.
+- ts-host `crispFastPaths`: a second crisp-case mechanism beside `runCrispCase` (guards that decline, type check and
+  refinements on the result, effects, capture, audits), without the type check; §6.3 promotion should emit compiled
+  cases. The kernel's JIT binding: it attached the compiled adapter through a hand-built weights frame (`identity: {}`)
+  and dropped the compiled native state, serving half of what was trained, and swallowed errors; Tier-1 weights should
+  bind as a tuned release (state + adapter) through `tuned-serving`. `partialBindings` (only the JIT used it) and the
+  unused `hoistContracts` option went with it.
+- `step_verifier.harvest_branch_wins`: no caller, and it read `trace_events`/`branch_win` fields no rollout carries.
+- The other agent's 18:06 versions (`collapse`, `unified_head`, `call_level_engine`, `opsd_privileged`, `hkb_bridge`,
+  hindsight-kb `attention`/`native_lfm`): superseded by the committed fixes (Mode P collapse algebra removed, tail-bucket
+  JSD, CE on verified continuations, sibling exclusion, real SQLiteKB, real rollout formats); nothing unique kept.
+
+Tests: `test_compiler_compiled_site` (learned basis release serves the trained loss, V gets gradient at step 0, strict
+config, Live-KB sibling exclusion and restraint, FO-MAML and compositional gradients reach the encoder),
+`test_natlang_compiler`, `test_learned_optimizer_bank` (21 passed); ts-host build + compiler-jit/decision/callable
+tests (62 passed); hindsight-kb kernel/attention/LFM3 tests incl. the new CUDA Triton parity tests (42 passed).
+
+**Open:** T2 on hindsight-kb's `ExperienceWriter` with the 000000002 `H`/`Q` (W0.2 extraction on g4a) instead of the
+stand-in writer; Tier-1 runtime binding as a tuned release; call-level rows carry no prompt token count (the teach
+step's size cap bounds them).
+
+## 2026-11-25 22:40 Compiled releases: why the first real-weights parity run diverged (integration agent)
+
+Run (cde55352685b, greedy 32): base 32/32 everywhere; compiled release native 5/32 and SGLang 5/32 (split at token 6,
+margin 0.68), fork llama 12/32 (token 13). Causes, reproduced on the tiny LFM fixture and fixed in 836fc32d5:
+(1) the parity script's native/SGLang requests did not declare the state `same-base-adapter-state`, so under the
+adapter the engines re-encoded the header text and dropped the compiled residual (training and the runtime declare it);
+(2) no-grad native serving merged adapter stacks into the BF16 weights while training, SGLang and the fork apply them
+factored in FP32, and the parity reference used the merged form; serving is now factored (`inference_factors`, opt-out
+`NATLANG_FACTORED_LORA=0`). Whether (2) accounts for llama's 12/32 is unmeasured: the real-weights rerun of all phases
+(including the new page phase) is next. Undeclared same-base states under an adapter still re-encode silently on
+native and SGLang (documented best-effort); every production client found declares the mode.
+
+### 2026-11-25: optional nonvoid application returns after a proven effect
+
+Inventoried the exporter `openOutcomeGoalEvidence`, Python `verify_application_return`/`semantic_goal_completed`/`load_episode`, Node disk verifier `verifyObservedWorkspaceEvidence`, and native materializer. Explicit `returnedValue.required=false` already separates a requested native effect from an optional typed application return. No production change or return-binding waiver was needed. Added TEST-only model-free coverage for declared `SourceAttributionReport`, root ERROR, no output witness, independently reviewed native note effect, and one executed child decision through Python NativeIR, Node disk verification, materialization and CLI. The root stays ERROR; no return is fabricated. Rejected meaning review or a missing required returned value does not complete the goal; fabricated void witness remains rejected. These synthetic review exchanges are test fixtures, never registered as teacher data. Genuine campaign post-effect-error recovery and training gain remain unchecked.
+
+
+### 2026-11-26: preserve the assigned-program start boundary in Vibe retry accounting
+
+Source40's two fixture/setup errors had no authored capture; prior accounting conservatively counted unknown start/sample state as an attempt and exposure. Absence alone cannot establish no inference. The SST successor now authenticates one monotonic boundary from its exact finite Eval after fixture binding and before loading the assigned program, carries runner-owned evidence through the existing bounded RPC failure graph, and preserves the original failure/disposal causes. Campaign accounting uses only the outer recognized lifecycle: proven pre-load failure is infrastructure work with zero goal attempts/exposure; later or legacy unknown failures stay conservative. No completed-goal or training-proof requirement is waived. Existing failed raw bytes are unchanged, and historical orchestration phase alone remains insufficient. Mechanism inventory is `meta/AUTHORED_LIFECYCLE_ACCOUNTING.json` in the SST successor.
+
+Targeted evidence: 116 campaign controls passed, including immutable raw, pre/post-boundary accounting, nested guest/malformed/future-version rejection and contradictory-call integrity handling. SST controls exercise exact-Eval/expired/duplicate lifecycle behavior, real generated fixture→start→load ordering, canonical RPC/bounded-error roundtrip and actual outcome-source compilation. Actual running finite-Eval integration and historical no-start attribution remain unchecked; the change does not gate active Source41 or any paid collection. This marker is retry provenance, never a positive training/admission certificate.
+### 2026-11-25 — Source-bound Regency query reassessment preserves false reference observations
+
+The actual0072 Regency query returns correct0→0 repair progress and a non-reopened crossing from its captured native accounts, but its old checker requires a private claim source label, exact finding token and two-element reference array. Future SST aacd1ef fixes the native stage/verifier mechanism. Added an offline reassessor for completed original read-only queries: it verifies clean source/entry/root-output custody, exact distinct native read/forecast effects and unchanged installed numeric-oracle decisions/citations, then requires one genuine independent bound Terra meaning review before any completion overlay. Old false reference-conformance observations stay false in source-bound incidental roles; no missing array element, actor read or positive check is invented. Only exact native-grounded original values can lose their old false masks. Originals remain immutable.
+
+Sixteen targeted custody/negative controls passed in ledger vibe-regency-recovery-check-20261125b. Actual-packet preparation, Terra admission and canonical reader/materializer handoff are still pending; no old success or seed is claimed. The genuine GAD missing-roster and contradictory Workspace answers remain failed. This work does not gate active collection or frozen Source41.
+## 2026-11-25 23:40 aei1: supply rechecks actually rerun data and build; the DGX fill is standing (coordinator)
+
+- **Bug.** `supply_wait` deleted `stages/{data,build}.{done,exit}` so a short round would rerun them, but the next
+  `step()` asked `step_finished`, which found the previous outputs and a successful last run in the journal and marked
+  the step done (`how: journal`). r0012 rechecked six times (18:56-23:02) on the same mix: 4,939,072 new tokens each
+  time, 61k short of 5M, while new fills arrived. Fix: `supply_wait` writes `stages/<step>.rerun`; `step_finished`
+  returns None while it exists; `step()` removes it when it launches the step. Test in
+  `test_a_round_short_of_new_supervision_waits_and_rebuilds_until_the_wait_expires`.
+- **DGX fill.** `aei1-collect-v0009-fill` was OOM-killed at its 4.5 GB cap (22:22; 4.5 GB peak) and nothing relaunched
+  it (only the Colab fill had a keeper). `FILL_GB` 4.5 -> 8; `_fill_beside` relaunches the fill every
+  `FILL_KEEPER_SECONDS` (300) while its collection runs (`NATLANG_EI_FILL_KEEPER=0` opts out). Test in
+  `test_async_reader_routing.py`.
+
+## 2026-11-26 00:10 aei1: open collections compacted; actor native-state GC cuts at the oldest running episode (storage)
+
+- **Symptom.** DGX root 52 GB free and falling 10-11 GB/h (floor 40): the v9 collections (head 34 GB, `-pop` 16,
+  `-remote0` 29) stay open for the supply wait (5M new tokens, up to 12 h), and retention only tiers closed ones.
+- **Measured (23:30).** Head: `actor/blocks` 16 GB (native-state cache, ~5 GB/h: 10 GB written since the collector
+  restarted at 21:33), `groups` 15 GB. Groups of all three: `rollouts.jsonl` 28 GB, each sample's `results.jsonl` 16.5
+  GB (zstd -3: ~8x), teacher samples 1 GB, raw partials/evidence ~1 GB (already compacted at the group's scoring),
+  worker logs and journals < 0.1 GB. Nothing else redundant: `results.jsonl` is the scorer's input, not a copy of
+  `rollouts.jsonl` (that is the scored, lowered form).
+- **Cause 1 (blocks).** `collect_actor_blocks` cut at the oldest live group's creation. A group resumed by a restarted
+  collector keeps its first `created` (`cases.jsonl` mtime), so groups resumed at 21:33 held every block since
+  15:46. Fix: the collector records each slot's episode start (and a memetic preparation's), and the GC cuts at the
+  oldest running one less the grace; a live memetic group still holds back to its creation (its preparation writes
+  guidance states its later episodes import). `NATLANG_BLOCK_GC_BY_GROUP=1` restores the group rule. An owner-scoped
+  release through the actor (`/v1/neuralese/collect` per stale owner) was tried and stopped: each call loads every
+  foreign-held block to compute closures under the store lock (> 60 s per owner) and would stall the actor.
+- **Cause 2 (groups).** A scored group is reused as scored, never scored again (`reuse_scored`), yet its samples'
+  `results.jsonl` stayed raw until the collection closed. Fix: `episode_files.compact_results` (verified `.zst`, mtime
+  kept) and `ei_round_tier.compact_groups`: every collection's scored groups, running ones included, compact each quiet
+  (30 min), unheld top-level sample (raw jobs and `results.jsonl`); a done group gets `.episodes-compacted`. NVMe
+  collections first, 5 min per collection per pass; also in the driver's `retain`. Readers resolve the compacted file
+  (`episode_files.present`): `task_rollouts.entry_outcome`/`score`, `collection_health`, `recorded_policies` (already
+  `read_bytes`), `sglang_bench`. Memetic nested evals stay raw (`memetic_workspace` reads them). Not applicable: held
+  measurements, program-tune arms and the dashboard read their own directories, which this does not compact. The
+  registry's collection globs name `rollouts.jsonl`, not `results.jsonl`. Opt-outs `--no-group-compaction`,
+  `NATLANG_RESULTS_COMPACT=0`.
+- **Remote pulls.** `remote_collect.pull` excludes each sample whose results the DGX holds compacted
+  (`COMPACTED_RESULTS_EXCLUDED`). The tier refuses a pulled collection while a live or failed puller's
+  `remote_collect.py` lacks that constant: today's `-remote0` puller (pin d0f9f06e5bf5) would re-pull 7 GB raw over the
+  4.8 MB/s link.
+- **Applied now.** Native-state files untouched since before the head collector's start less 600 s deleted (423
+  files, 5.8 GB, list first); scored groups compacted: head 4.8 GB, `-pop` 4.9, v0008 1.7. Root 48 -> 62 GB.
+  `-remote0` (29 GB) waits for a driver on a pin with this commit; so does the new block GC of the head collector.
+- **Not done.** `rollouts.jsonl` (28 GB, ~10x) stays raw: it is the registered training input, and about 20 readers
+  use its existence as the group's scored marker (`reuse_scored`, `sft_sources`, remote pull markers, registry
+  manifests). Compacting it is the next storage lever.
+- Tests: `test_episode_files.py` (compaction and readers, retention pass on an open collection, remote pull, block GC
+  cutoff); the stale expectation in `test_grpo_sampling_supply.py` (the token after an empty think block is context
+  since c1abc6a47) fixed.
+
+
+### 2026-11-26: distinguish native open-goal setup from teacher-worker dispatch
+
+The actual Tendril About warm-panel failure occurs before the finite teacher utility exists. The shared open-goal runner now owns a per-invocation pre-dispatch boundary across its twelve typed worker-call sites, covering all 2,327 current catalog rows (all open-user-goal). A native setup failure before dispatch carries the exact case and real source context, with no invented Eval identity. After dispatch, a lost worker response remains unknown; the worker's exact-Eval load witness is preserved when available. Both a failed worker response and a later cleanup failure are retained instead of replacing the first error. The Python reader accepts only the closed schema and matching actual case, and rejects nested/foreign/post-dispatch claims. Original legacy raw is unchanged and remains conservative.
+
+Targeted evidence: 124 campaign controls pass; public runner controls cover pre-dispatch setup, unknown response, existing exact worker witness, failed cleanup, and parallel invocations. The common lifecycle RPC contract is exported from the already-declared System Testing skill dependency, avoiding a new generated dependency on the worker package. Existing verified-manifest exposure is justified by canonical load_episode requiring actual model reply identity, even when all generated decisions are excluded from targets. No model, sampling, SFT admission, goal text, split or user-effect guard changes. The actual future finite-Eval marker RPC remains unchecked until the coherent source consumer runs; this does not gate active paid Source41.
+### 2026-11-26: Recover the original Regency progress query without a teacher rerun
+
+The original 0072 works-progress-versus-route-flow capture correctly answers that repair progress remains 0→0 and East Crossing is not fully reopened. Its eight native effect checks passed; the old verifier rejected a private reference decomposition, token and finding count. The shared source-hashed reassessor preserves those original false reference checks as incidental evidence rather than fabricating missing actor calls or reference findings. Exact original source, native accounts/forecasts, actual returned claims and original masks remain bound.
+
+One authorized independent `openai-codex:gpt-5.6-terra` review of the bound original accepted the actual requested meaning. Canonical recovery, Python completion validation and Node NativeIR materialization passed: one completed episode, 19 eligible training decisions. The actual standing reader f2227ce64 also loaded the derivative successfully using exact git-object Python sources (22 modules), independently of the newer 3171 reader. No original bytes or teacher trajectory were rewritten, and no Luna call was repeated.
+
+The verified manifest was atomically appended to the existing campaign seed list, preserving every earlier entry, and archived through `vibestudio_campaign.remote_archive` at DGX `recovered-0072-regency-findings-20261126/capture/manifest.json`. Local source/review/reader/materializer/seed/archive proofs are under `/home/werg/vibe-regency-recovery-ops`. The standing ingest owner received the archive and compatibility proof; ingestion itself is not claimed here. The other actual 0072 missing drafts, requested roster/note omissions and contradictory answers remain failed unless separately established from their own evidence.
+
+### 2026-11-26 — Native approval-state meaning and capability composition
+
+Source41 local full Luna collection continues (four active workers; no Sol). The current wave has 48 completed native cases, 38 pass / 9 fail / 1 error; archived/indexed counts are separate. Corrected a future Tendril startup gate requiring About-page text after native panel boot readiness (23 runner/route controls passed). Future Base827197 combines actual model-owned capability planning and content-project hierarchies, native qualification projection and state/phase field guidance; public joint-loader component control and final registry/binder controls passed. These controls use scripted model responses/native-port mocks and are not teacher trajectories or whole native qualification.
+
+Source40 approval-state capture passed all native checks but its meaning reviewer rejected an accurate acquirable/needs-approval answer to a no-visit query. The shared reassessor now authenticates original discover/preflight effects and recomputes exact authority before presenting actual evidence to an independent bound meaning reviewer. Eighteen custody controls and exact original packet preparation passed (1.17s, 57.2 MiB); no teacher rerun, grant invention or raw rewriting. Source/readers/engine scope inventory is VIBE_NATIVE_APPROVAL_REVIEW_20261126.md. Completion recovery remains contingent on an actual independent acceptance and canonical materialization, not this diagnostic finding.
+
+## 2026-11-26 01:10 Natlang compiler: Stage C on the 000000002 pplx writer; restored ts-host hooks; T1/T0 reruns (integration agent)
+
+Owner (2026-11-26, relayed from the Stage C agent) reverses parts of the 2026-11-25 21:30 integration: no core
+component is downgraded or deferred. Stage C trains on hindsight-kb's pplx `H`/`Q` warm-started from 000000002, the
+ts-host compiler hooks stay, T1 and T0 rerun with the new defaults, the fork's `LLAMA_POS_MEMORY` patch is tested and
+real-weights parity decides whether Mode-W serving is green.
+
+**Committed (Stage C agent's work plus review fixes).**
+- 016902afb step-verifier progress weighting (default) and latent TTT's proximal sum. dd8f1c9d7, f763a2d5e,
+  772a4303f, a later kernels commit: `PplxWarmstartWriter` is the default T2 writer (`--writer-backend pplx`); a
+  fresh run refuses to start without `--warmstart-dir`, the embedding stand-in refuses a GPU run (CPU tests only).
+  Fixes: `value_head` cast to FP32 alone fed it BF16 hidden states (dtype error on the first encode); parameters stay
+  BF16 with hindsight-kb's `MasterAdamW` (FP32 masters and moments; plain AdamW rounded the 2e-5 encoder updates
+  away); encoders stay in eval mode while training (as hindsight-kb's experience trainer runs its writer); key
+  projection must equal `key_dim`; the receipt records the warm-start files' SHA-256, checked against the extractor
+  manifest; hindsight-kb's FLA/causal-conv/Liger kernels on by default on CUDA (000000002 trained with them; 3.6x
+  faster encode+backward on the A100, outputs within 0.3-1.1% of the reference in BF16; `--no-pplx-hf-kernels`).
+  `prepare --cases` unwraps authored-pool rows (`authored.jsonl`'s `task`) for the held check (the wrapper has no
+  `source_groups`, so siblings would have gone unexcluded) and fails on a missing file. `per_call_hkb` writes scope
+  states in the call where they occur (as training does) and records `scope_writes` (`alone` is untrained).
+- 2a2c086d5 ts-host: `compiler.jit` (adapter + soft instruction state), `compiler.hoistContracts`, partial bindings
+  in the JIT key, `buildCompiledCasesModule` for `runCrispCase`. Fix: the JIT stack was set on a copy of the call frame
+  while `NativeRuntime` keeps its own copy (the agent's driver calls run in `session.runtime.frame`), so neither the
+  adapter nor the state reached any model request; it now binds on both, and the manifest `weight_stack` and the
+  adaptation provenance record it. A malformed compiled state id is a `jit_compile_error` (call runs uncompiled); a
+  contract-hoist failure is a `contract_hoist_error` event. Test: adapter and state reach the request, the state
+  replaces its text, cache hit, failures recorded. 8dcb86834 (subagent) fixed a failure found on the way:
+  `db4aa4b4e` bound a shared callable-folder module's top-level `nl` value to the first task that loaded it
+  (`adaptation-runtime` "retained callable-folder inline reference" failed; cross-task authority leak).
+- 575366040 (Stage C agent, already on main): OPSD contrast feedback (structural tool-sequence contrast against a
+  verified run of the same task; no arguments, no return values) and the T1 head's differentiable FP32 matmul.
+- hindsight-kb `review/live-kb-hardening` 561dea1 (extractor reads the salvaged model directory, `targets.<i>.writer/
+  query`, refuses targets that disagree) and 5d16c58 (`FunctionalEncoderCache` accessors transformers 5.22 reads;
+  block-incremental query encoding raised AttributeError on the Colab VM).
+
+**Warm start (g4a, admission).** `extract_lfm3_warmstart.py` on the verified salvaged 000000002 model directory
+(training/inference.safetensors SHA a0d543c1.../f551ad8c..., matching `model-only-verification.json`):
+`writer_H.pt` 155 tensors (0506ba92...), `query_Q.pt` 153 tensors (19163bc9...), decoders/readers dropped. Strict load
+into `PPLXBlockEncoder` at pplx revision 8fc2de24534aa3610d85fa59c463313a5f096455 passes; encodings finite, shapes
+256/128. The weights sit a median 5.5% (relative norm) from base pplx (a fine-tune, so the mapping is right). Finding:
+the 000000002 key space no longer separates related from unrelated natlang call texts the way base pplx does
+(token MaxSim related vs unrelated on 3 probes: base 0.94/0.88, 0.94/0.86, 0.94/0.88; 000000002 0.40/0.41,
+0.46/0.45, 0.52/0.50). T2's pooled keys and learned pool vectors train on top; the shuffled-KB arm says whether the
+retrieved slots carry anything. Paths: g4a `/content/natlang-work/cmp/warmstart-000000002/` (+ `verify*.json`).
+
+**T2 launched** (g4a, preemptible admission tenant under `/content/natlang-work/cmp/t2_keeper.sh`, resumes from
+`learner-state.pt` every 100 steps after an eviction by aei1): rows `rows-v0009-cl.jsonl` (DGX
+`/home/werg/data/compiler-t2-20261126/`): 736 rows, 194 of them call-level teacher rows (349 kept of 408, 59
+unverified, 0 unknown case, 0 held-excluded; cases from the authored pool and v0008/v0001 groups), 586 train / 117
+dev-seen / 33 dev-unseen. `--writer-backend pplx --warmstart-dir .../warmstart-000000002 --pplx-revision 8fc2de2...
+--lr 2e-4 --warm-lr 2e-5 --steps 5000`, ablation arms (base, joint, kv-only, adapter-only, shuffled site, shuffled KB)
+every 50 steps. Out: `/content/natlang-work/cmp/t2-pplx-run1/`. A first attempt without the kernels was stopped at
+its step-0 ablation and discarded.
+
+**T1 rebuilt** (DGX `cmp-t1-build-contrast-2`, code bdfad6040): 5,022 rollouts (the collections grew since the
+178-twin build), `contrast_feedback` 1,248, `structural_feedback` 380, `no_facts` 860 (was 681 of 2,052), 946
+episodes, 3,740 twins (508 validation), 1,277 too long. Answer-leak audit over every twin (`answer_leaves`/`carries`,
+plus the raw expected JSON): 0 leaking twins (3,445 twins have answer leaves to check). Out:
+`/home/werg/data/compiler-t1-20261126/` (`leak-audit.json`). **T1 retrain launched** on g4b
+(`/content/natlang-work/compiler-t1/v2-contrast/keeper.sh`, one epoch, 404 steps of 8 twins, resumable).
+
+**T0** (DGX `cmp-t0-train-pw-1`, the 5-shard features from g4b, 18,022 boundaries, 16,457 train / 1,565 validation):
+progress weighting validation AUROC 0.641 (episode mean 0.658, permuted control 0.487, train 0.738); without it
+0.653 (0.668, 0.482, 0.751). Criterion 0.78 not met; branch@N is not gated on this head. By episode progress the
+validation AUROC is flat: first boundary 0.63, last boundary 0.64, quartiles 0.65/0.67/0.65/0.65 (no weighting).
+The last boundary of an episode predicts its outcome no better than the first, so label dilution over early
+boundaries (the hypothesis behind progress weighting) is not what limits it; the head reads something available at
+turn 0 (with 150 validation episodes over 19 tasks, plausibly task difficulty). Progress weighting stays the default
+(no significant difference at this size); what the features carry about step correctness is the open question.
+
+**Fork / parity:** a separate stream (subagent) tests and commits the `LLAMA_POS_MEMORY = -2` patch, moves the pin
+through `update_llama_runtime.mjs --fork` and runs `check_compiled_site_parity.py` on real weights; Mode-W serving is
+not called green before that reports. Found while reviewing: no producer in the fork writes cells at pos -2.
+
+## 2026-11-26 02:00 Compiled releases: the native engine's remaining compiled-arm gap was the LoRA delta's cuBLAS kernel
+
+**Observation** (parity4, g4b L4, after 836fc32d5): native `engine.generate` agreed 6/32 with the graph reference on the
+compiled arm; the prefill's last position already differed by 0.154 nats (base arm: bit-equal at step 0).
+**Cause:** `FactoredLoRALinear.forward` (`model/native_adapters.py`) computed `(x A^T) B^T` with plain `F.linear` on FP32
+factors, which cuBLAS ran in TF32 (`NATLANG_STOCK_ARITHMETIC` defaults to tf32) with a reduction picked by the row
+count. The native engine prefills in chunks (tokens, 1-token consume_open, splice, 1-token consume_close, tokens) and
+decodes one token at a time; the graph runs one pass. Per-layer probe on g4b (`runs/compiled-site-parity-invlora-
+20261126/g4b-split-probe2.json`): under the stack every chunking differs from layer 2 on; with the delta on the
+batch-invariant IEEE FP32 kernel (`invariant_linear`, the base projections' own) every layer and the logits are
+bit-equal for the engine's exact chunking. **Fix** 7936c09b7 (default; `NATLANG_INVARIANT_LORA=0` opts out; tests in
+`test_compiled_site_serving.py`). Covers native serving, the SGLang actor's native fallback, the graph reference and
+grad-enabled fits (all go through `factored_lora_modules`); SGLang slots and llama.cpp apply LoRA in their own kernels;
+the lfm3 learner's `factored_linear` is a separate single-pass mechanism (BF16 branch by design). **DGX rerun** (GB10,
+same checkpoint/release): native compiled 32/32 both before and after (GB10 cuBLAS did not flip the 0.02-margin step),
+but per-step max |dlogp| over the reference's top-20 along native's path: compiled 0.239 (opt-out) -> 0.0 at all 16
+steps (fix). **Open, separate mechanism:** the base (unadapted) arm still differs per decode step (0.165 on the DGX,
+0.12-0.22 on g4b) because the checkpoint's `source-v1` shared-execution profile leaves FFN projections on HF
+`nn.Linear` (cuBLAS, row-count dependent); `stable-v1` makes every split bit-equal in the same probe. Adapted FFN
+targets already go through the invariant kernel. Known since 2026-11-02 (ENGINEERING_FINDINGS "Actual replay
+qualification": source-v1 actor vs replay 0.1755); the lever is the declared profile of exported checkpoints.
+
+## 2026-11-26 02:00 Mode-W memory cells in the fork, pin natlang-b12096, compiled-release parity on real weights (fork-memory agent)
+
+**LLAMA_POS_MEMORY.** The compiler Stage C agent's uncommitted fork patch (a -2 position for Mode-W window-exempt,
+RoPE-free memory cells) is fork aa7f41533, unchanged; review fixes and tests are e8552cc50. As written the patch was
+inert and wrong where it would have run: no batch with a -2 entry passed `llama_batch_allocr::init` (the
+decreasing-position check starts at -1), and memory cells sat in `llama_kv_cells::seq_pos`, so `seq_pos_min` became -2
+and `apply_ubatch`'s SWA purge (`seq_rm(s, seq_pos_min, ...)`) deleted the memory at the first eviction; on LFM hybrids
+a memory ubatch also wrote its inputs into the short-convolution state and -2 into the recurrent cell's position.
+Fixed: memory batches hold memory only and skip the position checks; memory is off the position timeline
+(`seq_pos_min/max` ignore it); the LFM short convolution writes its state back unchanged for a memory ubatch; RoPE at 0
+in both `llm_graph_input_pos` branches and the attention-temperature input; memory modules that do not implement it
+refuse memory batches. `tests/test-pos-memory.cpp` (generated LFM3 and Gemma3): memory adds exactly its cells to every
+KQ mask, the sliding-window one included, with full and evicting SWA caches (which agree to 6e-8); it survives partial
+`seq_rm`, save/restore and SWA eviction, is removed by a whole-sequence clear or `[LLAMA_POS_MEMORY, 0)`, copied by
+`seq_cp`; a state span at -2 equals the same span at position 0 bit for bit (unrotated, visible) whatever its
+convolution rows. Decoding with no memory is byte-identical to b536c7379 on both models; Release and Debug pass it and
+`test-llama-context`. Pin moved with `update_llama_runtime.mjs --fork natlang-b12096` (9ad4a2bbf).
+
+**Mode W is not green.** No engine can place memory: no server request or native-state form puts a span at -2, the
+Python native engine and SGLang have no memory slots, and no engine serves hindsight-kb's Mode-W output gate
+`tanh(gamma)` (memory would enter attention ungated). No trained Mode-W reader exists. ENGINE_PARITY's Mode-W row
+names this as the blocker.
+
+**Compiled release (Mode P), real weights** (cde55352685b, release `t2-smoke3`, greedy 32, natlang f0073246a with
+836fc32d5): SGLang 32/32 compiled and base; fork llama-server 32/32 both (prompt tokens equal natlang's) on b536c7379
+x64, natlang-b12096 x64 (g4b) and natlang-b12096 linux-arm64 (DGX); base 32/32 everywhere. Python native engine 6/32
+compiled on g4b, split at the reference's 0.021-nat tie at step 6: cause and fix in the entry above (7936c09b7, the
+LoRA delta's row-count-dependent cuBLAS kernel); after it the DGX gives 32/32 both arms with per-step |dlogp| 0.0 on the
+compiled arm, and the reference recomputed with the fix has the same tokens, so SGLang's and llama's 32/32 stand; the
+g4b rerun is not run (its L4 is held by a long non-preemptible job; `/content/natlang-work/cmp-modep/chain6.sh` is
+ready). Page: not measured; the harness cannot load the 3.47 GB BF16 natlang GGUF in Chromium (fetch
+to Blob fails, also as three gguf-split shards; the vendored build's memory64 maximum is 4 GiB). The pin-bump smoke on
+the stock LFM3 Q8_0 passes (page vs natlang-b12096 server: same ranking on 5 items, largest gaps 0.26-0.63 nats, tuple
+grammar enforced). Work: g4b `/content/natlang-work/cmp-modep/parity4`, `parity5`; DGX
+`/home/werg/data/compiled-parity-20261126/parity5`.
+
+## 2026-11-26 03:00 Native engine numerics: source-v1 FFN on the invariant kernel; IEEE FP32 adapter gradients (numerics agent)
+
+**Base arm, cause.** `source-v1` (the legacy `native_shared_execution` profile; absent = source-v1, which every
+exported production checkpoint declares, cde55352685b included) differs from `stable-v1` only in which modules
+`shared_execution.configure_shared_execution` replaces: stable-v1 runs the FFN Linears (w1, w3, w2) through
+`_fixed_ffn` (fixed-tile IEEE `invariant_linear`) and the norms through `_fixed_norm`, and uses an FP64 convolution
+adjoint under grad. Under source-v1 the FFN ran HF `nn.Linear` (cuBLAS BF16, reduction chosen by the row count), so the
+native engine's chunked prefill and one-token decode differed from the graph executor's whole-prompt pass. Everything
+else was already row-invariant: attention/conv/head projections go through `shared_state._linear` (invariant kernel),
+LFM3 norms through `native_parameter_precision.rowwise_norm_forward` (128-row padded windows), so the norm and conv
+differences of stable-v1 are not part of it. **Fix** ac348293f: under source-v1 the FFN modules run `_fixed_ffn` by
+default (opt-out `NATLANG_INVARIANT_FFN=0`); the declared profile, native identity digest and state identities are
+unchanged; plain training updates keep their vendor fast path (`allow_plain_fastpath`). Found along the way and fixed:
+`_fixed_ffn` skipped `linear_precision_output`, so an inline QAT point at lambda = 1 under stable-v1/ffn-stable-v1 lost
+its real NVFP4 GEMM. **SGLang fork** 8b9418a4e2 (+ doc 8d2533921, pin moved in `sglang-fork.json`; the DGX checkout
+that live actors import stays at 17e3458c2e until a boundary with no live actor): source-v1 FFN under
+`NATLANG_SGLANG_PROJECTION=native` follows the runtime (`natlang_native_projection`); the vendor policy, which held
+eval and collection use, is unchanged. llama.cpp / wllama run their own kernels and are scored by greedy agreement.
+**Measured** (DGX, cde55352685b, release `t2-smoke3`, greedy 32; per-step max |dlogp| over the reference's top-20 along
+native's path, `runs/compiled-site-parity-invlora-20261126/ffnfix/`): base arm 0.165 max (0.047-0.165 over steps 1-15)
+with the opt-out -> 0.0 at all 16 steps with the fix; compiled arm 0.0 both; greedy 32/32 both arms both ways.
+
+**Adapter backward.** `FactoredLoRALinear`'s delta (7936c09b7) ran IEEE FP32 forward, and `_InvariantLinear`'s input
+adjoint was the exact kernel, but its weight gradient `grad.T @ x` ran on cuBLAS in TF32
+(`configure_native_precision`), and inside a plain training update with `NATLANG_PROJECTION_ARITHMETIC=vendor` the
+forward and both adjoints took `_VendorLinear` (TF32 for FP32 operands). **Fix** ac348293f: FP32 operands declared
+`ieee` use `invariant_weight_gradient` for dW and never take the plain/vendor GEMMs (opt-out `NATLANG_IEEE_FP32_GRAD=0`).
+The lfm3 learner's `factored_linear` is a separate BF16-branch mechanism and is not touched.
+
+**Tests:** `test_lfm3_port.py::test_source_profile_runs_the_fixed_ffn_by_default`; `test_compiled_site_serving.py`:
+chunked native base decode equals one pass (dispatch assertion fails under the opt-out), `_fixed_ffn` row invariance at
+LFM3 FFN shapes, factor gradients vs an FP64 reference < 1e-5 relative in invariant/vendor x plain/not (fails under the
+opt-out); fork `test_lfm3_activation_contract.py`. Neighbouring suites (shared_state, inline QAT, cotangent scope, norm
+execution, serving adapters, HF export profile): 189 passed.
+
+**Who picks it up:** everything that loads a native model through `load_native_model`: the Python native engine and
+SGLang's native fallback route, program tuning / compiled-site fits and releases (`tune/*`, compiler T1 on the L4) at
+their next resume or launch on a pin at or after ac348293f; their forward (and fit gradients) shift by BF16 reduction
+order, so a fit measured before and after re-measures its base. aei1 (lfm3 learner, SGLang vendor collection and held
+eval) is unaffected numerically.
+
+## 2026-11-26 02:40 aei1: collection clients run at what fits; every many-threaded process bounds its malloc arenas (collection-fit agent)
+
+**Observation.** `aei1-collect-v0009-pop` (DGX-side client of the Pop actor, 64 slots, 22.2 GB = its learned peak x 1.1)
+waited 30+ min in the ledger (17.5 GB headroom), Pop's GPU idle. It was OOM-killed at its cap at 17:38, 21:25 and 23:39
+on 2026-11-25; each time the kernel's victim was the collector's main Python process (anon RSS 7.0 GB after 1 h 55 min,
+8.1 GB after 2 h 9 min), and each relaunch claimed the higher learned peak. The DGX collection's main process (192 slot
+threads) held ~470 64 MB glibc arena heaps (2.0 GB) beside a 0.9 GB main heap and grew ~170 MB in 10 min with flat
+load. The shared node episode servers do not leak: across ~190k `invocation_end` records their JS heap after an
+invocation is flat (~160 MB busy) from the 1st to the 64th invocation, RSS rises ~410 -> 630 MB and is bounded by the
+existing recycle (64 invocations or 1.5 GB RSS).
+
+**Cause and fix.** glibc gives each allocating thread its own arena, which keeps its peak after frees (the mechanism
+`bound_host_heap` already fixed in the SGLang front, 2026-11). It now lives in `natlang_neuralese/common/host_heap.py`
+(2 arenas + malloc_trim every 60 s; `MALLOC_ARENA_MAX` wins; `NATLANG_BOUND_HOST_HEAP=0` opts out) and runs in every
+thread-per-slot or per-request entry point: expert_iteration (collect and the driver), grpo train, held_eval, filled_reasoning,
+teacher_gen and serve_native_checkpoint. The learned peaks (a max) stay high until reset; `memory_ledger reset-peak`
+of the `-pop` families once the fixed clients have run is the follow-up.
+
+**Clients fitted.** The 2026-11-25 rule now covers every DGX-side client (Pop's `-pop`, a `--collect-on-dgx`
+`-remote<i>`): the fit loop requeues a waiting client at the most slots that fit the room (budget 6 GB + (full - 6) x
+n/S, at least min(`--collect-fit-min-slots`, S/4)), launched `--shrunk` with MemoryMax at its full size, and its
+collector (no held-priority dir) restores its slots and claim (`--room-slots`, `--ledger-full-gb`) once room returns.
+Not applicable: clients on their remote host (`remote_collect.py run`, fixed REMOTE_SYNC_GB of rsync, no episodes on the
+DGX) and the fills (FILL_GB / COLAB_FILL_GB claim for the source listings, not slots: `expert_iteration.py` FILL_GB
+comment). With today's 17.5 GB headroom (room ~2.5 GB after the reserve) even 16 Pop slots do not fit; the client starts
+as soon as room for its minimum appears instead of waiting for 22 GB.
+
+
+### 2026-11-26: separate finite guest execution from EvalDO preparation
+
+Actual wave0074 Regency fixture failures reported `eval timed out after 3000ms` before teacher entry.
+The admitted `timeoutMs` is a whole-run wall deadline: durable queueing, engine/runtime setup, transformation,
+compilation, guest execution and async settlement all consume it. Source41 and Source42 share the same relevant
+EvalDO/sandbox blobs. The original inspected failure SHA is
+`6f7545f888fc5988237387a59582a05d74d2373bc60adc3e9c1168c20abdd7b6`; it does not identify guest CPU versus setup.
+The historical cause and an exact replay of those failed policy inputs remain unchecked; no original verdict changed.
+
+Ship the shared explicit `executionTimeoutMs` API. Its clock starts at the first untrusted module initializer or
+entry invocation after initial trusted preparation/compilation, and includes later imports and async settlement.
+It requires the independent whole-run bound. The three finite, capability-free policy producers (Regency,
+Adventure, Living Canvas) retain the 3000ms guest limit and use a separate 30000ms whole-run infrastructure bound;
+`legacyWholeRunOnly` restores their previous whole-only behavior. Native requests remain empty, read-only and
+pregranted-only. Expiry aborts the exact run owner and joins canonical cleanup. A real detached-rejection defect
+exposed by synchronous guest expiry was fixed by observing the returned promise even when already aborted.
+Source-bound phase diagnostics retain the original typed failure through scope disposal, renderer JSON and SST.
+
+Clean pushed successor sources: Host `b0b64ffa708217b1e8d013e0ee5f591e59520797`,
+Base `b61caea43e40789b50ff8848983df8bf3557ea7f`, Examples `28f6f93bd0563105a47c26c27855b751fd9a4881`,
+SST `1630f7638b6fe9cb6b1d7c1635c9b06ee6e9b64e`. The source inventory is
+`meta/GUEST_EXECUTION_BUDGET_INVENTORY.json` in these repositories. 311 distinct model-free controls passed across
+actual confined sandbox/initializers, EvalDO owner cancellation and cleanup, strict public/internal RPC schemas,
+normalization and intent identity, three policy consumers and renderer diagnostic transport. Exact proof:
+`/home/werg/vibe-guest-execution-deadline-ops/focused-ready.json`. Official Host declaration build, actual Workerd
+native replay and a newly built installed-Hub package remain unchecked; the coherent source producer/package
+consumer must verify those paths. No SDK bytes or frozen source inputs changed, and useful Source42 Luna continued.
+
+Retained library functions can carry the prior invocation's inactive checkpoint closure. An explicit new guest
+budget fails closed before using such a build-loaded module from a different budget owner. Ordinary whole-only
+module bodies also lack cooperative in-module checkpoints: the separate diagnostic actually observed all ten
+bounded ticks (100ms fake clock) before the outer 25ms deadline check rejected the result. This is an OPEN coverage
+limit, with the existing whole-run process watchdog as fallback, not a claim all imported code is cooperatively
+bounded. Safe current-owner checkpoint rebinding must preserve valid escaped functions and realm concurrency;
+EvalDO's existing active execution context is the concrete shared seam. It does not gate the minimal no-import
+policy successor. The optional old007 guarded package was superseded; warm default-three cache retained and its
+resumption watcher now requires an exact coherent successor package spec plus actual capacity. No new model calls.
+
+### 2026-11-26 — source-bound notification answer reassessment
+
+Inventory: `reassess_native_review.mjs` handles native-pass rejected reviews; `reassess_image_answer.mjs` handles source-identified obsolete answer bookkeeping and exact return masks. `recheck_live_trajectories.recover` plus Python `validate_reassessment_check_roles`/`verify_completed_reassessment`, Node observed-workspace validation and canonical NativeIR materialization consume the existing completed-reassessment schema. No new reader format or execution path is needed.
+
+Added `reassess_notification_answer.mjs` for completed clean original read-only notification captures with all three original native scope/refresh/independent-row checks true. The original reference action/state/ID/revision equality remains false diagnostically. The actual nonempty typed original answer, exact output/effect references and root/projection causal masks must bind before a mandatory independent meaning review. Acknowledgment/effect branches, empty answers, unrelated masks, held tasks, forged observations and false lineage fail closed. No goal, ID, original raw packet or actor output is rewritten. Visibility is explicitly distinguished from retained SQLite storage; requested event-explanation completeness must be judged, never inferred from native custody.
+
+Targeted actual check: `vibe-notification-reassessment-check-20261126a` passed 46 Node controls (16 new notification + existing native/image controls). Immutable wave0075 removed-history and invite-replaced-by-brief originals both deterministically prepare review inputs, with all original native checks retained. Semantic acceptance, canonical recovery/materialization, archiving and training admission remain pending their actual independent reviews; no teacher rerun or training gain is claimed.
+
+Notification recovery acted on: one genuine bound `openai-codex:gpt-5.6-terra` review per immutable wave0075 original accepted removed-history and rejected invite-replaced-by-brief. The latter confused an absent visible invitation with missing storage: both invitation and briefing remained stored unread, so the requested causal explanation was misleading/incomplete. Its original failure and new rejection remain preserved; no review loop or teacher rerun.
+
+Removed-history passed canonical completed reassessment/import, held separation and Python `load_episode` with `task_completed=true`; actual Node NativeIR materialization accepted 1 row → 13 eligible decisions, 0 rejected. Original raw SHA `6d1fc8aa8ede586d28ac9f9171e6460a1eec4d50e0fe9d247dc5bcb441c0a6d2` and original source pins were independently rechecked against the durable archive. `remote_archive(defer_export=True)` and existing `sync_index` published `recovered-0075-notification-native-20261126`; after writer coordination, only its accepted manifest was atomically appended to the latest seed list (63→64). Manifest SHA `0e85f6bf63a3840da2db9bcb8490679f81716b95003582e1e6e6262aa3ecafbf`. Standing ingestion and a future learner build's consumption remain unobserved; no training gain is claimed. Exact receipts and both genuine reviews: `/home/werg/vibe-notification-recovery-ops/`.
+## 2026-11-26 — drain collection at settled runtime boundaries
+
+Source43's repaired release was actually ready while Source42 still had most of an archival64-case wave left. SIGTERM correctly cancels active managed work, so using it to pick up ready source would interrupt useful inference; waiting for all64 delays improvements. Add a soft drain to the existing collector owner. The full driver forwards stop-after-wave to Host, which checks only before another runtime/run after the previous run's review/export/retirement. The existing interruption receipt preserves completed outcomes and labels only unstarted cases unfinished. Hard signals retain cancellation semantics, including after soft drain. Default on with --finish-archive-wave opt-out. Four real-child Node controls and131 actual campaign tests passed; no model calls. Existing Source42/43 pins remain unchanged; ship the coupled Host+driver at the next coherent source cutover.
+
+## 2026-11-26 — historical infrastructure replay cannot stop a repaired release
+
+Acted on the actual Source43 startup failure: its first controller recovered partial Source42 wave0076 and then applied that old capture's structural-failure counter to the new release before any new teacher case ran. Source42 releasee80cec differs from Source43 release623829; preserved every original outcome, archived the exact stale hold, and resumed. Source44 was already ready by the subsequent boundary and is now actually running8 Luna workers (hard18GiB/reserve7.5 unchanged), first managed run st_b2455b2e17554d719b5058847246a2c3. Current campaign702 completed/1038 pending/8 Android; standing ingest ledger698 episodes through75 (different denominators).
+
+The shared post-archive stop decision now retains a source-bound historical hold diagnostic when both identified releases differ; current or unidentified release failures still stop, and --hold-historical-infrastructure restores legacy cross-series behavior. Pure infrastructure classification, raw receipts, attempts, held separation and NativeIR remain unchanged. All139 campaign tests actually passed, including real drive recovery with zero teacher regeneration for changed/current/missing/non-string identity and opt-out. The first test fixture used an ordinary exporter rejection that correctly did not count as infrastructure; corrected it to actual no-capture infrastructure, without broadening classification. Active Source44 pin stays immutable; this controller fix enters at its next safe resume.
+
+## 2026-11-26 — Retain exact per-case export failures without changing admission
+
+Wave0077 retained seven export-rejected raw captures but campaign reasons were null: ordinary Host exporter errors were only logged/aggregated, while the Python outcome reader only saw the passing native test. The shared producer/consumer now appends per-run diagnostics bound to exact compressed packet bytes and source pins, and reads only matching records. Existing native/transport reasons remain primary; mismatched or malformed auxiliary diagnostics never grant admission or become fabricated capture-integrity failures. Actual pending-review/checkpoint semantics and original raw/review/receipts stay unchanged. Diagnostic I/O failure preserves the original exporter error. `VIBESTUDIO_EXPORT_FAILURE_DIAGNOSTICS=0` restores earlier diagnostic behavior.
+
+Inventory: `LIVE_EXPORT_FAILURE_DIAGNOSTICS_20261126.md`. Actual targeted checks: 139 existing campaign tests +5 reader/outcome controls PASS, six reader controls including real Host→Python UTF-8/hash boundary PASS, three actual Node writer controls PASS. Host source successor is separate from immutable active Source46; the new pair enters the next normal pin/cutover. The seven old rejections are being audited by native proof and actual grade, not blanket-accepted or rewritten.
+
+## 2026-11-26 05:40 aei1: the DGX collection shrinks in place for round preparation (collection-fit agent)
+
+**Observation.** `aei1-collect-v0010` (192 slots, ~51 GB used) was SIGKILLed by ledger preemption when r0013's data
+(03:44) and build (04:29) steps launched; the fit loop requeued it ~1 min later, but every in-flight episode died and
+its group resumed only partly. `collect.log` shows no `held priority` yield before either preemption, and both prep
+yields logged `room: false, waited: 601`.
+
+**Cause.** The driver restarted at 02:41 inside r0013's preparation. Its predecessor's claim
+`ops/ei/held-priority/aei1-r0013-prep.json` (dead pid 926634) stayed on disk; `yield_claim` took any existing file for a
+nested block of its own and wrote nothing, while `held_priority_claims` (correctly) ignored the dead claim. So the
+collection never yielded, PREP_YIELD_WAIT ran out, and the step's admission preempted it. Even a working yield only
+stopped new episodes in the yielded half: those still running (~45 min each) and their shared episode servers kept their
+memory well past the 10-min wait.
+
+**Changes (default on).**
+- `yield_claim` replaces a dead or stale claim under its name; only a live one is left to its owner.
+- A round-preparation claim carries `evict_seconds` (`--prep-evict-seconds`, 120; 0 opts out, also
+  `NATLANG_EI_PREP_EVICT_SECONDS=0`). That long after the collection yields, grpo's slot loop stops the episodes in the
+  yielded slots (`_evict_slot`) and requeues them first in the same run (`_requeue_evicted`): continued from their
+  partials when `episode_files.partial_continuable`, else set aside as `stopped` (not counted as lost) and rerun. A held
+  claim never evicts.
+- Slot -> episode-server affinity (`grpo.slot_env`, `run_bonsai_queue.SharedChild.socket_order`): slot i searches from
+  socket i // 8, so the yielded top slots empty whole servers (~0.7 GB each), which exit, besides their episode
+  processes (~44 MB each). Opt-out `NATLANG_COLLECTOR_SLOT_AFFINITY=0`.
+- While yielding, the collection lowers its ledger claim to its use every 60 s (`resize yield`, never raised), so the
+  freed memory becomes headroom. The existing path restores it when the claim ends.
+- Estimate: evicting 96 of 192 slots frees ~4 GB of episode processes plus ~12 servers (~8 GB) within ~2-4 min, plus the
+  claim's unspent reserve. A step that still does not fit after PREP_YIELD_WAIT preempts as before.
+
+## 2026-11-26 06:10 aei1: the DGX collection is standing (coordinator)
+
+- 05:29 the coordinator stopped `aei1-collect-v0010` so it would relaunch on pin 1a02ec703; the driver sat in a 45 min
+  supply wait and launches the collection only at round steps, so it stayed down 20 min with the GPU at 0%.
+- `collection_fit_loop` (every 60 s) now also calls `collection_standing`: the DGX collection for the current policy
+  is launched again when its unit is gone, unless `stop_collections` holds it (a DGX SFT) until the next
+  `ensure_collection`. `ensure_collection` runs under one lock (main loop and the standing check never both launch).
+  `NATLANG_EI_STANDING_COLLECTION=0` opts out. Test in `test_async_train.py`.
+## 2026-11-26 — Bind Regency/Grimoire review roles to immutable native observations
+
+Extended the existing native-review reassessor to Regency and Grimoire rather than adding a recovery channel. Each derivative requires the original clean source hash, complete bound completed root, unchanged original rejected review, all genuine native checks, exact captured service effects, and actual retained note SHA/current revision where present. Regency facts separate pending council status and new persisted note bytes from the prior instruction memo; Grimoire separates view-current confirmation from older write authority. No original packet, verdict, return or native effect is rewritten. Exactly one new bound Terra admission review is authorized for each of three archived 0077 cases; failure stays preserved, with no teacher replay or review-until-pass. Deterministic preparation passed all three actual originals; 29 targeted Node controls pass, including missing calls, swapped note bytes/revision, unobserved advance, foreign scope and fabricated hold artifact negatives. Shared Python/Node recovery/materialization remains unchanged. Larger model-owned Regency source and truthful observation/projection history ship independently; recovery does not gate current collection.

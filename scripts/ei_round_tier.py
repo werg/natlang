@@ -25,7 +25,10 @@ Retention (``drop_plan``, default; ``--no-drop`` opts out; DECISIONS 2026-11-25 
 what no consumer reads: closed collections' actor exports and native-state blocks (every policy but the lineage head),
 trained rounds' learner states, chains pickles (mix with trained-units.json, filled, own Neuralese graph) and
 superseded exports, and the checkpoint of a policy that left the lineage unprotected; teacher campaigns' quiet episodes
-are compacted. The async driver runs the same deletions itself at each publication (``retain``).
+are compacted, and so are the scored groups of every collection, running ones included (``compact_groups``: a quiet,
+unheld sample's raw job files and its ``results.jsonl``, ``episode_files.compact_sample`` and ``compact_results``;
+``--no-group-compaction`` or ``NATLANG_RESULTS_COMPACT=0`` / ``NATLANG_EPISODE_COMPACT=0`` opt out; DECISIONS
+2026-11-25 "open collections compacted"). The async driver runs the same deletions itself at each publication (``retain``).
 
 Each item is skipped while any process (cwd, exe, fds, maps, command line, environment) or an active, failed or
 timer-triggered unit names it, or a ``.keep-on-nvme`` marker covers it. A deletion is also skipped while a configured
@@ -54,6 +57,7 @@ from types import SimpleNamespace
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO / 'training' / 'neuralese'), str(REPO)]
 from natlang_neuralese.common.paths import resolve  # noqa: E402
+from natlang_neuralese.common.policy_identity import entry_shas  # noqa: E402
 from natlang_neuralese.rl import episode_files  # noqa: E402
 from natlang_neuralese.train.checkpoint_offload import replace_with_link, verified_copy  # noqa: E402
 from scripts.prune_stale_checkouts import (configured_consumers, process_references, references,  # noqa: E402
@@ -98,7 +102,8 @@ def _shas(node) -> set[str]:
 
 def protected_policies(state: dict, current_policy: dict | None) -> set[str]:
     lineage = state.get('lineage') or []
-    keep = {e['sha256'] for e in lineage[-2:] if e.get('sha256')}
+    # a lineage policy under every file sha of its weights (a rebuilt checkpoint's earlier sha: ``policy_identity``)
+    keep = {s for e in lineage[-2:] for s in entry_shas(e)}
     for key in ('active_round', 'measuring', 'reference_policy', 'start_policy'):
         keep |= _shas(state.get(key))
     verdicts = state.get('applied_verdicts') or []
@@ -117,6 +122,31 @@ def _round_sha(r: Path) -> str | None:
         return None
 
 
+def round_trained(r: Path, state: dict) -> bool:
+    """Whether round ``r`` trained: the driver recorded it (``trained_rounds``), or its factors or publication exist."""
+    return (r.name in set(state.get('trained_rounds') or []) or (r / 'policy' / 'published.json').exists()
+            or (r / 'sft' / 'factors' / 'policy_manifest.json').exists())
+
+
+def round_pending(r: Path, state: dict) -> bool:
+    """A round that is still to train, whatever ``active_round`` says: not discarded, not trained (``round_trained``),
+    and either prepared (``stages/prepared.done``) or prepared from the lineage head (round.json ``base_policy_sha`` or
+    ``trained_from``). Its mix, fill and Neuralese-graph inputs and learner state are protected. 2026-11-25 14:23: with
+    ``active_round`` on a GRPO round that was later dropped, r0011 (prepared, never trained) counted as older than the
+    active round and lost its chains and inputs."""
+    if (r / 'discarded.json').exists() or round_trained(r, state):
+        return False
+    if (r / 'stages' / 'prepared.done').exists():
+        return True
+    lineage = state.get('lineage') or []
+    head = (lineage[-1].get('sha256') or '') if lineage else ''
+    try:
+        record = json.loads((r / 'round.json').read_text())
+    except (OSError, ValueError):
+        return False
+    return bool(head) and head in (record.get('base_policy_sha'), record.get('trained_from'))
+
+
 def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[dict]:
     """Retention (DECISIONS 2026-11-25 "EI retention"): what no consumer reads once a round is trained or a collection
     is closed is deleted, on the NVMe or through an earlier move's link on the HDD. Every action is a 'delete'; an
@@ -128,7 +158,7 @@ def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[di
       calls stored; a resumed partial never continues past a Neuralese write, ``episode_files.partial_continuable``;
       the SFT build trains imports as pass-through). Guarded by ``actor`` (the running actor names ``--store-dir``).
     - Rounds that trained (``trained_rounds``, ``discarded.json``, or older than the active round), never the active
-      one: ``sft/learner-state*`` (the round's resume state: read by ``--resume``, ``recap_for_dgx``, ``sft_handback``
+      one nor one still to train (``round_pending``: prepared and not trained, or prepared from the lineage head): ``sft/learner-state*`` (the round's resume state: read by ``--resume``, ``recap_for_dgx``, ``sft_handback``
       and ``rebuild_round`` only before publication); ``*.pkl`` of a mix directory whose ``trained-units.json`` exists
       (``--prefer-unseen`` reads rows.jsonl.zst and trained-units.json, ``sft_sources.trained_units``) or of a
       ``mix.pre-rebuild-*`` copy; ``filled/chains.pkl`` and ``neuralese-graph-own/chains.pkl`` (inputs of that
@@ -141,7 +171,7 @@ def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[di
     keep = protected_policies(state, current_policy)
     lineage = state.get('lineage') or []
     head = (lineage[-1].get('sha256') or '') if lineage else ''
-    on_lineage = {e.get('sha256') for e in lineage}
+    on_lineage = {s for e in lineage for s in entry_shas(e)}
     trained = set(state.get('trained_rounds') or [])
     active = (state.get('active_round') or {}).get('round_id')
     active_n = int(active[1:]) if active and ROUND.match(active) else None
@@ -160,7 +190,7 @@ def drop_plan(driver: Path, state: dict, current_policy: dict | None) -> list[di
                                     'alias': [str(d / 'actor' / name)],
                                     'why': f'closed collection of {m.group(2)} (not the lineage head): actor {name}'})
     for r in sorted((p for p in driver.iterdir() if ROUND.match(p.name) and p.is_dir()), key=lambda p: p.name):
-        if r.name == active:
+        if r.name == active or round_pending(r, state):
             continue
         discarded = (r / 'discarded.json').exists()
         if not (r.name in trained or discarded or (active_n is not None and int(r.name[1:]) < active_n)):
@@ -194,11 +224,19 @@ def _under_dest(link: Path) -> bool:
     return str(target).startswith(str(DEST) + '/') or str(target).startswith(str(link.parent.resolve()) + '/')
 
 
-def plan(driver: Path, state: dict, current_policy: dict | None, drop: bool = True) -> list[dict]:
+def plan(driver: Path, state: dict, current_policy: dict | None, drop: bool = True,
+         group_compaction: bool = True) -> list[dict]:
     """The actions for one driver directory, oldest first: {'op': 'delete'|'move'|'trim'|'compact', 'path', 'why'}.
     ``drop`` (default; ``--no-drop`` opts out) puts the retention deletions (``drop_plan``) and the teacher campaigns'
     episode compaction first; the moves then tier what is left."""
     actions = drop_plan(driver, state, current_policy) if drop else []
+    if drop and group_compaction and (driver / 'collect').is_dir():
+        # the NVMe's collections first (newest first: the running ones grow); moved ones (on the HDD) after
+        newest = sorted((driver / 'collect').iterdir(), key=lambda p: p.name, reverse=True)
+        for d in sorted(newest, key=lambda p: p.is_symlink()):
+            if COLLECTION.match(d.name) and d.is_dir() and (d / 'groups').is_dir():
+                actions.append({'op': 'compact-groups', 'path': str(d),
+                                'why': 'scored groups: quiet episodes compacted (episode_files.compact_results)'})
     if drop:
         for t in sorted(driver.glob('teacher-r*')):
             if t.is_dir() and not t.is_symlink() and (t / 'episodes').is_dir() and not (t / COMPACTED).exists():
@@ -215,7 +253,7 @@ def _tier_plan(driver: Path, state: dict, current_policy: dict | None) -> list[d
     # round builds read only the current and previous policy's collections (and the active round's base); the
     # reference and start policies are what a rollback returns to, whose collection then resumes (2026-11-24 19:12:
     # aei1 rolled back to r1, whose collections were on the HDD, and its live collectors wrote there)
-    keep12 = {e['sha256'][:12] for e in lineage[-2:] if e.get('sha256')} | \
+    keep12 = {s[:12] for e in lineage[-2:] for s in entry_shas(e)} | \
         {s[:12] for key in ('active_round', 'reference_policy', 'start_policy') for s in _shas(state.get(key))}
     by_round = {e.get('round_id'): e for e in lineage if e.get('round_id')}
     last_two = {e.get('round_id') for e in lineage[-2:]}
@@ -239,7 +277,7 @@ def _tier_plan(driver: Path, state: dict, current_policy: dict | None) -> list[d
             actions.append({'op': 'move', 'path': str(d), 'why': f'collection of unprotected policy {m.group(2)}'})
     for r in sorted((p for p in driver.iterdir() if ROUND.match(p.name) and p.is_dir() and not p.is_symlink()),
                     key=lambda p: p.name):
-        if r.name in last_two or r.name == active or int(r.name[1:]) >= head:
+        if r.name in last_two or r.name == active or int(r.name[1:]) >= head or round_pending(r, state):
             continue
         policy = by_round.get(r.name)
         policy_kept = policy is not None and policy.get('sha256') in keep
@@ -447,6 +485,67 @@ def compact_campaign(campaign: Path, quiet_seconds: int = 3600) -> dict:
     return {**dict(total), 'freed': episode_files.freed(total), 'skipped': skipped}
 
 
+# ---------- scored groups of any collection ----------
+GROUP_COMPACTED = '.episodes-compacted'
+GROUP_QUIET_SECONDS = 1800
+
+
+def remote_puller_blocks(collection: Path, procs, units) -> str | None:
+    """Why a collection pulled from a remote VM (``remote_collect.py run --work COLLECTION``) is not compacted: a live
+    or failed (restartable) puller whose ``remote_collect.py`` predates ``COMPACTED_RESULTS_EXCLUDED`` would pull every
+    compacted results.jsonl raw again. None when no such puller exists."""
+    needle = f'--work {collection} '
+    texts = [t for _, kind, t in procs if kind == 'cmdline'] + [t for _, t in units]
+    for text in texts:
+        if 'remote_collect.py' not in text or needle not in text + ' ':
+            continue
+        script = next((w for w in text.split() if w.endswith('remote_collect.py')), None)
+        try:
+            if script and 'COMPACTED_RESULTS_EXCLUDED' in Path(script).read_text():
+                continue
+        except OSError:
+            pass
+        return f'remote puller without compacted-results excludes: {script}'
+    return None
+
+
+GROUP_PASS_SECONDS = 300      # one collection's share of a pass: the moves after it keep their time
+
+
+def compact_groups(collection: Path, quiet_seconds: int = GROUP_QUIET_SECONDS, deadline: float | None = None,
+                   max_seconds: float = GROUP_PASS_SECONDS) -> dict:
+    """The scored groups (``score.json``) of one collection, open or closed: each top-level sample (``row-*/*``) that
+    is quiet ``quiet_seconds`` and that no process holds open loses its raw job files and its ``results.jsonl`` to
+    ``.zst`` (``episode_files.compact_sample``, ``compact_results``). A scored group is reused as scored and never scored
+    again (``grpo.Collector.reuse_scored``); its readers resolve the compacted file (``episode_files.present``). A group
+    whose samples were all compacted gets ``GROUP_COMPACTED`` (later passes skip it). Returns counters with 'freed',
+    'groups' and 'skipped' (samples still live)."""
+    total, groups, skipped = collections.Counter(), 0, 0
+    if not episode_files.enabled():
+        return {'freed': 0, 'groups': 0, 'skipped': 0}
+    held = episode_files.open_paths(collection / 'groups')
+    stop = time.time() + max_seconds if deadline is None else min(deadline, time.time() + max_seconds)
+    for group in sorted((collection / 'groups').glob('g*')):
+        if time.time() > stop:
+            break
+        if group.is_symlink() or not group.is_dir() or (group / GROUP_COMPACTED).exists() \
+                or not (group / 'score.json').is_file():
+            continue
+        now, live, stats = time.time(), 0, collections.Counter()
+        for sample in sorted(p for p in group.glob('row-*/*') if p.is_dir() and not p.is_symlink()):
+            if not episode_files.quiet_sample(sample, now, quiet_seconds, held):
+                live += 1
+                continue
+            stats.update(episode_files.compact_sample(sample))
+            stats.update(episode_files.compact_results(sample))
+        total.update(stats)
+        skipped += live
+        if not live and not stats.get('errors') and episode_files.results_enabled():
+            (group / GROUP_COMPACTED).write_text(json.dumps({'at': time.time(), **dict(stats)}) + '\n')
+        groups += 1
+    return {**dict(total), 'freed': episode_files.freed(total), 'groups': groups, 'skipped': skipped}
+
+
 # ---------- collection trim ----------
 # What a closed collection keeps: the episodes (results.jsonl, rollouts.jsonl, rewards, journals, partial episodes and
 # their evidence, compacted to .zst by natlang_neuralese.rl.episode_files, error records), memetic evaluations, task and
@@ -570,7 +669,8 @@ def run(args) -> dict:
         except (OSError, ValueError) as error:
             log(event='state unreadable: driver skipped', driver=str(driver), error=repr(error)[:200])
             continue
-        actions = plan(driver, state, current, drop=getattr(args, 'drop', True))
+        actions = plan(driver, state, current, drop=getattr(args, 'drop', True),
+                       group_compaction=getattr(args, 'group_compaction', True))
         if not apply_plan(driver, actions, args, procs, units, summary, deadline, configured):
             break
     return summary
@@ -587,11 +687,12 @@ def new_summary(apply: bool) -> dict:
     return {'deleted_bytes': 0, 'moved_bytes': 0, 'actions': 0, 'skipped': 0, 'errors': 0, 'applied': apply}
 
 
-def retain(driver: Path, *, apply: bool = True, ops=('delete', 'compact'), max_minutes: float = 30.,
+def retain(driver: Path, *, apply: bool = True, ops=('delete', 'compact', 'compact-groups'), max_minutes: float = 30.,
            consumer_configs: bool = True) -> dict:
     """The retention of one driver directory, run by the driver itself (``expert_iteration.py async-drive`` at each
     publication and when a collection closes; ``--no-retention`` opts out): ``plan``'s ``ops`` actions (deletions and
-    the teacher compaction by default; the HDD moves stay with the sweep) under the same reference checks."""
+    the teacher and scored-group compaction by default; the HDD moves stay with the sweep) under the same reference
+    checks."""
     state = json.loads((Path(driver) / 'phase-state.json').read_text())
     summary = new_summary(apply)
     actions = [a for a in plan(Path(driver), state, current_policy()) if a['op'] in ops]
@@ -618,6 +719,27 @@ def apply_plan(driver, actions, args, procs, units, summary, deadline, configure
         if why or keep_marker(path, driver):
             summary['skipped'] += 1
             log(event='kept', path=str(path), reason=(why or ['marker .keep-on-nvme'])[:3])
+            continue
+        if action['op'] == 'compact-groups':
+            # a running collector names and holds its collection: each sample is checked itself (quiet, none open)
+            blocked = remote_puller_blocks(path, procs, units)
+            if blocked or keep_marker(path, driver):
+                summary['skipped'] += 1
+                log(event='kept', path=str(path), reason=[blocked or 'marker .keep-on-nvme'])
+                continue
+            if not args.apply:
+                continue
+            try:
+                stats = compact_groups(path, deadline=deadline)
+            except Exception as error:
+                summary['errors'] += 1
+                log(event='error: kept', path=str(path), error=repr(error)[:300])
+                continue
+            if stats['freed']:
+                summary['compacted_bytes'] = summary.get('compacted_bytes', 0) + stats['freed']
+                summary['actions'] += 1
+                log(event='compacted', path=str(path), gb=round(stats['freed'] / GIB, 2), groups=stats['groups'],
+                    skipped=stats['skipped'], why=action['why'])
             continue
         if action['op'] == 'compact':
             if not args.apply:
@@ -709,6 +831,8 @@ def main(argv=None):
     parser.add_argument('--hdd-floor-gb', type=float, default=100.0)
     parser.add_argument('--no-drop', dest='drop', action='store_false',
                         help='opt out of the retention deletions and teacher compaction (drop_plan): moves only')
+    parser.add_argument('--no-group-compaction', dest='group_compaction', action='store_false',
+                        help='opt out of compacting the scored groups of every collection (compact_groups)')
     parser.add_argument('--no-consumer-configs', dest='consumer_configs', action='store_false',
                         help='opt out of the configured consumers (ops/consumers.d registrations, data registry, '
                              'current policy, watchdog, unit config files) as references of a deletion')

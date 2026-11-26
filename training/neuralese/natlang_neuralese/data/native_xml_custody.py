@@ -127,8 +127,10 @@ def render_packet(tokenizer, turn):
     packet=native_gold_packet(tokenizer,turn['context'],target,turn['tools_offered'],
                               prompt_rendering='full',response_tools=turn['response_tools'])
     raw=turn['model_response']['raw_response']['choices'][0]['message']['content']
-    end=tokenizer.decode([tokenizer.convert_tokens_to_ids('<|im_end|>')])
-    if not packet[0].endswith(raw+end+'\n'):
+    end_id=tokenizer.convert_tokens_to_ids('<|im_end|>');end=tokenizer.decode([end_id])
+    # The sampled reply stops at its end-of-turn token; the template's separator after it is never a target
+    # (serve.chat._without_turn_separator), so the rendered target ends exactly at that token.
+    if not packet[0].endswith(raw+end) or packet[1][-1]!=end_id:
         raise ValueError('native XML target rendering changes actual sampled assistant content')
     return packet
 

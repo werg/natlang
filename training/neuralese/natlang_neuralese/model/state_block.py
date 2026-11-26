@@ -48,7 +48,12 @@ def layer_fields(kind) -> tuple[str, ...]:
 # are trained to read the spliced span (DECISIONS 2026-11-23 "Neuralese read-back", 2026-11-25; ENGINE_PARITY). Other
 # states (contextual bodies, optimized, derived and soft states) carry no kind and splice as stored. States written
 # before the field existed keep their ids.
-PRODUCER_KINDS = ('text', 'span')
+# 'capture' = the in-context capture of a reply that summarizes its own context (`native.capture`, the grammar capture:
+# a learned compaction operator's reply, a `compact_history` note). Its rows carry what the value they attend to gave
+# them, which the reply's tokens alone lose (use ablation 2026-11-25: the spliced state beats the same tokens read inline
+# by up to 0.6 nats/token), so it splices as stored; NATLANG_NEURALESE_CAPTURE_IN_CONTEXT=1 reads it inline like a span
+# (DECISIONS 2026-11-25 "Learned compaction on by default").
+PRODUCER_KINDS = ('text', 'span', 'capture')
 
 
 def native_state_metadata(*, text, architecture, tokenizer_fingerprint, checkpoint_sha256, embedding_weight_sha256,

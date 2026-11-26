@@ -1,4 +1,5 @@
-"""Forward-only adapted inference reuses a stack's effective weights: bitwise the uncached actor, far less work."""
+"""Forward-only adapted inference reuses a stack's served form (FP32 factors, else merged weights): bitwise the uncached
+actor, far less work."""
 import pytest
 import torch
 

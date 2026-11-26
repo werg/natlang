@@ -180,6 +180,13 @@ def code_repo() -> Path:
 
 # ---------- paths ----------
 
+def _local_path_opt_out() -> bool:
+    """Scratch-only absolute names require an explicitly separate journal."""
+    override = os.environ.get('NATLANG_DATA_REGISTRY')
+    return (os.environ.get(ALLOW_ENV) == '1' and bool(override) and
+            Path(override).expanduser().resolve() != (root('data_nvme') / 'data-registry').resolve())
+
+
 def portable(path) -> str:
     """``root:rel`` for a path under a logical data root, a plain relative path under the canonical checkout."""
     p = Path(os.path.abspath(path))
@@ -198,7 +205,7 @@ def portable(path) -> str:
         if best is None or len(base.parts) > len(best[1].parts):
             best = (name, base, rel)
     if best is None:
-        if os.environ.get(ALLOW_ENV) == '1':     # the strictness opt-out (tests, scratch): an absolute, local name
+        if _local_path_opt_out():     # scratch registrations cannot poison the shared journal
             return str(p)
         raise ValueError(f'{path} is under no logical data root ({", ".join(PORTABLE_ROOTS)}) or the checkout')
     return f'{best[0]}:{best[2]}' if str(best[2]) != '.' else f'{best[0]}:'
@@ -236,8 +243,10 @@ def absolute(value: str, repo=None) -> Path:
     """The local path of a portable registry path."""
     head, sep, rel = value.partition(':')
     if sep and head in PORTABLE_ROOTS + ('repo',):
+        if os.path.isabs(rel) or '..' in Path(rel).parts:
+            raise ValueError(f'registry root-relative path escapes its root: {value!r}')
         return root(head) / rel if rel else root(head)
-    if os.path.isabs(value) and os.environ.get(ALLOW_ENV) == '1':
+    if os.path.isabs(value) and _local_path_opt_out():
         return Path(value)
     if os.path.isabs(value) or '..' in Path(value).parts:
         raise ValueError(f'registry paths are portable (root:rel or checkout-relative), not {value!r}')
@@ -307,12 +316,18 @@ def file_digest(path) -> dict:
 
 # ---------- journal ----------
 
-def _append_line(path: Path, value: dict) -> None:
+def _append_line(path: Path, value: dict, *, expected_sha256=None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = utf8(json_line(value, sort_keys=True))
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    fd = os.open(path, (os.O_RDWR if expected_sha256 else os.O_WRONLY) | os.O_CREAT | os.O_APPEND, 0o644)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
+        if expected_sha256 is not None:
+            digest = hashlib.sha256()
+            while chunk := os.read(fd, 1024 * 1024):
+                digest.update(chunk)
+            if digest.hexdigest() != expected_sha256:
+                raise ValueError('registry journal changed during quarantine; revalidate the reference closure')
         os.write(fd, data)
         os.fsync(fd)
     finally:
@@ -333,9 +348,11 @@ def _producer(producer=None) -> dict:
     return value
 
 
-def _append(record: dict) -> dict:
+def _append(record: dict, *, expected_sha256=None) -> dict:
+    if record.get('op') == 'dataset':
+        absolute(record['path'])  # final boundary also covers extra metadata overrides
     record = {'schema': RECORD_SCHEMA, 'time': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'machine': machine(), **record}
-    _append_line(journal_path(), record)
+    _append_line(journal_path(), record, expected_sha256=expected_sha256)
     global _LOADED
     _LOADED = None
     return record
@@ -575,6 +592,64 @@ def require_registered(paths, *, repo=None, ref=None) -> None:
         raise UnregisteredData('not in the data registry: ' + ', '.join(missing))
 
 
+def quarantine_missing_dataset(identity: str, *, declaration_sha256, note: str, repo=None, ref=None) -> dict:
+    """Deactivate exact orphan declarations; retain original journal and file provenance.
+
+    No path normalization, artifact deletion, manifest waiver, or blanket ID tombstone.
+    New declarations after the operation remain active.
+    """
+    if not note.strip():
+        raise ValueError('quarantine needs an explicit reason')
+    owner = registry_owner_repo() if repo is None else assert_registry_writable(repo)
+    published = registry_owner_ref(owner) if ref is None else ref
+    raw = journal_path().read_bytes()
+    journal = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    initial = load(repo=owner, ref=published, fresh=True)
+    reg = Registry(list(initial.git.values()), journal, repo=owner, ref=initial.git_ref)
+    if identity in reg.git:
+        raise ValueError('cannot quarantine a Git-owned dataset')
+    declarations = reg.snapshots.get(identity, [])
+    hashes = sorted(hashlib.sha256(canonical_json_bytes(row)).hexdigest() for row in declarations)
+    if not hashes or hashes != sorted(declaration_sha256):
+        raise ValueError('quarantine must bind every exact active declaration')
+    paths = []
+    for row in declarations:
+        if row.get('machine') != machine() or row.get('manifest_sha256') or row.get('roles') or row.get('protected') or row.get('kind') in ('held', 'held-eval'):
+            raise ValueError('quarantine requires owner-local unprotected declarations without manifests or roles')
+        value = row['path']
+        path = Path(value) if os.path.isabs(value) else absolute(value, repo=owner)
+        if path.exists() or path.is_symlink():
+            raise ValueError('quarantine cannot hide existing artifacts or symlinks')
+        paths.append(path.resolve())
+    for file in reg.extra_files.get(identity, []):
+        relative = file.get('path')
+        if not isinstance(relative, str) or os.path.isabs(relative) or '..' in Path(relative).parts:
+            raise ValueError('quarantine cannot hide escaping or unknown file references')
+        if any((base / relative).exists() or (base / relative).is_symlink() for base in paths):
+            raise ValueError('quarantine cannot hide existing file artifacts')
+    def overlaps(value):
+        path = (Path(value) if os.path.isabs(value) else absolute(value, repo=owner)).resolve()
+        return any(path == base or path.is_relative_to(base) or base.is_relative_to(path) for base in paths)
+    for entry in [*reg.git.values(), *[r for r in journal if r.get('op') == 'dataset' and r.get('id') != identity]]:
+        if entry.get('path') and overlaps(entry['path']):
+            raise ValueError('quarantine artifact overlaps another registered dataset')
+        for item in entry.get('inputs') or []:
+            if item.get('id') == identity or (item.get('path') and overlaps(item['path'])):
+                raise ValueError('quarantine dataset has downstream input references')
+    for entry in reg.consumption:
+        for item in entry.get('items') or []:
+            if item.get('id') == identity or (item.get('path') and overlaps(item['path'])):
+                raise ValueError('quarantine dataset has consumers')
+    prefix = hashlib.sha256(raw).hexdigest()
+    return _append({'op': 'quarantine', 'id': identity, 'declaration_sha256': hashes,
+                    'reason': 'missing-unreferenced-journal-artifact/1', 'note': note,
+                    'evidence': {'journal_sha256': prefix, 'registry_owner': str(owner),
+                                 'registry_ref': initial.git_ref, 'paths_missing': sorted(set(map(str, paths))),
+                                 'source_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                                 'file_records_retained': len(reg.extra_files.get(identity, []))},
+                    'producer': _producer()}, expected_sha256=prefix)
+
+
 # ---------- reading the merged registry ----------
 
 class Registry:
@@ -592,7 +667,31 @@ class Registry:
         self.snapshots: dict[str, list] = {}
         self.extra_files: dict[str, list] = {}
         self.consumption: list = []
+        self.quarantines = [r for r in journal if r.get('op') == 'quarantine']
+        covered = set()
+        declarations = {}
+        quarantine_ids = {r.get('id') for r in self.quarantines}
         for r in journal:
+            if r.get('op') == 'dataset' and r.get('id') in quarantine_ids:
+                declarations[hashlib.sha256(canonical_json_bytes(r)).hexdigest()] = r
+            elif r.get('op') == 'quarantine':
+                hashes = r.get('declaration_sha256')
+                if (r.get('reason') != 'missing-unreferenced-journal-artifact/1' or
+                        not isinstance(hashes, list) or not hashes or
+                        any(not isinstance(h, str) or len(h) != 64 or any(c not in '0123456789abcdef' for c in h) for h in hashes) or
+                        len(set(hashes)) != len(hashes) or r.get('id') in self.git or
+                        not isinstance(r.get('evidence'), dict) or not r['evidence'].get('journal_sha256')):
+                    raise ValueError('invalid registry quarantine evidence')
+                for digest in hashes:
+                    declaration = declarations.get(digest, {})
+                    if (declaration.get('id') != r.get('id') or declaration.get('manifest_sha256') or
+                            declaration.get('roles') or declaration.get('protected') or declaration.get('kind') in ('held', 'held-eval')):
+                        raise ValueError('quarantine does not bind exact unprotected journal declarations')
+                    covered.add(digest)
+        for r in journal:
+            if (r.get('op') == 'dataset' and r.get('id') in quarantine_ids and
+                    hashlib.sha256(canonical_json_bytes(r)).hexdigest() in covered):
+                continue
             op = r.get('op')
             if op == 'dataset':
                 self.snapshots.setdefault(r['id'], []).append(r)

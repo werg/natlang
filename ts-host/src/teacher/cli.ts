@@ -66,6 +66,7 @@ async function main(argv: string[] = process.argv.slice(2), stop?: AbortSignal):
       '         --prompt-rendering full|program-header  native prompt and tool surface (default full)\n' +
       '         --cache-stable-tools --collection-role student|teacher\n' +
       '         --text-neuralese-emulation  explicit teacher-only literal-text Neuralese over provider/HTTP; no vectors or training qualification\n' +
+      '         --in-context-neuralese  Neuralese as engines read it by default (each state as its text in place), no engine: authored replays\n' +
       '         --execution-adapter MODULE  caller-supplied program execution fixture\n' +
       '         --file-tools all|editor|files  (the file tools directory reducers offer; default all)\n' +
       '         --judge-model-id ID (--judge-server URL | --judge-provider PI_ID) for judged oracles\n' +
@@ -166,6 +167,7 @@ async function main(argv: string[] = process.argv.slice(2), stop?: AbortSignal):
     collectionRole: collectionRole as 'student' | 'teacher',
     ...(flags.has('--neuralese-server') ? { neuraleseServer: true } : {}),
     ...(flags.has('--text-neuralese-emulation') ? { textNeuraleseEmulation: true } : {}),
+    ...(flags.has('--in-context-neuralese') ? { inContextNeuralese: true } : {}),
     ...(judgeModelId ? { judgeModel: { modelId: judgeModelId,
       ...(flags.has('--judge-provider') ? { provider: flags.get('--judge-provider'),
         piOptions: { reasoningEffort: flags.get('--judge-reasoning-effort') ?? 'low' } } :

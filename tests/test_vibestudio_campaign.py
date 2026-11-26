@@ -11,6 +11,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts' / 'neural
 import vibestudio_campaign
 
 
+@pytest.mark.parametrize('sync_catalog', [True, False])
+def test_drive_publishes_current_catalog_before_archival_work(tmp_path, monkeypatch, sync_catalog):
+    catalog = tmp_path / 'catalog.jsonl'
+    catalog.write_text('{"requiresReview":true}\n')
+    monkeypatch.setattr(vibestudio_campaign, 'campaign_scope', lambda *_: (None, {}, {}))
+    monkeypatch.setattr(vibestudio_campaign, 'attempt_context', lambda *_: ('epoch', {}, {}))
+    monkeypatch.setattr(vibestudio_campaign, 'prerequisite_holds', lambda *_: {})
+    monkeypatch.setenv('NATLANG_CAMPAIGN_SYNC_CATALOG', '1' if sync_catalog else '0')
+    published = []
+    def sync(_args, paths, *, checkpoint):
+        published.append(list(paths))
+        if paths == [catalog]:
+            assert not (tmp_path / 'reused.json').exists()
+            assert catalog.read_text() == '{"requiresReview":true}\n'
+    monkeypatch.setattr(vibestudio_campaign, 'sync_index', sync)
+    vibestudio_campaign.drive(SimpleNamespace(root=tmp_path, held=tmp_path/'held', seed=[], host=tmp_path,
+        review_model=None, attempts=2, max_waves=0))
+    assert ([catalog] in published) is sync_catalog
+    assert published[-1] == [tmp_path/'status.json', tmp_path/'reused.json']
+
+
 def test_new_release_fresh_coverage_precedes_historical_genuine_failures():
     cases = {'old': {'workspace': 'system', 'family': 'old'},
              'new-a': {'workspace': 'system', 'family': 'fresh-a'},
@@ -211,7 +232,8 @@ def test_default_attempt_epoch_is_verified_release_sha_with_exact_provenance(mon
 
 
 @pytest.mark.parametrize("teacher_timeout", [3_600_000, 600_000])
-def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, tmp_path, teacher_timeout):
+@pytest.mark.parametrize("finish_archive_wave", [False, True])
+def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, tmp_path, teacher_timeout, finish_archive_wave):
     from types import SimpleNamespace
     cases = {name: {'taskId': name, 'workspace': 'system', 'family': 'settings'} for name in ['retry', 'done']}
     waves = tmp_path / 'waves'
@@ -241,6 +263,9 @@ def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, 
         assert command[:4] == ['node', '--import', 'tsx', 'scripts/collect-live-workflow-teacher.mjs']
         assert kwargs['env'] == {'PINNED': 'yes'}
         assert command[command.index('--checkpoint-request') + 1] == str(kwargs['request_file'])
+        assert ('--drain-request' in command) is not finish_archive_wave
+        if not finish_archive_wave:
+            assert command[command.index('--drain-request') + 1] == str(tmp_path / 'stop-after-wave')
         assert command.count('--case') == 1 and command[-1] == 'retry'
         assert command[command.index('--test-timeout-ms') + 1] == str(teacher_timeout)
         assert command[command.index('--cases-per-instance') + 1] == '12'
@@ -250,7 +275,7 @@ def test_drive_retries_historical_exhaustion_in_new_immutable_wave(monkeypatch, 
     monkeypatch.setattr(vibestudio_campaign.CollectorCheckpoint, 'run', collect)
     args = SimpleNamespace(root=tmp_path, held=tmp_path / 'held', seed=[], host=tmp_path, archive=tmp_path / 'archive',
         review_model=None, attempts=2, max_waves=1, wave_size=6, concurrency=3, reserve_disk_gib=8,
-        teacher_timeout_ms=teacher_timeout)
+        teacher_timeout_ms=teacher_timeout, finish_archive_wave=finish_archive_wave)
     vibestudio_campaign.drive(args)
     plan = vibestudio_campaign.read(jobs / '0003.json')
     assert plan == {'cases': ['retry'], 'attempt_epoch': 'new-release', 'provenance': provenance}
@@ -1032,3 +1057,221 @@ def test_archive_reconnect_clears_previous_owner_network_wait(tmp_path):
     owner = SimpleNamespace(requested=False, run=lambda argv, **_: subprocess.CompletedProcess(argv, 0))
     vibestudio_campaign.archive_transport(['ssh'], checkpoint=owner, health_path=health)
     assert vibestudio_campaign.read(health)['phase'] == 'archive-connected'
+
+
+def test_one_invalid_capture_preserves_other_wave_results_and_raw_artifacts(tmp_path, monkeypatch):
+    for name in ['bad', 'good']:
+        path = tmp_path/'cases'/name/'verified/manifest.json'
+        path.parent.mkdir(parents=True)
+        path.write_text('{}')
+    before = {str(p): p.read_bytes() for p in tmp_path.rglob('*.json')}
+    def load(path):
+        if path.parent.parent.name == 'bad':
+            raise ValueError('observed workspace call graph differs from recorded child inventory')
+        return {'task_id': 'good-id', 'task': {'id': 'good-id', 'interaction': {'goal': 'owned'},
+                'source_ids': [], 'source_groups': []}, 'teacher': {'model_id': vibestudio_campaign.LUNA},
+                'turns': [1], 'trajectory_ir': {'outcome': {'task_completed': True}}}
+    monkeypatch.setattr(vibestudio_campaign, 'load_episode', load)
+    monkeypatch.setattr(vibestudio_campaign, 'held_hit', lambda *_: False)
+    monkeypatch.setattr(vibestudio_campaign, 'require_registered_open_goal', lambda *_: None)
+    cases = {'bad': {'taskId': 'bad-id'}, 'good': {'taskId': 'good-id'}}
+    rows = vibestudio_campaign.outcomes(tmp_path, ['bad', 'good'], None, {}, cases)
+    assert rows['bad']['status'] == 'export-rejected'
+    assert rows['bad']['rejected_manifest'] == 'cases/bad/verified/manifest.json'
+    assert vibestudio_campaign.infrastructure_failure(rows['bad'], {})
+    assert not vibestudio_campaign.has_training_manifest(rows['bad'])
+    assert rows['good']['status'] == 'verified'
+    assert all(Path(path).read_bytes() == content for path, content in before.items())
+
+
+def test_capture_isolation_does_not_hide_held_policy_or_task_identity_errors(tmp_path, monkeypatch):
+    path = tmp_path/'verified/manifest.json'
+    path.parent.mkdir(); path.write_text('{}')
+    episode = {'task_id': 'actual', 'task': {'id': 'actual', 'interaction': {'goal': 'owned'},
+        'source_ids': [], 'source_groups': []}, 'teacher': {'model_id': vibestudio_campaign.LUNA}}
+    monkeypatch.setattr(vibestudio_campaign, 'load_episode', lambda *_: episode)
+    monkeypatch.setattr(vibestudio_campaign, 'held_hit', lambda *_: True)
+    with pytest.raises(ValueError, match='held closure'):
+        vibestudio_campaign.outcomes(tmp_path, ['goal'], None, {}, {'goal': {'taskId': 'other'}})
+    monkeypatch.setattr(vibestudio_campaign, 'held_hit', lambda *_: False)
+    monkeypatch.setattr(vibestudio_campaign, 'require_registered_open_goal', lambda *_: None)
+    with pytest.raises(ValueError, match='another task'):
+        vibestudio_campaign.outcomes(tmp_path, ['goal'], None, {}, {'goal': {'taskId': 'other'}})
+    episode['teacher']['model_id'] = 'disallowed-other-teacher'
+    with pytest.raises(ValueError, match='actual Luna'):
+        vibestudio_campaign.outcomes(tmp_path, ['goal'], None, {}, {'goal': {'taskId': 'actual'}})
+
+
+def test_unreadable_raw_capture_is_preserved_and_does_not_erase_other_results(tmp_path):
+    directory = tmp_path/'cases'/'bad'/'st_example'
+    directory.mkdir(parents=True)
+    raw = directory/'trajectory-bad-full.json.gz'
+    raw.write_bytes(b'original incomplete gzip')
+    rows = vibestudio_campaign.outcomes(tmp_path, ['bad', 'unstarted'], None, {}, {'bad': {}, 'unstarted': {}})
+    assert rows['bad']['status'] == 'export-rejected'
+    assert rows['bad']['capture_errors']
+    assert rows['unstarted']['status'] == 'no-capture'
+    assert raw.read_bytes() == b'original incomplete gzip'
+    vibestudio_campaign.publish(tmp_path/'collection-interruption.json', {'interruptedCases': ['bad', 'unstarted']})
+    rows = vibestudio_campaign.outcomes(tmp_path, ['bad', 'unstarted'], None, {}, {'bad': {}, 'unstarted': {}})
+    assert rows['bad']['interrupted']
+    assert vibestudio_campaign.wave_infrastructure_hold(rows, {}, 1) is None
+
+
+def lifecycle_packet(started):
+    return {'result': {'passed': False}, 'execution': {
+        'error': 'Native fixture policy exceeded its finite deadline',
+        'failure': {'phase': 'orchestration', 'error': {'name': 'Error', 'message': 'Native fixture failed',
+            'errorData': {'authoredLifecycle': {
+                'schema': 'vibestudio.authored-lifecycle/1',
+                'runId': 'system-test-runner:teacher:00000000-0000-0000-0000-000000000001',
+                'runtimeId': 'do:vibestudio/internal:EvalDO:' + 'a' * 40,
+                'boundary': 'assigned-program-load', 'teacherStarted': started}}}}}}
+
+
+@pytest.mark.parametrize('started', [False, True, None])
+def test_authoritative_lifecycle_preserves_no_capture_uncertainty_and_attempt_budget(tmp_path, started):
+    packet = lifecycle_packet(started)
+    if started is None:
+        del packet['execution']['failure']['error']['errorData']
+    raw = tmp_path / 'st_original' / 'trajectory-example-full.json.gz'
+    raw.parent.mkdir()
+    with gzip.open(raw, 'wt') as stream:
+        json.dump(packet, stream)
+    original = raw.read_bytes()
+    outcome = vibestudio_campaign.outcomes(tmp_path, ['example'], None, {}, {'example': {}})['example']
+    assert outcome['teacher_started'] is started
+    assert outcome['teacher_model_sampled'] is (False if started is False else None)
+    assert bool(vibestudio_campaign.infrastructure_failure(outcome, {})) is (started is False)
+    rows = vibestudio_campaign.publish_status(tmp_path, {'example': {'workspace': 'examples', 'family': 'native'}},
+        {}, [{'example': outcome}], None, 2, {}, attempt_epoch='release', receipt_epochs=['release'])
+    assert rows['example']['attempts'] == (0 if started is False else 1)
+    assert rows['example']['cumulative_teacher_attempts'] == (0 if started is False else 1)
+    assert raw.read_bytes() == original
+
+
+@pytest.mark.parametrize('damage', ['nested-guest', 'unknown-version', 'wrong-boundary', 'foreign-runtime',
+                                    'unbound-run', 'truthy-string', 'malformed-error'])
+def test_guest_or_malformed_lifecycle_does_not_prove_pre_teacher(damage):
+    packet = lifecycle_packet(False)
+    error = packet['execution']['failure']['error']
+    evidence = error['errorData']['authoredLifecycle']
+    if damage == 'nested-guest':
+        packet['execution']['failure']['error'] = {'message':'outer', 'cause': error}
+    elif damage == 'unknown-version': evidence['schema'] = 'vibestudio.authored-lifecycle/999'
+    elif damage == 'wrong-boundary': evidence['boundary'] = 'after-root'
+    elif damage == 'foreign-runtime': evidence['runtimeId'] = 'some-other-runtime'
+    elif damage == 'unbound-run': evidence['runId'] = 'unrelated'
+    elif damage == 'truthy-string': evidence['teacherStarted'] = 'false'
+    else: packet['execution']['failure']['error'] = []
+    assert vibestudio_campaign.authored_lifecycle(packet) is None
+
+
+def test_retained_teacher_call_contradicts_no_start_marker_as_integrity_failure(tmp_path):
+    packet = lifecycle_packet(False)
+    packet['execution']['diagnostics'] = {'natlangTeacher': {'rootCallIds':['actual'], 'calls':[]}}
+    raw = tmp_path / 'st_original' / 'trajectory-example-full.json.gz'
+    raw.parent.mkdir()
+    with gzip.open(raw, 'wt') as stream: json.dump(packet, stream)
+    outcome = vibestudio_campaign.outcomes(tmp_path, ['example'], None, {}, {'example': {}})['example']
+    assert outcome['teacher_started'] is True
+    assert 'authored_lifecycle' not in outcome
+    assert outcome['capture_errors'] == ['Authored lifecycle contradicts retained teacher calls']
+
+
+def dispatch_lifecycle_packet(case_id='example'):
+    packet = lifecycle_packet(False)
+    packet['execution']['failure']['error']['errorData']['authoredLifecycle'] = {
+        'schema':'vibestudio.authored-lifecycle/2','boundary':'teacher-worker-dispatch',
+        'caseId':case_id,'sourceContextId':'TEST-owned-source-context','teacherStarted':False}
+    return packet
+
+
+def test_owned_predispatch_failure_is_bound_to_the_case_and_preserves_original_raw(tmp_path):
+    packet = dispatch_lifecycle_packet()
+    raw = tmp_path/'st_original'/'trajectory-open-goal-example-full.json.gz'
+    raw.parent.mkdir()
+    with gzip.open(raw,'wt') as stream: json.dump(packet,stream)
+    original=raw.read_bytes()
+    outcome=vibestudio_campaign.outcomes(tmp_path,['open-goal-example'],None,{}, {'open-goal-example':{}})['open-goal-example']
+    assert outcome['teacher_started'] is False
+    assert outcome['teacher_model_sampled'] is False
+    assert vibestudio_campaign.infrastructure_failure(outcome,{})
+    assert raw.read_bytes()==original
+
+
+@pytest.mark.parametrize('damage',['wrong-case','no-case-binding','already-dispatched','wrong-boundary','empty-context','fake-eval-id','nested-guest'])
+def test_predispatch_witness_cannot_claim_another_case_or_a_started_teacher(damage):
+    packet=dispatch_lifecycle_packet()
+    error=packet['execution']['failure']['error']
+    witness=error['errorData']['authoredLifecycle']
+    expected='example'
+    if damage=='wrong-case': witness['caseId']='foreign'
+    elif damage=='no-case-binding': expected=None
+    elif damage=='already-dispatched': witness['teacherStarted']=True
+    elif damage=='wrong-boundary': witness['boundary']='assigned-program-load'
+    elif damage=='empty-context': witness['sourceContextId']=''
+    elif damage=='fake-eval-id': witness['runtimeId']='invented-eval'
+    else: packet['execution']['failure']['error']={'message':'outer transport error','cause':error}
+    assert vibestudio_campaign.authored_lifecycle(packet,expected) is None
+@pytest.mark.parametrize('outcome,attempts,stop,expected', [
+    ('verified',2,False,'drain-native'),('test-failed',2,False,'continue-paid'),
+    ('test-failed',1,False,'drain-native'),('verified',2,True,'continue-paid'),
+])
+def test_native_continuation_uses_actual_retry_queue_without_publishing_goal_success(tmp_path,monkeypatch,outcome,attempts,stop,expected):
+    import hashlib
+    capture=tmp_path/'capture';capture.mkdir();host='a'*40
+    repositories={'vibestudio':{'git_commit':host,'dirty':False}}
+    source=json.dumps({'repositories':repositories}).encode();(capture/'source.json').write_bytes(source)
+    ready=tmp_path/'ready.json';ready.write_text(json.dumps({'schema':'vibestudio.native-reference-continuation/1','nonce':'TEST-only','capture':str(capture),'sourceSha256':hashlib.sha256(source).hexdigest(),'repositories':repositories}))
+    monkeypatch.setattr(vibestudio_campaign,'outcomes',lambda *args:{'case':{'status':outcome}})
+    result=vibestudio_campaign.native_completion_decision(ready,capture,['case'],cases={'case':{}},held=set(),training={},seeds={},receipts=[],receipt_epochs=[],attempt_epoch='TEST-epoch',review_model=None,attempts=attempts,holds={},host_commit=host,stop_requested=stop)
+    assert result['decision']==expected and result['additionalTeacherCalls']==0
+    assert not (tmp_path/'status.json').exists()
+    assert result['requestSha256']==hashlib.sha256(ready.read_bytes()).hexdigest()
+    for key in ['capture','sourceSha256','repositories','nonce']:
+        original=json.loads(ready.read_text());mutated=dict(original);mutated[key]=None;ready.write_text(json.dumps(mutated))
+        with pytest.raises(ValueError,match='owned capture'):
+            vibestudio_campaign.native_completion_decision(ready,capture,['case'],cases={'case':{}},held=set(),training={},seeds={},receipts=[],receipt_epochs=[],attempt_epoch='TEST-epoch',review_model=None,attempts=attempts,holds={},host_commit=host)
+        ready.write_text(json.dumps(original))
+
+
+def test_native_reference_packets_are_excluded_from_training_snapshots(tmp_path,monkeypatch):
+    registrations=[]
+    episode={'trajectory_ir':{'outcome':{'status':'passed','task_completed':True}},'turns':[1]}
+    monkeypatch.setattr(vibestudio_campaign,'verified_episode',lambda *_:episode)
+    monkeypatch.setattr(vibestudio_campaign.data_registry,'record_dataset',lambda *args,**kwargs:registrations.append(kwargs) or {'id':'TEST-training-only'})
+    reference=tmp_path/'capture/native-reference-only/held-reference.json';reference.parent.mkdir(parents=True);reference.write_text('TEST-only held native reference original')
+    vibestudio_campaign.export_trajectories(tmp_path,{'teacher':{'status':'verified','manifest':'manifest.json'}},set(),set())
+    assert 'capture/native-reference-only/**' in registrations[0]['exclude']
+    assert reference.read_text()=='TEST-only held native reference original'
+
+
+@pytest.mark.parametrize("previous_release", ["old-release", "current-release", None, 17])
+@pytest.mark.parametrize("legacy_hold", [False, True])
+def test_archival_recovery_only_holds_current_or_unidentified_release(tmp_path, monkeypatch, previous_release, legacy_hold):
+    from types import SimpleNamespace
+    names=['one','two']
+    cases={name:{'taskId':name,'workspace':'system','family':'settings'} for name in names}
+    waves=tmp_path/'waves';jobs=waves/'jobs';jobs.mkdir(parents=True)
+    plan={'cases':names,'attempt_epoch':'old-epoch','provenance':{'release':{'sha256':previous_release}}}
+    vibestudio_campaign.publish_immutable(jobs/'0000.json',plan)
+    (waves/'0000-capture').mkdir()
+    monkeypatch.setattr(vibestudio_campaign,'campaign_scope',lambda *_:(None,{},cases))
+    monkeypatch.setattr(vibestudio_campaign,'attempt_context',lambda *_:('new-epoch',{'release':{'sha256':'current-release'}},{}))
+    monkeypatch.setattr(vibestudio_campaign,'native_reference_capable',lambda *_:False)
+    monkeypatch.setattr(vibestudio_campaign,'prerequisite_holds',lambda *_:{})
+    monkeypatch.setattr(vibestudio_campaign,'sync_index',lambda *_,**__:None)
+    archived=[]
+    monkeypatch.setattr(vibestudio_campaign,'remote_archive',lambda *args,**kw:archived.append(kw['wave']))
+    monkeypatch.setattr(vibestudio_campaign,'outcomes',lambda *_:{name:{'status':'no-capture','teacher_started':False,'reason':'Original harness produced no capture'} for name in names})
+    def no_teacher(*_,**__):raise AssertionError('Historical capture must never regenerate teacher calls')
+    monkeypatch.setattr(vibestudio_campaign.CollectorCheckpoint,'run',no_teacher)
+    args=SimpleNamespace(root=tmp_path,held=tmp_path/'held',seed=[],host=tmp_path,archive=tmp_path/'archive',review_model=None,attempts=2,max_waves=1,wave_size=64,concurrency=8,hold_historical_infrastructure=legacy_hold)
+    vibestudio_campaign.drive(args)
+    expected_hold=legacy_hold or previous_release!='old-release'
+    assert (tmp_path/'runtime-hold.json').is_file() is expected_hold
+    assert (tmp_path/'stop-after-wave').is_file() is expected_hold
+    assert (waves/'0000-historical-infrastructure-hold.json').is_file() is not expected_hold
+    assert len(archived)==1 and archived[0]['plan']==plan
+    assert vibestudio_campaign.read(waves/'0000-result.json')['one']['status']=='no-capture'

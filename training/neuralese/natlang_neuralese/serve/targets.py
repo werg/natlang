@@ -98,7 +98,38 @@ def non_student_context(tokenizer, target_message, target_ids, *, think="context
         start = _first(tokenizer, ids, "<tool_call>", "<|tool_call_start|>")
         if start is not None:
             end = max(end, start)
-    return end
+    return max(end, empty_think_first_end(tokenizer, target_message, ids))
+
+
+def empty_think_first_end(tokenizer, target_message, target_ids):
+    """The end of the first token after an empty think block (``think_end`` + 1), else 0: that token is predicted at
+    the ``</think>`` position right after the generation prompt's ``<think>``, a state the student never reaches (it
+    reasons first; the base gives ``</think>`` there ~3e-9). Trained, it teaches the policy to act at the think tag:
+    2026-11-25 a program fit on teacher rows (64% without reasoning) put P(``<tool_call>`` | ``<think>``) at 0.28 and
+    reasoned in 3.7% of its turns (base 100%); per row this token's gradient was 7x more aligned (cosine 0.19 vs 0.03)
+    with raising P(``<tool_call>`` | ``<think>``) than the rest of the action. ``NATLANG_EMPTY_THINK_FIRST=train`` opts
+    out."""
+    import os
+    if os.environ.get("NATLANG_EMPTY_THINK_FIRST", "context") == "train":
+        return 0
+    if (target_message.get("reasoning_content") or "").strip():
+        return 0
+    end = think_end(tokenizer, target_ids)
+    return min(end + 1, len(list(target_ids))) if end else 0
+
+
+def own_empty_think_context(tokenizer, target_message, target_ids):
+    """Leading tokens of the student's own rendered reply that are context, not loss: the template's empty think block
+    (through ``</think>``) of an own reply without reasoning, else 0. Such a reply is a decision readout the actor
+    scored (its option is the continuation after the prefix all options share; the recorded ``sample_ids`` are empty)
+    or a call rendered with ``enable_thinking: false``, so ``</think>`` right after the generation prompt's ``<think>``
+    was never the student's choice (the base gives it ~20 nats). Trained, it teaches the policy to close every think
+    block at once: 2026-11-25 the program-tuning fits (``tune.rows``) trained it in 96-153 own readout rows of
+    tally and tree, and the merged arms reasoned in 0-7% of their turns (base 100%). ``sft_sources.think_context``
+    applies the same rule to expert-iteration builds (sft-v4-run1 trained it in 18 own rows)."""
+    if (target_message.get("reasoning_content") or "").strip():
+        return 0
+    return max(think_end(tokenizer, target_ids), empty_think_first_end(tokenizer, target_message, target_ids))
 
 
 def _first(tokenizer, ids, *tokens):

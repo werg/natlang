@@ -1,0 +1,9 @@
+{
+  "recipe": "natlang.compiler.t3-native-query-projector/1",
+  "target_host": "colab-g4b-or-g4a",
+  "teacher_encoder": "perplexity-ai/pplx-embed-v2-late-0.6b",
+  "declared_success_criteria": {
+    "recall_at_32_min": 0.9,
+    "vram_freed_gb_min": 1.1
+  }
+}

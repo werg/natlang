@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import sys
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -248,10 +249,12 @@ def test_open_goal_binds_the_full_recorded_child_inventory(tmp_path):
     custody = {'schema': 'natlang.call-graph-chronology/1', 'task_id': 'internal-task',
                'sha256': '1' * 64, 'child_call_ids': ['missing-crisp-attempt']}
     detail['record']['graph_custody'] = custody
+    custody['sha256'] = live.observed_graph_custody_digest(detail['record'], custody['child_call_ids'])
     rewrite(tmp_path, spec, detail, verification)
     with pytest.raises(ValueError, match='recorded child inventory'):
         live.load_episode(path)
     custody['child_call_ids'] = []
+    custody['sha256'] = live.observed_graph_custody_digest(detail['record'], [])
     rewrite(tmp_path, spec, detail, verification)
     assert live.load_episode(path)['trajectory_ir']['outcome']['invocation_ledger'][0]['graph_custody'] == custody
 
@@ -1002,7 +1005,8 @@ def test_void_application_return_requires_exact_completed_typed_contract():
         verify_application_return({key: value for key, value in binding.items() if key != 'selectedResult'}, {'root': record}, ['root'], entry)
 
 
-def test_void_entry_can_complete_effects_before_root_error_without_inventing_a_return(tmp_path):
+@pytest.mark.parametrize("result_type", ["void", "SourceAttributionReport"])
+def test_optional_entry_can_complete_reviewed_effects_before_root_error_without_inventing_a_return(tmp_path, result_type):
     path, spec, root, verification = fixture(tmp_path)
     interaction = open_goal(root, spec, verification)
     child = copy.deepcopy(root)
@@ -1013,10 +1017,10 @@ def test_void_entry_can_complete_effects_before_root_error_without_inventing_a_r
     child['events'] = [{'kind': 'action', 'outcome': 'completed', 'tool_call_id': 'actual-tool-id'}]
     for turn in child['record']['model_turns']:
         turn['request']['invocation_id'] = 'child'
-    root['record'].update(outcome='failed', executor={'kind': 'crisp'}, model_turns=[], program_root='skills/reference')
-    root['record']['definition'] = {'id': 'ts:review.ts#default', 'name': 'review', 'source': 'review.ts', 'returns': 'void'}
+    root['record'].update(outcome='error', executor={'kind': 'crisp'}, model_turns=[], program_root='skills/reference')
+    root['record']['definition'] = {'id': 'ts:review.ts#default', 'name': 'review', 'source': 'review.ts', 'returns': result_type}
     root['summary']['definition_id'] = 'ts:review.ts#default'
-    entry = {'program': 'skills/reference/review.ts', 'callable': 'review', 'resultType': 'void',
+    entry = {'program': 'skills/reference/review.ts', 'callable': 'review', 'resultType': result_type,
              'arguments': {'goal': interaction['goal']}, 'argumentJson': {'goal': json.dumps(interaction['goal'])}}
     interaction.update(program=entry['program'], entry=entry)
     spec['interaction'] = copy.deepcopy(interaction)
@@ -1027,7 +1031,12 @@ def test_void_entry_can_complete_effects_before_root_error_without_inventing_a_r
     proof = {'goal': interaction['goal'], 'entry': entry, 'passed': True, 'contextId': 'owned-context', 'caseId': 'void-case',
              'checks': {'ownedNoteReadback': True}, 'outcomeDimensions': {
                  'effects': {'passed': True}, 'returnedValue': {'required': False, 'passed': True}}}
-    payload = {'proof': proof}
+    proof['semanticReviewRequired'] = True
+    # TEST-only exchange: exercises canonical bound-review admission, never teacher registration.
+    payload = {'proof': proof, 'semanticReview': {
+        'schema': 'natlang.live-workflow-review/1', 'model': 'TEST-only-local-review',
+        'input': {'actual': {'retainedText': 'hello'}, 'expected': {'goal': interaction['goal']}},
+        'verdict': {'accepted': True}, 'exchange': {'request': {}, 'reply': {}}}}
     def persist():
         verification['evidence'] = [{**artifact(tmp_path, 'void-goal.json', payload), 'kind': 'workspace'}]
         spec['calls'] = [artifact(tmp_path, 'root.json', root), artifact(tmp_path, 'child.json', child)]
@@ -1038,15 +1047,25 @@ def test_void_entry_can_complete_effects_before_root_error_without_inventing_a_r
     assert episode['trajectory_ir']['outcome']['task_completed'] is True
     assert episode['trajectory_ir']['outcome']['status'] == 'passed'
     assert len(episode['turns']) == 1 and episode['turns'][0]['invocation_id'] == 'child'
+    assert episode['call_tree'][0]['outcome'] == 'error'
+    payload['semanticReview']['verdict']['accepted'] = False
+    persist()
+    assert live.load_episode(path)['trajectory_ir']['outcome']['task_completed'] is False
+    payload['semanticReview']['verdict']['accepted'] = True
+    proof['outcomeDimensions']['returnedValue'].update(required=True, passed=False)
+    persist()
+    assert live.load_episode(path)['trajectory_ir']['outcome']['task_completed'] is False
+    proof['outcomeDimensions']['returnedValue'].update(required=False, passed=True)
     payload['applicationReturn'] = {'kind': 'void', 'root_call_id': 'call-one', 'valueJson': 'null', 'selectedResult': None}
     persist()
     with pytest.raises(ValueError, match='original root output'):
         live.load_episode(path)
     payload.pop('applicationReturn')
-    root['record']['definition']['returns'] = 'string'
-    persist()
-    with pytest.raises(ValueError, match='declared return contract'):
-        live.load_episode(path)
+    if result_type == 'void':
+        root['record']['definition']['returns'] = 'string'
+        persist()
+        with pytest.raises(ValueError, match='declared return contract'):
+            live.load_episode(path)
 
 
 def test_ts_application_entry_binds_actual_default_export():
@@ -1237,3 +1256,49 @@ def test_artifact_observer_records_actual_bound_reads_and_resets_after_error(tmp
     with observed_artifacts() as later:
         pass
     assert later == set() and failed == {str(path.resolve())}
+
+
+def test_observed_child_inventory_preserves_fresh_task_causal_children():
+    records = {
+        'parent/1': {'call_id': 'parent/1', 'parent_call_id': None, 'task_id': 'parent',
+                     'graph_custody': {'schema': 'natlang.call-graph-chronology/1', 'task_id': 'parent',
+                                       'sha256': '1' * 64, 'child_call_ids': ['child/1']}},
+        'child/1': {'call_id': 'child/1', 'parent_call_id': 'parent/1', 'task_id': 'child',
+                    'graph_custody': {'schema': 'natlang.call-graph-chronology/1', 'task_id': 'child',
+                                      'sha256': '2' * 64, 'child_call_ids': []}},
+    }
+    for record in records.values():
+        record['graph_custody']['sha256'] = live.observed_graph_custody_digest(record, record['graph_custody']['child_call_ids'])
+    live.verify_observed_child_inventory(records)
+    for mutation in ['own-task', 'missing', 'foreign-parent', 'duplicate-declared', 'corrupt-digest']:
+        changed = copy.deepcopy(records)
+        if mutation == 'own-task':
+            changed['child/1']['task_id'] = 'unattested-task'
+        elif mutation == 'missing':
+            del changed['child/1']
+        elif mutation == 'foreign-parent':
+            changed['child/1']['parent_call_id'] = 'foreign/1'
+        elif mutation == 'duplicate-declared':
+            changed['parent/1']['graph_custody']['child_call_ids'].append('child/1')
+        else:
+            changed['child/1']['graph_custody']['sha256'] = '0' * 64
+        with pytest.raises(ValueError, match='recorded child inventory'):
+            live.verify_observed_child_inventory(changed)
+
+
+def test_graph_custody_digest_matches_actual_node_protocol_for_unicode_and_effect_refs():
+    records = [
+        {'task_id': 'parent', 'call_id': 'parent/1', 'parent_call_id': None, 'effects': []},
+        {'task_id': 'tâche🎶', 'call_id': 'child/1', 'parent_call_id': 'parent/1', 'effects': [
+            {'order': 0, 'graph_order': 2, 'service': 'native', 'method': 'read', 'async': True, 'by': 'crisp',
+             'args': {'complete': True, 'hash': 'a' * 64, 'bytes': 17},
+             'result': {'complete': False, 'reason': 'nonportable', 'preview': '\ud800'}, 'error': 'évidence\nretained'}]},
+        {'task_id': 'task', 'call_id': 'task/1', 'parent_call_id': None},
+    ]
+    script = """import {graphCustodyDigest} from './dist/calls/graph-custody.js';
+let text='';for await(const chunk of process.stdin)text+=chunk;
+console.log(JSON.stringify(JSON.parse(text).map(r=>graphCustodyDigest(r.task_id,r.call_id,r.parent_call_id,['nested/1'],r.effects))));"""
+    expected = json.loads(subprocess.run(['node', '--input-type=module', '-e', script],
+        input=json.dumps(records), text=True, capture_output=True, check=True,
+        cwd=Path(__file__).resolve().parents[2] / 'ts-host').stdout)
+    assert [live.observed_graph_custody_digest(record, ['nested/1']) for record in records] == expected

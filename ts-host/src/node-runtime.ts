@@ -10,6 +10,7 @@ import { toHost } from './runtime/kernel.js';
 import { kernelHooks } from './runtime/hooks.js';
 import { NatlangRuntime, NatlangTask, type NatlangRuntimeOptions } from './runtime/runtime.js';
 import { nodePlatform } from './runtime/node.js';
+import { runInFrame } from './runtime/context.js';
 
 export type NodeNativeRuntimeOptions = Partial<NativeRuntimeOptions> & Pick<NatlangRuntimeOptions,
   'neuralese' | 'nativeProgramGuidance' | 'program' | 'adaptation' | 'executorIdentity' | 'traceStepStates' | 'specialization' |
@@ -83,10 +84,20 @@ export class NodeNativeRuntime extends PlatformRuntime {
   /** A manually driven NativeSession also owns its actual evaluation scope,
    * without pretending that the standalone root was durably captured by run(). */
   override async evaluate(...args: Parameters<PlatformRuntime['evaluate']>) {
+    return this.asInvocation(() => super.evaluate(...args));
+  }
+
+  /** Run host code (a collector's application controller) as this standalone invocation: the Natlang calls it
+   * makes are live children of the run. Entering `frame` without this names an invocation that never began. */
+  runHosted<T>(fn: () => T | Promise<T>): Promise<T> {
+    return this.asInvocation(() => runInFrame(this.frame!, fn));
+  }
+
+  private async asInvocation<T>(fn: () => T | Promise<T>): Promise<T> {
     const task=this.frame!.task,id=this.options.runId;
     const own=!this.rootOptions.frame&&!task.isInvocationActive(id);
     if(own)task.beginInvocation(id);
-    try { return await super.evaluate(...args); }
+    try { return await fn(); }
     finally { if(own)task.endInvocation(id); }
   }
 

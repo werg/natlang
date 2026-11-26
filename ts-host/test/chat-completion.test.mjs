@@ -362,6 +362,31 @@ test('a request that binds weight adapters is refused by a transport that cannot
   assert.deepEqual(sent[0].x_natlang_adapters, adapters);
 });
 
+test('exact_ids asks a native server for the RL capture of the reply; other servers never see it', async () => {
+  const sent = [];
+  const transport = async body => { sent.push(body); return { choices: [{ finish_reason: 'stop', message: { content: 'ok' } }] }; };
+  await chatCompletionModelTurn(transport, { adapters: true })({ ...request(), exact_ids: true, temperature: 1 });
+  await chatCompletionModelTurn(transport)({ ...request(), exact_ids: true, temperature: 1 });
+  await chatCompletionModelTurn(transport, { adapters: true })({ ...request(), temperature: 1 });
+  // a greedy request gets no capture (engines refuse one at temperature 0)
+  await chatCompletionModelTurn(transport, { adapters: true })({ ...request(), exact_ids: true, temperature: 0 });
+  assert.deepEqual(sent.map(body => body.x_natlang_rl_capture), [true, undefined, undefined, undefined]);
+  assert.ok(sent.every(body => !('exact_ids' in body)));
+});
+
+test('thinking: false renders a native call without reasoning (enable_thinking), merged into the profile\'s switches', async () => {
+  const sent = [];
+  const transport = async body => { sent.push(body); return { choices: [{ finish_reason: 'stop', message: { content: 'ok' } }] }; };
+  await chatCompletionModelTurn(transport, { adapters: true, request: { chat_template_kwargs: { preserve_thinking: true } } })(
+    { ...request(), thinking: false });
+  await chatCompletionModelTurn(transport, { adapters: true })({ ...request(), thinking: false });
+  await chatCompletionModelTurn(transport, { adapters: true })(request());
+  await chatCompletionModelTurn(transport)({ ...request(), thinking: false });
+  assert.deepEqual(sent.map(body => body.chat_template_kwargs), [{ preserve_thinking: true, enable_thinking: false },
+    { enable_thinking: false }, undefined, undefined]);
+  assert.ok(sent.every(body => !('thinking' in body)));
+});
+
 
 test('HTTP chat and decision scoring reject native states when none are loaded', async () => {
   const { openAICompatibleModelTurn } = await import('../dist/model/openai-compatible.js');

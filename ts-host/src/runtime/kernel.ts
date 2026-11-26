@@ -33,7 +33,8 @@ import { specializerOutput } from '../calls/compilations.js';
 import type { DefinitionIdentity } from '../calls/types.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { weightBindingFor, type ResolvedWeightStack } from '../adaptation/weights/binding.js';
-import { nativeStateSentinel } from '../native/neuralese.js';
+import { compileOnCreateClosure } from './jit.js';
+import { isNativeStateId, nativeStateSentinel } from '../native/neuralese.js';
 import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
 
 export type { CaptureCell };
@@ -85,6 +86,8 @@ export type CallableDefinition = {
   generic?: GenericResult;
   /** The instance this definition runs, once a call has instantiated its generic result (`instantiateDefinition`). */
   representation?: Representation;
+  /** Bound leading argument values from `fn.partial(...)`, hashed into Tier-1 JIT provenance keys. */
+  partialBindings?: readonly unknown[];
 };
 
 /** The representation a call asks for: from the compiler's annotation of its call site, or a host's `invokeAt`. */
@@ -564,7 +567,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const eligibleGuidance = !!owner && (owner === view.program?.id || !!view.program?.guidanceScope.importedPrograms.includes(owner));
   // The callee's own lexical weight stack replaces the caller's (plans/HIERARCHICAL_LORA_TUNING.md §6).
   const weights = weightBindingFor(task.weights, owner)?.resolve(definition.id, descriptor?.key, definition.contextId ?? null);
-  const adaptationProvenance = view.program || weights ? { ...(view.program ? view.provenance(definition.id, owner) : {}),
+  let adaptationProvenance: Record<string, unknown> | undefined = view.program || weights ? { ...(view.program ? view.provenance(definition.id, owner) : {}),
     ...(weights ? { weights: { release: weights.release, binding: weights.binding, status: weights.status, identity: weights.identity,
       requested: weights.requested, effective: weights.effective, skipped: weights.skipped, ...(weights.reason ? { reason: weights.reason } : {}) } } : {}),
     effectiveInstructionHash: hexDigest(options.instructions ?? definition.body), originalInstructionHash: descriptor?.baselineHash ?? null,
@@ -784,6 +787,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   }
   // A strict tier attempt serves from crisp cases only: with none, the engine goes on to the next tier and no model runs.
   if (attempt?.strict && !handoff) { capture?.discard(); task.discardGraphCall(callId, frame.parentCallId); throw new Deopt(attempt.declined ?? 'no crisp case of this tier served the call'); }
+  const compilerOpts = task.runtime.options.compiler;
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
   const lexicalServices = unrecordedServices(frame.services ?? task.services);
@@ -857,6 +861,12 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     maxSeconds: model.maxSeconds, contextTokens: definition.budget?.contextTokens ?? model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, decisionReadout: model.decisionReadout, decisionGeneration: model.decisionGeneration, decisionSamples: model.decisionSamples,
     guidance: model.guidance, promptRendering: model.promptRendering,
+    ...(compilerOpts?.compiledDecisions ? (() => {
+      const cal = compilerOpts.compiledDecisions.get(definition.id) ?? compilerOpts.compiledDecisions.get(definition.name);
+      return cal ? { compiledDecision: cal } : {};
+    })() : {}),
+    ...(compilerOpts?.branchSearch ? { branchSearch: compilerOpts.branchSearch } : {}),
+    ...(compilerOpts?.hoistContracts ? { hoistContracts: true } : {}),
     // Live events (plans/STREAMING.md §1.6): the call's model deltas, tagged with the call; nothing without a subscriber.
     ...(task.live ? { onDelta: liveDeltas(task.live, { taskId: task.id, callId, parentCallId: frame.parentCallId ?? null,
       definitionId: definition.id, name: definition.name }) } : {}),
@@ -911,10 +921,51 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     // soft instruction state is primed from in training and stands for at serving.
     const instructions = node.body.replace(/^\n+|\n+$/g, '');
     Object.assign(childFrame.invocationTexts!, { instructions, ...(node.skills ? { skills: { ...node.skills.documents } } : {}) });
-    if (weights?.soft) {
+    let effectiveWeights = weights;
+    if (!effectiveWeights && compilerOpts?.jit) {
+      // Tier-1 JIT (plans/NATLANG_COMPILER.md §6): the compiled site serves as a tuned stack, its adapter and its
+      // instruction state together, exactly as a static release binds them (both are read from the invocation frame:
+      // `activeNativeAdapters`, `activeSoftStates` -> same-base-adapter-state).
+      const jit = compilerOpts.jit;
+      const partialArgsJson = definition.partialBindings?.length ? JSON.stringify(definition.partialBindings) : undefined;
+      const site = { siteId: definition.id, resolvedHeaderText: instructions, ...(partialArgsJson ? { partialArgsJson } : {}) };
+      try {
+        const entry = await compileOnCreateClosure(jit.cache,
+          { ...site, compilerSha: jit.compilerSha, policySha: jit.policySha, ...(jit.baseGgufSha256 ? { baseGgufSha256: jit.baseGgufSha256 } : {}) },
+          () => jit.compile(site));
+        if (entry.nativeStateId && !isNativeStateId(entry.nativeStateId))
+          throw new TypeError(`the JIT compiler returned ${JSON.stringify(entry.nativeStateId)}, not a native-state block ID`);
+        if (entry.adapterId || entry.nativeStateId) {
+          const stackEntries = entry.adapterId ? [{ id: entry.adapterId, scale: 1.0, node: `jit:${definition.id}` }] : [];
+          const jitStack: ResolvedWeightStack = {
+            release: `jit:${entry.cacheKey.slice(0, 16)}`, program: owner ?? definition.programId ?? 'jit', binding: definition.id,
+            requested: stackEntries, effective: stackEntries, skipped: [], identity: entry.cacheKey,
+            baseIdentity: jit.baseGgufSha256 ?? jit.policySha, status: 'ready',
+            ...(entry.nativeStateId ? { soft: { instructions: { state: entry.nativeStateId, textSha256: hexDigest(instructions) }, skills: {} } } : {}),
+          };
+          effectiveWeights = jitStack;
+          // The model calls read the stack from the frame: this call's own, and the copy its runtime keeps
+          // (`session.runtime.frame`, which the agent's driver calls run in).
+          (childFrame as { weights?: ResolvedWeightStack }).weights = jitStack;
+          if (runtime.frame) runtime.frame = { ...runtime.frame, weights: jitStack };
+          const recorded = { release: jitStack.release, binding: jitStack.binding, identity: jitStack.identity, status: jitStack.status,
+            effective: stackEntries.map(({ id, scale }) => ({ id, scale })) };
+          const manifestEvent = runtime.trace.events[0] as Record<string, unknown> | undefined;
+          if (manifestEvent?.kind === 'manifest') manifestEvent.weight_stack = recorded;
+          adaptationProvenance = { ...(adaptationProvenance ?? {}), weights: { ...recorded, requested: stackEntries, skipped: [] } };
+          runtime.trace.emit('jit_compile_bound', { call_id: callId, site_id: definition.id, cache_key: entry.cacheKey,
+            adapter_id: entry.adapterId, native_state_id: entry.nativeStateId, cache_hits: entry.hits });
+        }
+      } catch (error) {
+        // The call runs uncompiled; the failure is recorded, never swallowed.
+        runtime.trace.emit('jit_compile_error', { call_id: callId, site_id: definition.id,
+          error: String((error as Error)?.message ?? error).slice(0, 300) });
+      }
+    }
+    if (effectiveWeights?.soft) {
       // Each tuned instruction/skill state replaces exactly the text it was primed from; any other text stays text under
       // the same stack, as training kept it (tune/soft.py `place_states`: an interpolating lambda's other renderings).
-      const soft = weights.soft, kept: string[] = [];
+      const soft = effectiveWeights.soft, kept: string[] = [];
       if (soft.instructions && hexDigest(instructions) === soft.instructions.textSha256) node.body = nativeStateSentinel(soft.instructions.state);
       else if (soft.instructions) kept.push('instructions');
       for (const [target, use] of Object.entries(soft.skills)) {
@@ -922,7 +973,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
           node.skills.documents[target] = nativeStateSentinel(use.state);
         else kept.push(target);
       }
-      if (kept.length) runtime.trace.emit('soft_state_text', { call_id: callId, binding: weights.binding,
+      if (kept.length) runtime.trace.emit('soft_state_text', { call_id: callId, binding: effectiveWeights.binding,
         text: kept, reason: 'the text differs from the one its soft state was primed from; it stays text' });
     }
     if (handoff) node.handoff = handoff;

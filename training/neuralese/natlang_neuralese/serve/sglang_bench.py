@@ -61,8 +61,9 @@ def _write(path, value):
 
 def _grpo_turns(path):
     """(prompt ids, sampled ids) of each ordinary-token call in a GRPO collector's results.jsonl (rl_sampling/2: a
-    call's prompt is an earlier call's prompt kept up to ``keep`` plus its delta)."""
-    for line in open(path):
+    call's prompt is an earlier call's prompt kept up to ``keep`` plus its delta). ``path`` raw or compacted (.zst)."""
+    from ..rl.episode_files import read_bytes
+    for line in read_bytes(path).decode('utf-8', 'replace').splitlines():
         try:
             result = json.loads(line)
         except ValueError:
@@ -93,7 +94,8 @@ def _grpo_turns(path):
 def build_workload(roots, out):
     rows, seen = [], set()
     for root in roots:
-        for path in sorted(glob.glob(os.path.join(root, '**/results.jsonl'), recursive=True)):
+        for path in sorted({*glob.glob(os.path.join(root, '**/results.jsonl'), recursive=True),
+                            *glob.glob(os.path.join(root, '**/results.jsonl.zst'), recursive=True)}):
             for prompt, tokens, policy in _grpo_turns(path):
                 key = hashlib.sha256(json.dumps([prompt, tokens]).encode()).hexdigest()
                 if key not in seen and tokens:

@@ -515,6 +515,9 @@ class Collector:
         self.paused = threading.Event()             # set during a held measurement on the training actor
         self.active_slots = args.slots
         self.running = 0                            # episodes in flight (their node work and KV stay live)
+        # slot -> start time of the episode or memetic preparation it runs (``oldest_running_start``: the EI actor's
+        # native-state GC, expert_iteration.collect_actor_blocks)
+        self.slot_starts = {}
         self.generated = 0                          # sampled tokens of finished episodes (throughput)
         self.episodes = 0
         self.env = pinned_env()
@@ -843,6 +846,12 @@ class Collector:
         serves the collected policy (a replaced Colab session may come back serving another one)."""
         return True
 
+    def oldest_running_start(self):
+        """The start time of the oldest episode (or memetic preparation) a slot runs now; now when none runs. Recorded
+        before its process starts, so nothing it stores on the actor predates it."""
+        with self.lock:
+            return min(getattr(self, 'slot_starts', {}).values(), default=time.time())
+
     def slot(self, index=0):
         sampling = self.work / 'sampling-config.json'
         while not self.stop.is_set():
@@ -859,8 +868,15 @@ class Collector:
                 continue
             group, entry = item
             info = self.groups[group]
+            starts = self.__dict__.setdefault('slot_starts', {})     # (tests build collectors without __init__)
             if entry.get(MEMETIC_PREPARE):
-                self._prepare_memetic(group, info)
+                with self.lock:
+                    starts[index] = time.time()
+                try:
+                    self._prepare_memetic(group, info)
+                finally:
+                    with self.lock:
+                        starts.pop(index, None)
                 continue
             workers = info['dir'] / 'workers'
             workers.mkdir(exist_ok=True)
@@ -879,20 +895,31 @@ class Collector:
                        '--runtime', str(self.runtime), '--server', actor_url,
                        '--chat-completions-url', actor_url + '/v1/chat/completions', '--model-id', 'natlang-rl',
                        '--model-concurrency', '1', '--chat-request-config', str(sampling), '--neuralese-server']
+            evicted = False
             with (workers / f'{key}.log').open('a') as handle:
-                process = subprocess.Popen(command, cwd=REPO, env=self.env, stdout=handle, stderr=subprocess.STDOUT,
-                                           start_new_session=True)
+                begun = time.time()
+                process = subprocess.Popen(command, cwd=REPO, env=slot_env(self.env, index), stdout=handle,
+                                           stderr=subprocess.STDOUT, start_new_session=True)
                 with self.lock:
                     self.running += 1
+                    starts[index] = begun
                 try:
                     while process.poll() is None:
                         if self.stop.wait(2):
                             os.killpg(process.pid, signal.SIGTERM)
                             process.wait()
                             return
+                        if self._evict_slot(index):     # the collection shrinks in place: stop, requeue, no verdict
+                            os.killpg(process.pid, signal.SIGTERM)
+                            process.wait()
+                            evicted = True
                 finally:
                     with self.lock:
                         self.running -= 1
+                        starts.pop(index, None)
+            if evicted and not self.stop.is_set():
+                self._requeue_evicted(group, queued)
+                continue
             if self.stop.is_set():
                 # the collection stops under it: a restart of the same policy resumes the group (resume_unfinished)
                 if not resume_enabled(self.args):
@@ -924,6 +951,39 @@ class Collector:
                         self.outstanding -= 1
                         # no longer outstanding: its creation time must not pin the block GC's cutoff for the whole run
                         self.groups.pop(group, None)
+
+    def _evict_slot(self, index):
+        """Whether slot ``index`` stops its running episode now (``expert_iteration``'s collector shrinking in place
+        for round preparation); never here."""
+        return False
+
+    def _requeue_evicted(self, group, entry):
+        """An episode stopped by a shrink (``_evict_slot``) runs again in this run, ahead of new work: continued from
+        its partial jobs when ``continue_partials`` and ``episode_files.partial_continuable`` (the resume rule), else
+        set aside (``stopped``, never counted against the entry) and rerun from scratch."""
+        from natlang_neuralese.rl import episode_files
+        with self.lock:
+            info = self.groups.get(group)
+        if info is None or info.get('abandoned'):
+            return
+        ok = False
+        if self.continue_partials:
+            ok, _ = episode_files.partial_continuable(entry, self.policy_sha, getattr(self.args, 'top_p', 1.))
+        if not ok:
+            try:
+                episode_files.set_attempt_aside(info['dir'], entry, 'stopped')
+                (Path(info['dir']) / 'workers' / f"{entry['key']}{DONE_SUFFIX}").unlink(missing_ok=True)
+            except OSError as error:
+                print(json.dumps({'event': 'episode eviction failed', 'group': group, 'episode': entry['key'],
+                                  'error': repr(error)[:200]}), flush=True)
+                self._abandon(group, entry['key'], -signal.SIGTERM)
+                return
+        with self.lock:
+            self.pending.appendleft((group, entry))
+            self.dynamic['episodes_evicted'] += 1
+            self.dynamic['episodes_evicted_continued' if ok else 'episodes_evicted_rerun'] += 1
+        print(json.dumps({'event': 'episode evicted', 'group': group, 'episode': entry['key'], 'continued': ok}),
+              flush=True)
 
     def _prepare_memetic(self, group, info):
         """A staged memetic group's preparation stage (``memetic_workspace prepare``) on this slot: its supervisors
@@ -2205,6 +2265,17 @@ class WeightSync:
         if target.get('slot') is not None:
             self.staging = 1 - target['slot']
         self.pending = None
+
+
+def slot_env(env, index):
+    """The environment of slot ``index``'s episode: with shared episode servers (run_bonsai_queue
+    NATLANG_COLLECTOR_SHARED=N, default 8), its server search starts at socket ``index // N``, so slots
+    0..N-1 share s000, N..2N-1 s001, ...: when a collection yields its top slots, whole servers empty and exit
+    instead of every server keeping a few episodes (and its memory). NATLANG_COLLECTOR_SLOT_AFFINITY=0 opts out."""
+    shared = int((env or {}).get('NATLANG_COLLECTOR_SHARED', os.environ.get('NATLANG_COLLECTOR_SHARED', '8')) or 0)
+    if shared <= 0 or os.environ.get('NATLANG_COLLECTOR_SLOT_AFFINITY', '1') == '0':
+        return env
+    return {**(env if env is not None else os.environ), 'NATLANG_COLLECTOR_SOCKET_START': str(int(index) // shared)}
 
 
 def release_host_memory():
@@ -6402,6 +6473,8 @@ def build_parser():
 def main():
     args = build_parser().parse_args()
     if args.command == 'train':
+        from natlang_neuralese.common.host_heap import bound_host_heap
+        bound_host_heap()      # collector slot threads + learner: the arenas never keep their peaks (common/host_heap.py)
         args.top_p = check_top_p(args.top_p)
         from natlang_neuralese.common.cuda_context import ensure_context
         ensure_context()   # GB10: a context can fail to create under host-memory fragmentation; retried

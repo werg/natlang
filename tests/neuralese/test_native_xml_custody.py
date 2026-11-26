@@ -55,7 +55,9 @@ def test_render_exact_actual_xml_and_refuse_noncanonical_frame():
     if not base.is_dir():pytest.skip('pinned real tokenizer unavailable')
     tokenizer=AutoTokenizer.from_pretrained(base,trust_remote_code=False);bind_history_reasoning(tokenizer,policy='keep')
     turn=fixture();text,ids,boundary=render_packet(tokenizer,turn)
-    assert text.endswith(turn['model_response']['raw_response']['choices'][0]['message']['content']+'<|im_end|>\n')
+    # The target ends at the sampled end-of-turn token: the template's newline after it is never sampled.
+    assert text.endswith(turn['model_response']['raw_response']['choices'][0]['message']['content']+'<|im_end|>')
+    assert ids[-1]==tokenizer.convert_tokens_to_ids('<|im_end|>')
     assert 0<boundary<len(ids)
     assert '<tools>' not in text
 

@@ -1,0 +1,11 @@
+{
+  "lfm3_snapshot_present": true,
+  "hkb_seed_000000002_present": true,
+  "hkb_repo_present": true,
+  "recipes_written": [
+    "/home/werg/natlang/ops/compiler-prep-20261125/t0-step-verifier.json",
+    "/home/werg/natlang/ops/compiler-prep-20261125/t1-opsd.json",
+    "/home/werg/natlang/ops/compiler-prep-20261125/t2-unified-compiler.json",
+    "/home/werg/natlang/ops/compiler-prep-20261125/t3-native-query.json"
+  ]
+}

@@ -760,11 +760,12 @@ class SglangEngine(Engine):
         ids.extend(prefix[last:])
         start = len(ids)
         ids.extend(span)
+        kind = 'capture' if text is None else 'span'   # engine._native_capture_impl
         if text is None:
             text = self.tokenizer.decode(span, skip_special_tokens=False)
         block, record = self._native_store_capture(span, [{'ids': ids, 'start': start, 'end': len(ids),
                                                            **({'imports': spliced} if spliced else {})}], text=text,
-                                                   producer_kind='span')
+                                                   producer_kind=kind)
         with self._sglang_lock:
             self.sglang_state_writes += 1
         return self._capture_result(block, record, prefix, span, value_type, imports, blocks, text=text)
@@ -991,7 +992,7 @@ class SglangEngine(Engine):
         future: Future = Future()
         request.request_id = request.request_id or f"chatcmpl-{next(self._ids)}"
         try:
-            plan = self._prompt_plan(request.messages, request.tools)
+            plan = self._prompt_plan(request.messages, request.tools, request.chat_template_kwargs)
         except Exception as error:
             future.set_exception(error)
             return future
@@ -1017,7 +1018,7 @@ class SglangEngine(Engine):
 
     def generate(self, request):
         request.request_id = request.request_id or f"chatcmpl-{next(self._ids)}"
-        plan = self._prompt_plan(request.messages, request.tools)
+        plan = self._prompt_plan(request.messages, request.tools, request.chat_template_kwargs)
         if self._routes_native(request, plan):
             return self._native_gated(lambda: super(SglangEngine, self).generate(request))
         return self._sglang_run(Sequence(request, Future(), prompt_plan=self._append_only(request, plan)))

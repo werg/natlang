@@ -97,3 +97,18 @@ test('recorded repeated once-only service results remain exact across replay',as
     assert.deepEqual(subtreeEffects(store,record).map(effect=>effect.result),[{value:'recorded'},{value:'recorded'}]);
   } finally {store.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('observed causal children retain independent task identity without weakening their own custody',()=>{
+ const {rows,root}=graph(2),child=rows.get('t/1');
+ child.task_id='independent-check';child.graph_custody.task_id=child.task_id;
+ child.graph_custody.sha256=graphCustodyDigest(child.task_id,child.call_id,child.parent_call_id,child.graph_custody.child_call_ids,child.effects);
+ verifyObservedCallTree([root,child],root.call_id);
+ const mismatchedTask={...child,task_id:'unattested-other-task'};
+ assert.throws(()=>verifyObservedCallTree([root,mismatchedTask],root.call_id),/recorded child inventory/);
+ assert.throws(()=>verifyObservedCallTree([root],root.call_id),/recorded child inventory/);
+ assert.throws(()=>verifyObservedCallTree([root,child,child],root.call_id),/repeats an invocation/);
+ const foreignParent={...child,parent_call_id:'foreign-root'};
+ assert.throws(()=>verifyObservedCallTree([root,foreignParent],root.call_id),/inventory|unreachable/);
+ // Replay still requires a single task-wide effect-order namespace; causal training does not invent one.
+ assert.throws(()=>subtreeEffects({call:id=>rows.get(id),children:id=>(rows.get(id)?.graph_custody.child_call_ids??[]).map(call_id=>({call_id})),value:ref=>ref?.value},root),/crosses task identities/);
+});

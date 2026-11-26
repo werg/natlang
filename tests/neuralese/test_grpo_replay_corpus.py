@@ -80,11 +80,11 @@ def test_a_leading_empty_think_block_is_context_and_reasoned_replies_keep_every_
     corpus = grpo.ReplayCorpus(f'ops={path}', set(), 7, log=lambda r: None, tokenizer=_Tokens())
     assert corpus.think == 'context' and corpus.think_masked == 2
     (_, _, first), (_, _, reasoned) = corpus.groups['a'][0]['segs']
-    assert first['weight'].tolist() == [0, 0, 1, 1] and 'weight' not in reasoned
+    assert first['weight'].tolist() == [0, 0, 0, 1] and 'weight' not in reasoned   # + the token after the block
     (_, _, seeded), = corpus.groups['b'][0]['segs']
-    assert seeded['weight'].tolist() == [0, .5, .5]                       # the row's own weight stays on the action
+    assert seeded['weight'].tolist() == [0, 0, .5]                        # the row's own weight stays on the action
     # the weights reach the loss as for every chain
-    assert exp0_sft.chain_weights(corpus.groups['a'][0], 'cpu').tolist() == [0, 0, 1, 1, 1, 1, 1, 1]
+    assert exp0_sft.chain_weights(corpus.groups['a'][0], 'cpu').tolist() == [0, 0, 0, 1, 1, 1, 1, 1]
     kept = grpo.ReplayCorpus(f'ops={path},think=train', set(), 7, log=lambda r: None, tokenizer=_Tokens())
     assert kept.think_masked == 0 and 'weight' not in kept.groups['a'][0]['segs'][0][2]
     with pytest.raises(SystemExit):

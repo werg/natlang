@@ -1,0 +1,15 @@
+{
+  "recipe": "natlang.compiler.t1-opsd-call-level/1",
+  "backbone": "LiquidAI/LFM3-1.7B",
+  "backbone_revision": "40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd",
+  "target_host": "colab-g4a-or-dgx-fallback",
+  "lora_rank": 128,
+  "lora_alpha": 128.0,
+  "lr": 3e-05,
+  "opsd_topk": 64,
+  "opsd_beta": 0.5,
+  "opsd_max_log_ratio": 6.0,
+  "opsd_ce_weight": 0.3,
+  "ban_literal_expected_answers": true,
+  "min_new_tokens_per_round": 10000000
+}

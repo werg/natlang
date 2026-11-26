@@ -178,7 +178,7 @@ class Drive:
 
     # ---------- transfer ----------
 
-    def upload(self, path, key, *, rate=None, pause=None, properties=None) -> dict:
+    def upload(self, path, key, *, rate=None, pause=None, properties=None, deadline=None) -> dict:
         """Resumable upload of PATH to ``natlang/<key>`` (replacing nothing: an existing name is an error unless its
         md5 matches, then it is reused). Returns {id, bytes, md5, sha256, seconds}; raises unless Drive's md5 and size
         equal the bytes read. RATE caps bytes/second; PAUSE() true holds the transfer between chunks."""
@@ -197,6 +197,8 @@ class Drive:
         with open(path, 'rb') as stream:
             while sent < size or size == 0:
                 while pause and pause():
+                    if deadline is not None and time.time() > deadline:
+                        raise PassDeadline(f'{key}: paused past the pass deadline')
                     time.sleep(30)
                 block = stream.read(CHUNK)
                 md5.update(block)
@@ -351,6 +353,11 @@ NEVER = ('bgkit-checkpoints*', '*hindsight*', 'megatoken*', 'ComfyUI*', '*vibest
          'natlang-test-tmp', 'natlang-development-data')
 
 
+class PassDeadline(Exception):
+    """An upload held by PAUSE past the pass's deadline: the pass ends cleanly (2026-11-26: remote collection pulls
+    from Colab almost continuously, so a paused upload ran into the unit's hard timeout 21 times in 26 h)."""
+
+
 def colab_transfer_active() -> bool:
     """An rsync or scp to or from a Colab host is running (they share the DGX uplink with Drive uploads)."""
     for pid in os.listdir('/proc'):
@@ -463,6 +470,9 @@ def _linked(path: str, links: set[str]) -> bool:
     return False
 
 
+PAUSED_START_SECONDS = 600
+
+
 def archive(args, drive=None) -> int:
     drive = drive or Drive()
     exclude = [os.path.expanduser(line.strip()) for line in _lines(Path.home() / '.config/natlang/archive-exclude.txt')]
@@ -496,8 +506,14 @@ def archive(args, drive=None) -> int:
                 and abs(record.get('mtime', 0) - st.st_mtime) < 1:
             done = record          # on Drive and verified before (the delete did not happen, or it was restored)
         else:
-            done = drive.upload(path, key, rate=rate, pause=colab_transfer_active,
-                                properties={'natlang_path': str(path)[-100:]})
+            if colab_transfer_active() and time.time() + PAUSED_START_SECONDS > deadline:
+                continue            # no session opened just to sit paused into the deadline
+            try:
+                done = drive.upload(path, key, rate=rate, pause=colab_transfer_active, deadline=deadline,
+                                    properties={'natlang_path': str(path)[-100:]})
+            except PassDeadline as stop:
+                log(event='pass deadline while paused', path=str(path), why=str(stop))
+                break
             done = {'op': 'put', 'path': str(path), 'key': key, 'mtime': st.st_mtime, **done}
             manifest_append(done)
         # the copy verified; the file is unchanged since it was read; then the HDD copy goes, a stub stays

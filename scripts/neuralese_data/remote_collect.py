@@ -84,6 +84,10 @@ PUSH_EXCLUDE = ('rollouts.jsonl', 'journal.jsonl', 'row-*/', '*.log', 'actor/', 
 # episode keeps arrives compacted (``episode_files``: ``*.zst``). NATLANG_REMOTE_PULL_RAW_JOBS=1 opts out.
 PULL_EXCLUDE = ('/groups/*/row-*/*/jobs/*.partial.json', '/groups/*/row-*/*/jobs/*.partial.json.evidence-*.jsonl',
                 '/groups/*/row-*/*/jobs/*.result.json', '/groups/*/row-*/*/jobs/*.tmp-*')
+# a sample's results.jsonl the DGX holds compacted (``episode_files.compact_results``, ``ei_round_tier``: once its group is
+# scored) is never pulled raw again: each pull excludes them by path. ``ei_round_tier`` compacts a pulled collection
+# only while its live puller's code names this constant.
+COMPACTED_RESULTS_EXCLUDED = True
 MISSING_RELAUNCHES = 3
 LOST_SECONDS = 1800         # a VM that answers no ssh this long is gone: the unit ends (rc 75) and the driver restarts it
 SESSION_LOST_RC = 75
@@ -401,6 +405,18 @@ def pull_job_excludes():
     return [f'--exclude={e}' for e in PULL_EXCLUDE]
 
 
+def compacted_results_excludes(work, stage):
+    """``--exclude-from`` for the samples whose results.jsonl the DGX holds as ``results.jsonl.zst`` (none: [])."""
+    work = Path(work)
+    paths = sorted('/' + str(p.relative_to(work))[:-len('.zst')]
+                   for p in work.glob('groups/*/row-*/*/results.jsonl.zst') if p.is_file())
+    if not paths:
+        return []
+    listing = Path(stage) / 'compacted-results.exclude'
+    listing.write_text(''.join(f'{p}\n' for p in paths))
+    return [f'--exclude-from={listing}']
+
+
 def pull(host, work, *, timeout=1800):
     """The VM's work directory into the DGX's: content first (markers left out), the markers into a staging tree, the
     content again, then each changed marker moved into place (``os.replace``: atomic), so a DGX reader sees a group's
@@ -410,7 +426,8 @@ def pull(host, work, *, timeout=1800):
     stage.mkdir(parents=True, exist_ok=True)
     content = ['--exclude=/.remote-stage', '--exclude=/.remote-scratch', '--exclude=/.remote-vm',
                '--exclude=/.remote-collect.lock', '--exclude=/remote-collector.json', '--exclude=/collector.json',
-               *[f'--exclude=/groups/*/{m}' for m in MARKERS], *pull_job_excludes()]
+               *[f'--exclude=/groups/*/{m}' for m in MARKERS], *pull_job_excludes(),
+               *compacted_results_excludes(work, stage)]
     rsync(*content, f'{host}:{work}/', f'{work}/', timeout=timeout)
     # only new or changed markers land in the stage (--compare-dest: one identical in WORK is not transferred)
     rsync('--include=/groups/', '--include=/groups/*/', *[f'--include=/groups/*/{m}' for m in MARKERS],

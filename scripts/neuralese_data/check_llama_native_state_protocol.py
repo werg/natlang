@@ -4,7 +4,9 @@ llama-server's native-state protocol on a natlang GGUF export (natlang_neuralese
 declares the export's native identity; a grammar forces a producer span (produce-open, text, produce-close) and the
 reply carries it as a native_state part (streamed too: the last chunk carries the blocks and the message with its parts); the stored artifact decodes with the reference codec (serve/store.py) to the
 same content ID and re-encodes byte for byte; a re-upload is accepted, a wrong ID refused; consuming the state answers an
-exact-native-state receipt; an unknown state fails with neuralese-unknown-native-state. Native-state file handoff: a
+exact-native-state receipt; an unknown state fails with neuralese-unknown-native-state. A server that serves
+native.producer-kind.capture stores a request's x_natlang_producer_kind "capture" span as a capture (the reference id
+of the same tensors with that kind), which a reader splices (exact-native-state). Native-state file handoff: a
 PUT of {"path": FILE} stores a local store file as read (GET answers its bytes), a state with a non-finite value is
 refused, and a second server started with --native-state FILE (the produced state's store file, as a release's
 states/<id>.nzs) consumes it exactly.
@@ -110,6 +112,31 @@ try:
     print('consume', st, json.dumps(reply2.get('native_state') if st == 200 else reply2)[:400], reply2['choices'][0]['message']['content'][:120] if st == 200 else '')
     assert st == 200 and any(item['id'] == sid and item['mode'] == 'exact-native-state'
                              for item in reply2['native_state']['imports'])
+    # A capture (x_natlang_producer_kind "capture": a reply captured in its own context, the grammar capture of a
+    # compaction operator's reply or a compact_history note) is stored as producer_kind 'capture', its id is the
+    # reference codec's for the same tensors and kind, and a reader splices it as stored (exact-native-state).
+    if 'native.producer-kind.capture' in info['capabilities']:
+        st, captured = call('/v1/chat/completions', {'messages': [{'role': 'user', 'content': 'Summarize the ticket.'}],
+            'max_tokens': 40, 'temperature': 0, 'grammar': grammar, 'x_natlang_producer_kind': 'capture'})
+        assert st == 200, captured
+        cid = captured['native_state']['blocks'][0]['id']
+        st, meta = call(f'/v1/neuralese/native-states/{cid}/meta')
+        assert st == 200 and meta['producer_kind'] == 'capture', meta
+        st, cbody = call(f'/v1/neuralese/native-states/{cid}', raw=True)
+        cblock, decoded = decode_native_state(cbody)
+        assert decoded == cid and cblock.producer_kind == 'capture' and cblock.token_ids.tolist() == block.token_ids.tolist()
+        import dataclasses
+        from natlang_neuralese.serve.store import native_state_id
+        assert native_state_id(dataclasses.replace(block, producer_kind='capture')) == cid, \
+            'the reference id of the span with kind capture'
+        assert cid != sid
+        st, read = call('/v1/chat/completions', {'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'Which order is this about? '},
+            {'type': 'native_state', 'id': cid}]}], 'max_tokens': 20, 'temperature': 0})
+        assert st == 200 and [item['mode'] for item in read['native_state']['imports']] == ['exact-native-state'], read
+        st, refused = call('/v1/chat/completions', {'messages': [{'role': 'user', 'content': 'hi'}], 'max_tokens': 2,
+            'x_natlang_producer_kind': 'text'})
+        assert st == 400, refused
+        print('capture kind: stored as capture, reference id', cid, 'spliced exact-native-state')
     st, unknown = call('/v1/chat/completions', {'messages': [{'role': 'user', 'content': [{'type': 'native_state', 'id': 'nzs1_' + 'b' * 52}]}], 'max_tokens': 5})
     print('unknown', st, str(unknown)[:200])
     assert st == 400

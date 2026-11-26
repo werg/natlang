@@ -284,6 +284,30 @@ PERMANENT_PROVIDER_FAILURES = ('credit balance is too low', 'insufficient_quota'
 # teacher's root answers "failed" or a wrong value: that is the provider's verdict, not the teacher's, so an episode
 # whose logs carry it and that did not succeed is no verdict (deferred and retried)
 TEMPORARY_PROVIDER_LIMITS = ('You have hit your ChatGPT usage limit', 'Claude Code usage limit')   # the latter: scripts/claude_code_endpoint.py
+# Google AI Studio's free tier answers a per-model per-minute or per-day quota with the same "You exceeded your current
+# quota" text OpenAI uses for a spent account, plus the free-tier quota metric and its limit ("limit: 15, model: ...",
+# "Please retry in 41s"); a window that passes (limit above 0) is a temporary limit, not a refused account (2026-11-25:
+# Gemini 3.5 Flash-Lite was retired for its launch on a per-minute 429). "limit: 0" (no free quota for the model) stays a
+# refusal.
+FREE_TIER_QUOTA = re.compile(r'generate_content_free_tier_\w+, limit: (\d+)')
+
+
+def provider_refusal(logs):
+    """The PERMANENT_PROVIDER_FAILURES message in an episode's logs that refuses the account, or None (a free-tier
+    quota window with a nonzero limit is temporary: provider_limit)."""
+    refusal = next((m for m in PERMANENT_PROVIDER_FAILURES if m in logs), None)
+    if refusal == 'exceeded your current quota' and provider_limit(logs):
+        return None
+    return refusal
+
+
+def provider_limit(logs):
+    """Whether the logs carry a temporary provider limit: a subscription's usage window (TEMPORARY_PROVIDER_LIMITS) or
+    a free-tier quota window with a nonzero limit (FREE_TIER_QUOTA)."""
+    if any(limit in logs for limit in TEMPORARY_PROVIDER_LIMITS):
+        return True
+    limits = [int(n) for n in FREE_TIER_QUOTA.findall(logs)]
+    return bool(limits) and max(limits) > 0
 # decide() collection needs the actor's exact native capture, which a hosted teacher endpoint does not give
 UNSUPPORTED_DECIDE = 'decision collection needs its exact native capture'
 
@@ -356,12 +380,36 @@ def resumable_attempt(directory, identity, row):
     return same_teacher and same_row and (directory / 'queue.jsonl').is_file()
 
 
+CONFIG_ENV_DIR = Path.home() / '.config/natlang'
+
+
+def config_env_key(name, directory=CONFIG_ENV_DIR):
+    """The value of NAME in the provider key files ``~/.config/natlang/*.env`` (``NAME=value`` lines, optionally
+    ``export``ed), or None. A teacher's key reaches its episodes even when the campaign's launch script sourced only
+    some of the files (expert_iteration.TEACHER_ENV_FILES at an older pin)."""
+    for path in sorted(Path(directory).glob('*.env')):
+        try:
+            lines = path.read_text().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            key, sep, value = line.partition('=')
+            if sep and key.strip().removeprefix('export ').strip() == name:
+                return value.strip().strip('"').strip("'") or None
+    return None
+
+
 def episode_env(teacher, env):
     """The environment of one episode's collector: a teacher with `api_key_command` (a short-lived bearer token, e.g.
     Vertex AI's `gcloud auth application-default print-access-token`) gets a freshly minted key in `api_key_env`, so a
     campaign outlives the token's hour."""
     command = getattr(teacher, 'api_key_command', None)
     if not command:
+        name = getattr(teacher, 'api_key_env', None)
+        if name and not env.get(name):   # a provider whose key file the launch script did not source
+            key = config_env_key(name, CONFIG_ENV_DIR)
+            if key:
+                return {**env, name: key}
         return env
     token = subprocess.run(command, capture_output=True, text=True, timeout=60, check=True).stdout.strip()
     if not token:
@@ -687,13 +735,13 @@ class Generator:
                   'rollouts': str(directory / 'rollouts.jsonl')}
         logs = ''.join(path.read_text(errors='replace') for path in directory.glob('*.log'))
         record['provider_failure'] = PROVIDER_FAILURE in logs
-        if any(limit in logs for limit in TEMPORARY_PROVIDER_LIMITS):
+        if provider_limit(logs):
             record['provider_limited'] = True
         if UNSUPPORTED_DECIDE in logs:   # a deterministic harness limit, not a provider failure: recorded, never retried
             record['unsupported'] = 'decide-native-capture'
         with self.lock:
             if self._no_verdict(record):
-                refusal = next((m for m in PERMANENT_PROVIDER_FAILURES if m in logs), None)
+                refusal = provider_refusal(logs)
                 if refusal and teacher.enabled:
                     teacher.enabled = False
                     print(json.dumps({'event': 'teacher retired', 'teacher': teacher.model_id, 'reason': refusal}),
@@ -823,6 +871,8 @@ def record_episode_files(work, directory):
 
 
 def main():
+    from natlang_neuralese.common.host_heap import bound_host_heap
+    bound_host_heap()          # the campaign's slot threads (common/host_heap.py)
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--work', required=True)
     p.add_argument('--pool', action='append', default=[],

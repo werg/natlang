@@ -790,6 +790,147 @@ def test_round_preparation_claim_shrinks_the_dgx_collection_further_and_its_ledg
     collector._resize_claim('restore')
     assert calls[-1] == [*ei.LEDGER, 'resize', '--unit', 'aei-collect-v0001', 'restore', '--budget-gb', '70.0']
 
+def test_a_collection_launched_at_room_slots_runs_them_until_the_ledger_has_room(tmp_path, monkeypatch):
+    """The collector started at --room-slots does not yield its (already fitted) claim; it takes its full slots and
+    restores its claim once ledger_room_gb covers the growth to --ledger-full-gb."""
+    resized = []
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(
+        start=lambda: args and resized.append(args[0])))
+    import scripts.memory_ledger as ml
+    monkeypatch.setattr(ml, 'claimed_budget', lambda unit, state_path=None: 44 * ml.GIB)
+    room = {'gb': 10.}
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda u=None, priority='medium': room['gb'])
+    collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    collector.active_slots = 192
+    collector.setup(['t1'], time.time() + 3600, endpoints=[('http://own', 192)], priority_dir=tmp_path / 'prio',
+                    ledger_unit='aei-collect-v0001', ledger_full_gb=70., room_slots=58)
+    assert collector.active_slots == 58
+    collector._priority()
+    assert collector.active_slots == 58 and resized == []             # no yield: the launch budget fits the slots
+    room['gb'] = 30.                                                   # 26 GB to grow: room
+    collector.priority_read = 0
+    collector._priority()
+    assert collector.active_slots == 192 and collector.room_slots is None and resized == ['restore']
+    plain = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    plain.active_slots = 64
+    plain.setup(['t1'], time.time() + 3600, endpoints=[('http://own', 64)], room_slots=64)
+    assert plain.room_slots is None and plain.active_slots == 64        # not fewer than its slots: no limit
+
+
+def test_a_remote_client_started_at_room_slots_restores_without_a_held_priority_dir(tmp_path, monkeypatch):
+    """A DGX-side client of a remote actor has no held-priority dir; started at --room-slots it still checks the room
+    and restores its slots and claim (--ledger-full-gb)."""
+    resized = []
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(
+        start=lambda: args and resized.append(args[0])))
+    import scripts.memory_ledger as ml
+    monkeypatch.setattr(ml, 'claimed_budget', lambda unit, state_path=None: 12 * ml.GIB)
+    room = {'gb': 3.}
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda u=None, priority='medium': room['gb'])
+    collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    collector.active_slots = 64
+    collector.setup(['t1'], time.time() + 3600, endpoints=[('http://pop', 64)], verify=True,
+                    ledger_unit='aei-collect-v0001-pop', ledger_full_gb=22., room_slots=24)
+    collector._priority()
+    assert collector.active_slots == 24 and resized == []
+    room['gb'] = 11.
+    collector.priority_read = 0
+    collector._priority()
+    assert collector.active_slots == 64 and resized == ['restore']
+
+
+def test_every_many_threaded_process_bounds_its_malloc_arenas():
+    """2026-11-25: the Pop client's main process (64 slot threads) grew to 7.0 / 8.1 GB anon RSS and was OOM-killed at
+    each cap; the DGX collection's held ~470 64 MB arena heaps. One mechanism (common/host_heap.bound_host_heap) in every
+    thread-per-slot / per-request entry point; NATLANG_BOUND_HOST_HEAP=0 opts out."""
+    from natlang_neuralese.common import host_heap
+    for path in ('scripts/neuralese_data/expert_iteration.py', 'scripts/neuralese_data/grpo.py',
+                 'scripts/neuralese_data/filled_reasoning.py', 'scripts/neuralese_data/teacher_gen.py',
+                 'scripts/neuralese_data/serve_native_checkpoint.py',
+                 'training/neuralese/natlang_neuralese/rl/held_eval.py'):
+        text = (REPO / path).read_text()
+        assert 'from natlang_neuralese.common.host_heap import bound_host_heap' in text and 'bound_host_heap()' in text, path
+    os.environ['NATLANG_BOUND_HOST_HEAP'] = '0'
+    try:
+        assert host_heap.bound_host_heap() is None
+    finally:
+        del os.environ['NATLANG_BOUND_HOST_HEAP']
+
+
+def test_a_dead_drivers_prep_claim_is_replaced_not_taken_for_a_nested_block(tmp_path, monkeypatch):
+    """2026-11-26 02:41: the restarted driver found its predecessor's aei1-r0013-prep.json (dead pid) and wrote no claim:
+    the collection never yielded and the data/build steps preempted it at 03:44 and 04:29."""
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(start=lambda: None))
+    stale = tmp_path / 'aei1-r0013-prep.json'
+    stale.write_text(json.dumps({'pid': 2**22 + 12345, 'share': 0.5}))
+    with ei.yield_claim(tmp_path, 'aei1-r0013-prep', 0.5, extra={'evict_seconds': 120}) as path:
+        assert path == stale and json.loads(path.read_text())['pid'] == os.getpid()
+        assert json.loads(path.read_text())['evict_seconds'] == 120
+        with ei.yield_claim(tmp_path, 'aei1-r0013-prep', 0.5) as nested:
+            assert nested is None                       # a live claim: the outer block owns it
+    assert not stale.exists()
+
+
+def test_a_prep_yield_evicts_the_yielded_slots_after_its_grace_and_the_claim_follows_the_use(tmp_path, monkeypatch):
+    """The collection shrinks in place for round preparation: its yielded slots' episodes are stopped after the claim's
+    evict_seconds (a held claim never evicts), the ledger claim is lowered again as the use falls, and everything is
+    restored when the claim ends."""
+    resized = []
+    monkeypatch.setattr(ei.threading, 'Thread', lambda target, args=(), daemon=None: types.SimpleNamespace(
+        start=lambda: args and resized.append(args[0])))
+    clock = {'t': 1000.}
+    monkeypatch.setattr(ei.time, 'time', lambda: clock['t'])
+    claims = []
+    monkeypatch.setattr(ei, 'held_priority_claims', lambda directory: list(claims))
+    collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    collector.setup(['t1'], clock['t'] + 3600, endpoints=[('http://own', 192)], priority_dir=tmp_path,
+                    ledger_unit='aei-collect-v0001')
+    collector.active_slots = 192
+
+    def check(dt):
+        clock['t'] += dt
+        collector._priority()
+    claims[:] = [{'pid': 1, 'share': 0.5, 'evict_seconds': 120}]
+    check(31)
+    assert collector.active_slots == 96 and resized == ['yield']
+    assert not collector._evict_slot(150) and not collector._evict_slot(10)      # within the grace
+    check(61)
+    assert resized == ['yield', 'yield']                     # the claim follows the use down
+    check(61)                                                 # 153 s after the yield: past the 120 s grace
+    assert collector._evict_slot(150) and collector._evict_slot(96) and not collector._evict_slot(95)
+    claims[:] = []
+    check(31)
+    assert collector.active_slots == 192 and resized[-1] == 'restore' and not collector._evict_slot(150)
+    claims[:] = [{'pid': 1}]                                  # a held measurement: yields, never evicts
+    check(31)
+    check(600)
+    assert collector.active_slots == 144 and not collector._evict_slot(150)
+
+
+def test_an_evicted_episode_runs_again_in_the_same_run(tmp_path, monkeypatch):
+    """grpo's slot hook: an evicted episode is requeued first; continued from its partial when that is continuable,
+    else set aside as 'stopped' (never counted as lost) and rerun."""
+    from natlang_neuralese.rl import episode_files
+    collector = ei.frontier_collector(_ShardBase)([{'id': 't1'}], tmp_path)
+    collector.setup(['t1'], time.time() + 3600, endpoints=[('http://own', 2)])
+    collector._requeue_evicted = types.MethodType(grpo.Collector._requeue_evicted, collector)
+    group_dir = tmp_path / 'g0'
+    (group_dir / 'workers').mkdir(parents=True)
+    collector.groups[0] = {'dir': group_dir, 'size': 2, 'done': 0, 'versions': [], 'task_id': 't1'}
+    entry = {'key': 'k0', 'output': str(group_dir / 'row-000/sample-00/results.jsonl')}
+    monkeypatch.setattr(episode_files, 'partial_continuable', lambda e, sha, top_p: (True, ''))
+    collector._requeue_evicted(0, entry)
+    assert collector.pending[0] == (0, entry) and collector.dynamic['episodes_evicted_continued'] == 1
+    asides = []
+    monkeypatch.setattr(episode_files, 'partial_continuable', lambda e, sha, top_p: (False, 'no partial'))
+    monkeypatch.setattr(episode_files, 'set_attempt_aside', lambda d, e, label: asides.append(label) or 1)
+    collector._requeue_evicted(0, entry)
+    assert asides == ['stopped'] and collector.dynamic['episodes_evicted_rerun'] == 1 and len(collector.pending) == 2
+    assert grpo.slot_env({'A': '1'}, 17) == {'A': '1', 'NATLANG_COLLECTOR_SOCKET_START': '2'}
+    monkeypatch.setenv('NATLANG_COLLECTOR_SLOT_AFFINITY', '0')
+    assert grpo.slot_env({'A': '1'}, 17) == {'A': '1'}
+
+
 def test_pop_rl_actor_profiles_keep_pop_settings():
     pop_settings, pop_fmt = pop_rl_actor.pop_sglang('fp8_e4m3', 20, profile='pop')
     assert pop_settings['max_running'] == 20 and pop_fmt == 'sglang-pop-rtx4060-bf16-vendor-projection-kv-fp8_e4m3'

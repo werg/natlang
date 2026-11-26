@@ -478,8 +478,9 @@ def test_an_unmeasured_start_is_judged_against_the_given_reference_and_rolls_bac
     assert ctrl.current['sha256'] == ref[1] and not ctrl.in_lineage('0' * 64)
 
 
-def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tmp_path):
+def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tmp_path, monkeypatch):
     import expert_iteration as ei
+    monkeypatch.setattr(ei, 'AUTO_PHASE_SWITCH', True)
     ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
                                          held_every=1)
     def publish_and_judge(i, verdict, adopt):
@@ -497,9 +498,37 @@ def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tm
     assert ev['switch_phase'] == {'from': 'grpo', 'to': 'sft'} and ctrl.current['sha256'] == _policy(4)[1]
 
 
+
+def test_neutral_rounds_do_not_switch_phase_by_default(tmp_path):
+    import expert_iteration as ei
+    ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
+                                         held_every=1)
+    for i in (1, 2, 3):
+        ctrl.record_round_published(f'r{i}', *_policy(i), base_sha256=ctrl.current['sha256'])
+        ctrl.start_measurement()
+        ev = ctrl.record_verdict({'verdict': 'neutral', 'adopt': True, 'checkpoint': _policy(i)[0],
+                                  'sha256': _policy(i)[1]})
+        assert ev['action'] == 'adopt' and 'switch_phase' not in ev
+    assert ctrl.phase == 'sft' and ctrl.current['sha256'] == _policy(3)[1]
+
+
+def test_judge_adopts_neutral_and_rolls_back_only_a_significant_regression(monkeypatch):
+    import expert_iteration as ei
+    vs = lambda d, p, ran_out=0.0: {'primary': {'delta': d, 'permutation_p': p}, 'ran_out_rate_delta': ran_out}
+    assert ei.judge(vs(-0.018, 0.49, 0.02), 3, 3) == ('neutral', True)
+    assert ei.judge(vs(0.021, 0.39, 0.0235), 3, 3) == ('neutral', True)
+    assert ei.judge(vs(-0.05, 0.01), 3, 3) == ('failure', False)
+    assert ei.judge(vs(0.05, 0.01), 3, 3) == ('success', True)
+    monkeypatch.setattr(ei, 'NEUTRAL_ADOPT', False)
+    assert ei.judge(vs(-0.018, 0.49), 3, 3) == ('neutral', False)
+
+
 def _driver(tmp_path, monkeypatch, **over):
     import expert_iteration as ei
     monkeypatch.setattr(ei, 'OPS', tmp_path / 'ops')
+    # never the live ledger's room or learned peaks (tests that need them set their own)
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda unit=None, priority='medium': None)
+    monkeypatch.setattr(ei, 'ledger_family_peaks', lambda: {})
     (tmp_path / 'ops' / 'grpo-v4').mkdir(parents=True, exist_ok=True)
     pin = tmp_path / 'pin'
     (pin / 'scripts' / 'neuralese_data').mkdir(parents=True, exist_ok=True)
@@ -508,6 +537,8 @@ def _driver(tmp_path, monkeypatch, **over):
     argv = ['async-drive', '--root', str(tmp_path / 'loop'), '--name', 'aei', '--start', str(start),
             '--start-sha', 'a' * 64, '--commit', 'c' * 40, '--pin', str(pin), '--sft-work', str(tmp_path / 'work'),
             *over.pop('argv', [])]
+    if '--min-new-tokens' not in argv:      # the supply wait has its own test; preparation tests build tiny mixes
+        argv += ['--min-new-tokens', '0']
     parser_args = {}
     monkeypatch.setattr(sys, 'argv', ['expert_iteration.py', *argv])
     monkeypatch.setattr(ei, 'async_drive', lambda a: parser_args.setdefault('a', a) and 0)
@@ -2884,7 +2915,8 @@ def test_a_collection_queued_at_its_full_claim_is_requeued_at_the_prep_share(tmp
     monkeypatch.setattr(ei, 'ledger_queued', lambda u: u in queued)
     monkeypatch.setattr(ei, 'ledger_waiting_gb', lambda u: queued.get(u))
     monkeypatch.setattr(d.c, 'active', lambda u: False)
-    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (40, 70))
+    monkeypatch.setattr(d.c, 'collection_plan', lambda slots, room=None: {'budget': 40, 'full': 70, 'cap': 70,
+                                                                          'slots': 96, 'room_slots': None})
     stopped, relaunched = [], []
     monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), queued.pop(u, None)))
     monkeypatch.setattr(d, 'ensure_collection', lambda p: (relaunched.append(p['sha256']), queued.__setitem__(unit, 40)))
@@ -2916,16 +2948,149 @@ def test_a_collection_launched_at_the_prep_share_asks_the_ledger_for_a_shrunk_ad
     assert launches[0].index('--shrunk') < launches[0].index('--')
     calls = []
     monkeypatch.setattr(d.c, 'ledger', lambda unit, budget, *a, **kw: calls.append((unit, budget, kw.get('shrunk'))))
-    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (51, 70))
+    monkeypatch.setattr(d.c, 'collection_plan', lambda slots, room=None: {'budget': 51, 'full': 70, 'cap': 70,
+                                                                          'slots': 96, 'room_slots': None})
     monkeypatch.setattr(d.a, 'fill', None, raising=False)
     cur = d.controller.current
     (d.collect_dir(cur)).mkdir(parents=True)
     (d.collect_dir(cur) / 'tasks.json').write_text('[]')
     d.ensure_collection(cur)
     assert calls[-1] == (d.collection_unit(cur), 51, True)
-    monkeypatch.setattr(d.c, 'collection_budget', lambda slots: (70, 70))
+    monkeypatch.setattr(d.c, 'collection_plan', lambda slots, room=None: {'budget': 70, 'full': 70, 'cap': 70,
+                                                                          'slots': 192, 'room_slots': None})
     d.ensure_collection(d.controller.current)
     assert calls[-1][2] is False
+
+
+def test_a_waiting_collection_is_requeued_at_the_slots_that_fit_the_ledger_room(tmp_path, monkeypatch):
+    """2026-11-25 18:44-19:48 and 20:20-21:18+: v0009 (192 slots), preempted by a running data/build step, waited at its
+    full 70 GB (need 85) with 58.6 GB of headroom, DGX GPU idle. Whenever it waits, the driver requeues it at the most
+    slots whose budget fits the room (at least --collect-fit-min-slots); the collector starts with --room-slots and
+    restores its full claim (--ledger-full-gb), with MemoryMax at the formula cap. --collect-fit-min-slots 0 opts out."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')
+    cur = d.controller.current
+    unit = d.collection_unit(cur)
+    room = {'gb': 58.6 - 15}
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda u=None, priority='medium': room['gb'])
+    # the plan: 43.6 GB fits 12 + 20 + 0.2 x 58 = 43.6 -> 58 slots (budget 44 after rounding: 57 slots, 43)
+    plan = d.c.collection_plan(192, 43.6)
+    assert plan['room_slots'] == plan['slots'] and plan['budget'] <= 43.6 and plan['full'] == plan['cap'] == 70
+    assert ei.dgx_collection_budget_gb(12, plan['slots'] + 1) > 43.6
+    assert d.c.collection_plan(192, 80)['room_slots'] is None and d.c.collection_plan(192, 80)['budget'] == 70
+    assert d.c.collection_plan(192, 30)['room_slots'] is None      # below the minimum slots: left as it is
+    queued = {unit: 70.0}
+    monkeypatch.setattr(ei, 'ledger_queued', lambda u: u in queued)
+    monkeypatch.setattr(ei, 'ledger_waiting_gb', lambda u: queued.get(u))
+    monkeypatch.setattr(d.c, 'active', lambda u: False)
+    monkeypatch.setattr(d.c, 'present', lambda u: u in queued)
+    monkeypatch.setattr(d.a, 'fill', None, raising=False)
+    (d.collect_dir(cur)).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    stopped, launched = [], []
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), queued.pop(u, None)))
+    monkeypatch.setattr(d.c, 'ledger', lambda u, budget, prio, argv, log, **kw: (
+        launched.append((u, budget, argv, kw)), queued.__setitem__(u, budget)))
+    assert d.collection_pending() is True
+    u, budget, argv, kw = launched[-1]
+    assert stopped == [unit] and u == unit and budget == plan['budget']
+    assert argv[argv.index('--room-slots') + 1] == str(plan['slots']) and argv[argv.index('--slots') + 1] == '192'
+    assert argv[argv.index('--ledger-full-gb') + 1] == '70' and kw['shrunk'] is True and kw['host_max_gb'] == 70
+    assert d.collection_pending() is True and len(stopped) == 1        # at the fitted budget: left alone
+    room['gb'] = 39.                                                     # less room still: smaller again
+    assert d.collection_pending() is True and len(stopped) == 2 and launched[-1][1] <= 39
+    # a DGX SFT's stop_collections and a fit requeue never interleave: stopped under the same lock, not relaunched
+    queued.clear()
+    assert d.requeue_collection_to_fit(cur, unit) is False and len(launched) == 2
+    # the opt-out: no fit, the full claim
+    queued[unit] = 70.0
+    d.a.collect_fit_min_slots = 0
+    assert d.collection_room_gb(unit) is None and d.collection_pending() is True and len(stopped) == 2
+    # standing: gone while no DGX SFT holds the GPU, it is launched again; after stop_collections it stays stopped
+    d.a.collect_fit_min_slots = ei.COLLECT_FIT_MIN_SLOTS
+    queued.clear()
+    d.collections_held = False
+    d.collection_standing()
+    assert launched[-1][0] == unit and unit in queued
+    d.stop_collections(remote=False)
+    n = len(launched)
+    d.collection_standing()
+    assert unit not in queued and len(launched) == n
+    monkeypatch.setenv('NATLANG_EI_STANDING_COLLECTION', '0')
+    d.collections_held = False
+    d.collection_standing()
+    assert len(launched) == n
+
+
+def test_the_full_collection_claim_follows_the_measured_peaks_capped_by_the_formula(tmp_path, monkeypatch):
+    """Measured use 50-55 GB beside a 70 GB claim: the full claim is the largest learned peak of the newest three DGX
+    collection units x 1.1, at most the formula (which stays MemoryMax); fills, selects and remote collectors are other
+    families; no peak: the formula; --no-measured-collection-claim opts out."""
+    ei, d = _driver(tmp_path, monkeypatch)
+    monkeypatch.setattr(ei, 'HELD_PRIORITY_DIR', tmp_path / 'prio')
+    G = 2**30
+    peaks = {'aei-collect-v0001': 66 * G, 'aei-collect-v0002': 50 * G, 'aei-collect-v0003': 52 * G,
+             'aei-collect-v0004': 48 * G, 'aei-collect-v0004-fill': 90 * G, 'aei-collect-v0004-remote0': 90 * G,
+             'other-collect-v0009': 90 * G}
+    assert ei.measured_collection_gb('aei', peaks) == round(52 * 1.1) == 57
+    assert ei.measured_collection_gb('aei', {}) is None
+    monkeypatch.setattr(ei, 'ledger_family_peaks', lambda: peaks)
+    assert d.c.collection_full_gb(192) == (57, 70) and d.c.collection_budget(192) == (57, 57)
+    with ei.yield_claim(tmp_path / 'prio', 'aei-r0002-prep', 0.5):
+        assert d.c.collection_budget(192) == (51, 57)                   # the share's formula budget, under the full
+    peaks['aei-collect-v0005'] = 80 * G
+    assert d.c.collection_full_gb(192) == (70, 70)                      # capped by the formula
+    d.c.a.measured_collection_claim = False
+    peaks.pop('aei-collect-v0005')
+    assert d.c.collection_full_gb(192) == (70, 70)
+
+
+def test_a_waiting_dgx_side_collection_client_is_requeued_at_the_slots_that_fit(tmp_path, monkeypatch):
+    """2026-11-26 00:50-02:20+: aei1-collect-v0009-pop (64 slots, 22.2 GB, its learned peak) waited 30+ min, Pop's GPU
+    idle. A DGX-side client (Pop, a --collect-on-dgx remote) waiting at more than fits is started again at the slots that
+    fit (budget CLIENT_BASE_GB + (full - base) x n / S, at least min(--collect-fit-min-slots, S // 4)), shrunk, with
+    --room-slots and --ledger-full-gb so its collector restores; a client on its remote host is never fitted."""
+    import pop_rl_actor
+    monkeypatch.setattr(pop_rl_actor, 'POP', 'pop-host')
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port, bind_host=None: 'http://100.1.2.3:18531')
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--rebind-actor', 'pop-host@http://100.1.2.3:18531=64'])
+    cur = d.controller.current
+    target = d.dgx_clients()[0]
+    assert target['pop'] and target['suffix'] == '-pop'
+    G = 2**30
+    monkeypatch.setattr(ei, 'ledger_family_peaks', lambda: {'aei-collect-v0000-pop': 20.2 * G, 'aei-collect-v0000': 99 * G})
+    full = d.client_plan(target, d.client_formula_gb(64))
+    assert full == {'budget': 22, 'full': 22, 'slots': 64, 'room_slots': None}   # 20.2 x 1.1, over the 17 formula
+    plan = d.client_plan(target, 17, room_gb=14.)
+    assert plan['room_slots'] == plan['slots'] and plan['budget'] <= 14 and plan['slots'] >= 16
+    assert d.client_plan(target, 17, room_gb=7.)['room_slots'] is None     # below 16 slots: left as it is
+    unit = d.collection_unit(cur) + '-pop'
+    queued = {unit: 22.2}
+    monkeypatch.setattr(pop_rl_actor, 'pop_busy', lambda: None)
+    monkeypatch.setattr(ei, 'ledger_room_gb', lambda u=None, priority='medium': 14.)
+    monkeypatch.setattr(ei, 'ledger_queued', lambda u: u in queued)
+    monkeypatch.setattr(ei, 'ledger_waiting_gb', lambda u: queued.get(u))
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda endpoint, sha: True)
+    monkeypatch.setattr(d.c, 'active', lambda u: False)
+    monkeypatch.setattr(d.c, 'present', lambda u: u in queued)
+    (d.collect_dir(cur)).mkdir(parents=True)
+    (d.collect_dir(cur) / 'tasks.json').write_text('[]')
+    stopped, launched = [], []
+    monkeypatch.setattr(d.c, 'stop_unit', lambda u: (stopped.append(u), queued.pop(u, None)))
+    monkeypatch.setattr(d.c, 'ledger', lambda u, budget, prio, argv, log, **kw: (
+        launched.append((u, budget, argv, kw)), queued.__setitem__(u, budget)))
+    assert d.requeue_client_to_fit(cur, target) is True
+    u, budget, argv, kw = launched[-1]
+    assert stopped == [unit] and u == unit and budget == plan['budget'] and kw == {'detach': True, 'shrunk': True, 'host_max_gb': 22}
+    assert argv[argv.index('--room-slots') + 1] == str(plan['slots']) and argv[argv.index('--ledger-full-gb') + 1] == '22'
+    assert argv[argv.index('--actor') + 1].endswith('=64')                 # the collector's full slots
+    assert d.requeue_client_to_fit(cur, target) is False and len(stopped) == 1     # fitted: left alone
+    queued[unit] = 22.2
+    monkeypatch.setattr(pop_rl_actor, 'pop_busy', lambda: 'held')              # Pop measuring: never restarted
+    assert d.requeue_client_to_fit(cur, target) is False and len(stopped) == 1
+    monkeypatch.setattr(pop_rl_actor, 'pop_busy', lambda: None)
+    d.a.collect_fit_min_slots = 0                                              # the opt-out
+    assert d.requeue_client_to_fit(cur, target) is False and len(stopped) == 1
 
 
 def test_async_driver_retention_pass_and_opt_out(tmp_path, monkeypatch):
@@ -2948,6 +3113,190 @@ def test_async_driver_retention_pass_and_opt_out(tmp_path, monkeypatch):
     assert d.retain('r0001 published') is None and actor.exists()
     d.a.no_retention = False
     monkeypatch.setenv('NATLANG_OPS_ROOT', str(tmp_path / 'ops'))
+    # a pass another test's driver started in the background holds the class-wide lock until it ends
+    assert ei.AsyncRoundDriver.RETAIN_LOCK.acquire(timeout=120)
+    ei.AsyncRoundDriver.RETAIN_LOCK.release()
     d.retain('r0001 published').join(60)
     assert not actor.exists() and notes and notes[-1]['retention'] == 'r0001 published', notes
     assert notes[-1]['errors'] == 0 and notes[-1]['actions'] == 1
+
+
+def test_round_builds_take_the_fixed_val_set_drop_solved_own_and_defer_unfilled_campaign_episodes(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--fill', str(tmp_path / 'fill')])
+    cur = d.controller.current
+    d.collect_dir(cur).mkdir(parents=True)
+    (d.collect_dir(cur) / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+    for name in ('teacher-r0001', 'teacher-r0002', 'teacher-r0003'):
+        (d.root / name).mkdir(parents=True)
+    for name in ('teacher-r0001', 'teacher-r0003'):
+        (d.root / name / 'manifest.jsonl').write_text('{}\n')
+    _, _, build = d.prepare_plan(d.root / 'r0001', [cur])
+    assert build[build.index('--fixed-val') + 1] == str(d.root / 'val-fixed')
+    assert build[build.index('--anchor-per-task') + 1] == '0'
+    assert build[build.index('--defer-unfilled-hours') + 1] == str(ei.DEFER_UNFILLED_HOURS)
+    assert build[build.index('--fill-out') + 1] == str(tmp_path / 'fill')
+    assert [build[i + 1] for i, x in enumerate(build) if x == '--campaign-work'] == \
+        [str(d.root / 'teacher-r0001'), str(d.root / 'teacher-r0003')]
+    _, off = _driver(tmp_path / 'off', monkeypatch, argv=['--fill', str(tmp_path / 'fill'), '--no-fixed-val',
+                                                          '--own-solved-anchor', '1', '--defer-unfilled-hours', '0'])
+    off.collect_dir(off.controller.current).mkdir(parents=True)
+    (off.collect_dir(off.controller.current) / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+    _, _, build = off.prepare_plan(off.root / 'r0001', [off.controller.current])
+    assert '--fixed-val' not in build and '--defer-unfilled-hours' not in build
+    assert build[build.index('--anchor-per-task') + 1] == '1'
+
+
+def test_the_learner_scores_the_fixed_val_sets_first_then_the_rounds_own(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch)
+    rd = d.root / 'r0001'
+    (rd / 'mix').mkdir(parents=True)
+    (rd / 'chains.sha256').write_text('f' * 64 + '\n')
+    (rd / 'mix' / 'val-teacher.pkl').write_bytes(b'x')
+    (d.root / 'val-fixed').mkdir(parents=True)
+    for kind in ('own', 'teacher'):
+        (d.root / 'val-fixed' / f'val-fixed-{kind}.pkl').write_bytes(b'x')
+    env = d.sft_env(rd, d.controller.current, activation_gb=56, preflight_only=False)
+    extra = env['EXTRA'].split()
+    assert env['VAL'] == str(d.root / 'val-fixed' / 'val-fixed-own.pkl')
+    assert [extra[i + 1] for i, x in enumerate(extra) if x == '--val-chains'] == \
+        [str(d.root / 'val-fixed' / 'val-fixed-teacher.pkl'), str(rd / 'mix' / 'val-teacher.pkl')]
+
+
+def test_a_round_short_of_new_supervision_waits_and_rebuilds_until_the_wait_expires(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--min-new-tokens', '5000000', '--max-supply-wait-hours', '6',
+                                                 '--supply-recheck-minutes', '45'])
+    rd = d.root / 'r0002'
+    (rd / 'stages').mkdir(parents=True)
+    for name in ('data', 'build'):
+        (rd / 'stages' / f'{name}.done').write_text('{}')
+    clock = [1_000_000.]
+    monkeypatch.setattr(ei.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(ei.time, 'sleep', lambda s: clock.__setitem__(0, clock[0] + s))
+    monkeypatch.setattr(d, 'standing_teacher', lambda: None)
+    short = {'mix': {'parts': {'rl-own': {'weighted_target_tokens': 4_800_000},
+                               'teacher': {'weighted_target_tokens': 1_200_000}}}}
+    assert d.supply_wait(rd, short)                        # short: waits 45 min, then data and build run again
+    assert clock[0] - 1_000_000 >= 45 * 60
+    assert not (rd / 'stages' / 'data.done').exists() and not (rd / 'stages' / 'build.done').exists()
+    # the rerun is real: earlier outputs and a successful journal do not mark the step finished (r0012 2026-11-25)
+    (rd / 'neuralese-graph-own').mkdir()
+    (rd / 'neuralese-graph-own' / 'chains.pkl').write_bytes(b'x')
+    monkeypatch.setattr(ei, 'unit_last_run_succeeded', lambda unit: True)
+    assert d.step_finished(rd, 'data', 'aei-r0002-data', ['x']) is None
+    (rd / 'stages' / 'data.rerun').unlink()
+    assert d.step_finished(rd, 'data', 'aei-r0002-data', ['x']) == 'journal'
+    record = json.loads((rd / 'stages' / 'supply.json').read_text())
+    assert record['decision'] == 'wait' and record['builds'][0]['new_weighted_target_tokens'] == 1_200_000
+    enough = {'mix': {'parts': {'rl-own': {'weighted_target_tokens': 4_800_000},
+                                'filled': {'weighted_target_tokens': 5_100_000}}}}
+    assert not d.supply_wait(rd, enough)
+    assert json.loads((rd / 'stages' / 'supply.json').read_text())['decision'] == 'train'
+    clock[0] += 6 * 3600                                     # still short, but the wait expired: it trains
+    assert not d.supply_wait(rd, short)
+    assert json.loads((rd / 'stages' / 'supply.json').read_text())['decision'] == 'train: wait expired'
+    _, off = _driver(tmp_path / 'off', monkeypatch, argv=['--min-new-tokens', '0'])
+    (off.root / 'r0001' / 'stages').mkdir(parents=True)
+    assert not off.supply_wait(off.root / 'r0001', short)
+
+
+def test_the_colab_fill_is_kept_running_beside_each_serving_session_and_never_on_a_training_one(tmp_path, monkeypatch):
+    ei, d = _driver(tmp_path, monkeypatch, argv=['--fill', str(tmp_path / 'fill')])
+    import pop_rl_actor
+    import filled_reasoning
+    from natlang_neuralese.common import data_registry
+    monkeypatch.setattr(data_registry, 'role_paths', lambda name, **kw: [])
+    targets = [{'host': 'colab-g4', 'front': 'http://127.0.0.1:8570', 'pop': False, 'suffix': '-remote0', 'slots': 64},
+               {'host': 'pop', 'front': 'http://pop:18531', 'pop': True, 'suffix': '-pop', 'slots': 32}]
+    monkeypatch.setattr(d, 'remote_targets', lambda: targets)
+    monkeypatch.setattr(d, 'target_endpoint', lambda t: 'http://127.0.0.1:18731')
+    monkeypatch.setattr(pop_rl_actor, 'remote_endpoint', lambda host, port: f'http://127.0.0.1:{port + 10161}')
+    monkeypatch.setattr(d, 'fill_export', lambda: '/export')
+    monkeypatch.setattr(d, 'trained_builds', lambda: ['/r1/mix'])
+    monkeypatch.setattr(d.c, 'work_tokenizer', lambda: None)
+    alive, present, busy, launched = [True], set(), set(), []
+    monkeypatch.setattr(ei, 'endpoint_alive', lambda url, sha, timeout=10: alive[0])
+    monkeypatch.setattr(d.c, 'present', lambda unit: unit in present)
+    monkeypatch.setattr(d, 'colab_sft_busy_hosts', lambda: busy)
+    monkeypatch.setattr(d.c, 'ledger', lambda unit, gb, prio, argv, log, **kw: launched.append((unit, gb, argv)))
+    assert d.colab_fill_check() == ['aei-colab-fill-remote0']           # Pop is not a Colab session
+    unit, gb, argv = launched[0]
+    parsed = filled_reasoning.build_parser().parse_args(list(map(str, argv[2:])))
+    assert gb == ei.COLAB_FILL_GB and parsed.polite and parsed.sglang == 'http://127.0.0.1:19731'
+    assert parsed.front == 'http://127.0.0.1:18731' and parsed.skip_trained == ['/r1/mix']
+    assert parsed.expect_policy == d.controller.current['sha256'] and parsed.prefer_work == [str(tmp_path / 'work')]
+    present.add(unit)
+    assert d.colab_fill_check() == []                                    # running: left alone
+    present.clear()
+    assert d.colab_fill_check() == ['aei-colab-fill-remote0']           # it died: relaunched
+    busy.add('colab-g4')
+    assert d.colab_fill_check() == []                                    # a round's SFT holds the session
+    busy.clear()
+    alive[0] = False
+    assert d.colab_fill_check() == []                                    # its actor does not serve the head
+    _, off = _driver(tmp_path / 'off', monkeypatch, argv=['--fill', str(tmp_path / 'fill'), '--no-colab-fill'])
+    assert off.colab_fill_check() == []
+
+
+def test_a_rebuilt_policys_earlier_file_sha_counts_as_the_policy_everywhere(tmp_path, monkeypatch):
+    """aei1 2026-11-25: retention deleted r0010's checkpoint 4dec7ca9; the rebuild from r0009 + its factors has the same
+    effective policy and a new file sha (cde55352), which the lineage names. The 08:50-13:45 collections under 4dec
+    (``v0009-4dec7ca9c301*``) are samples of the same weights: the lineage entry carries the earlier sha from
+    published.json ``rebuilt``, and collections_of, collection_dirs, the frontier's allowed set, the build's own-policy
+    tier, in_lineage, failed_policies and retention's protection match it. NATLANG_EI_POLICY_EQUIVALENTS=0 opts out."""
+    import argparse
+    import sft_sources
+    ei, d = _driver(tmp_path, monkeypatch)
+    old, new, eff = '4' * 64, '5' * 64, 'f' * 64
+    ckpt = d.root / 'r0001' / 'policy' / 'checkpoint.pt'
+    ckpt.parent.mkdir(parents=True)
+    (ckpt.parent / 'published.json').write_text(json.dumps({
+        'checkpoint_sha256': new, 'merge': {'effective_policy_sha256': eff, 'checkpoint_sha256': new},
+        'rebuilt': {'previous_checkpoint_sha256': old, 'effective_policy_sha256': eff}}))
+    d.controller.record_round_published('r0001', ckpt, new, base_sha256=d.controller.current['sha256'])
+    prev, cur = d.controller.previous, d.controller.current
+    alias = {**cur, 'sha256': old}
+    for p in (prev, cur, alias):
+        for suffix in ('', '-remote0'):
+            c = d.collection_base(p, suffix)
+            (c / 'groups').mkdir(parents=True)
+            (c / 'runs.jsonl').write_text(json.dumps({'checkpoint_sha256': p['sha256'], 'started': 0}) + '\n')
+    names = [x.name for x in d.collections_of(d.lineage_policies())]
+    assert {d.collection_base(alias).name, d.collection_base(alias, '-remote0').name} <= set(names)
+    assert d.collection_base(alias) in d.collection_dirs(cur)
+    assert d.controller.in_lineage(old) and d.controller.in_lineage(new)
+    # the frontier: the rebuilt policy's earlier sha is allowed, and recorded for the build
+    rd = d.root / 'r0002'
+    frontier, lines, build = d.prepare_plan(rd, d.lineage_policies())
+    assert f'{old}={new}' in frontier
+    extract = next(x for x in lines if 'extract' in x)
+    assert f'{d.collection_base(alias)}:{d.collection_base(alias)}' in extract
+    import natlang_neuralese.rl.held_eval as held_eval
+    monkeypatch.setattr(held_eval, 'training_exclusion_ids', lambda rows, manifest: [])
+    rd.mkdir(parents=True, exist_ok=True)
+    args = argparse.Namespace(out=str(rd / 'frontier.json'), collect=[str(x) for x in d.collections_of([prev, cur])],
+                              policy=new, previous_policy=prev['sha256'], allow_adjacent_policies=True,
+                              equivalent_policy=[f'{old}={new}'], held_manifest='unused', solved=0.75, min_scored=2)
+    ei.frontier(args)
+    assert json.loads((rd / 'frontier.json').read_text())['equivalent_policies'] == {old: new}
+    with pytest.raises(SystemExit):
+        ei.frontier(argparse.Namespace(**{**vars(args), 'equivalent_policy': []}))
+    # the build's own-policy tier: an episode drawn under the earlier sha is the frontier policy's own
+    eq = sft_sources.load_frontier_equivalents(rd / 'frontier.json')
+    assert sft_sources.own_policy_tier({'policy': old}, new, prev['sha256'], eq) == 0
+    assert sft_sources.own_policy_tier({'policy': old}, new, prev['sha256']) == 1
+    # a failed policy is failed under its earlier sha too
+    (d.root / 'verdicts').mkdir()
+    (d.root / 'verdicts' / 'x.json').write_text(json.dumps({'verdict': 'failure', 'sha256': new}))
+    monkeypatch.setattr(d.c, 'failed_policies', lambda: [])
+    assert set(d.failed_policies()) == {new, old}
+    # retention protects the earlier sha's collections with the lineage's
+    monkeypatch.syspath_prepend(str(REPO / 'scripts'))
+    import ei_round_tier as tier
+    state = {'lineage': d.controller.state['lineage']}
+    assert old in tier.protected_policies(state, None)
+    assert not [a for a in tier._tier_plan(d.root, state, None) if old[:12] in a['path']]
+    # the opt-out
+    monkeypatch.setenv('NATLANG_EI_POLICY_EQUIVALENTS', '0')
+    assert d.collection_base(alias) not in d.collection_dirs(cur) and not d.controller.in_lineage(old)
+    assert old not in tier.protected_policies({'lineage': [{**e, 'equivalent_sha256': []} for e in state['lineage']]},
+                                              None)

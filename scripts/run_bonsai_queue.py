@@ -730,7 +730,7 @@ class SharedChild:
         root = Path(SharedChild.ROOT) / f'natlang-collector-{os.getuid()}' / key   # short: unix socket paths < 108 bytes
         root.mkdir(parents=True, exist_ok=True)
         request = (json.dumps({'argv': command[3:]}) + '\n').encode()
-        for index in range(256):
+        for index in SharedChild.socket_order():
             path = root / f's{index:03d}.sock'
             for attempt in range(2):
                 connection = self._connect(socket_module, path)
@@ -777,6 +777,13 @@ class SharedChild:
                 connection.close()
                 break   # busy: the next socket
         raise RuntimeError('no shared collector process accepted the invocation')
+
+    @staticmethod
+    def socket_order(count=256):
+        """Socket indices in search order: from NATLANG_COLLECTOR_SOCKET_START (the collector's slot -> server
+        affinity, grpo.slot_env), wrapping around."""
+        start = int(os.environ.get('NATLANG_COLLECTOR_SOCKET_START', '0') or 0) % count
+        return [*range(start, count), *range(start)]
 
     @staticmethod
     def _connect(socket_module, path, probe=False):
@@ -1059,6 +1066,14 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             text_neuralese and remote and not neuralese_server and 'program_guidance_file' not in entry))
         if not isinstance(text_neuralese_emulation, bool):
             raise ValueError('entry text_neuralese_emulation must be a boolean')
+        # An authored teacher episode's replay (sft_sources replay) reads Neuralese as the engines do, each state as its
+        # text in place (ts-host model/in-context-neuralese.ts), instead of the teacher-text transport.
+        in_context_neuralese = entry.get('in_context_neuralese', False)
+        if not isinstance(in_context_neuralese, bool):
+            raise ValueError('entry in_context_neuralese must be a boolean')
+        if in_context_neuralese:
+            text_neuralese_emulation = False
+            command.append('--in-context-neuralese')
         if text_neuralese_emulation:
             command.append('--text-neuralese-emulation')
         case_seconds = entry.get('case_seconds', seconds)
