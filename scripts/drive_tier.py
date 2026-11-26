@@ -429,7 +429,9 @@ def registered(path: Path) -> bool:
         return True
 
 
-def candidates(roots, *, min_mb, min_age_days, exclude, links, held):
+def candidates(roots, *, min_mb, min_age_days, exclude, links, held, until=None):
+    """Archivable files under ROOTS. UNTIL (a time) ends the walk: on a busy HDD a walk between two files outlasted
+    the unit's hard timeout (2026-11-26 07:15)."""
     now = time.time()
     for name in roots:
         top = HDD / name
@@ -440,6 +442,8 @@ def candidates(roots, *, min_mb, min_age_days, exclude, links, held):
         age_days = min_age_days if tolerance is None else tolerance
         keep = KEEP_SUBPATHS.get(name, ())
         for directory, children, files in os.walk(top):
+            if until is not None and time.time() > until:
+                return
             children[:] = sorted(c for c in children if not os.path.islink(os.path.join(directory, c))
                                  and not (directory == str(top) and c in keep))
             for file in sorted(files):
@@ -486,7 +490,7 @@ def archive(args, drive=None) -> int:
     hard = began + (getattr(args, 'hard_minutes', None) or args.max_minutes + 4) * 60
     latest = manifest_latest()
     for path, st in candidates(args.root or default_roots(), min_mb=args.min_mb, min_age_days=args.min_age_days,
-                               exclude=exclude, links=links, held=held):
+                               exclude=exclude, links=links, held=held, until=deadline):
         now = time.time()
         if now > deadline:
             break

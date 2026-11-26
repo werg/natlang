@@ -177,6 +177,7 @@ def test_no_file_starts_that_cannot_finish_before_the_hard_stop(tmp_path, monkey
     monkeypatch.setattr(m, 'held_paths', lambda: set())
     monkeypatch.setattr(m, 'mirror_manifest', lambda drive: None)
     monkeypatch.setattr(m, 'EXPECT_RATE', 1000)  # bytes/s: 60 s of hard window fits 60,000 bytes
+    monkeypatch.setattr(m, 'colab_transfer_active', lambda: False)    # hermetic: a live rsync would hold the start
     big = old_file(hdd / 'natlang-grpo-v1' / 'a' / 'big.bin', b'b' * 120_000)
     small = old_file(hdd / 'natlang-grpo-v1' / 'b' / 'small.bin', b's' * 4096)
     args = SimpleNamespace(apply=True, root=['natlang-grpo-v1'], budget_gb=1, max_minutes=0.5, hard_minutes=1,
@@ -216,3 +217,14 @@ def test_an_upload_paused_by_colab_transfers_ends_the_pass_at_its_deadline(tmp_p
     assert held.exists() and clock[0] - 1000.0 <= 60 + 30
     monkeypatch.setattr(m, 'PAUSED_START_SECONDS', 600)        # paused now and near the deadline: no session opens
     assert m.archive(args, Paused()) == 0 and held.exists()
+
+
+def test_the_candidate_walk_stops_at_the_pass_deadline(tmp_path, monkeypatch):
+    m = load()
+    hdd = tmp_path / 'hdd'
+    monkeypatch.setattr(m, 'HDD', hdd)
+    for i in range(3):
+        old_file(hdd / 'natlang-grpo-v1' / f'd{i}' / 'f.bin', b'x' * 10)
+    kw = dict(min_mb=0, min_age_days=-1, exclude=[], links=set(), held=set())
+    assert len(list(m.candidates(['natlang-grpo-v1'], **kw))) == 3
+    assert list(m.candidates(['natlang-grpo-v1'], until=time.time() - 1, **kw)) == []
