@@ -2445,6 +2445,32 @@ def test_a_restart_during_the_snapshot_wait_waits_on_the_recorded_policy_and_ste
     assert ei.argv_digest(frontier_argv) != ei.argv_digest(['frontier', '--other'])
 
 
+def test_prepare_registers_the_collections_when_a_frontier_exists_but_no_snapshot_was_recorded(tmp_path, monkeypatch):
+    """aei1 r0016 (2026-11-27): the round's frontier existed from before a restart, its prepare record was re-made
+    with v13 added and no snapshot_at, and v13's live collections were never registered: the data step refused
+    them. The registration follows the record, not the wait."""
+    ei, d, rd, lineage, plans, launched = _lineage_driver(tmp_path, monkeypatch)
+    v0, v1, v2 = lineage
+    (rd / 'frontier.json').write_text('{}')
+    (rd / 'stages' / 'prepare.json').write_text(json.dumps({'policies': [v1, v2], 'started_at': 1}))
+
+    def collections_of(pols):
+        out = []
+        for p in pols:
+            c = tmp_path / 'collect' / p['sha256'][:4]
+            c.mkdir(parents=True, exist_ok=True)
+            (c / 'runs.jsonl').write_text(json.dumps({'started': 0}) + '\n')
+            out.append(c)
+        return out
+    monkeypatch.setattr(d, 'collections_of', collections_of)
+    snapped = []
+    monkeypatch.setattr(ei, 'record_collection', lambda work, closed=True: snapped.append((Path(work).name, closed)))
+    monkeypatch.setattr(ei, 'unit_last_run_succeeded', lambda unit: False)
+    d.prepare(rd, [v1, v2])
+    assert snapped == [(v1['sha256'][:4], False), (v2['sha256'][:4], False)]
+    assert json.loads((rd / 'stages' / 'prepare.json').read_text())['snapshot_at'] > 0
+
+
 def test_a_prepare_record_from_a_rolled_back_lineage_starts_over(tmp_path, monkeypatch):
     ei, d, rd, lineage, plans, launched = _lineage_driver(tmp_path, monkeypatch)
     v0, v1, v2 = lineage

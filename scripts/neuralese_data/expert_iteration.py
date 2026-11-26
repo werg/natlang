@@ -4823,7 +4823,10 @@ class AsyncRoundDriver:
                 raise SystemExit(f'round {round_dir.name}: no collection of {cur["sha256"][:12]} ({self.collect_dir(cur)})')
             self.standing_teacher()
             time.sleep(60)
-        if not snapshot_taken:
+        # registered whenever this record has none, not only when the wait ran: a frontier from before a restart
+        # skips the wait, and r0016's record (re-made with v13 added) left v13's live collections unregistered, so
+        # the data step refused them twice and stopped the driver (2026-11-27 00:08)
+        if not record.get('snapshot_at'):
             for d in self.collections_of(policies):
                 record_collection(d, closed=False)       # the snapshot the extraction reads (the collection grows on)
             record = {**record, 'snapshot_at': round(time.time(), 1)}
