@@ -14472,3 +14472,32 @@ Source43's repaired release was actually ready while Source42 still had most of 
 Acted on the actual Source43 startup failure: its first controller recovered partial Source42 wave0076 and then applied that old capture's structural-failure counter to the new release before any new teacher case ran. Source42 releasee80cec differs from Source43 release623829; preserved every original outcome, archived the exact stale hold, and resumed. Source44 was already ready by the subsequent boundary and is now actually running8 Luna workers (hard18GiB/reserve7.5 unchanged), first managed run st_b2455b2e17554d719b5058847246a2c3. Current campaign702 completed/1038 pending/8 Android; standing ingest ledger698 episodes through75 (different denominators).
 
 The shared post-archive stop decision now retains a source-bound historical hold diagnostic when both identified releases differ; current or unidentified release failures still stop, and --hold-historical-infrastructure restores legacy cross-series behavior. Pure infrastructure classification, raw receipts, attempts, held separation and NativeIR remain unchanged. All139 campaign tests actually passed, including real drive recovery with zero teacher regeneration for changed/current/missing/non-string identity and opt-out. The first test fixture used an ordinary exporter rejection that correctly did not count as infrastructure; corrected it to actual no-capture infrastructure, without broadening classification. Active Source44 pin stays immutable; this controller fix enters at its next safe resume.
+
+## 2026-11-26 05:40 aei1: the DGX collection shrinks in place for round preparation (collection-fit agent)
+
+**Observation.** `aei1-collect-v0010` (192 slots, ~51 GB used) was SIGKILLed by ledger preemption when r0013's data
+(03:44) and build (04:29) steps launched; the fit loop requeued it ~1 min later, but every in-flight episode died and
+its group resumed only partly. `collect.log` shows no `held priority` yield before either preemption, and both prep
+yields logged `room: false, waited: 601`.
+
+**Cause.** The driver restarted at 02:41 inside r0013's preparation. Its predecessor's claim
+`ops/ei/held-priority/aei1-r0013-prep.json` (dead pid 926634) stayed on disk; `yield_claim` took any existing file for a
+nested block of its own and wrote nothing, while `held_priority_claims` (correctly) ignored the dead claim. So the
+collection never yielded, PREP_YIELD_WAIT ran out, and the step's admission preempted it. Even a working yield only
+stopped new episodes in the yielded half: those still running (~45 min each) and their shared episode servers kept their
+memory well past the 10-min wait.
+
+**Changes (default on).**
+- `yield_claim` replaces a dead or stale claim under its name; only a live one is left to its owner.
+- A round-preparation claim carries `evict_seconds` (`--prep-evict-seconds`, 120; 0 opts out, also
+  `NATLANG_EI_PREP_EVICT_SECONDS=0`). That long after the collection yields, grpo's slot loop stops the episodes in the
+  yielded slots (`_evict_slot`) and requeues them first in the same run (`_requeue_evicted`): continued from their
+  partials when `episode_files.partial_continuable`, else set aside as `stopped` (not counted as lost) and rerun. A held
+  claim never evicts.
+- Slot -> episode-server affinity (`grpo.slot_env`, `run_bonsai_queue.SharedChild.socket_order`): slot i searches from
+  socket i // 8, so the yielded top slots empty whole servers (~0.7 GB each), which exit, besides their episode
+  processes (~44 MB each). Opt-out `NATLANG_COLLECTOR_SLOT_AFFINITY=0`.
+- While yielding, the collection lowers its ledger claim to its use every 60 s (`resize yield`, never raised), so the
+  freed memory becomes headroom. The existing path restores it when the claim ends.
+- Estimate: evicting 96 of 192 slots frees ~4 GB of episode processes plus ~12 servers (~8 GB) within ~2-4 min, plus the
+  claim's unspent reserve. A step that still does not fit after PREP_YIELD_WAIT preempts as before.

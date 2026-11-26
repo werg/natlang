@@ -235,6 +235,15 @@ COLLECTION_PRIORITY = os.environ.get('NATLANG_EI_COLLECTION_PRIORITY', 'medium')
 HELD_PRIORITY_DIR = OPS / 'ei' / 'held-priority'
 HELD_PRIORITY_SHARE = 0.75    # the collection yields a quarter of its slots (~ the held actor's running cap)
 HELD_PRIORITY_STALE = 300     # seconds without a heartbeat after which a claim is ignored
+# A round-preparation claim also evicts (DECISIONS 2026-11-26 "the DGX collection shrinks in place for round preparation"):
+# PREP_EVICT_SECONDS after the collection yields, the episodes still running in its yielded slots are stopped and queued
+# again in the same run (continued from their partial when episode_files.partial_continuable, else rerun from scratch),
+# so their episode processes (~44 MB each) and, with slot -> episode-server affinity (grpo NATLANG_COLLECTOR_SOCKET_START),
+# whole episode servers (~0.7 GB per 8 slots) exit within minutes and the step fits beside it: before, the yielded slots
+# drained only as their ~45-min episodes ended, PREP_YIELD_WAIT ran out and the step's admission preempted the whole
+# collection. A held claim never evicts. 0 opts out (--prep-evict-seconds 0; NATLANG_EI_PREP_EVICT_SECONDS=0).
+PREP_EVICT_SECONDS = int(os.environ.get('NATLANG_EI_PREP_EVICT_SECONDS', '120'))
+YIELD_REFRESH_SECONDS = 60    # while yielding, the ledger claim follows the falling use (memory_ledger resize yield)
 # Round preparation beside the standing DGX collection (DECISIONS 2026-11-24 "the DGX collection yields to round
 # preparation"): the ledger preempted the 74 GB collection for each round's data (12 GB) and build steps, and its
 # relaunch needs budget + 15 GB reserve = 89 GB free, which the prep and ~40 GB of standing claims never leave: the GPU
@@ -421,12 +430,24 @@ def yield_claim(directory, name, share, extra=None):
     """While the block runs, every DGX collection reading ``directory`` runs ``share`` of its slots
     (``priority_slots``) and lowers its ledger claim (``FrontierCollector._priority``): ``<name>.json`` with this
     process's pid and ``share``, its mtime refreshed every minute (a claim older than HELD_PRIORITY_STALE or of a dead
-    process is ignored). Nothing when ``share`` >= 1 (the opt-out). A claim already held under ``name`` (a nested
-    block) is left to its owner."""
+    process is ignored). Nothing when ``share`` >= 1 (the opt-out). A live claim already held under ``name`` (a nested
+    block, or another live driver) is left to its owner; a dead one is replaced: 2026-11-26 the driver restarted at
+    02:41 inside r0013's preparation, its predecessor's ``aei1-r0013-prep.json`` (dead pid) stayed, every later
+    prep_yield of r0013 took it for a nested block and wrote nothing, and the collection never yielded: the data and
+    build steps preempted it at 03:44 and 04:29, killing every in-flight episode."""
     path = Path(directory) / f'{name}.json'
-    if share >= 1 or path.exists():
+    if share >= 1:
         yield None
         return
+    if path.exists():
+        try:
+            held = json.loads(path.read_text())
+            live = _pid_alive(held.get('pid')) and time.time() - path.stat().st_mtime < HELD_PRIORITY_STALE
+        except (OSError, ValueError):
+            live = False
+        if live:
+            yield None
+            return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({'pid': os.getpid(), 'unit': name, 'share': share, 'started': time.time(),
                                 **(extra or {})}) + '\n')
@@ -554,6 +575,7 @@ def frontier_collector(base):
             # ledger has room for its full claim, then takes its full slots and claim back (``_room_returned``); its
             # launch budget already matches them, so the first check does not yield
             self.room_slots = int(room_slots) if room_slots and int(room_slots) < self.full_slots else None
+            self.evict_at, self.yield_refreshed = None, 0.
             if self.room_slots:
                 self.active_slots = min(getattr(self, 'active_slots', self.full_slots), self.room_slots)
             self._learnable()
@@ -572,12 +594,31 @@ def frontier_collector(base):
                     self.room_slots = None
                 else:
                     active = min(active, self.room_slots)
+            # a round-preparation claim's evict_seconds: its yielded slots' episodes are stopped and requeued after them
+            evict = [int(c['evict_seconds']) for c in claims if c.get('evict_seconds') and 'share' in c]
+            if active < self.full_slots and evict:
+                if self.evict_at is None:
+                    self.evict_at = time.time() + min(evict)
+            else:
+                self.evict_at = None
             if active != self.active_slots:
-                print(json.dumps({'event': 'held priority', 'active_slots': active, 'slots': self.full_slots}), flush=True)
+                print(json.dumps({'event': 'held priority', 'active_slots': active, 'slots': self.full_slots,
+                                  'evict_at': self.evict_at}), flush=True)
                 if self.ledger_unit and (active < self.full_slots) != (self.active_slots < self.full_slots):
                     threading.Thread(target=self._resize_claim, args=('yield' if active < self.full_slots else 'restore',),
                                      daemon=True).start()
+                    self.yield_refreshed = time.time()
                 self.active_slots = active
+            elif (self.ledger_unit and claims and active < self.full_slots
+                  and time.time() - self.yield_refreshed >= YIELD_REFRESH_SECONDS):
+                # still yielding: the claim follows the use down as the yielded slots drain (never raised)
+                self.yield_refreshed = time.time()
+                threading.Thread(target=self._resize_claim, args=('yield',), daemon=True).start()
+
+        def _evict_slot(self, index):
+            """grpo's slot hook: this slot's running episode is stopped and requeued (``_requeue_evicted``) once a
+            round-preparation yield's grace has passed and the slot lies above the active slots."""
+            return self.evict_at is not None and index >= self.active_slots and time.time() >= self.evict_at
 
         def _room_returned(self):
             """Whether the ledger now has room (``ledger_room_gb``) for this collection's claim to grow to its full
@@ -1597,9 +1638,11 @@ class Cycle:
             raise SystemExit(f'{unit} failed: see its log; rerun the cycle to resume')
 
     def prep_yield(self, name):
-        """The DGX collections yield slots while a preparation stage runs (``yield_claim``; ``--prep-yield-share``)."""
+        """The DGX collections yield slots while a preparation stage runs (``yield_claim``; ``--prep-yield-share``),
+        stopping and requeueing the episodes of their yielded slots after ``--prep-evict-seconds``."""
+        evict = int(getattr(self.a, 'prep_evict_seconds', PREP_EVICT_SECONDS) or 0)
         return yield_claim(HELD_PRIORITY_DIR, f'{name}-prep', float(getattr(self.a, 'prep_yield_share', PREP_YIELD_SHARE)),
-                           extra={'reason': 'round preparation'})
+                           extra={'reason': 'round preparation', **({'evict_seconds': evict} if evict > 0 else {})})
 
     def collection_full_gb(self, slots):
         """(full-size ledger GB of a DGX collection of ``slots``, its cap): the formula (``dgx_collection_budget_gb``,
@@ -3507,6 +3550,7 @@ class AsyncRoundDriver:
             dir=str(self.root), name=a.name, start=a.start, start_sha=a.start_sha or BASE_SHA, commit=a.commit,
             pin=a.pin, sft_work=a.sft_work, seed_work=a.seed_work, live_work=a.live_work, k=a.k, collect_hours=a.collect_hours, slots=a.slots,
             kv_gb=a.kv_gb, prep_yield_share=getattr(a, 'prep_yield_share', PREP_YIELD_SHARE),
+            prep_evict_seconds=getattr(a, 'prep_evict_seconds', PREP_EVICT_SECONDS),
             collect_fit_min_slots=getattr(a, 'collect_fit_min_slots', COLLECT_FIT_MIN_SLOTS),
             measured_collection_claim=getattr(a, 'measured_collection_claim', MEASURED_COLLECT_CLAIM),
             fill=a.fill, fill_inflight=a.fill_inflight, neuralese_variants=a.neuralese_variants,
@@ -6048,6 +6092,10 @@ def main():
     ad.add_argument('--prep-yield-share', type=float, default=PREP_YIELD_SHARE,
                    help='share of its slots a DGX collection keeps while a round prepares beside it (it also lowers its ledger '
                         'claim instead of being preempted; 1 opts out; env NATLANG_EI_PREP_YIELD_SHARE)')
+    ad.add_argument('--prep-evict-seconds', type=int, default=PREP_EVICT_SECONDS,
+                    help='while a round prepares, the DGX collection stops (and requeues in place) the episodes of its '
+                         'yielded slots after this many seconds, so the step fits beside it instead of preempting it '
+                         '(0 opts out; env NATLANG_EI_PREP_EVICT_SECONDS)')
     ad.add_argument('--collect-fit-min-slots', type=int, default=COLLECT_FIT_MIN_SLOTS,
                     help='a DGX collection waiting in the ledger is requeued at the most slots (at least this many) '
                          'whose budget fits the room now, restoring its full slots when room returns (0 opts out; env '

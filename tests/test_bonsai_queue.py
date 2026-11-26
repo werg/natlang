@@ -1216,3 +1216,12 @@ def test_a_shared_invocations_error_lands_in_its_own_log():
     record = json.loads(child.log.getvalue())
     assert record == {'event': 'shared_collector_error', 'exit': 1, 'error': 'TypeError: invalid binding'}
     theirs.close()
+
+
+def test_shared_collector_search_starts_at_the_slots_server(monkeypatch):
+    """grpo.slot_env gives slot i NATLANG_COLLECTOR_SOCKET_START = i // 8: slots 8k..8k+7 share server k, so a yielded
+    top half of the slots empties whole servers (DECISIONS 2026-11-26)."""
+    monkeypatch.delenv('NATLANG_COLLECTOR_SOCKET_START', raising=False)
+    assert queue_module.SharedChild.socket_order(4) == [0, 1, 2, 3]
+    monkeypatch.setenv('NATLANG_COLLECTOR_SOCKET_START', '2')
+    assert queue_module.SharedChild.socket_order(4) == [2, 3, 0, 1]
