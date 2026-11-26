@@ -125,7 +125,8 @@ def _systemd_run_expands_environment():
     """systemd-run 254+ expands $VAR in the command unless told not to; older managers (Pop: 249) have neither the
     expansion nor the option, so the argv already reaches the unit verbatim."""
     try:
-        out = subprocess.run(['systemd-run', '--version'], capture_output=True, text=True).stdout.split()
+        out = (subprocess.run(['systemd-run', '--version'], capture_output=True, text=True).stdout or "")
+        out = out.split()
         return int(out[1]) >= 254
     except (OSError, ValueError, IndexError):
         return True

@@ -1214,14 +1214,42 @@ def stop_colab(host, *, yielded=False):
     state_file = colab_state_path(host)
     state = read_json(state_file) or {}
     pid = state.get('pid')
-    if pid:
-        ssh_host(host, f'kill -TERM -- -{int(pid)} 2>/dev/null; for i in $(seq 30); do kill -0 {int(pid)} 2>/dev/null '
-                       f'|| exit 0; sleep 2; done; kill -KILL -- -{int(pid)} 2>/dev/null; true', check=False, timeout=120)
+    # every live actor claim the session's admission holds, not only the recorded PID: a record a later serve
+    # overwrote left the live actor running, and r0015's learner waited out its admission behind it (2026-11-26)
+    pids = sorted(set(colab_actor_claims(host)) | ({int(pid)} if pid else set()))
+    for p in pids:
+        ssh_host(host, f'kill -TERM -- -{p} 2>/dev/null; for i in $(seq 30); do kill -0 {p} 2>/dev/null '
+                       f'|| exit 0; sleep 2; done; kill -KILL -- -{p} 2>/dev/null; true', check=False, timeout=120)
     if yielded and state.get('serve_args'):
         write_json(colab_yielded_path(host), {**state, 'yielded_at': time.time()})
     state_file.unlink(missing_ok=True)
-    log(event='Colab G4 actor stopped', host=host, pid=pid, previous=state.get('policy_id'), yielded=bool(yielded))
+    log(event='Colab G4 actor stopped', host=host, pid=pid, also=[p for p in pids if p != pid],
+        previous=state.get('policy_id'), yielded=bool(yielded))
     return state
+
+
+def colab_actor_claims(host):
+    """PIDs of the session's live non-preemptible ``actor-*`` admission claims (the label ``serve_colab`` gives an
+    actor; tenants are preemptible and keep theirs). Empty when the status cannot be read: the recorded PID alone is
+    stopped then."""
+    try:
+        cfg = host_config('colab', host=host)
+        out = ssh_host(host, f'. {shlex.quote(cfg["env"])} >/dev/null 2>&1; '
+                             f'{shlex.join([cfg["python"], cfg["admission"], "status"])}', check=False, timeout=60)
+    except Exception as exc:                # noqa: BLE001 - the recorded PID is still stopped
+        log(event='Colab admission status unreadable: recorded actor only', host=host, error=repr(exc))
+        return []
+    return actor_claim_pids(out)
+
+
+def actor_claim_pids(status_text):
+    """The ``pid`` of each live claim in ``admission.py status`` output labelled ``actor-`` and not preemptible."""
+    try:
+        claims = json.loads(status_text or '{}')
+    except ValueError:
+        return []
+    return [int(c['pid']) for key, c in claims.items() if not key.startswith('waiting:') and isinstance(c, dict)
+            and str(c.get('label', '')).startswith('actor-') and not c.get('preemptible') and c.get('pid')]
 
 
 def colab_hardware(host):
