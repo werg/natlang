@@ -42,3 +42,12 @@ for(const mode of ['node','workerd'])test(`${mode} model-visible typed callback 
  const runtime=core.createNatlangRuntime({platform,calls:false,model:async request=>{opening=request;return{calls:[['return_result',{status:'success',value:'done'}]]};}});
  try{const project=core.compileVirtualProject({root:'/async-opening',files:{'entry.ts':'import observe from "./observe.nl";export default async function entry(readSlot:(id:string)=>Promise<{id:string}|null>):Promise<string>{return observe(readSlot);}','observe.nl':'---\nargs:\n  readSlot: "(id:string)=>Promise<{id:string}|null>"\nreturns: string\n---\nReturn done.'}},core,{platform});assert.equal(project.ok,true,JSON.stringify(project.diagnostics));assert.equal(await runtime.run(()=>project.require('entry.ts').default(async id=>({id}))),'done');assert.match(JSON.stringify(opening),/readSlot: \(id: string\) => Promise</);}finally{runtime.close();}
 });
+for(const mode of ['node','workerd'])for(const asynchronous of [false,true])test(`${mode} lexical ${asynchronous?'async':'synchronous'} JavaScript captures preserve the actual callable contract`,async()=>{
+ const platform=mode==='node'?core.nodePlatform():workerdPlatform({realm:{call(body,params,args){return Function(...params,body)(...args);}}});let seen=0;
+ const runtime=core.createNatlangRuntime({platform,calls:false,agent:async session=>{
+  seen++;
+  if(asynchronous){const bad=await session.applyAsync('eval',{code:'return callback("captured").id;',finish:false});assert.equal(bad.kind,'rejected',bad.text);assert.match(bad.text,/unresolved Promise/);}
+  const result=await session.applyAsync('eval',{code:asynchronous?'return (await callback("captured")).id;':'return callback("captured").id;',finish:true});assert.equal(result.kind,'completed',result.text);
+ }});
+ try{const project=core.compileVirtualProject({root:'/lexical-callback',files:{'entry.ts':`import {nl} from "@natlang/node";export default async function entry():Promise<string>{const callback=${asynchronous?'async ':''}(id:string)${asynchronous?':Promise<{id:string}>':':{id:string}'}=>({id});return await nl.with<string>({callback})\`Use the actual supplied callback.\`();}`}},core,{platform});assert.equal(project.ok,true,JSON.stringify(project.diagnostics));assert.equal(await runtime.run(()=>project.require('entry.ts').default()),'captured');assert.equal(seen,1);}finally{runtime.close();}
+});

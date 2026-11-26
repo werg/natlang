@@ -865,7 +865,7 @@ export class NativeToolAgent {
         try { text = JSON.stringify(value); } catch { text = undefined; }
         if (text === undefined) continue;
         const ref = await this.compactRef(session, { operator: 'compact-params', value: text,
-          instructions: argumentInstructions(field.name, formatType(field.type), this.purpose(session)) });
+          instructions: argumentInstructions(field.name, formatTypeScript(field.type), this.purpose(session)) });
         if (ref) out[field.name] = ref.$neuralese.id;
       }
       if (Object.keys(out).length) return out;
@@ -880,7 +880,7 @@ export class NativeToolAgent {
       let text: string | undefined;
       try { text = JSON.stringify(value); } catch { text = undefined; }
       if (text === undefined || value instanceof FileHandle) continue;
-      const instructions = listingViewInstructions(field.name, formatType(field.type), typeof lam.body === 'string' ? lam.body.replace(/\n+$/, '') : '');
+      const instructions = listingViewInstructions(field.name, formatTypeScript(field.type), typeof lam.body === 'string' ? lam.body.replace(/\n+$/, '') : '');
       const budget = this.options.modelBudget;
       const bounded = budget && (budget.maxRequests !== undefined || budget.maxTokens !== undefined);
       let reservation: Awaited<ReturnType<ModelBudget['reserveBatch']>>;
@@ -1645,7 +1645,7 @@ export class NativeToolAgent {
     const section = (heading: string, body: string[]) => { if (body.length) lines.push(...(lines.length ? [''] : []), heading, ...body); };
     const declared = (keyword: string, name: string, type: string, value: Value, note = '', kind: 'capture' | 'let' = 'capture'): string => {
       // Host types print as their tag; only a class-like tag (FileHandle, Map) is a usable TypeScript type.
-      const shown = /^[a-z]+$/.test(type) && !['string', 'number', 'boolean', 'null'].includes(type) ? 'unknown' : type;
+      const shown = /^[a-z]+$/.test(type) && !['string', 'number', 'boolean', 'null'].includes(type) ? 'unknown' : modelTypeSource(type);
       const display = valueDisplay(session, sealed, kind, name);
       const expression = scopeExpression(value, root, display.holder, display.budget,
         { nodes: 0, depth: 0, untrusted: session.runtime.untrusted, whole: display.whole });
