@@ -11,3 +11,5 @@ Actual Source54 adaptive job: guard stopped at7,453,749,248B working versus5,905
 - Colab admission.py lines1–18: separate discrete-VRAM/host tenant eviction, no memory_ledger victim/requeue spec or free-floor guard. No change to VM leases, actor/learner/optimizer/RNG. Engine implementations (llama-server/wllama/Python/SGLang/ts-host) do not implement this out-of-process allocator; their command, hard caps and execution allowance remain unchanged.
 
 No production profile, existing unit, source freeze or current ledger file is edited by source tests. Explicit job opt-out remains --no-resumable. Current54 profile correction is owned separately.
+
+Owner-binding follow-up: prepare-only/helper children inherit NATLANG_LEDGER_UNIT. Only the process whose PID equals that unit's actual MainPID may inspect or withdraw its continuation. Helpers and foreign MainPIDs leave the parent's queue unchanged. Actual focused suite:283 passed in4.75s,135MiB; original283-test journal retained in vibe-guard-owner-cancellation-20261126a.service. This changes checkpoint clients, not the already-deployed guard or any production budget.

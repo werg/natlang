@@ -33,8 +33,20 @@ class CollectorCheckpoint:
         if not self.requested or not self.guard_continuation():
             self.cancel_continuation()
 
-    def guard_continuation(self):
+    def ledger_owner_unit(self):
+        """An inherited unit name does not authorize a helper to withdraw its parent."""
         unit = os.environ.get('NATLANG_LEDGER_UNIT')
+        if not unit:
+            return None
+        result = subprocess.run(['systemctl', '--user', 'show', unit, '-p', 'MainPID', '--value'],
+                                capture_output=True, text=True)
+        try:
+            return unit if result.returncode == 0 and int(result.stdout.strip()) == os.getpid() else None
+        except ValueError:
+            return None
+
+    def guard_continuation(self):
+        unit = self.ledger_owner_unit()
         if not unit:
             return False
         from scripts.memory_ledger import read_snapshot
@@ -44,7 +56,7 @@ class CollectorCheckpoint:
 
     def cancel_continuation(self):
         """Explicit completion/stop withdraws future launches, never the active execution."""
-        unit = os.environ.get('NATLANG_LEDGER_UNIT')
+        unit = self.ledger_owner_unit()
         if not unit or self.continuation_cancelled:
             return
         result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'memory_ledger.py'),

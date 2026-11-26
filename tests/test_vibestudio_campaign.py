@@ -1352,6 +1352,7 @@ def test_explicit_campaign_hold_withdraws_a_concurrent_guard_queue(tmp_path,monk
         checkpoint._request(__import__('signal').SIGTERM,None)
     calls=[]
     def cancel(argv,**kwargs):
+        if argv[0]=='systemctl':return SimpleNamespace(returncode=0,stdout=str(__import__('os').getpid()))
         calls.append(argv);state.write_text(json.dumps({'waiting':{}}))
         return SimpleNamespace(returncode=0,stdout=json.dumps({'unit':'test-owner.service','cancelled':True}))
     monkeypatch.setattr(vibestudio_campaign,'_drive',stop)
