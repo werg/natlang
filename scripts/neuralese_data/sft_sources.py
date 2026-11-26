@@ -4403,6 +4403,8 @@ def neuralese_graph(args):
     lowered_of = {}         # key -> (every call on a current surface, lowering counters, calls): rows are not kept
     for (label, name), samples in sorted(wanted.items()):
         path = files.get((label, name))
+        if path is not None and not Path(path).exists():     # compacted (rollouts.jsonl.zst) since the listing
+            path = group_rollouts(Path(path).parent)
         if path is None:
             funnel['rollouts_missing'] += len(samples)
             continue
