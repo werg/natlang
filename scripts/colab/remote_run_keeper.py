@@ -217,6 +217,8 @@ def main(argv=None):
                     else:
                         log(event='attempt ended without a traceback (eviction, admission timeout)', rc=state)
                 ship(args)
+                # a fresh Drive token at ROOT/drive-token, for setup commands that fetch inputs from Drive
+                P.drive_token_to(args.host, P.host_config('colab', host=args.host))
                 if args.setup:
                     remote(args.host, args.setup, timeout=1800)
                 restore(args)
