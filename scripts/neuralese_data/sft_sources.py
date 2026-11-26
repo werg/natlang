@@ -2988,6 +2988,12 @@ class FixedVal:
         tmp.write_text(json.dumps({'schema': FIXED_VAL_SCHEMA, 'per_kind': self.per_kind, 'tasks': kept,
                                    'families': sorted(self.families), 'time': time.time()}, indent=1) + '\n')
         os.replace(tmp, self.dir / 'tasks.json')
+        # registered like every other output: exp0_sft consumes these as --val-chains and refuses unregistered data
+        # (2026-11-26 aei1 r0012: four SFT launches failed on the unregistered set)
+        data_registry.record_dataset(data_registry.dataset_id(self.dir, 'sft-rows'), self.dir, kind='sft-rows',
+                                     format=f'{FIXED_VAL_SCHEMA}: val-fixed-{{own,teacher}}.pkl (exp0_sft --val-chains), '
+                                            'tasks.json', include=['val-fixed-*.pkl', 'tasks.json'],
+                                     note='fixed held-like validation set (sft_sources --fixed-val)')
 
     def report(self):
         return {'dir': str(self.dir), 'new': self.new, 'tasks': {k: len(v) for k, v in (self.tasks or {}).items()}}

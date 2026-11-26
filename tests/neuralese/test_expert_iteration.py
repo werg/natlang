@@ -1114,6 +1114,8 @@ def test_the_fixed_val_set_is_chosen_once_from_untrained_held_family_tasks_and_t
     assert len(record['tasks']['own']) == 3 and len(record['tasks']['teacher']) == 2     # the unrendered one is out
     own = pickle.loads((tmp_path / 'val' / 'val-fixed-own.pkl').read_bytes())['chains']
     assert len(own) == 3 and 'prompt' not in own[0]['segs'][0][2]
+    from natlang_neuralese.common import data_registry      # exp0_sft --val-chains refuses unregistered data
+    assert data_registry.load().find(tmp_path / 'val' / 'val-fixed-own.pkl') is not None
     again = sft_sources.FixedVal.open(tmp_path / 'val', manifest)        # frozen: the next build reads the record
     assert not again.new and again.tasks == record['tasks'] and again.report()['tasks'] == {'own': 3, 'teacher': 2}
 

@@ -14286,3 +14286,25 @@ turn 0 (with 150 validation episodes over 19 tasks, plausibly task difficulty). 
 **Fork / parity:** a separate stream (subagent) tests and commits the `LLAMA_POS_MEMORY = -2` patch, moves the pin
 through `update_llama_runtime.mjs --fork` and runs `check_compiled_site_parity.py` on real weights; Mode-W serving is
 not called green before that reports. Found while reviewing: no producer in the fork writes cells at pos -2.
+
+## 2026-11-26 02:00 Compiled releases: the native engine's remaining compiled-arm gap was the LoRA delta's cuBLAS kernel
+
+**Observation** (parity4, g4b L4, after 836fc32d5): native `engine.generate` agreed 6/32 with the graph reference on the
+compiled arm; the prefill's last position already differed by 0.154 nats (base arm: bit-equal at step 0).
+**Cause:** `FactoredLoRALinear.forward` (`model/native_adapters.py`) computed `(x A^T) B^T` with plain `F.linear` on FP32
+factors, which cuBLAS ran in TF32 (`NATLANG_STOCK_ARITHMETIC` defaults to tf32) with a reduction picked by the row
+count. The native engine prefills in chunks (tokens, 1-token consume_open, splice, 1-token consume_close, tokens) and
+decodes one token at a time; the graph runs one pass. Per-layer probe on g4b (`runs/compiled-site-parity-invlora-
+20261126/g4b-split-probe2.json`): under the stack every chunking differs from layer 2 on; with the delta on the
+batch-invariant IEEE FP32 kernel (`invariant_linear`, the base projections' own) every layer and the logits are
+bit-equal for the engine's exact chunking. **Fix** 7936c09b7 (default; `NATLANG_INVARIANT_LORA=0` opts out; tests in
+`test_compiled_site_serving.py`). Covers native serving, the SGLang actor's native fallback, the graph reference and
+grad-enabled fits (all go through `factored_lora_modules`); SGLang slots and llama.cpp apply LoRA in their own kernels;
+the lfm3 learner's `factored_linear` is a separate single-pass mechanism (BF16 branch by design). **DGX rerun** (GB10,
+same checkpoint/release): native compiled 32/32 both before and after (GB10 cuBLAS did not flip the 0.02-margin step),
+but per-step max |dlogp| over the reference's top-20 along native's path: compiled 0.239 (opt-out) -> 0.0 at all 16
+steps (fix). **Open, separate mechanism:** the base (unadapted) arm still differs per decode step (0.165 on the DGX,
+0.12-0.22 on g4b) because the checkpoint's `source-v1` shared-execution profile leaves FFN projections on HF
+`nn.Linear` (cuBLAS, row-count dependent); `stable-v1` makes every split bit-equal in the same probe. Adapted FFN
+targets already go through the invariant kernel. Known since 2026-11-02 (ENGINEERING_FINDINGS "Actual replay
+qualification": source-v1 actor vs replay 0.1755); the lever is the declared profile of exported checkpoints.
