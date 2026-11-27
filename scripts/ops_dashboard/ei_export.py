@@ -1,6 +1,11 @@
 """Expert-iteration section of the ops snapshot (`snap['ei']`): the async round driver (aei1), its rounds, SFT, collection,
 held-out gate, teacher campaign, Colab credits, watchdog alerts and machine history.
 
+Held pass rates follow ``rl/held_eval.py`` (``aggregate``/``compare``): recomputed from the samples, a sample that ran
+and was not lost to infrastructure is counted, an unscored counted one (timeout, unresolved) is a failure, and pairs
+leave an infrastructure loss out of both sides. Every policy is also paired against the fixed anchor (the run's start
+policy), not only against the previous round.
+
 Every reader is incremental or cached: logs are read from a byte offset kept in the exporter state, JSON files are parsed again only
 when their (mtime, size) changed, finished rounds and collections are not re-read. Stdlib only; imported lazily by export.py (never
 shipped to Pop).
@@ -22,7 +27,13 @@ WATCHDOG_STATE = os.path.expanduser(CONFIG.get('watchdog_state', '~/.local/state
 TUNE = os.path.expanduser(CONFIG.get('program_tune_dir', '~/data/program-tune-20261117'))
 PROBE_EVERY_S = 600
 LOG_EVENTS_KEEP = 300
-STATE_VERSION = 3
+STATE_VERSION = 5          # 5: held records recomputed from samples (rate over counted samples), held-v4, supply wait, verdict events
+# rl/held_eval.py: a result written before these fields was measured with them; PAIRING_ENGINE_FIELDS refuse a pairing
+LEGACY_CONTEXT_TOKENS = 32768
+LEGACY_SAMPLING = {'temperature': 1.0, 'top_p': 1.0}
+PAIRING_ENGINE_FIELDS = ('engine', 'dtype', 'kv_cache_dtype', 'speculative', 'head_logits')
+# ops_watchdog.py DEFAULTS['colab'] when the roster has no 'colab' key
+WATCHDOG_DEFAULT_SESSIONS = [{'session': 'g4a', 'gpu': 'colab-g4a', 'tunnel_unit': 'colab-g4a-tunnel'}]
 
 
 # ---------- small helpers ----------
@@ -131,7 +142,8 @@ ROLE_RULES = [   # (regex, role, where, title template using named groups)
     (r'^aei1-teacher', 'teacher', 'api', 'Teacher campaign (API models)'),
     (r'^aei1-r(?P<r>\d+)-data', 'prepare', 'dgx', 'Round r{r}: data and build'),
     (r'^aei1-r(?P<r>\d+)-sft', 'sft', 'dgx', 'Round r{r}: SFT'),
-    (r'^popheld-', 'held', 'pop', 'Held-v3 evaluation (Pop engine)'),
+    (r'^popheld-', 'held', 'pop', 'Held evaluation (served on Pop)'),
+    (r'^grpo-v(?P<v>\d+)', 'grpo', 'dgx', 'GRPO run (grpo-v{v})'),
     (r'^(progtune|progdev)-', 'tuning', 'colab', 'Program tuning'),
     (r'^tqual-', 'taskqual', 'dgx', 'Task qualification'),
     (r'^(vibe-student-fill|vsingest|colab-g4[ab]-fill)', 'datafill', 'dgx', 'Vibestudio student data'),
@@ -140,7 +152,7 @@ ROLE_RULES = [   # (regex, role, where, title template using named groups)
     (r'^(ops-peer|ops-dashboard|opsdash|natlang-gb10)', 'plumbing', 'dgx', 'Ops plumbing'),
     (r'^(check-main|test-|pytest)', 'test', 'dgx', 'Tests'),
 ]
-ROLE_LABELS = {'driver': 'Round driver', 'collect': 'Collection', 'fill': 'Student fill', 'teacher': 'Teacher campaign', 'prepare': 'Round prepare',
+ROLE_LABELS = {'driver': 'Round driver', 'grpo': 'GRPO', 'collect': 'Collection', 'fill': 'Student fill', 'teacher': 'Teacher campaign', 'prepare': 'Round prepare',
                'sft': 'SFT', 'held': 'Held evaluation', 'tuning': 'Program tuning', 'taskqual': 'Task qualification', 'datafill': 'Student data fill',
                'colab': 'Colab keeper', 'housekeeping': 'Housekeeping', 'plumbing': 'Plumbing', 'test': 'Tests', 'other': 'Other'}
 
@@ -158,18 +170,26 @@ def unit_role(name):
 # ---------- lineage ----------
 
 class Lineage:
+    """Versions of the run's policies. The *anchor* is the run's start policy (v0, fixed for the whole run); the driver's
+    *reference* moves with adoptions and verdicts."""
     def __init__(self, phase):
         self.by_sha, self.rounds = {}, {}
         self.reference = (phase.get('reference_policy') or phase.get('start_policy') or {})
+        self.start = (phase.get('start_policy') or {})
+        v0 = next((e for e in phase.get('lineage', []) if e.get('version') == 0), {})
+        if not self.start.get('sha256'):
+            self.start = {'sha256': v0.get('sha256') or self.reference.get('sha256'), 'checkpoint': v0.get('checkpoint') or self.reference.get('checkpoint')}
         for e in phase.get('lineage', []):
             self.by_sha[e['sha256']] = e['version']
             if e.get('round_id'):
                 self.rounds[e['round_id']] = e['version']
-        ref = self.reference.get('sha256')
         m = re.search(r'/(sft-v\d+)/', self.reference.get('checkpoint', '') or '')
         self.ref_name = m.group(1) if m else 'reference'
-        if ref:
-            self.by_sha.setdefault(ref, 0)
+        m = re.search(r'/(sft-v\d+)/', self.start.get('checkpoint', '') or '')
+        self.start_name = m.group(1) if m else 'start'
+        for sha in (self.start.get('sha256'), self.reference.get('sha256')):
+            if sha and sha not in self.by_sha and sha == self.start.get('sha256'):
+                self.by_sha[sha] = 0
         self.latest = max(self.by_sha.values()) if self.by_sha else 0
 
     def ver(self, sha):
@@ -179,7 +199,7 @@ class Lineage:
         v = self.ver(sha)
         if v is None:
             return (sha or '')[:8]
-        return f'v{v}' + (f' ({self.ref_name})' if v == 0 else '')
+        return f'v{v}' + (f' ({self.start_name})' if v == 0 else '')
 
 
 # ---------- drive.log: events, held gate failures ----------
@@ -217,6 +237,25 @@ def process_drive_log(st, path, lin, now):
         if stage == 'pin' and r.get('done'):
             emit(ts, 'driver', 'info', f'Driver (re)started on code pin {os.path.basename(str(r.get("pin")))[4:16]}')
             st['restart_ts'] = ts
+            st['pin'] = os.path.basename(str(r.get('pin')))[4:16]
+        elif 'supply' in r and 'round' in r:
+            s = r['supply'] or {}
+            st['supply'] = {'round': r['round'], 'ts': ts, 'decision': r.get('decision'), 'new_tokens': s.get('new_weighted_target_tokens'),
+                            'total_tokens': s.get('weighted_target_tokens'), 'own_tokens': s.get('own_weighted_target_tokens'),
+                            'minimum': r.get('minimum'), 'waited_hours': r.get('waited_hours'), 'parts': s.get('parts'), 'next_ts': None}
+            if last.get('supply') != [r['round'], r.get('decision')]:
+                last['supply'] = [r['round'], r.get('decision')]
+                emit(ts, 'round', 'info', f'{r["round"]}: supply {r.get("decision")}: {(s.get("new_weighted_target_tokens") or 0) / 1e6:.2f} M of '
+                                          f'{(r.get("minimum") or 0) / 1e6:.1f} M new weighted target tokens', round=r['round'])
+        elif 'supply_next_build_in_minutes' in r:
+            if (st.get('supply') or {}).get('round') == r.get('round'):
+                st['supply']['next_ts'] = ts + 60 * (r['supply_next_build_in_minutes'] or 0)
+        elif 'remote_collection_failed' in r or 'colab_fill_failed' in r:
+            what = 'remote collection' if 'remote_collection_failed' in r else 'Colab fill'
+            err = clip(short_error(r.get('remote_collection_failed') or r.get('colab_fill_failed')), 90)
+            if last.get(what) != err:
+                last[what] = err
+                emit(ts, 'collect', 'warn', f'{what} failed: {err}')
         elif stage == 'held reuse':
             emit(ts, 'held', 'info', f'Held result reused for {os.path.basename(str(r.get("out")))[7:19]}')
         elif 'published' in r:
@@ -263,6 +302,10 @@ def process_drive_log(st, path, lin, now):
             else:
                 st['gate_fail'] = {'error': err, 'count': 1, 'first_ts': ts, 'last_ts': ts, 'candidate': r.get('held_failed')}
                 emit(ts, 'held', 'warn', f'Held verdict for {vtxt(r.get("held_failed"))} failed: {err}')
+        elif 'verdict' in r and 'policy' in r:
+            st.pop('gate_fail', None)        # a verdict ends a streak of failed attempts (a stale streak alerted for days)
+            emit(ts, 'held', 'warn' if r['verdict'] == 'failure' else 'ok' if r['verdict'] == 'success' else 'info',
+                 f'Held verdict for {vtxt(r["policy"])}: {r["verdict"]}, {r.get("action") or "no action"}')
         elif 'held_pair_refused' in r:
             emit(ts, 'held', 'warn', f'Held pair refused: {vtxt(r.get("candidate"))} and {vtxt(r.get("reference"))} were measured with different engine settings; the reference is re-measured')
         elif 'held_v4_queued' in r:
@@ -467,19 +510,26 @@ def campaign_rows(path):
 
 def summarize_campaign(pool, state_cache, now):
     """Per-teacher outcomes of one teacher-rNNNN directory. Finished campaigns are cached by manifest signature."""
-    man, dfr = pool + '/manifest.jsonl', pool + '/deferred.jsonl'
+    man, dfr, lj = pool + '/manifest.jsonl', pool + '/deferred.jsonl', pool + '/driver-launch.json'
     key = pool
-    s = [sig(man), sig(dfr)]
+    s = [sig(man), sig(dfr), sig(lj)]
     hit = state_cache.get(key)
     if hit and hit[0] == s:
         return hit[1]
     rows, deferred = campaign_rows(man), campaign_rows(dfr)
+    launch = read_json(lj, {}) or {}
+    # a standing campaign resumes on the same manifest: rows from position scored_at_launch on are this launch's work
+    since = launch.get('scored_at_launch') or 0
     per, fam = {}, {}
     mk = lambda t: per.setdefault(t['model_id'], {'id': t['model_id'], 'provider': t.get('provider'), 'reasoning': t.get('reasoning'), 'effort': t.get('reasoning_effort'),
-                                                'tasks': 0, 'episodes': 0, 'success': 0, 'outcomes': {}, 'seconds': 0.0, 'tokens': 0, 'deferred': {}, 'provider_failures': 0})
+                                                'tasks': 0, 'episodes': 0, 'success': 0, 'outcomes': {}, 'seconds': 0.0, 'tokens': 0, 'deferred': {}, 'provider_failures': 0,
+                                                'since_launch': {'episodes': 0, 'success': 0}})
     tasks_done, tasks_won = set(), set()
-    for r in rows:
+    for pos, r in enumerate(rows):
         t = mk(r['teacher'])
+        if pos >= since:
+            t['since_launch']['episodes'] += len(r.get('episodes', []))
+            t['since_launch']['success'] += sum(e.get('outcome') == 'task_success' for e in r.get('episodes', []))
         t['tasks'] += 1
         t['seconds'] += r.get('seconds') or 0
         t['provider_failures'] += 1 if r.get('provider_failure') else 0
@@ -506,7 +556,6 @@ def summarize_campaign(pool, state_cache, now):
         t['seconds_mean'] = round(t['seconds'] / t['tasks'], 1) if t['tasks'] else None
         t['tokens_mean'] = round(t['tokens'] / t['episodes']) if t['episodes'] else None
         del t['seconds'], t['tokens']
-    launch = read_json(pool + '/driver-launch.json', {})
     out = {'pool': os.path.basename(pool), 'tasks_done': len(tasks_done), 'tasks_won': len(tasks_won), 'success': sum(t['success'] for t in per.values()), 'deferred': len(deferred),
            'eligible': launch.get('tasks'), 'launched_at': ms(launch['at']) if launch.get('at') else None,
            'last_activity_ts': ms(max([mtime(f) or 0 for f in (man, dfr)] or [0])),
@@ -540,7 +589,34 @@ def teacher_section(st, run, now):
     cur['pool_rel'] = None
     cur['campaigns'] = campaigns
     cur['claimed'] = len(glob.glob(pools[-1] + '/claims/*'))
+    # ops/ei/teachers.json is what the campaign runs with: a teacher not in it was removed (its rows stay in the history)
+    configured = teacher_config(EI_ROOT + '/teachers.json')
+    if configured is not None:
+        known = {t['id'] for t in cur['teachers']}
+        cur['teachers'] = [{**t, 'configured': t['id'] in configured, 'status': 'configured' if t['id'] in configured else 'removed',
+                            'paid': (configured.get(t['id']) or {}).get('paid', False)} for t in cur['teachers']]
+        cur['teachers'] += [{'id': i, 'provider': c['provider'], 'tasks': 0, 'episodes': 0, 'success': 0, 'outcomes': {}, 'deferred': {},
+                             'since_launch': {'episodes': 0, 'success': 0}, 'configured': True, 'status': 'configured', 'paid': c['paid']}
+                            for i, c in configured.items() if i not in known]
+        cur['configured'] = [{'id': i, **c} for i, c in configured.items()]
     return cur
+
+
+def teacher_config(path):
+    """{model_id: {provider, slots, paid}} of ops/ei/teachers.json (None when absent). Paid: Vertex AI endpoints (billed to
+    the owner's cloud account; the free-tier and API-credit teachers are not)."""
+    rows = read_json(path, None)
+    if not isinstance(rows, list):
+        return None
+    out = {}
+    for t in rows:
+        if not isinstance(t, dict) or not t.get('model_id'):
+            continue
+        ep = t.get('endpoint') or ''
+        host = re.sub(r'^https?://([^/]+).*', r'\1', ep) if ep else (t.get('provider') or '')
+        out[t['model_id']] = {'provider': t.get('provider') or host, 'slots': t.get('slots'),
+                              'paid': 'aiplatform.googleapis.com' in ep or t.get('api_key_env') == 'VERTEX_ACCESS_TOKEN'}
+    return out
 
 
 # ---------- collection ----------
@@ -656,7 +732,8 @@ def collection_section(st, run, lin, running_units, now):
         pols.append(p)
     fill = None
     for version, suffix, name, path in collection_dirs(run, lin):
-        if suffix == '' and f'aei1-collect-v{version:04d}-fill.service' in running_units:
+        # the fill unit is aei1-collect-vNNNN-fill or a reader-pinned aei1-collect-vNNNN-fill-reader-<a>-<b>
+        if suffix == '' and any(u.startswith(f'aei1-collect-v{version:04d}-fill') for u in running_units):
             fj = None
             for raw in read_tail(path + '/fill.log', 2048):
                 fj = jline(raw) or fj
@@ -667,37 +744,94 @@ def collection_section(st, run, lin, running_units, now):
 
 # ---------- held-out ----------
 
-def held_record(path):
-    d = read_json(path, None)
-    if not d or 'success_rate' not in d:
+def _infra_lost(s):
+    """held_eval.sample_infra_lost: the sample's ``infra_lost`` reason, else (a result written before the field) an
+    infrastructure_error outcome."""
+    return bool(s['infra_lost']) if 'infra_lost' in s else s.get('outcome') == 'infrastructure_error'
+
+
+def _engine_key(engine):
+    """held_eval.compare's pairing engine: the PAIRING_ENGINE_FIELDS (per sample range of a merged result); None when
+    the result has no attested engine (compare then skips the check)."""
+    if not isinstance(engine, dict) or not engine:
         return None
-    # held_eval.compare's rule: an episode lost to infrastructure (``infra_lost``; a result written before the field:
-    # an infrastructure_error) is left out, and of both sides of a pair (``paired``); any other unscored one fails
-    # (outcomes and lost are keyed '<task>#<sample>': the record is cached in the JSON exporter state)
-    rates, outcomes, lost = {}, {}, []
-    for s in d.get('samples', []):
+    if 'engine_parts' in engine:
+        return json.dumps([[p.get('samples'), _engine_key(p.get('engine') or {})] for p in engine['engine_parts']], sort_keys=True)
+    return json.dumps({k: engine.get(k) for k in PAIRING_ENGINE_FIELDS}, sort_keys=True)
+
+
+def held_set(path, manifest):
+    """The held set a result measured: held-v4 by its directory, held-v3 by its manifest hash (ops/held-v3/manifest.json,
+    AGENTS.md sha 45471060), else the manifest hash."""
+    if '/held-v4/' in path:
+        return 'held-v4'
+    if str(manifest or '').startswith('45471060'):
+        return 'held-v3'
+    return f'held-{str(manifest or "unknown")[:8]}'
+
+
+def held_record(path):
+    """One measurement, recomputed from its samples as held_eval.aggregate/compare do: a sample that ran and was not lost
+    to infrastructure is counted; an unscored counted one (timeout, unresolved run) is a failure. ``rate`` is successes
+    over the counted samples (held_eval's success_rate), ``rate_all`` successes over every planned sample (tasks x
+    samples, losses included). The result's stored ``success_rate`` is not trusted: results written before fc178542b
+    divided by the scored samples only (8e634a0f: 293/460 = 63.7% stored, 293/494 counted, 293/512 over all)."""
+    d = read_json(path, None)
+    if not d or not isinstance(d.get('samples'), list):
+        return None
+    tasks, outcomes, lost = {}, {}, []
+    ran = scored = successes = unscored = timeouts = 0
+    for s in d['samples']:
         if not s.get('ran', True):
             continue
-        key = f"{s['task_id']}#{s.get('sample')}"
-        if (bool(s['infra_lost']) if 'infra_lost' in s else s.get('outcome') == 'infrastructure_error'):
+        ran += 1
+        timeouts += bool(s.get('timed_out'))
+        reward = s['reward'] if 'reward' in s else (1.0 if s.get('outcome') == 'task_success' else 0.0)
+        scored += reward is not None
+        key = f"{s['task_id']}#{s.get('sample')}"      # outcomes and lost are cached in the JSON exporter state
+        if _infra_lost(s):
             lost.append(key)
             continue
-        outcomes[key] = s.get('outcome') == 'task_success'
-        t = rates.setdefault(s['task_id'], [0, 0])
+        ok = reward == 1.0
+        successes += ok
+        unscored += reward is None
+        outcomes[key] = ok
+        t = tasks.setdefault(s['task_id'], [0, 0])
+        t[0] += ok
         t[1] += 1
-        t[0] += 1 if s.get('outcome') == 'task_success' else 0
-    per = [a / b for a, b in rates.values() if b]
+    counted = len(outcomes)
+    planned = (d.get('tasks') or 0) * (d.get('samples_per_task') or 0) or len(d['samples'])
+    per = [a / b for a, b in tasks.values() if b]
     n = len(per)
     mean = sum(per) / n if n else None
     se = (sum((x - mean) ** 2 for x in per) / max(n - 1, 1)) ** 0.5 / n ** 0.5 if n > 1 else None
-    oc = d.get('outcome_counts') or {}
-    return {'sha': d.get('policy_id'), 'series': (d.get('series') or {}).get('key'), 'rate': d.get('success_rate'), 'successes': d.get('successes'),
-            'scored': d.get('scored'), 'ran': d.get('ran'), 'tasks': d.get('tasks'), 'spt': d.get('samples_per_task'), 'finished': ms(d['finished_at']) if d.get('finished_at') else None,
+    stored = d.get('success_rate')
+    rate = round(successes / counted, 4) if counted else None
+    return {'sha': d.get('policy_id'), 'series': (d.get('series') or {}).get('key'), 'set': held_set(path, d.get('manifest_sha256')),
+            'law': json.dumps([d.get('context_tokens', LEGACY_CONTEXT_TOKENS), d.get('sampling', LEGACY_SAMPLING)], sort_keys=True),
+            'engine_key': _engine_key(d.get('engine')),
+            'rate': rate, 'rate_all': round(successes / planned, 4) if planned else None, 'successes': successes,
+            'counted': counted, 'scored': scored, 'ran': ran, 'planned': planned, 'unscored': unscored, 'infra': len(lost), 'timeouts': timeouts,
+            'stored_rate': stored if stored is not None and rate is not None and abs(stored - rate) > 1e-4 else None,
+            'complete': bool(d.get('complete', ran == planned)), 'tasks': d.get('tasks'), 'spt': d.get('samples_per_task'),
+            'finished': ms(d['finished_at']) if d.get('finished_at') else None,
             'ran_out_rate': d.get('ran_out_rate'), 'loop_rate': d.get('loop_rate'), 'neuralese_use': d.get('neuralese_use_rate'),
-            'graded': d.get('mean_graded_reward'), 'infra': len(lost), 'counted': len(outcomes), 'timeouts': d.get('timeouts'),
-            'engine': ((d.get('engine') or {}).get('dtype'), (d.get('engine') or {}).get('kv_cache_dtype')),
+            'graded': d.get('mean_graded_reward'), 'engine': ((d.get('engine') or {}).get('dtype'), (d.get('engine') or {}).get('kv_cache_dtype')),
             'task_mean': round(mean, 4) if mean is not None else None, 'task_se': round(se, 4) if se is not None else None, 'task_n': n,
-            'rates': {k: v for k, v in rates.items()}, 'outcomes': outcomes, 'lost': lost}
+            'outcomes': outcomes, 'lost': lost}
+
+
+def pairable(a, b):
+    """None when held_eval.compare would pair the two results, else why not. Different scoring series pair (owner
+    2026-11-22; ``same_series`` says so); a different held set, sampling law, context budget or pairing engine setting
+    does not."""
+    if a.get('set') != b.get('set'):
+        return 'different held sets'
+    if a.get('law') != b.get('law'):
+        return 'different sampling law or context budget'
+    if a.get('engine_key') and b.get('engine_key') and a['engine_key'] != b['engine_key']:
+        return 'different engine settings'
+    return None
 
 
 def _pair_rates(rec, drop):
@@ -712,36 +846,57 @@ def _pair_rates(rec, drop):
 
 
 def paired(a, b):
-    """Task-level paired difference b - a over the tasks both measured, an episode lost to infrastructure on either side
-    left out of both (normal approximation; the driver's verdict uses held_eval compare's permutation test)."""
-    if 'outcomes' in a and 'outcomes' in b:
-        drop = set(a['lost']) | set(b['lost'])
-        ra, rb = _pair_rates(a, drop), _pair_rates(b, drop)
-    else:
-        ra, rb = a['rates'], b['rates']
+    """Task-level paired difference b - a (held_eval.compare's primary statistic: mean per-task pass-rate change over the
+    tasks both measured; unscored counted samples fail, an infrastructure loss on either side leaves the (task, sample)
+    out of both). The interval is the normal approximation from the task-level standard error (the driver's verdict uses
+    compare's permutation test)."""
+    if not a or not b or 'outcomes' not in a or 'outcomes' not in b:
+        return None
+    drop = set(a['lost']) | set(b['lost'])
+    ra, rb = _pair_rates(a, drop), _pair_rates(b, drop)
     common = [k for k in ra if k in rb and ra[k][1] and rb[k][1]]
     if len(common) < 8:
         return None
     d = [rb[k][0] / rb[k][1] - ra[k][0] / ra[k][1] for k in common]
     m = sum(d) / len(d)
     se = (sum((x - m) ** 2 for x in d) / (len(d) - 1)) ** 0.5 / len(d) ** 0.5
-    return {'delta_pts': round(100 * m, 2), 'ci_pts': [round(100 * (m - 1.96 * se), 2), round(100 * (m + 1.96 * se), 2)], 'tasks': len(d),
-            'up': sum(1 for x in d if x > 0), 'down': sum(1 for x in d if x < 0)}
+    return {'delta_pts': round(100 * m, 2), 'se_pts': round(100 * se, 2), 'ci_pts': [round(100 * (m - 1.96 * se), 2), round(100 * (m + 1.96 * se), 2)],
+            'tasks': len(d), 'up': sum(1 for x in d if x > 0), 'down': sum(1 for x in d if x < 0), 'same_series': a.get('series') == b.get('series')}
 
 
 def run_kind(path):
     parts = path.split('/')
-    try:
-        i = parts.index('held')
-        return parts[i - 1], parts[i + 1]
-    except (ValueError, IndexError):
-        return os.path.basename(os.path.dirname(path)), ''
+    for marker in ('held', 'held-v4'):
+        try:
+            i = parts.index(marker)
+            return parts[i - 1], parts[i + 1]
+        except (ValueError, IndexError):
+            continue
+    return os.path.basename(os.path.dirname(path)), ''
 
+
+def verdicts_section(run, lin):
+    """The driver's verdicts (verdicts/<sha12>.json): verdict, adoption, its reference and the delta against the start."""
+    out = []
+    for p in glob.glob(run + '/verdicts/*.json'):
+        if p.endswith('-compare.json'):
+            continue
+        v = read_json(p, None)
+        if not isinstance(v, dict):
+            continue
+        vs = v.get('vs_start') or {}
+        out.append({'label': lin.label(v.get('sha256')), 'sha12': (v.get('sha256') or '')[:12], 'verdict': v.get('verdict'), 'adopt': v.get('adopt'),
+                    'reference': lin.label((v.get('reference') or {}).get('sha256')),
+                    'vs_start_pts': round(100 * vs['delta'], 2) if isinstance(vs.get('delta'), (int, float)) else None, 'vs_start_p': vs.get('p'),
+                    'ts': ms(mtime(p) or 0)})
+    out.sort(key=lambda v: v['ts'])
+    return out
 
 
 def held_section(st, run, lin, log_st, phase, now):
     hc = st.setdefault('held', {})
-    paths = set(glob.glob(EI_ROOT + '/*/held/*/result.json')) | set(glob.glob(run + '/held/*/result.json'))
+    paths = (set(glob.glob(EI_ROOT + '/*/held/*/result.json')) | set(glob.glob(run + '/held/*/result.json'))
+             | set(glob.glob(run + '/held-v4/*/result.json')))
     # a measurement set aside (aside.json: a partial, refused or unpaired copy) is no result: a 9-episode partial
     # plotted as an 89% point on 2026-11-24
     paths = {p for p in paths if not os.path.exists(os.path.join(os.path.dirname(p), 'aside.json'))}
@@ -759,7 +914,7 @@ def held_section(st, run, lin, log_st, phase, now):
     for p, (s, rec) in sorted(hc.items(), key=lambda kv: (kv[1][1] or {}).get('finished') or 0):
         if not rec or p not in paths:
             continue
-        k = (rec['sha'], rec['series'], rec['finished'])
+        k = (rec['sha'], rec['series'], rec['set'], rec['finished'])
         if k in seen:
             continue
         seen.add(k)
@@ -768,23 +923,36 @@ def held_section(st, run, lin, log_st, phase, now):
             label = lin.label(rec['sha'])
         elif rec['sha'] in cand_name:
             label = cand_name[rec['sha']]
+        elif kind.startswith(('policy-', 'hv4-')):
+            label = f'{(rec["sha"] or "")[:8]} (off lineage)'       # a rolled-back or dropped policy of the run
         else:
             label = 'base model' if kind == 'base' else f'{run_name} {kind}'.strip()
+        # an incomplete measurement pairs only the tasks it reached (fast-first): held_eval never makes it a verdict
         results.append({**rec, 'label': label, 'version': lin.ver(rec['sha']), 'unpaired': 'unpaired' in p})
-    # drop results of a policy superseded in the same series (keep every distinct (sha, series))
-    pairs = []
-    by_series = {}
+    usable = lambda r: not r['unpaired'] and r['complete']
+
+    def comparable(r, sha):
+        """The latest measurement of ``sha`` that pairs with ``r`` (its own series first)."""
+        cands = [x for x in results if x['sha'] == sha and usable(x) and pairable(x, r) is None]
+        same = [x for x in cands if x['series'] == r['series']]
+        return (same or cands or [None])[-1]
+
+    anchor = lin.start.get('sha256')
     for r in results:
-        by_series.setdefault(r['series'], []).append(r)
-    for series, rs in by_series.items():
-        rs = sorted(rs, key=lambda r: r['finished'] or 0)
+        a = comparable(r, anchor) if anchor and r['sha'] != anchor and usable(r) else None
+        pr = paired(a, r) if a else None
+        r['vs_anchor'] = {**pr, 'anchor_rate': a['rate'], 'anchor_series': a['series']} if pr else None
+    pairs = []
+    for hs in sorted({r['set'] for r in results}):
+        rs = [r for r in results if r['set'] == hs and usable(r)]
         for a, b in zip(rs, rs[1:]):
-            pr = paired(a, b)
-            if pr and a['sha'] != b['sha']:
-                pairs.append({'series': series, 'a': a['label'], 'b': b['label'], **pr})
-    # in-progress measurements (Pop's held log)
+            pr = paired(a, b) if a['sha'] != b['sha'] and pairable(a, b) is None else None
+            if pr:
+                pairs.append({'set': hs, 'series': b['series'], 'a': a['label'], 'b': b['label'], 'ts': b['finished'], **pr})
+    pairs.sort(key=lambda x: x['ts'] or 0)
+    # in-progress measurements (each measurement's pop-held.log; held-v4 in hv4-*)
     inprog = []
-    for d in glob.glob(run + '/held/policy-*'):
+    for d in glob.glob(run + '/held/policy-*') + glob.glob(run + '/held-v4/hv4-*'):
         if os.path.exists(d + '/result.json') or 'unpaired' in d or os.path.exists(d + '/aside.json'):
             continue
         log = d + '/pop-held.log'
@@ -797,31 +965,54 @@ def held_section(st, run, lin, log_st, phase, now):
             if j and 'held_eval_progress' in j:
                 prog = j
                 break
-        sha12 = os.path.basename(d)[7:19]
+        sha12 = re.sub(r'^(policy|hv4)-', '', os.path.basename(d))[:12]
         sha = next((s for s in lin.by_sha if s.startswith(sha12)), sha12)
         if prog:
             done, of, minutes = prog['held_eval_progress'], prog['of'], prog.get('minutes')
-            inprog.append({'label': lin.label(sha), 'done': done, 'of': of, 'minutes': minutes, 'updated': ms(t),
+            inprog.append({'label': lin.label(sha), 'set': 'held-v4' if '/held-v4/' in d else 'held-v3', 'done': done, 'of': of, 'minutes': minutes, 'updated': ms(t),
                            'eta_s': round((of - done) * minutes * 60 / done) if done and minutes else None})
-    meas = phase.get('measuring') or {}
-    cand, ref = (meas.get('candidate') or {}), (meas.get('reference') or {})
-    def latest(sha, series=None):
-        rs = [r for r in results if r['sha'] == sha and not r['unpaired'] and (series is None or r['series'] == series)]
+
+    def latest(sha, hs=None):
+        rs = [r for r in results if r['sha'] == sha and usable(r) and (hs is None or r['set'] == hs)]
         return rs[-1] if rs else None
+    anchor_rec = latest(anchor)
+    main_set = anchor_rec['set'] if anchor_rec else 'held-v3'
+    verdicts = verdicts_section(run, lin)
+    # the best measured policy against the anchor (rolled-back policies included: they were measured)
+    ranked = [r for r in results if r['set'] == main_set and r['vs_anchor'] and usable(r)]
+    best = max(ranked, key=lambda r: r['vs_anchor']['delta_pts'], default=None)
+    meas = phase.get('measuring') or {}
+    lineage_shas = [e['sha256'] for e in sorted(phase.get('lineage', []), key=lambda e: e['version'])]
+    cand_sha = (meas.get('candidate') or {}).get('sha256') or next((s for s in reversed(lineage_shas) if latest(s, main_set)), None)
+    ref_sha = (meas.get('reference') or {}).get('sha256') or lin.reference.get('sha256')
     gate = None
-    if cand:
-        c = latest(cand.get('sha256'))
-        r_same = latest(ref.get('sha256'), c['series'] if c else None)
-        gate = {'candidate': lin.label(cand.get('sha256')), 'candidate_version': cand.get('version'), 'reference': lin.label(ref.get('sha256')),
-                'candidate_result': {k: c.get(k) for k in ('rate', 'scored', 'counted', 'ran', 'series', 'infra', 'finished')} if c else None,
-                'reference_same_series': bool(r_same), 'pair': paired(r_same, c) if c and r_same else None,
+    if cand_sha:
+        c = latest(cand_sha, main_set) or latest(cand_sha)
+        r_ref = comparable(c, ref_sha) if c and ref_sha and ref_sha != cand_sha else None
+        verdict = next((v for v in reversed(verdicts) if cand_sha.startswith(v['sha12'])), None)
+        gate = {'candidate': lin.label(cand_sha), 'candidate_version': lin.ver(cand_sha), 'measuring': bool(meas.get('candidate')),
+                'reference': lin.label(ref_sha), 'anchor': lin.label(anchor),
+                'candidate_result': {k: c.get(k) for k in ('rate', 'rate_all', 'successes', 'counted', 'unscored', 'scored', 'ran', 'planned', 'series', 'set', 'infra', 'finished')} if c else None,
+                'reference_same_series': bool(r_ref and r_ref['series'] == c['series']), 'pair': paired(r_ref, c) if c and r_ref else None,
+                'vs_anchor': (c or {}).get('vs_anchor'), 'verdict': verdict,
+                'unmeasured': [lin.label(s) for s in lineage_shas[lineage_shas.index(cand_sha) + 1:]] if cand_sha in lineage_shas else [],
                 'failing': log_st.get('gate_fail'), 'every': phase.get('held_every'), 'since_held': phase.get('since_held'),
                 'neutral': phase.get('consecutive_neutral')}
     q = read_json(run + '/held-v4/queue.json', {}) or {}
-    queue = [{'label': lin.label(e.get('sha256')), 'state': e.get('state'), 'reasons': e.get('reasons'), 'queued_at': ms(e['queued_at']) if e.get('queued_at') else None}
-             for e in q.get('entries', [])]
-    out = [{k: v for k, v in r.items() if k not in ('rates', 'outcomes', 'lost')} for r in results]
-    return {'results': out[-16:], 'pairs': pairs[-8:], 'in_progress': inprog, 'gate': gate, 'queue': queue}
+    queue = []
+    for e in q.get('entries', []):
+        r = latest(e.get('sha256'), 'held-v4')
+        queue.append({'label': lin.label(e.get('sha256')), 'state': e.get('state'), 'reasons': e.get('reasons'), 'why': e.get('why'),
+                      'queued_at': ms(e['queued_at']) if e.get('queued_at') else None,
+                      'rate': r['rate'] if r else None, 'rate_all': r['rate_all'] if r else None})
+    no_gain = {'consecutive_neutral': phase.get('consecutive_neutral'), 'anchor': lin.label(anchor), 'set': main_set,
+               'best': {'label': best['label'], 'rate': best['rate'], 'vs_anchor': best['vs_anchor']} if best else None,
+               'beats_anchor': bool(best and best['vs_anchor']['ci_pts'][0] > 0)}
+    out = [{k: v for k, v in r.items() if k not in ('outcomes', 'lost', 'law', 'engine_key')} for r in results]
+    return {'results': out[-18:], 'pairs': pairs[-8:], 'in_progress': inprog, 'gate': gate, 'queue': queue, 'verdicts': verdicts[-10:],
+            'anchor': {'label': lin.label(anchor), 'name': lin.start_name, 'sha12': (anchor or '')[:12],
+                       'rate': anchor_rec['rate'] if anchor_rec else None, 'series': anchor_rec['series'] if anchor_rec else None},
+            'no_gain': no_gain}
 
 
 # ---------- Colab credits ----------
@@ -872,6 +1063,11 @@ def colab_section(st, run, now):
                  'started': ms(s['started']) if s.get('started') else None, 'stopped': ms(s['stopped']) if s.get('stopped') else None}
                 for s in cost.get('sessions', [])]
     out = {k: c.get(k) for k in ('balance', 'rate', 'assignments', 'sessions', 'probe_error')}
+    ro = roster()
+    # the watchdog roster lists the Colab sessions the project runs on; none configured = Colab stopped (owner 2026-11-27)
+    out['state'] = 'stopped' if colab_stopped(ro) else 'configured'
+    out['configured_sessions'] = [x.get('session') for x in colab_sessions_cfg(ro)]
+    out['note'] = clip(ro.get('_doc_colab'), 200) if ro.get('_doc_colab') else None
     out['at'] = ms(c['at']) if c.get('at') else None
     out['hist'] = c.get('hist', [])[-200:]
     if out['balance'] is not None and out['rate']:
@@ -884,14 +1080,52 @@ def colab_section(st, run, now):
 
 # ---------- watchdog, machine history, disks ----------
 
+def roster():
+    """OPS/watchdog.json: the experiments, GPUs and Colab sessions the ops watchdog expects (the heartbeat edits it)."""
+    return read_json(OPS + '/watchdog.json', {}) or {}
+
+
+def colab_sessions_cfg(ro):
+    return (ro.get('colab') or {}).get('sessions', WATCHDOG_DEFAULT_SESSIONS) if 'colab' in ro else WATCHDOG_DEFAULT_SESSIONS
+
+
+def colab_stopped(ro):
+    return 'colab' in ro and not colab_sessions_cfg(ro)
+
+
+def alert_unexpected(key, row, ro):
+    """Why a watchdog alert is about a resource the roster does not expect (None when it does). The watchdog keeps a
+    key until its check runs again without seeing it, so alerts of sessions or GPUs taken out of the roster linger."""
+    sessions = colab_sessions_cfg(ro)
+    names = {x.get('session') for x in sessions}
+    tunnels = {x.get('tunnel_unit') for x in sessions}
+    gpus = ro.get('gpus') or {}
+    parts = key.split(':')
+    if parts[0] == 'gpu' and len(parts) > 1 and (gpus.get(parts[1]) or {}).get('disabled'):
+        return f'GPU {parts[1]} is disabled in the roster'
+    if parts[0] != 'colab':
+        return None
+    stopped = colab_stopped(ro)
+    if parts[1] in ('missing', 'not_gpu') and len(parts) > 2 and parts[2] not in names:
+        return f'Colab session {parts[2]} is in no configured session' + (' (Colab stopped)' if stopped else '')
+    if parts[1] == 'tunnel' and len(parts) > 2 and parts[2] not in tunnels:
+        return f'{parts[2]} belongs to no configured session' + (' (Colab stopped)' if stopped else '')
+    if parts[1] == 'burn_idle' and stopped:
+        return 'no Colab GPU session is configured (Colab stopped)'
+    if parts[1] == 'stray' and stopped and str(((row or {}).get('detail') or {}).get('hardware', '')).upper() == 'CPU':
+        return 'a CPU assignment while Colab GPU sessions are stopped (burns little; listed under credits)'
+    return None
+
+
 def watchdog_section(now):
     ws = read_json(WATCHDOG_STATE, {}) or {}
+    ro = roster()
     rows = {}
     for raw in read_tail(OPS + '/alerts.jsonl', 200000):
         j = jline(raw)
         if j and j.get('key'):
             rows[j['key']] = j
-    active = []
+    active, suppressed = [], []
     for key, meta in (ws.get('alerts') or {}).items():
         j = rows.get(key)
         if not j or key.startswith('health:log:'):
@@ -899,13 +1133,20 @@ def watchdog_section(now):
         age = now - meta.get('last', 0)
         if meta.get('once') and age > 6 * 3600:
             continue
-        active.append({'key': key, 'check': j.get('check'), 'severity': j.get('severity'), 'message': clip(j.get('message'), 220), 'ts': ms(j.get('ts') or meta['last']),
-                       'last_ts': ms(meta['last']), 'repeat': meta.get('repeat', 0), 'once': bool(meta.get('once'))})
+        a = {'key': key, 'check': j.get('check'), 'severity': j.get('severity'), 'message': clip(j.get('message'), 220), 'ts': ms(j.get('ts') or meta['last']),
+             'last_ts': ms(meta['last']), 'repeat': meta.get('repeat', 0), 'once': bool(meta.get('once'))}
+        why = alert_unexpected(key, j, ro)
+        if why:
+            suppressed.append({**a, 'why': why})
+        else:
+            active.append(a)
     active.sort(key=lambda a: (a['severity'] != 'critical', -a['last_ts']))
     gpu = {}
     for name, g in (ws.get('gpu') or {}).items():
-        gpu[name] = {'util': g.get('util'), 'idle_s': g.get('idle_s'), 'error': clip(g.get('error'), 80), 'checked': ms(g['checked']) if g.get('checked') else None}
-    return {'alerts': active, 'gpu': gpu, 'tunnels': ws.get('tunnels'), 'checked': ms(ws['last_run']) if ws.get('last_run') else None}
+        gpu[name] = {'util': g.get('util'), 'idle_s': g.get('idle_s'), 'error': clip(g.get('error'), 80), 'checked': ms(g['checked']) if g.get('checked') else None,
+                     'disabled': bool(((ro.get('gpus') or {}).get(name) or {}).get('disabled'))}
+    return {'alerts': active, 'suppressed': suppressed, 'gpu': gpu, 'tunnels': ws.get('tunnels'), 'checked': ms(ws['last_run']) if ws.get('last_run') else None,
+            'experiments': [x.get('name') for x in ro.get('experiments', [])], 'colab_stopped': colab_stopped(ro)}
 
 
 def history_section(st, machines, gpu, now):
@@ -922,7 +1163,7 @@ def history_section(st, machines, gpu, now):
                 del h[f'disk:{name}:{d["mount"]}'][:-144]
         for name in ('colab-g4a', 'colab-g4b'):
             g = (gpu or {}).get(name)
-            if g and g.get('util') is not None:
+            if g and g.get('util') is not None and not g.get('disabled'):
                 h.setdefault(name, []).append([ms(now), None, g['util'], None, None])
                 del h[name][:-144]
     out = {k: v for k, v in h.items() if not k.startswith(('_', 'disk:'))}
@@ -964,12 +1205,41 @@ def registry_section(st, now):
     return rows
 
 
+def newest_handoff():
+    files = sorted(glob.glob(REPO + '/plans/neuralese/HANDOFF_*.md'))
+    return files[-1] if files else None
+
+
+def handoff_items(path):
+    """The numbered "Next steps" of the newest supervisor handoff (plans/neuralese/HANDOFF_<date>.md): the current
+    open work, ahead of the longer-lived register."""
+    rows, on = [], False
+    try:
+        for line in open(path):
+            h = re.match(r'#{2,3}\s+(.*)', line)
+            if h:
+                on = bool(re.search(r'next steps', h.group(1), re.I))
+                continue
+            if not on:
+                continue
+            m = re.match(r'\s{0,3}(\d+)\.\s+(.*)', line)
+            if m:
+                rows.append([m.group(2).strip()])
+            elif rows and line.strip() and line.startswith(' '):
+                rows[-1].append(line.strip())
+    except OSError:
+        return []
+    owner = f'supervisor ({os.path.basename(path)}, next steps)'
+    return [{'item': clip(re.sub(r'[`*]', '', ' '.join(r)), 260), 'owner': owner, 'source': 'handoff'} for r in rows]
+
+
 def open_items_section(st):
     p = REPO + '/plans/semantic-fp/OPEN_ITEMS.md'
-    s = [sig(p), sig(OPS + '/teacher-free-models/candidates.jsonl')]
+    ho = newest_handoff()
+    s = [sig(p), sig(OPS + '/teacher-free-models/candidates.jsonl'), ho, sig(ho) if ho else None]
     if st.get('open_items_sig') == s and 'open_items' in st:
         return st['open_items']
-    rows, in_flight = [], False
+    rows, in_flight = (handoff_items(ho) if ho else []), False
     try:
         for line in open(p):
             h = re.match(r'#{2,3}\s+(.*)', line)
@@ -1002,17 +1272,48 @@ def free_teacher_candidates():
     return rows
 
 
+DECISION_HEAD = re.compile(r'(#{2,3})\s+(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d))?\s*(?:[—:-]\s*)?(.*)')
+SUMMARY_LEAD = re.compile(r'\*\*(Cause|Verdict|Decision|Conclusion|Result|Why)[^*]*\*\*', re.I)
+NEXT_LEAD = re.compile(r'\*\*(Fix|Next|Simplest experiment|Recommended|Recommendation|Action)[^*]*\*\*', re.I)
+
+
+def decision_entries(text):
+    """DECISIONS.md entries in file order (appended: the last are the newest): heading date/time/title, and a summary,
+    the entry's **Cause/Verdict/Decision** paragraph or else its first paragraph, and its **Fix/Next/Simplest
+    experiment** paragraph."""
+    entries, cur = [], None
+    for line in text.splitlines():
+        m = DECISION_HEAD.match(line)
+        if m:
+            cur = {'when': m.group(2) + (f' {m.group(3)}' if m.group(3) else ''), 'title': clip(m.group(4).strip(), 200),
+                   'level': len(m.group(1)), 'paras': [[]]}
+            entries.append(cur)
+        elif cur is not None:
+            if line.strip():
+                cur['paras'][-1].append(line.strip())
+            elif cur['paras'][-1]:
+                cur['paras'].append([])
+    out = []
+    for e in entries:
+        paras = [' '.join(p) for p in e.pop('paras') if p]
+        lead = next((p for p in paras if SUMMARY_LEAD.match(p)), paras[0] if paras else '')
+        nxt = next((p for p in paras if NEXT_LEAD.match(p)), None)
+        if nxt:      # the heading paragraph of a list: take the first items with it
+            i = paras.index(nxt)
+            nxt = ' '.join(paras[i:i + 2]) if len(nxt) < 80 and i + 1 < len(paras) else nxt
+        e['summary'] = clip(re.sub(r'[`*]', '', lead), 420)
+        e['next'] = clip(re.sub(r'[`*]', '', nxt), 420) if nxt else None
+        out.append(e)
+    return out
+
+
 def decisions_section(st):
     p = REPO + '/plans/neuralese/DECISIONS.md'
     s = sig(p)
     if st.get('decisions_sig') == s and 'decisions' in st:
         return st['decisions']
-    heads = []
-    for l in read_tail(p, 400000):
-        m = re.match(r'##\s+(2026-\d\d-\d\d \d\d:\d\d)\s+(.*)', l)
-        if m:
-            heads.append({'when': m.group(1), 'title': clip(m.group(2), 200)})
-    st['decisions'], st['decisions_sig'] = heads[-6:][::-1], s
+    entries = decision_entries('\n'.join(read_tail(p, 400000)[1:]))      # the first tail line may be cut
+    st['decisions'], st['decisions_sig'] = entries[-8:][::-1], s
     return st['decisions']
 
 
@@ -1059,15 +1360,22 @@ def build(state, machines, units, now, run=None):
     part('decisions', lambda: decisions_section(st))
     active = phase.get('active_round') or {}
     drive = next((u for u in units if u['role'] == 'driver' and u['state'] == 'running'), None)
+    rid = active.get('round_id')
+    ro = roster()
+    # the watchdog roster names the experiments in flight; a run left out of it is paused, and its stopped driver is expected
+    expected = 'experiments' not in ro or any(x.get('name') == os.path.basename(run) for x in ro.get('experiments', []))
     snap = {
         'schema': 1, 'run': os.path.basename(run), 'ts': ms(now),
         'driver': {'running': bool(drive), 'unit': drive['unit'] if drive else None, 'started_ts': drive['started_ts'] if drive else None,
-                   'last_log_ts': ms(log_st['last_ts']) if log_st.get('last_ts') else None, 'restart_ts': ms(log_st['restart_ts']) if log_st.get('restart_ts') else None},
-        'phase': {'round': active.get('round_id'), 'phase': active.get('phase') or phase.get('phase'), 'version_counter': phase.get('version_counter'),
+                   'last_log_ts': ms(log_st['last_ts']) if log_st.get('last_ts') else None, 'restart_ts': ms(log_st['restart_ts']) if log_st.get('restart_ts') else None,
+                   'pin': log_st.get('pin'), 'expected': expected},
+        'phase': {'round': rid, 'phase': active.get('phase') or phase.get('phase'), 'method': phase.get('phase'), 'version_counter': phase.get('version_counter'),
                   'latest_version': lin.latest, 'current_policy': lin.label(((phase.get('lineage') or [{}])[-1]).get('sha256')),
-                  'held_every': phase.get('held_every'), 'since_held': phase.get('since_held')},
+                  'held_every': phase.get('held_every'), 'since_held': phase.get('since_held'), 'consecutive_neutral': phase.get('consecutive_neutral'),
+                  **waiting_on(log_st, run, rid, bool(drive), now, expected)},
         'lineage': [{'version': e['version'], 'round': e.get('round_id'), 'sha12': e['sha256'][:12]} for e in phase.get('lineage', [])],
         'reference': {'label': lin.label(lin.reference.get('sha256')), 'name': lin.ref_name},
+        'anchor': {'label': lin.label(lin.start.get('sha256')), 'name': lin.start_name, 'sha12': (lin.start.get('sha256') or '')[:12]},
         'rounds': sections.get('rounds') or [], 'collection': sections.get('collection'), 'held': sections.get('held'), 'teacher': sections.get('teacher'),
         'colab': sections.get('colab'), 'watchdog': sections.get('watchdog'), 'hist': hist, 'disks': disks, 'tuning': sections.get('tuning'),
         'registry': sections.get('registry'), 'open_items': sections.get('open_items'), 'decisions': sections.get('decisions'),
@@ -1075,17 +1383,33 @@ def build(state, machines, units, now, run=None):
     return snap
 
 
+def waiting_on(log_st, run, rid, running, now, expected=True):
+    """What the driver waits on, from its newest supply line: {'waiting_on': text, 'supply': {...}} (empty when it is not
+    waiting). A round waits for supply until enough new weighted target tokens exist; the driver rebuilds and checks again
+    every 45-90 min."""
+    if not running:
+        return {'waiting_on': 'the round driver is not running' + ('' if expected else ' (paused: the run is not in the watchdog roster)'), 'supply': None}
+    sup = log_st.get('supply')
+    if not sup or sup.get('round') != rid or sup.get('decision') != 'wait' or os.path.exists(f'{run}/{rid}/sft/launch.json'):
+        return {'waiting_on': None, 'supply': None}
+    nxt = sup.get('next_ts')
+    text = (f'{rid} waits for training data: {(sup.get("new_tokens") or 0) / 1e6:.2f} M of {(sup.get("minimum") or 0) / 1e6:.1f} M new weighted '
+            f'target tokens (waited {sup.get("waited_hours") or 0:.1f} h)' + (f'; next build check {time.strftime("%H:%M", time.localtime(nxt))}' if nxt else ''))
+    return {'waiting_on': text, 'supply': {**{k: v for k, v in sup.items() if k not in ('ts', 'next_ts')}, 'ts': ms(sup['ts']), 'next_ts': ms(nxt) if nxt else None}}
+
+
 def derived_alerts(ei, floors, machines, now):
     """Alerts the page lists beside the exporter's own (unit failures, disk floors): driver, SFT sync, credits, disk fall, held gate, watchdog."""
     out = []
     add = lambda i, level, text, machine=None: out.append({'id': i, 'level': level, 'machine': machine, 'text': text})
     d = ei.get('driver') or {}
-    if not d.get('running'):
-        add('ei:driver', 'crit', 'The round driver (aei1-drive-*) is not running: no rounds will advance.', 'dgx')
+    if not d.get('running') and d.get('expected', True):
+        last = f' (last drive.log line {time.strftime("%H:%M", time.localtime(d["last_log_ts"] / 1000))})' if d.get('last_log_ts') else ''
+        add('ei:driver', 'crit', f'The round driver (aei1-drive-*) is not running{last}: no rounds will advance.', 'dgx')
     for r in ei.get('rounds', []):
         s = r.get('sft')
         if r.get('sft_running') and s and s.get('step_ts') and now * 1000 - s['step_ts'] > 70 * 60_000:
-            add(f'ei:syncstale:{r["id"]}', 'warn', f'{r["id"]} SFT log is {int((now * 1000 - s["step_ts"]) / 60000)} min behind (the Colab learner state syncs about every 20 min).')
+            add(f'ei:syncstale:{r["id"]}', 'warn', f'{r["id"]} SFT log is {int((now * 1000 - s["step_ts"]) / 60000)} min behind' + (' (a Colab learner state syncs about every 20 min).' if r.get('host') == 'colab-g4' else '.'))
     c = ei.get('colab') or {}
     if c.get('runway_h') is not None and c['runway_h'] < 12:
         add('ei:credits', 'crit' if c['runway_h'] < 4 else 'warn', f'Colab credits: {c["balance"]:.0f} units last {c["runway_h"]:.0f} h at {c["rate"]}/h. Refill soon.')
@@ -1103,9 +1427,15 @@ def derived_alerts(ei, floors, machines, now):
     t = ei.get('teacher') or {}
     if t.get('eligible') and t['tasks_done'] < t['eligible'] and t.get('last_activity_ts') and now * 1000 - t['last_activity_ts'] > 2 * 3600_000:
         add('ei:teacher-stall', 'warn', f'The teacher campaign {t["pool"]} has made no progress for {int((now * 1000 - t["last_activity_ts"]) / 3600_000)} h ({t["tasks_done"]}/{t["eligible"]} tasks).')
+    ng = (ei.get('held') or {}).get('no_gain') or {}
+    if (ng.get('consecutive_neutral') or 0) >= 2 and ng.get('best') is not None and not ng.get('beats_anchor'):
+        b = ng['best']
+        va = b['vs_anchor']
+        add('ei:no-gain', 'warn', f'{ng["consecutive_neutral"]} consecutive neutral rounds and no policy beats {ng["anchor"]} on {ng["set"]}: the best, {b["label"]}, '
+                                  f'is {va["delta_pts"]:+.1f} pts (95% {va["ci_pts"][0]:+.1f} to {va["ci_pts"][1]:+.1f}) over {va["tasks"]} tasks.', 'dgx')
     g = (ei.get('held') or {}).get('gate') or {}
     f = g.get('failing')
-    if f and f.get('count', 0) >= 6:
+    if f and f.get('count', 0) >= 6 and d.get('expected', True):
         add('ei:gate', 'warn', f'Held verdict for {g.get("candidate")} has failed {f["count"]} times since {time.strftime("%H:%M", time.localtime(f["first_ts"]))}: {f["error"]}.')
     wd = (ei.get('watchdog') or {}).get('alerts', [])
     tunnels = {a['key'].split(':', 2)[2] for a in wd if a['key'].startswith('colab:tunnel:')}

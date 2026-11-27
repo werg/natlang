@@ -142,27 +142,6 @@ def test_snapshot_record_fits_one_stream_record():
     assert export.snapshot_record(small)['data']['processes'][0]['rationale'] == 'r'    # nothing is cut when it already fits
 
 
-def test_teacher_summary(tmp_path):
-    pool = tmp_path / 'pool'
-    pool.mkdir()
-    ep = lambda o, tok=100: {'sample': 0, 'outcome': o, 'completion_tokens': tok}
-    row = lambda i, model, outcomes, fam='f1': {'index': i, 'task_id': f't{i}', 'family': fam, 'teacher': {'model_id': model},
-                                                 'seconds': 10.0, 'episodes': [ep(o) for o in outcomes]}
-    write_lines(pool / 'manifest.jsonl', [row(1, 'm/a', ['task_success']), row(2, 'm/a', ['semantic_mismatch'], 'f2'),
-                                          row(3, 'm/b', ['budget_exhaustion', 'task_success'])])
-    write_lines(pool / 'deferred.jsonl', [{**row(4, 'm/a', ['unresolved']), 'attempt': 1}])
-    (pool / 'pool.json').write_text(json.dumps({'eligible': 100}))
-    state = {}
-    t = export.teacher_summary(str(pool), state, 1000.0)
-    assert (t['eligible'], t['tasks_done'], t['success'], t['deferred']) == (100, 3, 2, 1)
-    a = next(x for x in t['teachers'] if x['id'] == 'm/a')
-    assert (a['tasks'], a['episodes'], a['success'], a['success_rate'], a['deferred']) == (2, 2, 1, 0.5, {'unresolved': 1})
-    assert t['families_total'] == 2 and t['families_with_success'] == 1 and t['history'][-1][1:] == [3, 2]
-    export.teacher_summary(str(pool), state, 1001.0)
-    assert len(state['teacher_hist']) == 1                                               # unchanged counts add no history point
-    assert export.teacher_summary(None, state, 0) is None
-
-
 def test_runs_window_and_summary(tmp_path):
     ops = tmp_path / 'ops'
     old = ops / 'old' / 'train.jsonl'
@@ -226,16 +205,6 @@ def test_alerts_disk_and_ledger(monkeypatch):
     assert {a['id'] for a in alerts} >= {'disk:dgx:/', 'disk:dgx:/big', 'ledger:dgx', 'error:0'}
 
 
-def test_queue_from_annotations_and_bench_queue(tmp_path):
-    done = tmp_path / 'done'
-    done.write_text('x')
-    ann = {'queue': [{'title': 'A', 'machine': 'dgx', 'done_when_exists': str(done)},
-                     {'title': 'B', 'machine': 'dgx', 'blocked_on': 'A', 'done_when_exists': str(tmp_path / 'nope')}]}
-    q = export.build_queue(ann, {'dgx': {'waiting': [{'unit': 'hunt-z.service', 'budget_gb': 30}], 'headroom_gb': 5}}, str(tmp_path), set())
-    assert [(i['title'], i['source']) for i in q] == [('hunt-z.service', 'ledger-waiting'), ('B', 'annotations')]
-    assert os.path.isdir(tmp_path)
-
-
 def test_run_without_finished_step_is_listed_while_fresh(tmp_path):
     path = tmp_path / 'train.jsonl'
     write_lines(path, [{'event': 'start'}, {'event': 'learner progress', 'step': 1}])
@@ -247,11 +216,26 @@ def test_run_without_finished_step_is_listed_while_fresh(tmp_path):
     assert [r['id'] for r in rows] == ['grpo-v9.run1'] and rows[0]['steps'] == 0 and rows[0]['kind'] == 'grpo'
 
 
-def test_active_teacher_pool_is_the_newest_campaign(tmp_path, monkeypatch):
-    for name, t in (('teacher-gen-1/a', 100), ('teacher-gen-2/b', 200)):
-        p = tmp_path / 'ops' / name / 'manifest.jsonl'
-        p.parent.mkdir(parents=True)
-        p.write_text('{}\n')
-        os.utime(p, (t, t))
-    monkeypatch.setattr(export, 'DATA', str(tmp_path))
-    assert export.active_teacher_pool().endswith('teacher-gen-2/b')
+def test_held_unit_progress_reads_its_measurement_log(tmp_path, monkeypatch):
+    """A popheld-policy-<sha12> unit reports the progress line of ops/ei/<run>/held/policy-<sha12>/pop-held.log."""
+    monkeypatch.setattr(export, 'OPS', str(tmp_path))
+    write_lines(tmp_path / 'ei' / 'aei1' / 'held' / 'policy-919472c49381' / 'pop-held.log',
+                [{'held_eval_progress': 128, 'of': 512, 'minutes': 60.0}])
+    import time
+    rec = {'unit': 'popheld-policy-919472c49381-1795721331.service', 'cmd': '/usr/bin/python3 driver.py job.json', 'state': 'running'}
+    prog, eta = export.progress_of(rec, {}, [], time.time())
+    assert prog == {'done': 128, 'total': 512, 'unit': 'episodes'} and eta == 10800
+    write_lines(tmp_path / 'ei' / 'aei1' / 'held-v4' / 'hv4-919472c49381' / 'pop-held.log', [{'held_eval_progress': 4, 'of': 504, 'minutes': 1.0}])
+    assert export.progress_of({**rec, 'unit': 'popheld-hv4-919472c49381-1.service'}, {}, [], time.time())[0]['done'] == 4
+
+
+def test_queue_lists_ledger_waiting_units():
+    q = export.build_queue({'dgx': {'waiting': [{'unit': 'aei1-r0016-sft.service', 'budget_gb': 30}], 'headroom_gb': 5}})
+    assert [(i['title'], i['source'], i['blocked_on']) for i in q] == [
+        ('Round r16: SFT', 'ledger-waiting', 'memory ledger: needs 30 GB, headroom 5 GB')]
+
+
+def test_retired_readers_are_gone():
+    """The annotations' investigations and queue, the bench queue and the teacher-gen fallback are removed (dead producers)."""
+    for name in ('teacher_summary', 'active_teacher_pool', 'bench_queue'):
+        assert not hasattr(export, name)

@@ -28,12 +28,16 @@ measurement), **Machines** (DGX, Pop, Colab A100, Colab L4 with activity, memory
 Teacher details, Training data, Open items and fallow, Investigations, Inbox, Events). Wide screens show every tab in the top bar.
 
 `snap.ei` (built by `ei_export.py`, all readers incremental or cached by mtime and size; state in the exporter's `state.json` under `ei`, rebuilt when `STATE_VERSION` changes):
-`driver`, `phase`, `lineage`, `reference`, `rounds` (stamps, size, SFT series, mix, frontier, health), `collection` (per policy, hourly episodes by machine, live collectors, fill),
-`held` (results with series and task-level standard errors, same-series pairs, the gate, measurements in progress from Pop's held log, the held-v4 queue), `colab` (balance and rate
-from `colab usage` every 10 min in a background thread, balance history, spend per session from `cycle-cost.json`), `watchdog` (active alerts and GPU idle from the ops watchdog's state), `hist`
-(10-minute machine samples, 24 h), `disks` (fall rate), `tuning`, `registry`, `open_items`, `decisions`, `events` (curated from `drive.log`). Derived alerts (driver down, SFT log lag, credits runway,
-disk fall, held gate retrying, stalled collector or teacher) join `snap.alerts`. The driver is discovered as the newest `ops/ei/*/drive.log`. Held pass rates are only comparable inside one measurement series;
-the page and the exporter never pair across series.
+`driver` (`expected`: the run is in the watchdog roster `ops/watchdog.json`), `phase` (`waiting_on`, `supply`: the driver's supply wait), `lineage`, `reference` (the driver's moving reference), `anchor` (the run's start policy, fixed),
+`rounds` (stamps, size, SFT series, mix, frontier, health), `collection` (per policy, hourly episodes by machine, live collectors, fill),
+`held` (results with set, series, `rate` = successes over counted samples as `held_eval` computes it (an unscored sample that was not lost to infrastructure fails), `rate_all` over every planned sample, `unscored`, `infra`,
+task-level standard errors and `vs_anchor`; consecutive pairs per held set (across scoring series, as `held_eval compare` pairs them, `same_series` says which); the gate (candidate vs the driver's reference and vs the anchor, the driver's verdict);
+`verdicts`; `no_gain` (consecutive neutral rounds, the best policy against the anchor); measurements in progress; the held-v4 queue), `teacher` (per teacher: `status` configured/removed from `ops/ei/teachers.json`, `paid`, `since_launch`),
+`colab` (balance and rate from `colab usage` every 10 min in a background thread, balance history, spend per session from `cycle-cost.json`, `state` stopped/configured from the roster), `watchdog` (active alerts, `suppressed`
+alerts about resources the roster no longer expects, GPU idle), `hist` (10-minute machine samples, 24 h), `disks` (fall rate), `tuning`, `registry`, `open_items` (the newest `HANDOFF_*.md` next steps first, then
+`OPEN_ITEMS.md` in flight, then qualified free teachers), `decisions` (the 8 newest DECISIONS entries with their cause/verdict and next-step paragraphs), `events` (curated from `drive.log`). Derived alerts (driver down while
+expected, SFT log lag, credits runway, disk fall, held gate retrying, no policy beats the anchor after neutral rounds, stalled collector or teacher) join `snap.alerts`. The driver is discovered as the newest `ops/ei/*/drive.log`.
+Held results of different held sets, sampling laws or engine settings never pair.
 
 ## How data reaches the page
 
@@ -43,7 +47,7 @@ the page and the exporter never pair across series.
   every 30 s and GB-scale training data would otherwise grow the signed history without bound.
 - **Retained facts** are small and human-made: edits and questions (declared commands), the participant's application records
   and the agent's answers. The page reads them with the `edits` and `inbox` queries (live views).
-- The page reads only the snapshot (and the `ops.metrics` stream while the Investigations tab is open, for its old GRPO charts); machine history, events, rounds and held results travel inside the snapshot.
+- The page reads only the snapshot (and the `ops.metrics` stream: GRPO run steps, e.g. grpo-v12-1); machine history, events, rounds and held results travel inside the snapshot. The snapshot has no `investigations` since 2026-11-27 (v4).
 - Query names: `ops.tick` (exporter file signatures, plus `listener`: the agent's heartbeat) `|snapshot|metrics|machines|events`; `data.catalog|dataset|items|item|tokens|chain|task_refs|search|registry`.
   `edits.*` and `inbox.*` are native-only.
 

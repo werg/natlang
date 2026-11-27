@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Live ops dashboard exporter: every 30 s write the current snapshot (latest.json) and append metric, machine and event JSONL.
 
+GRPO runs (train.jsonl under ops/, e.g. grpo-v12-1 since 2026-11-27) feed metrics.jsonl and `runs`; the expert-iteration
+section (`ei`, ei_export.py) carries rounds, SFT, held and teachers. Removed 2026-11-27 (producers dead): the annotations'
+investigations and queue (grpo-v2-era, last edited 2026-11-24), the bench-arm queue (grpo-v2/hunt queue scripts) and the
+teacher-gen-* campaign fallback (last campaign 2026-11-21; teachers come from the ei section).
+
 Contract: <data_dir>/ops/dashboard/CONTRACT.md (data_dir, floors and the Pop ssh host are in config.json). Stdlib only, Python 3.10+.
 The same file runs on Pop (`ssh POP python3 - --host-json CFG < export.py`) to collect that host's metrics,
 memory ledger and systemd units in one ssh call.
@@ -34,10 +39,10 @@ SNAP_LIMIT = 180000    # latest.json: one retained stream record, at most 192 Ki
 KEEP_S = 6 * 3600      # finished/failed units stay listed this long
 WINDOW_S = CONFIG.get('runs_window_days', 3) * 86400     # runs untouched for longer are not exported
 MACHINE_EVERY_S = CONFIG.get('machine_history_s', 120) - 5
-TEACHER_POOL = os.path.join(DATA, CONFIG['teacher_pool']) if CONFIG.get('teacher_pool') else None
 FLOORS = CONFIG.get('floors_gb', {})
-DEFAULT_PATTERNS = ['hunt-*', 'grpo-*', 'popsoak-*', 'front-*', 'checkmain-*', 'test-*', 'trlref-*', 'perf-*', 'exp*',
-                    'held-*', 'opsdash*', 'ops-dashboard-*', 'probe-*', 'bench-*', 'sft-*', 'natlang-gb10-compactor*']
+DEFAULT_PATTERNS = ['grpo-*', 'hunt-*', 'aei1-*', 'popheld-*', 'held-*', 'sft-*', 'cmp-*', 'colab-g4*', 'vibe-student-*', 'vsingest-*',
+                    'natlang-storage-sweep*', 'natlang-drive-tier*', 'natlang-teacher-free-models*', 'opsdash*', 'ops-dashboard-*', 'ops-peer-*',
+                    'check-main*', 'checkmain-*', 'test-*', 'probe-*', 'bench-*', 'natlang-gb10-compactor*']
 SKIP_DIRS = {'actor', 'groups', 'held', 'rollouts', 'decisions', 'code', 'workers', '__pycache__', 'dashboard'}
 
 ALWAYS = ['reward_mean', 'kl_mean', 'grad_norm', 'grad_norm_vs_median', 'lr', 'lr_data_scale', 'spread_fraction', 'groups',
@@ -384,89 +389,6 @@ def runs_summary(state, active_runs, now):
     return rows
 
 
-# ---------- teacher generation ----------
-
-_JSONL_CACHE = {}
-
-
-def read_jsonl_cached(path):
-    """Rows of a JSONL file that only grows; re-read when its size or mtime changes."""
-    try:
-        sig = (os.path.getsize(path), os.path.getmtime(path))
-    except OSError:
-        return []
-    hit = _JSONL_CACHE.get(path)
-    if not hit or hit[0] != sig:
-        rows = []
-        for line in open(path, errors='replace'):
-            try:
-                rows.append(json.loads(line))
-            except ValueError:
-                pass
-        hit = _JSONL_CACHE[path] = (sig, rows)
-    return hit[1]
-
-
-def active_teacher_pool():
-    """The teacher-generation campaign written most recently (ops/teacher-gen-*/<pool>/manifest.jsonl): discovered, not configured."""
-    cands = []
-    for p in glob.glob(os.path.join(DATA, 'ops', 'teacher-gen-*', '*', 'manifest.jsonl')):
-        try:
-            cands.append((os.path.getmtime(p), os.path.dirname(p)))
-        except OSError:
-            pass
-    return max(cands)[1] if cands else None
-
-
-def teacher_summary(pool, state, now):
-    """Teacher-generation progress: per teacher outcome counts, deferred (retry) rows, family coverage, a success history."""
-    if not pool:
-        return None
-    rows = read_jsonl_cached(pool + '/manifest.jsonl')
-    deferred = read_jsonl_cached(pool + '/deferred.jsonl')
-    pool_info = read_json(pool + '/pool.json', {})
-    per, fam = {}, {}
-    for r in rows:
-        t = per.setdefault(r['teacher']['model_id'], {'id': r['teacher']['model_id'], 'tasks': 0, 'episodes': 0, 'success': 0, 'outcomes': {},
-                                                        'seconds': 0.0, 'tokens': 0, 'deferred': {}})
-        t['tasks'] += 1
-        t['seconds'] += r.get('seconds') or 0
-        won = False
-        for e in r.get('episodes', []):
-            t['episodes'] += 1
-            t['outcomes'][e['outcome']] = t['outcomes'].get(e['outcome'], 0) + 1
-            t['tokens'] += e.get('completion_tokens') or 0
-            won |= e['outcome'] == 'task_success'
-        t['success'] += sum(e['outcome'] == 'task_success' for e in r.get('episodes', []))
-        f = fam.setdefault(r.get('family') or '?', {'family': r.get('family') or '?', 'tasks': 0, 'success': 0})
-        f['tasks'] += 1
-        f['success'] += won
-    for r in deferred:
-        t = per.setdefault(r['teacher']['model_id'], {'id': r['teacher']['model_id'], 'tasks': 0, 'episodes': 0, 'success': 0, 'outcomes': {},
-                                                        'seconds': 0.0, 'tokens': 0, 'deferred': {}})
-        o = (r.get('episodes') or [{}])[0].get('outcome', 'unknown')
-        t['deferred'][o] = t['deferred'].get(o, 0) + 1
-    for t in per.values():
-        t['success_rate'] = round(t['success'] / t['episodes'], 3) if t['episodes'] else None
-        t['seconds_mean'] = round(t['seconds'] / t['tasks'], 1) if t['tasks'] else None
-        t['tokens_mean'] = round(t['tokens'] / t['episodes']) if t['episodes'] else None
-        del t['seconds'], t['tokens']
-    total_ok = sum(t['success'] for t in per.values())
-    done = len({r['task_id'] for r in rows})
-    hist = state.setdefault('teacher_hist', [])
-    if not hist or hist[-1][1:] != [done, total_ok]:
-        hist.append([ms(now), done, total_ok])
-        del hist[:-300]
-    hour = [h for h in hist if h[0] >= ms(now) - 3600_000]
-    per_hour = (hist[-1][2] - (hour[0][2] if len(hour) > 1 else hist[-1][2])) if hist else 0
-    mt = max([os.path.getmtime(f) for f in (pool + '/manifest.jsonl', pool + '/deferred.jsonl') if os.path.exists(f)] or [0])
-    return {'pool': os.path.basename(pool), 'pool_rel': os.path.relpath(pool, OPS), 'eligible': pool_info.get('eligible'), 'tasks_done': done, 'success': total_ok,
-            'deferred': len(deferred), 'success_last_hour': per_hour, 'last_activity_ts': ms(mt),
-            'teachers': sorted(per.values(), key=lambda t: -t['success']),
-            'families': sorted(fam.values(), key=lambda f: (-f['success'], -f['tasks']))[:12], 'families_total': len(fam),
-            'families_with_success': sum(1 for f in fam.values() if f['success']), 'history': hist[-120:]}
-
-
 # ---------- fallow register ----------
 
 def split_row(line):
@@ -500,7 +422,7 @@ def parse_fallow(text):
     return rows
 
 
-# ---------- processes, queue, investigations, alerts ----------
+# ---------- processes, ledger queue, alerts ----------
 
 def annotation_for(ann, name):
     short = name[:-8] if name.endswith('.service') else name
@@ -540,6 +462,21 @@ def read_tail(path, n=8192):
         return []
 
 
+def held_log(cmd, unit, now):
+    """The progress log of a running held measurement: an aei1 measurement directory named by a
+    ``popheld-policy-<sha12>-<ts>`` / ``popheld-hv4-<sha12>-<ts>`` unit (its pop-held.log), else the newest GRPO run's
+    held-pop.log written in the last 15 min."""
+    m = re.match(r'popheld-(policy|hv4)-([0-9a-f]{12})', unit)
+    if m:
+        sub = 'held' if m.group(1) == 'policy' else 'held-v4'
+        logs = glob.glob(f'{OPS}/ei/*/{sub}/{m.group(1)}-{m.group(2)}*/pop-held.log')
+        return max(logs, key=os.path.getmtime) if logs else None
+    if unit.startswith('popheld-'):
+        logs = sorted(glob.glob(OPS + '/*/*/held-pop.log'), key=os.path.getmtime)
+        return logs[-1] if logs and now - os.path.getmtime(logs[-1]) < 900 else None
+    return None
+
+
 def progress_of(rec, state, lines, now):
     """(progress, eta_s) for a unit record: grpo --work step count or a held-eval measure line."""
     cmd = rec['cmd']
@@ -559,9 +496,9 @@ def progress_of(rec, state, lines, now):
     if kind_of(rec['unit'], cmd) == 'held-eval':      # progress line in the unit journal, else WORK/held-pop.log (out = WORK/held/step-N)
         out = last_arg(cmd, '--out')
         hp = held_progress(lines) or (held_progress(read_tail(os.path.join(out, '..', '..', 'held-pop.log'))) if out else None)
-        if not hp and rec['unit'].startswith('popheld-') and rec['state'] == 'running':    # Pop evals log into the run's held-pop.log
-            logs = sorted(glob.glob(OPS + '/*/*/held-pop.log'), key=os.path.getmtime)
-            hp = held_progress(read_tail(logs[-1])) if logs and now - os.path.getmtime(logs[-1]) < 900 else None
+        if not hp and rec['state'] == 'running':
+            log = held_log(cmd, rec['unit'], now)
+            hp = held_progress(read_tail(log)) if log else None
     if hp:
         done, of, minutes = hp
         eta = (of - done) * minutes * 60 / done if done and minutes and rec['state'] == 'running' else None
@@ -662,46 +599,20 @@ def process_item(rec, state, lines, now, ann):
             'last_update_ts': ms(state.get('runs', {}).get(run or '', {}).get('mtime') or now)}
 
 
-def bench_queue(hunt, active_units):
-    """`run ARM ...` / `replay.sh ARM ...` lines of a live queue*.sh whose arm has not started."""
-    ps = sh(['ps', '-eo', 'args', '--no-headers'])
-    items = []
-    for script in sorted(glob.glob(hunt + '/queue*.sh')):
-        if script not in ps:
-            continue        # script no longer running: its remaining lines will never start
-        for line in open(script):
-            m = re.match(r'\s*(?:run|\S*replay\.sh)\s+(\w+)\s*(.*)', line)
-            if not m or m.group(1) in ('arm',):
-                continue
-            arm = m.group(1)
-            tj = f'{hunt}/{arm}/train.jsonl'
-            if (os.path.exists(tj) and os.path.getsize(tj) > 0) or f'hunt-{arm}.service' in active_units:
-                continue
-            items.append({'title': f'Bench arm {arm}', 'description': clip(f'{os.path.basename(script)}: {m.group(2)}', 400),
-                          'rationale': '', 'machine': 'dgx', 'blocked_on': 'previous arm in the queue', 'eta_s': None,
-                          'source': 'bench-queue'})
-    return items
-
-
-def build_queue(ann, ledgers, hunt, active_units):
+def build_queue(ledgers):
+    """Units waiting in a memory ledger (the queue head blocks smaller units behind it)."""
     items = []
     for machine, ledger in ledgers.items():
         for w in (ledger or {}).get('waiting', []):
             w = w if isinstance(w, dict) else {'unit': str(w)}
             name = w.get('unit') or w.get('name') or '?'
-            a = annotation_for(ann, name)
+            role = unit_role(name)
             need = w.get('budget_gb')
-            items.append({'title': clip(a.get('title') or name, 100), 'description': clip(a.get('description') or summarize(w.get('command', '')), 400),
-                          'rationale': clip(a.get('rationale', ''), 400), 'machine': machine,
+            items.append({'title': clip(role['title'] if role['role'] != 'other' else name, 100), 'unit': name,
+                          'description': clip(summarize(w.get('command', '')), 400), 'rationale': '', 'machine': machine,
                           'blocked_on': f'memory ledger: needs {need} GB, headroom {ledger.get("headroom_gb")} GB' if need else 'memory ledger',
                           'eta_s': None, 'source': 'ledger-waiting'})
-    for q in ann.get('queue', []):
-        if q.get('done_when_exists') and os.path.exists(q['done_when_exists']):
-            continue
-        items.append({'title': clip(q.get('title'), 100), 'description': clip(q.get('description'), 400),
-                      'rationale': clip(q.get('rationale'), 400), 'machine': q.get('machine'),
-                      'blocked_on': clip(q.get('blocked_on'), 200), 'eta_s': None, 'source': 'annotations'})
-    return items + bench_queue(hunt, active_units)
+    return items
 
 
 def build_alerts(machines, ledgers, unit_alerts, errors):
@@ -753,7 +664,7 @@ def machine_now(machine, d, now):
 def snapshot_record(snap):
     """latest.json line: shrink the bulkiest parts until the record fits one retained stream record."""
     rec = {'ts': snap['ts'], 'type': 'snapshot', 'data': snap}
-    steps = [lambda: snap.update(teachers={**snap['teachers'], 'history': snap['teachers']['history'][-40:]}) if snap.get('teachers') else None,
+    steps = [lambda: snap.update(teachers={**snap['teachers'], 'history': (snap['teachers'].get('history') or [])[-40:]}) if snap.get('teachers') else None,
              lambda: snap.update(fallow=[{k: v for k, v in r.items() if k != 'fields'} for r in snap['fallow']]),
              lambda: snap.update(processes=[p for p in snap['processes'] if p['state'] == 'running'] + [p for p in snap['processes'] if p['state'] != 'running'][:15]),
              lambda: snap.update(processes=[{**p, 'description': clip(p['description'], 100), 'rationale': ''} for p in snap['processes']]),
@@ -805,9 +716,8 @@ def cycle(out, ops, ann_path, state, once=False, use_pop=True):
     order = {'running': 0, 'failed': 1, 'finished': 2}
     items.sort(key=lambda x: (order[x['state']], -(x['started_ts'] or 0)))
     ledgers = {m: d.get('ledger') for m, d in hosts.items()}
-    active = {i['unit'] for i in items if i['state'] == 'running'}
-    queue = build_queue(ann, ledgers, ops + '/grpo-v2/hunt', active)
-    invs = [{**i, 'updated_ts': ms(os.path.getmtime(ann_path))} for i in ann.get('investigations', [])] if os.path.exists(ann_path) else []
+    queue = build_queue(ledgers)
+    state.pop('teacher_hist', None)     # state of the removed teacher-gen fallback
     machines_now = {m: machine_now(m, d, now) for m, d in hosts.items()}
     ei = None
     mod = ei_module()
@@ -824,24 +734,14 @@ def cycle(out, ops, ann_path, state, once=False, use_pop=True):
         fallow = parse_fallow(open(FALLOW).read())[:80]
     except OSError:
         fallow = []
-    try:
-        teachers = (ei or {}).get('teacher') or teacher_summary(TEACHER_POOL or active_teacher_pool(), state, now)
-    except Exception as e:
-        teachers = None
-        errors.append(f'exporter: teacher summary failed: {clip(e, 120)}')
-    for it in items:       # teacher-generation units report the pool's progress; ETA from the exporter's own history
-        if teachers and it['unit'].startswith('tgen-') and it['state'] == 'running' and teachers.get('eligible'):
-            it['progress'] = {'done': teachers['tasks_done'], 'total': teachers['eligible'], 'unit': 'tasks'}
-            old = [h for h in teachers['history'] if h[0] >= ms(now) - 6 * 3600_000]
-            if len(old) > 1 and old[-1][1] > old[0][1]:
-                rate = (old[-1][1] - old[0][1]) / ((old[-1][0] - old[0][0]) / 1000)
-                it['eta_s'] = round((teachers['eligible'] - teachers['tasks_done']) / rate)
+    teachers = (ei or {}).get('teacher')
     runs = runs_summary(state, {i['run'] for i in items if i['state'] == 'running' and i['run']}, now)
     runs = [r for r in runs if r['held'] or r['active'] or r['kind'] != 'bench'][:16]       # retired GRPO runs: only what has a held result
     if ei:
         ei = {k: v for k, v in ei.items() if k != 'teacher'}       # travels once, as snap['teachers']
-    snap = {'v': 3, 'ts': ms(now), 'machines': machines_now, 'processes': items[:60],
-            'queue': queue, 'investigations': invs, 'fallow': fallow, 'alerts': alerts, 'teachers': teachers, 'ei': ei, 'runs': runs}
+    # v4: no `investigations`; `queue` is the ledger's waiting units only; held rates in ei.held recomputed from samples
+    snap = {'v': 4, 'ts': ms(now), 'machines': machines_now, 'processes': items[:60],
+            'queue': queue, 'fallow': fallow, 'alerts': alerts, 'teachers': teachers, 'ei': ei, 'runs': runs}
     mach = []
     for m, d in hosts.items():
         if once or now - state.setdefault('machine_ts', {}).get(m, 0) >= MACHINE_EVERY_S:

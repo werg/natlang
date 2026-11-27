@@ -132,6 +132,18 @@ def test_inbox_sync(tmp_path):
     assert line['answers'][0]['text'] == 'yes'
 
 
+
+def test_inbox_sync_accepts_chat_style_messages(tmp_path):
+    """The same inbox.jsonl from chat-style agent messages: no inReplyTo = an ask (data carries kind and subject)."""
+    old = {'asks': [{'operationId': 'a1', 'kind': 'ask', 'subject': {'kind': 'unit', 'id': 'u'}, 'text': 'q', 'author': 'b'}],
+           'answers': [{'ask': 'a1', 'text': 'yes', 'author': 'n', 'operationId': 'x'}]}
+    data_edits.inbox_sync(old)
+    want = open(data_edits.INBOX).read()
+    chat = {'messages': [{'author': 'b', 'operationId': 'a1', 'text': 'q', 'data': {'kind': 'ask', 'subject': {'kind': 'unit', 'id': 'u'}}},
+                         {'author': 'n', 'operationId': 'x', 'text': 'yes', 'inReplyTo': 'a1'}]}
+    assert data_edits.inbox_sync(chat) == {'asks': 1, 'changed': False} and open(data_edits.INBOX).read() == want
+
+
 def test_code_constants_parse(tmp_path, monkeypatch):
     src = tmp_path / 'grpo.py'
     src.write_text("POOLS = [resolve_str('data_hdd', 'a', 'cases.jsonl'),\n  resolve_str('data_nvme', 'b', 'cases.jsonl')]\n"
@@ -148,7 +160,8 @@ def test_live_grpo_constants_resolve():
     """The catalog reads the trainer's real default pools (grpo.py POOLS, or its registry role): each resolves to a path."""
     data_catalog._CODE.clear()
     c = data_catalog.code_constants()
-    assert len(c['POOLS']['value']) >= 2 and all(p.endswith('cases.jsonl') for p in c['POOLS']['value'])
+    # registry pools are JSONL task files (cases.jsonl, and since the M2 migration also tasks.jsonl)
+    assert len(c['POOLS']['value']) >= 2 and all(p.endswith('.jsonl') for p in c['POOLS']['value'])
 
 
 def test_tick_carries_the_agents_inbox_listener_heartbeat(tmp_path, monkeypatch):

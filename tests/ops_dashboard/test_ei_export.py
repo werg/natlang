@@ -33,6 +33,7 @@ def test_unit_roles():
     assert ei.unit_role('aei1-r0005-data.service')['title'] == 'Round r5: data and build'
     assert ei.unit_role('popheld-policy-e15b-17955.service')['role'] == 'held'
     assert ei.unit_role('progdev-ext_x-base-1.service')['role'] == 'tuning'
+    assert ei.unit_role('grpo-v12-1.service') == {'role': 'grpo', 'where': 'dgx', 'title': 'GRPO run (grpo-v12)'}
     assert ei.unit_role('something-else')['role'] == 'other'
 
 
@@ -60,6 +61,9 @@ def test_drive_log_events_collapse_repeats_and_stay_incremental(tmp_path):
     lines(log, [{'time': '2026-11-24T07:00:00', 'stage': 'async', 'held_failed': SHA['b'], 'error': 'other failure'}])
     ei.process_drive_log(st, str(log), ei.Lineage(phase()), time.time())
     assert st['gate_fail']['count'] == 1 and len(st['events']) == 5               # only the new line was read
+    lines(log, [{'time': '2026-11-24T08:00:00', 'stage': 'async', 'verdict': 'neutral', 'policy': SHA['b'], 'action': 'adopt'}])
+    ei.process_drive_log(st, str(log), ei.Lineage(phase()), time.time())
+    assert 'gate_fail' not in st and st['events'][-1]['text'] == 'Held verdict for v1: neutral, adopt'     # a verdict ends the failure streak
 
 
 def test_sft_tail_eta_and_downsampling(tmp_path):
@@ -107,23 +111,95 @@ def held_result(path, sha, series, rates, finished):
                              'tasks': len(rates), 'samples_per_task': 2, 'finished_at': finished, 'outcome_counts': {'task_success': ok}, 'engine': {'dtype': 'bfloat16'}, 'samples': samples})])
 
 
-def test_held_gate_pairs_only_one_series(tmp_path, monkeypatch):
+def test_held_gate_pairs_against_reference_and_fixed_anchor(tmp_path, monkeypatch):
+    """held_eval.compare pairs across scoring series (flagged same_series False) and prefers the reference's measurement
+    on the candidate's own series; every policy also carries its delta against the fixed anchor (the start policy)."""
     run = tmp_path / 'ei' / 'aei1'
     monkeypatch.setattr(ei, 'EI_ROOT', str(tmp_path / 'ei'))
     base = [1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1]
-    held_result(run / 'held' / 'policy-bbbbbbbbbbbb' / 'result.json', SHA['b'], 'S2', [min(2, r + 1) for r in base], 2000.0)
+    held_result(run / 'held' / 'policy-bbbbbbbbbbbb' / 'result.json', SHA['b'], 'S2', [min(2, r + 1) if i % 3 else r for i, r in enumerate(base)], 2000.0)
     held_result(tmp_path / 'ei' / 'sft-v9' / 'held' / 'candidate' / 'result.json', SHA['a'], 'S1', base, 1000.0)
     lin = ei.Lineage(phase())
     log = {'gate_fail': {'error': 'x', 'count': 4, 'first_ts': 1.0, 'last_ts': 2.0}}
-    out = ei.held_section({}, str(run), lin, log, phase(), time.time())
+    out = ei.held_section({}, str(run), lin, log, {**phase(), 'consecutive_neutral': 3}, time.time())
     assert [r['label'] for r in out['results']] == ['v0 (sft-v9)', 'v1']
     g = out['gate']
-    assert g['candidate'] == 'v1' and g['reference_same_series'] is False and g['pair'] is None and g['failing']['count'] == 4
-    # the reference re-measured on the candidate's series pairs them
+    assert g['candidate'] == 'v1' and g['anchor'] == 'v0 (sft-v9)' and g['reference_same_series'] is False and g['failing']['count'] == 4
+    assert g['pair']['same_series'] is False and g['pair']['delta_pts'] > 0 and g['neutral'] == 3
+    v1 = out['results'][1]
+    assert v1['vs_anchor']['anchor_series'] == 'S1' and v1['vs_anchor']['se_pts'] > 0 and out['results'][0]['vs_anchor'] is None
+    assert out['no_gain']['best']['label'] == 'v1' and out['no_gain']['consecutive_neutral'] == 3
+    # the reference re-measured on the candidate's series is the one paired
     held_result(run / 'held' / 'policy-aaaaaaaaaaaa' / 'result.json', SHA['a'], 'S2', base, 3000.0)
     out = ei.held_section({}, str(run), lin, log, phase(), time.time())
     pair = out['gate']['pair']
-    assert out['gate']['reference_same_series'] is True and pair['tasks'] == 12 and pair['delta_pts'] > 0 and pair['up'] > pair['down']
+    assert out['gate']['reference_same_series'] is True and pair['same_series'] and pair['tasks'] == 12 and pair['up'] > pair['down']
+    assert next(r for r in out['results'] if r['label'] == 'v1')['vs_anchor']['anchor_series'] == 'S2'
+    # a partial measurement (incomplete) is listed but never paired
+    held_result(run / 'held' / 'policy-cccccccccccc' / 'result.json', SHA['c'], 'S2', base[:4], 4000.0)
+    rec = json.loads((run / 'held' / 'policy-cccccccccccc' / 'result.json').read_text())
+    (run / 'held' / 'policy-cccccccccccc' / 'result.json').write_text(json.dumps({**rec, 'complete': False}))
+    out = ei.held_section({}, str(run), lin, log, phase(), time.time())
+    v2 = next(r for r in out['results'] if r['label'] == 'v2')
+    assert v2['complete'] is False and v2['vs_anchor'] is None and all(p['b'] != 'v2' for p in out['pairs'])
+
+
+def test_held_rate_counts_unscored_samples_as_failures(tmp_path):
+    """8e634a0f: the stored success_rate (293/460) dropped 52 unscored samples; held_eval counts the unresolved ones as
+    failures and leaves only infrastructure losses out (293/494); rate_all divides by every planned sample (293/512)."""
+    samples = []
+    for i in range(256):
+        for k in range(2):
+            n = 2 * i + k
+            if n < 18:
+                samples.append({'task_id': f't{i}', 'sample': k, 'ran': True, 'outcome': 'infrastructure_error', 'reward': None})
+            elif n < 52:
+                samples.append({'task_id': f't{i}', 'sample': k, 'ran': True, 'outcome': 'unresolved', 'reward': None})
+            else:
+                ok = n < 52 + 293
+                samples.append({'task_id': f't{i}', 'sample': k, 'ran': True, 'outcome': 'task_success' if ok else 'semantic_mismatch', 'reward': 1.0 if ok else 0.0})
+    p = tmp_path / 'result.json'
+    p.write_text(json.dumps({'policy_id': 'x', 'series': {'key': 'S'}, 'success_rate': 0.637, 'successes': 293, 'scored': 460, 'tasks': 256,
+                             'samples_per_task': 2, 'complete': True, 'manifest_sha256': '4547106069df', 'samples': samples}))
+    r = ei.held_record(str(p))
+    assert (r['successes'], r['counted'], r['scored'], r['unscored'], r['infra'], r['planned']) == (293, 494, 460, 34, 18, 512)
+    assert r['rate'] == round(293 / 494, 4) and r['rate_all'] == round(293 / 512, 4) and r['stored_rate'] == 0.637 and r['set'] == 'held-v3'
+
+
+def test_pairing_refuses_other_held_sets_and_engines(tmp_path):
+    a = {'set': 'held-v3', 'law': 'L', 'engine_key': 'E'}
+    assert ei.pairable(a, {**a}) is None and ei.pairable(a, {**a, 'engine_key': None}) is None
+    assert ei.pairable(a, {**a, 'set': 'held-v4'}) == 'different held sets'
+    assert ei.pairable(a, {**a, 'law': 'M'}) and ei.pairable(a, {**a, 'engine_key': 'F'}) == 'different engine settings'
+    assert ei.held_set('/x/aei1/held-v4/hv4-abc/result.json', '4547106069') == 'held-v4'
+
+
+def test_no_gain_alert():
+    now = time.time()
+    held = {'no_gain': {'consecutive_neutral': 3, 'anchor': 'v0 (sft-v9)', 'set': 'held-v3', 'beats_anchor': False,
+                        'best': {'label': 'v8', 'rate': 0.61, 'vs_anchor': {'delta_pts': 3.5, 'ci_pts': [-0.8, 7.8], 'tasks': 256}}}}
+    alerts = ei.derived_alerts({'driver': {'running': True}, 'rounds': [], 'held': held}, {}, {}, now)
+    assert [a['id'] for a in alerts] == ['ei:no-gain'] and '3 consecutive neutral rounds' in alerts[0]['text'] and 'v8' in alerts[0]['text']
+    held['no_gain']['beats_anchor'] = True
+    assert ei.derived_alerts({'driver': {'running': True}, 'rounds': [], 'held': held}, {}, {}, now) == []
+
+
+def test_supply_wait_is_what_the_driver_waits_on(tmp_path):
+    log = tmp_path / 'drive.log'
+    lines(log, [{'time': '2026-11-27T08:42:08', 'stage': 'async', 'round': 'r0016', 'decision': 'wait', 'minimum': 5000000, 'waited_hours': 11.55,
+                 'supply': {'new_weighted_target_tokens': 2449476, 'weighted_target_tokens': 4073562, 'parts': {'teacher': 1}}},
+                {'time': '2026-11-27T08:42:08', 'stage': 'async', 'round': 'r0016', 'supply_next_build_in_minutes': 45},
+                {'time': '2026-11-27T08:42:09', 'stage': 'async', 'round': 'r0016', 'supply_next_build_in_minutes': 45}])
+    st = {}
+    ei.process_drive_log(st, str(log), ei.Lineage(phase()), time.time())
+    w = ei.waiting_on(st, str(tmp_path), 'r0016', True, time.time())
+    assert w['waiting_on'].startswith('r0016 waits for training data: 2.45 M of 5.0 M new weighted target tokens (waited 11.6 h); next build check')
+    assert w['supply']['new_tokens'] == 2449476 and w['supply']['next_ts']
+    assert [e['kind'] for e in st['events']] == ['round']
+    assert ei.waiting_on(st, str(tmp_path), 'r0016', False, time.time())['waiting_on'] == 'the round driver is not running'
+    (tmp_path / 'r0016' / 'sft').mkdir(parents=True)
+    (tmp_path / 'r0016' / 'sft' / 'launch.json').write_text('{}')
+    assert ei.waiting_on(st, str(tmp_path), 'r0016', True, time.time())['waiting_on'] is None
 
 
 def test_held_record_leaves_infrastructure_losses_out_of_both_sides(tmp_path):
@@ -171,6 +247,25 @@ def test_teacher_campaign_summary(tmp_path):
     assert next(t for t in out['teachers'] if t['id'] == 'm3')['deferred'] == {'unresolved': 1}
 
 
+def test_teacher_section_marks_removed_and_paid_teachers(tmp_path, monkeypatch):
+    """teachers.json is what runs: Luna/Sol rows stay in a standing campaign's history but are 'removed'; Vertex is paid;
+    since_launch counts only rows after the launch's scored_at_launch."""
+    root = tmp_path / 'ei'
+    monkeypatch.setattr(ei, 'EI_ROOT', str(root))
+    (root).mkdir()
+    (root / 'teachers.json').write_text(json.dumps([{'model_id': 'nem', 'endpoint': 'https://integrate.api.nvidia.com/v1'},
+                                                     {'model_id': 'google/gemini-4-argon', 'endpoint': 'https://aiplatform.googleapis.com/v1/x', 'api_key_env': 'VERTEX_ACCESS_TOKEN'}]))
+    pool = root / 'aei1' / 'teacher-r0016'
+    mk = lambda model, o: {'task_id': model + o, 'family': 'f', 'teacher': {'model_id': model}, 'episodes': [{'outcome': o}]}
+    lines(pool / 'manifest.jsonl', [mk('gpt-6-luna', 'task_success'), mk('gpt-6-luna', 'semantic_mismatch'), mk('nem', 'task_success')])
+    (pool / 'driver-launch.json').write_text(json.dumps({'at': 1.0, 'tasks': 44, 'scored_at_launch': 2}))
+    out = ei.teacher_section({}, str(root / 'aei1'), time.time())
+    by = {t['id']: t for t in out['teachers']}
+    assert by['gpt-6-luna']['status'] == 'removed' and by['gpt-6-luna']['since_launch'] == {'episodes': 0, 'success': 0}
+    assert by['nem']['status'] == 'configured' and by['nem']['since_launch'] == {'episodes': 1, 'success': 1}
+    assert by['google/gemini-4-argon']['paid'] and by['google/gemini-4-argon']['episodes'] == 0
+
+
 def test_build_snapshot_and_alerts(tmp_path, monkeypatch):
     root = tmp_path / 'ops' / 'ei'
     run = root / 'aei1'
@@ -190,6 +285,11 @@ def test_build_snapshot_and_alerts(tmp_path, monkeypatch):
     assert snap['errors'] == [] and snap['driver']['running'] is False and snap['events'][0]['text'] == 'Published v1 from r0001'
     ids = {a['id']: a['level'] for a in ei.derived_alerts(snap, {}, {}, time.time())}
     assert ids['ei:driver'] == 'crit' and ids['ei:credits'] == 'crit'
+    # the roster names only another experiment: aei1 is paused and its stopped driver raises nothing
+    (tmp_path / 'ops' / 'watchdog.json').write_text(json.dumps({'experiments': [{'name': 'grpo-v12-1'}]}))
+    snap = ei.build({}, {}, [], time.time())
+    assert snap['driver']['expected'] is False and 'paused' in snap['phase']['waiting_on']
+    assert 'ei:driver' not in {a['id'] for a in ei.derived_alerts(snap, {}, {}, time.time())}
 
 
 def test_disk_fall_alert_uses_the_exporters_own_history():
@@ -203,6 +303,7 @@ def test_watchdog_alerts_are_listed_once_per_condition(tmp_path, monkeypatch):
     now = time.time()
     monkeypatch.setattr(ei, 'OPS', str(tmp_path))
     monkeypatch.setattr(ei, 'WATCHDOG_STATE', str(tmp_path / 'wd.json'))
+    (tmp_path / 'watchdog.json').write_text(json.dumps({'colab': {'sessions': [{'session': 's', 'gpu': 'colab-g4a', 'tunnel_unit': 't'}]}}))
     (tmp_path / 'wd.json').write_text(json.dumps({'alerts': {'colab:tunnel:t': {'last': now, 'once': False}, 'units:storm:t': {'last': now, 'once': False},
                                                   'colab:balance': {'last': now, 'once': False}, 'health:x': {'last': now - 9 * 3600, 'once': True}},
                                                   'gpu': {'colab-g4a': {'util': 0, 'idle_s': 900.0, 'checked': now}}, 'last_run': now}))
@@ -211,6 +312,26 @@ def test_watchdog_alerts_are_listed_once_per_condition(tmp_path, monkeypatch):
     assert sorted(a['key'] for a in wd['alerts']) == ['colab:balance', 'colab:tunnel:t', 'units:storm:t'] and wd['gpu']['colab-g4a']['idle_s'] == 900.0
     ids = [a['id'] for a in ei.derived_alerts({'driver': {'running': True}, 'rounds': [], 'watchdog': wd}, {}, {}, now)]
     assert ids == ['wd:colab:tunnel:t']          # the storm of the same unit and the exporter's own credit alert replace the rest
+
+
+def test_watchdog_alerts_of_resources_out_of_the_roster_are_suppressed(tmp_path, monkeypatch):
+    """Colab stopped by the owner (roster: no sessions, GPUs disabled): its lingering session, tunnel, idle-burn and GPU
+    alerts and CPU stray assignments are listed as suppressed, not raised; a stray GPU assignment still alerts."""
+    now = time.time()
+    monkeypatch.setattr(ei, 'OPS', str(tmp_path))
+    monkeypatch.setattr(ei, 'WATCHDOG_STATE', str(tmp_path / 'wd.json'))
+    (tmp_path / 'watchdog.json').write_text(json.dumps({'gpus': {'colab-g4a': {'kind': 'colab', 'disabled': True}}, 'colab': {'sessions': []},
+                                                       '_doc_colab': 'stopped by owner'}))
+    keys = {'colab:missing:g4a': {}, 'colab:tunnel:colab-g4a-tunnel': {}, 'colab:burn_idle': {}, 'gpu:colab-g4a': {},
+            'colab:stray:m-cpu': {'hardware': 'CPU'}, 'colab:stray:m-gpu': {'hardware': 'A100'}, 'disk:/': {}}
+    (tmp_path / 'wd.json').write_text(json.dumps({'alerts': {k: {'last': now, 'once': False} for k in keys},
+                                                  'gpu': {'colab-g4a': {'util': None, 'idle_s': 2400.0, 'checked': now}}, 'last_run': now}))
+    lines(tmp_path / 'alerts.jsonl', [{'key': k, 'check': k.split(':')[0], 'severity': 'critical', 'message': k, 'ts': now, 'detail': d} for k, d in keys.items()])
+    wd = ei.watchdog_section(now)
+    assert sorted(a['key'] for a in wd['alerts']) == ['colab:stray:m-gpu', 'disk:/']
+    assert len(wd['suppressed']) == 5 and wd['colab_stopped'] and wd['gpu']['colab-g4a']['disabled']
+    ro = ei.roster()
+    assert ei.colab_stopped(ro) and ei.alert_unexpected('colab:missing:g4a', {}, {}) is None      # no roster: the watchdog defaults expect g4a
 
 
 def test_stalled_collector_and_teacher_alerts():
@@ -224,14 +345,29 @@ def test_stalled_collector_and_teacher_alerts():
     assert 'ei:teacher-stall' not in [a['id'] for a in ei.derived_alerts(snap, {}, {}, now)]
 
 
-def test_open_items_list_unqualified_free_teacher_candidates(tmp_path, monkeypatch):
+def test_open_items_lead_with_the_handoff_and_list_qualified_free_teachers(tmp_path, monkeypatch):
     monkeypatch.setattr(ei, 'OPS', str(tmp_path / 'ops'))
     monkeypatch.setattr(ei, 'REPO', str(tmp_path / 'repo'))
     lines(tmp_path / 'repo' / 'plans' / 'semantic-fp' / 'OPEN_ITEMS.md',
           ['## In flight', '| Item | Owner |', '|---|---|', '| fix x | agent |'])
+    lines(tmp_path / 'repo' / 'plans' / 'neuralese' / 'HANDOFF_20261127.md',
+          ['# Handoff', '## 8. Next steps, in order', '', '1. Read investigators A and B and build the fix', '   (GRPO on the frontier).',
+           '2. Ask the owner about `Vertex`.', '## 9. Other', '3. not a step'])
     lines(tmp_path / 'ops' / 'teacher-free-models' / 'candidates.jsonl',
-          [{'provider': 'openrouter', 'model': 'a/b:free', 'first_seen': '2026-11-25T08:00:00+0100', 'status': 'new'},
-           {'provider': 'kilo', 'model': 'c-free', 'first_seen': '2026-11-25', 'status': 'qualified'}])
+          [{'provider': 'openrouter', 'model': 'a/b:free', 'status': 'new'},
+           {'provider': 'kilo', 'model': 'c-free', 'status': 'qualified', 'note': 'yield 11/20'}])
     rows = ei.open_items_section({})
-    assert rows[0] == {'item': 'fix x', 'owner': 'agent'}
-    assert len(rows) == 2 and 'a/b:free on openrouter (first seen 2026-11-25)' in rows[1]['item']
+    assert [r['item'] for r in rows[:2]] == ['Read investigators A and B and build the fix (GRPO on the frontier).', 'Ask the owner about Vertex.']
+    assert rows[0]['source'] == 'handoff' and rows[2] == {'item': 'fix x', 'owner': 'agent'}
+    assert len(rows) == 4 and 'c-free on kilo qualified (yield 11/20)' in rows[3]['item']
+
+
+def test_decisions_take_the_newest_entries_with_their_cause_and_next_step():
+    text = '\n'.join(['## 2026-11-26 15:30 Older entry', '', 'First paragraph.', '',
+                      '### 2026-11-26 — minor entry', 'Body.', '',
+                      '## 2026-11-27 Why SFT rounds give no held gain (investigator A)', '', 'Question: why.', '',
+                      '**Cause.** The training signal does not raise pass rates.', 'Second line.', '', '**Fix (most direct).**', '1. Train with GRPO.'])
+    e = ei.decision_entries(text)
+    assert [x['when'] for x in e] == ['2026-11-26 15:30', '2026-11-26', '2026-11-27']
+    assert e[2]['title'] == 'Why SFT rounds give no held gain (investigator A)' and e[2]['summary'].startswith('Cause. The training signal')
+    assert e[2]['next'] == 'Fix (most direct). 1. Train with GRPO.' and e[1]['title'] == 'minor entry' and e[0]['next'] is None
