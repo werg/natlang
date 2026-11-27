@@ -30,6 +30,7 @@ except (OSError, NameError):
     CONFIG = {}
 DATA = os.path.expanduser(CONFIG.get('data_dir', ''))
 OPS = DATA + '/ops'
+EXTRA_RUN_ROOTS = [os.path.expanduser(p) for p in CONFIG.get('extra_run_roots', [])]
 DASH = OPS + '/dashboard'
 FALLOW = os.path.expanduser(CONFIG.get('repo', '')) + '/plans/neuralese/FALLOW_REGISTER.md'
 LEDGER = os.path.expanduser(CONFIG.get('repo', '')) + '/scripts/memory_ledger.py'
@@ -40,7 +41,7 @@ KEEP_S = 6 * 3600      # finished/failed units stay listed this long
 WINDOW_S = CONFIG.get('runs_window_days', 3) * 86400     # runs untouched for longer are not exported
 MACHINE_EVERY_S = CONFIG.get('machine_history_s', 120) - 5
 FLOORS = CONFIG.get('floors_gb', {})
-DEFAULT_PATTERNS = ['grpo-*', 'hunt-*', 'aei1-*', 'popheld-*', 'held-*', 'sft-*', 'cmp-*', 'colab-g4*', 'vibe-student-*', 'vsingest-*',
+DEFAULT_PATTERNS = ['grpo-*', 'wfgrpo-*', 'proggrpo-*', 'hunt-*', 'aei1-*', 'popheld-*', 'held-*', 'sft-*', 'cmp-*', 'colab-g4*', 'vibe-student-*', 'vsingest-*',
                     'natlang-storage-sweep*', 'natlang-drive-tier*', 'natlang-teacher-free-models*', 'opsdash*', 'ops-dashboard-*', 'ops-peer-*',
                     'check-main*', 'checkmain-*', 'test-*', 'probe-*', 'bench-*', 'natlang-gb10-compactor*']
 SKIP_DIRS = {'actor', 'groups', 'held', 'rollouts', 'decisions', 'code', 'workers', '__pycache__', 'dashboard'}
@@ -91,9 +92,15 @@ def read_json(path, default):
         return default
 
 
-def run_id(ops, path):
-    rel = os.path.relpath(path, ops)
-    return None if rel.startswith('..') else rel.replace('/', '.')
+def run_id(ops, path, extra_roots=None):
+    roots = (ops, *(EXTRA_RUN_ROOTS if extra_roots is None and ops == OPS else (extra_roots or ())))
+    for root in roots:
+        if not root:
+            continue
+        rel = os.path.relpath(path, root)
+        if not rel.startswith('..'):
+            return rel.replace('/', '.')
+    return None
 
 
 def last_arg(cmd, flag):
@@ -234,7 +241,7 @@ def is_step(rec):
     return isinstance(rec, dict) and 'step' in rec and ('cuda_peak_gib' in rec or 'cuda_peak_gb' in rec or 'behaviour' in rec)
 
 
-def discover_runs(ops):
+def discover_runs(ops, extra_roots=None):
     found = []
 
     def walk(d, parts):
@@ -249,14 +256,22 @@ def discover_runs(ops):
         for e in entries:
             if e.is_dir(follow_symlinks=False) and e.name not in SKIP_DIRS and not e.name.startswith(('pin-', '.')):
                 walk(e.path, parts + [e.name])
-    walk(ops, [])
+
+    roots = (ops, *(EXTRA_RUN_ROOTS if extra_roots is None and ops == OPS else (extra_roots or ())))
+    for root in roots:
+        if root and os.path.isdir(root):
+            walk(root, [])
     return [('.'.join(p), d) for p, d in found]
+
+
+def _is_grpo_run(run):
+    return any(p.startswith(('grpo', 'wfgrpo', 'proggrpo')) for p in run.split('.'))
 
 
 def run_kind(run, rec):
     if rec.get('replay_groups') or any(x in run.split('.') for x in ('hunt', 'bench', 'replay-controls')):
         return 'bench'
-    return 'grpo' if run.startswith('grpo') else 'other'
+    return 'grpo' if _is_grpo_run(run) else 'other'
 
 
 def tail_run(st, path):
@@ -381,7 +396,7 @@ def runs_summary(state, active_runs, now):
         if 'max_step' not in st and not (run in active_runs or (st.get('mtime') and now - st['mtime'] < 6 * 3600)):
             continue
         mine = sorted((h for k, h in held.items() if h['run_id'] == run), key=lambda h: h.get('step') or 0)
-        rows.append({'id': run, 'group': run.rsplit('.', 1)[0] if '.' in run else run, 'kind': st.get('kind') or ('grpo' if run.startswith('grpo') else 'other'), 'steps': st.get('max_step', 0),
+        rows.append({'id': run, 'group': run.rsplit('.', 1)[0] if '.' in run else run, 'kind': st.get('kind') or ('grpo' if _is_grpo_run(run) else 'other'), 'steps': st.get('max_step', 0),
                      'phase': st.get('phase'),
                      'last_ts': ms(st['mtime']) if st.get('mtime') else None, 'active': run in active_runs,
                      'spark': st.get('spark', {}), 'held': mine})
@@ -432,7 +447,7 @@ def annotation_for(ann, name):
 def kind_of(name, cmd):
     if 'grpo.py' in cmd and ' train' in cmd:
         return 'bench' if '--replay' in cmd or name.startswith('hunt-') else 'grpo'
-    if ('held_eval' in cmd and 'measure' in cmd) or name.startswith('popheld-'):
+    if ('held_eval' in cmd and 'measure' in cmd) or name.startswith('popheld-') or '-popheld-' in name:
         return 'held-eval'
     if 'pytest' in cmd or 'check-main' in cmd:
         return 'test'

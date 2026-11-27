@@ -143,6 +143,8 @@ ROLE_RULES = [   # (regex, role, where, title template using named groups)
     (r'^aei1-r(?P<r>\d+)-data', 'prepare', 'dgx', 'Round r{r}: data and build'),
     (r'^aei1-r(?P<r>\d+)-sft', 'sft', 'dgx', 'Round r{r}: SFT'),
     (r'^popheld-', 'held', 'pop', 'Held evaluation (served on Pop)'),
+    (r'^(wfgrpo|proggrpo)-.*-popheld-', 'held', 'pop', 'Workflow dev eval (served on Pop)'),
+    (r'^(wfgrpo|proggrpo)-(?P<wf>.+)', 'grpo', 'dgx', 'Workflow GRPO ({wf})'),
     (r'^grpo-v(?P<v>\d+)', 'grpo', 'dgx', 'GRPO run (grpo-v{v})'),
     (r'^(progtune|progdev)-', 'tuning', 'colab', 'Program tuning'),
     (r'^tqual-', 'taskqual', 'dgx', 'Task qualification'),

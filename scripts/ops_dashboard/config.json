@@ -12,5 +12,8 @@
     }
   },
   "runs_window_days": 3,
-  "machine_history_s": 120
+  "machine_history_s": 120,
+  "extra_run_roots": [
+    "~/data/workflow-compile-20261127"
+  ]
 }
