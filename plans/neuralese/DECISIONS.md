@@ -14973,3 +14973,19 @@ intermediate states were not kept); whether a live teacher with an anchor would 
 `/mnt/external/dgx-moved-data/compiler-t1-20261126/run1/`, deletable). Its keeper `cmp-t1-keeper-3` is gone (Colab
 stopped). The rerun (`opsd_privileged train ... --out <new run dir>`, start teacher by default) goes on the next free
 GPU (a Colab session when the owner restores one, or the DGX when the ledger has ~20 GB).
+
+## 2026-11-27 09:20 Codex teachers off; Colab GPU sessions stopped (owner)
+
+Owner: "Are we using Luna for collection? Let's stop that for now", then "Sol is on the list? No, take that off."
+`ops/ei/teachers.json` (the driver's teacher list, read at every teacher launch) no longer holds any `openai-codex`
+teacher: `gpt-6-luna` (6 slots) and `gpt-6.1-sol` (failed tasks only) are removed; the previous file is kept as
+`teachers.json.pre-noluna-*`. The aei1 teacher unit was stopped so its relaunch takes the new list. Still listed: Haiku
+(retires itself without Anthropic credit), Nemotron 3.5 Super and 3 Ultra (NIM), ERNIE 5.5 Flash (OpenRouter free),
+Gemini 3.5/3.1 Flash Lite, and the paid Vertex Gemini 4 Argon and 3.1 Pro (paused by the owner 2026-11-24; re-added to
+the file since; owner asked).
+
+Owner also stopped both Colab GPU sessions (g4a A100, g4b L4) at 08:40: keepers (`colab-g4a/g4b-keeper`,
+`cmp-t1-keeper-3`, `cmp-t2-keeper-4`) stopped first, then the DGX-side Colab clients, the sessions (`colab stop`) and
+tunnels. T2 run2's learner state (step ~450) is on Drive and its logs to step 462 on the HDD mirror. aei1 SFT falls back
+to the DGX. Two independent investigations of why the SFT rounds give no held gain (v12 = sft-v9 on held-v3, a slide
+from +3.5 pts over three "neutral" rounds) are running.
