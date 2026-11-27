@@ -15266,3 +15266,33 @@ a `/proc` (cmdline, environ, cwd, exe, fds, maps) plus user-unit reference scan 
   - **Success bar:** `>= +10 pts` paired lift on `dev32` over `step-00000` within 15 steps, with KL `<= 0.15` and clean behaviour probe.
   - **Stop / pivot trigger:** Stop early if sentinel fires, behaviour shift trips, KL > 0.25, or step-10 `dev32` is `<= step-00000` by > 5 pts.
   - **Next after W1:** Chain W2 (`auth_multi_round_state_games`, `v12=24.1%`) and W3 (`ext_decisions_tally`, `v12=67.9%`), run Layer-1 `calibrate-decisions` fast-path audit, and once local lift is confirmed, relaunch Colab A100 compute to scale both clean general-backbone GRPO (`grpo-v12-2` on `9a6e7a4e9`) and the workflow compiler suite.
+
+
+## 2026-11-27 20:17 CET — Experiment W1 complete (KL-tethered at `0.0027` nats); launch controlled A/B Experiment W1b (`wfgrpo-folder-route-lr15`)
+
+- **Experiment W1 (`wfgrpo-folder-route`, 15/15 steps complete on DGX, pin `9a6e7a4e9`):**
+  - Clean execution end-to-end: `behaviour_shift: false`, `grad_spike: false`, `rho_mean = 0.9999–1.0001`, `0` OOMs, `0` actor mismatches; `reasoning_vs_first_step` tightened monotonically to **`0.797`** (`-20.3%` reasoning tokens).
+  - Unseen `dev32` paired results (all 3 checkpoints complete, 64/64 scored):
+    - `step-00000` (`v12` baseline): `25/64 = 39.1%`, `loop_rate = 25.0%`
+    - `step-00005`: `29/64 = 45.3%` (`+6.25 pts`, `p = 0.51`, `loop_rate = 15.6%`)
+    - `step-00010`: `26/64 = 40.6%` (`+1.56 pts`, `p = 1.00`, `loop_rate = 18.8%`)
+    - `step-00015`: `27/64 = 42.2%` (`+3.12 pts`, `p = 0.81`, `loop_rate = 28.1%`) — **verdict: neutral (KL-tethered at `0.0027` nats)**.
+  - **Root-cause diagnosis:** `kl_mean` hit an equilibrium ceiling at **`0.00273` nats** (`ref_abs_dlogp_mean = 0.034` nats — only ~3.4% probability shift off `v12`) because `--lr 5e-5` × `lr_data_scale ≈ 0.33–0.50` gave effective `lr ≈ 1.7–2.5e-5` fighting `--kl-beta 0.02`. Failure breakdown of `step-00010` (`38` failures): `12` timeouts/loops, `9` nested-path bugs (`inbox/alpha/...`), `16` partial `intent.nl` misclassifications.
+- **Launched Experiment W1b (`wfgrpo-folder-route-lr15`) on DGX + Pop (zero cloud spend, zero paid teachers):**
+  - Exact controlled A/B vs W1 on `ext_decisions_folder_route` (`v12` start, pin `9a6e7a4e9`, reusing W1's `step-00000-pop` `dev32` baseline via `--held-base`):
+    - **`--lr 1.5e-4`** (3× W1), **`--lr-reference-spread 6`** (full LR at 6 spread groups), **`--kl-beta 0.004`** (5× looser KL tether to unlock `kl ~ 0.02–0.06` nats).
+  - **Success bar:** `>= +12 pts` paired lift on `dev32` (`>= 51%` vs `39.1%`) with `kl <= 0.15` and `behaviour_shift: false`.
+  - **Stop trigger:** Stop early if sentinel fires, `behaviour_shift` trips, `kl > 0.25`, or `step-00010` `dev32` regresses > 5 pts.
+
+
+## 2026-11-27 23:12 CET — Stop Experiment W1b on `</think>` hazard guardrail; launch Experiment W2 (`wfgrpo-state-games`)
+
+- **Stopped Experiment W1b (`wfgrpo-folder-route-lr15`) at Step 3 (guardrail hit):**
+  - `close_ratio` dropped monotonically `1.00 -> 0.549 (s1) -> 0.376 (s2) -> 0.175 (s3)` (`close_logp = -0.937`, `close_push.student = -23.9` vs `close_push.kl = +2.3`), crossing the `< 0.20` early-stop threshold (`kl = 0.00559`, `dlogp = 0.0455`).
+  - **Lesson from W1 vs W1b A/B:** `lr=5e-5, kl_beta=0.02` was over-tethered (`kl` plateaued at `0.0027`), while `lr=1.5e-4, kl_beta=0.004` let `</think>` closing hazard decay 5.7× in 3 steps. Calibrated midpoint: **`lr=1e-4, kl_beta=0.01`**.
+  - Reclaimed `grpo-w1b/run/{actor,groups}` (`/` at `148 GB` free); kept `train.jsonl` and `factors/`.
+- **Launched Experiment W2 (`wfgrpo-state-games`) on DGX + Pop (zero cloud spend, zero paid teachers):**
+  - **Workflow:** `auth_multi_round_state_games` (authored multi-turn agentic logic & state tracking, `v12 ≈ 24.1%` baseline, 66 `support` / 24 unseen `dev` / 15 excluded `confirm`, pin `9a6e7a4e9`).
+  - **Recipe:** Calibrated on-policy binary GRPO + rare-success self-distillation (`--lr 1e-4 --warmup 2 --kl-beta 0.01 --lr-reference-spread 6 --lr-reference-group-units 1024 --reward binary --loss-norm episode --sd-weight 0.1 --memetic-share 0 --sd-teacher-weight 0 --teacher-attempts 0 --max-steps 15 --save-every 5 --held-remote pop --held-samples 2 --held-strict-series`).
+  - **Success bar:** `>= +10 pts` paired lift on unseen `dev` (`48` episodes) over `step-00000` within 15 steps, with `close_ratio >= 0.40` and `kl <= 0.15`.
+  - **Stop trigger:** Stop early if `close_ratio < 0.25`, `kl > 0.20`, sentinel fires, or `step-00010` `dev` regresses > 5 pts.
