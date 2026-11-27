@@ -15191,3 +15191,63 @@ the last real gain (sft-v6). But it points nowhere useful.
   - Eval: parallel `--held-remote pop --held-samples 4 --held-samples-start 4 --held-every-hours 3 --held-strict-series` on `held-v3`.
   - Success: paired `held-v3` (4 samples) `>= +2.5 pts` over `step-00000` (with positive `auth` file-check movement and lower loop/ran-out rate). Failure: `< -2.5 pts` at `p < 0.05` or learner sentinel -> stop and diagnose. Neutral at 60 steps: confirms general-pool GRPO plateau and triggers full shift to per-program/workflow specialization + deterministic/hybrid compilation.
 
+
+## 2026-11-27 Storage sweep (Sonnet)
+
+Root NVMe `/` 72 GB free before (floor 40) -> 154 GB after; HDD `/mnt/external` 173 GB free (floor 50) -> 334 GB after.
+Everything ran through the memory ledger (units `sweep-*`); every deletion list, with sizes and reasons, is in the sweep's
+scratchpad (`list-1..5.tsv` and their `.done` logs); a deletion is skipped unless the path matches an allowed prefix and
+a `/proc` (cmdline, environ, cwd, exe, fds, maps) plus user-unit reference scan finds no holder. No code changed.
+
+- **Lossless compaction (the sanctioned `episode_files` / `ei_round_tier.compact_groups` path, verified round trip, no
+  data dropped; readers resolve the `.zst`; spot-read 33 groups of v7/v8/v9 afterwards):**
+
+| Path | Freed | Reason |
+|---|---|---|
+| `ops/ei/sft-v7/collect`, `sft-v8/collect`, `sft-v9/collect` (groups: results.jsonl, rollouts.jsonl, jobs) | 23.2 + 13.4 + 15.8 = 52.4 GB (NVMe) | cycle-era collections the aei1 sweep never compacted (still raw rollouts); `compact_groups` |
+| `ops/teacher-gen-20261119/gap-v1` (24k episodes, finished 11-21) and `teacher-gen-20261115` | 22.5 GB (NVMe) | raw `jobs/*.partial.json`, evidence and byte-copy `jobs/*.result.json` (11.2 GB of exact duplicates); `episode_files compact --apply` |
+| `ops/ei/sft-v7/teacher`, `sft-v8/teacher`, `sft-v9/teacher`, `teacher-qual-20261124`, `ops/sft-v5` | 3.0 GB (NVMe) | same, smaller campaigns |
+
+- **Deleted:**
+
+| Path | Size | Reason |
+|---|---|---|
+| `natlang-pins/ei-standing-reader-b5dc0ed22`, `vibestudio-controller-3fea99ba7`, `vibestudio-data-d5004813f`, `ops/ei/pin-0fcc27ff90d7` (`pin_checkout.py remove`) | 5.6 GB (NVMe) | historical pins named only in `drive.log` history; `reader-sources.json` names pin-069a3905a4a0 + vibestudio-reader-f82cc4837; no process/unit |
+| `ops/ei/aei1/aside-r0014-pre-67966a19cba6/{filled,mix,neuralese-graph-own}/chains.pkl` | 2.6 GB | pre-rebuild build of r0014 (never trained); rows.jsonl.zst, trained-units.json stay |
+| `ops/ei/aei1/r0012/mix-dgx/chains.pkl` | 0.6 GB | trained, published round; same rule as `drop_plan` (the `mix-dgx` name escaped its glob) |
+| `ops/ei/aei1-remeasure-20261125/policy-{8e63,6f19}/actor/blocks` | 1.4 GB | closed measurement actors' native-state blocks; episodes/results stay |
+| `ops/ei/colab/smoke-r1/sft` | 1.7 GB | 6-step Colab SFT smoke (11-22), superseded |
+| `/tmp/natlang-collector-1000/*` (440 dirs untouched > 26 h) | 4.4 GB (NVMe) | collector scratch of finished episodes, no holder |
+| `/mnt/external/dgx-moved-data/compiler-t2-20261126/t2-pplx-run1/store/blocks` | 12.2 GB | T2 run1 (objective /2) abandoned for run2 (/3, run1 state refused on resume); step-500 state on Drive; receipts/ablation/train.jsonl/sites.json stay |
+| `.../compiler-t1-20261126/run1/learner-state`, `learner-state.prev` | 2.9 GB | T1 run1 collapsed, declared discarded (DECISIONS 2026-11-27); train.jsonl stays |
+| `natlang-grpo-bench/lora-20261122/{run2,work}/checkpoints/step-*/checkpoint.pt` (7) | 22.5 GB | learner-bench merged weights of a replay with perturbed factors; telemetry is in DECISIONS, regenerable |
+| `natlang-grpo-v4/run2/checkpoints`: `state-step-00039/40.safetensors` (2 x 19.3 GB) + 11 intermediate `checkpoint.pt` (steps 4,10,12,16,22,24,26,30,32,36,38) | 74 GB | grpo-v4-run2 stopped 11-20 (no held gain, `</think>` hazard); the new GRPO starts from aei1 r0014. Kept: step-00001, 00020, 00040 |
+| `natlang-grpo-v5/run1/checkpoints`: `state-step-00003.safetensors`, abandoned `.state-step-00004...stage-partial`, `step-00002/03` checkpoints | 29.8 GB | grpo-v5-run1 stopped for sft-v6; kept step-00001 (held-measured) and step-00004 |
+| `dgx-moved-20261122/ops-ei-sft-v9-collect-actor-blocks` (+ dangling link, `blocks.removed.json` note) | 3.2 GB | closed cycle collection's native-state blocks (`drop_plan` rule) |
+
+- **Deduplicated:** `/mnt/external/adapter-slots-20261124/base-5ff07638.pt` (9.48 GB) was byte-identical to the base
+  (`BASE_SHA` 5ff07638..., sha256 verified for it, for `dgx-moved-20261123/native-pins/<sha>.pt` and for
+  `natlang-development-data/archive/.../natlang-operator-soft-20261120/base/checkpoint.pt`): replaced by a symlink to the
+  `native-pins` copy (the experiment's scripts keep working). Nothing was moved to the HDD.
+- **Considered and kept:** all `vibestudio-reader-*` pins (in use or named by registry/unit), `pin-069a3905a4a0`,
+  `pin-3f5dfbf6a08e`, `pin-a034dbf9c5e4`, `pin-a44bf25bd455`; sft-v5/v7/v8/v9 checkpoints (3.3 GB each; parents of the
+  start policy; v8 is sft-v9's start checkpoint); sft-v7..v9 `mix/chains.pkl` and `filled` (inputs of the start lineage,
+  the driver's `--prefer-unseen` reads their rows/trained-units); `sft-v9/collect/actor/sglang-hf` (3.8 GB, named by the
+  live fill unit and semantic-fill config); `aei1-remeasure-20261125/r0005-rebuilt/checkpoint.pt` (3.4 GB, rebuild of the
+  applied-verdict policy 3eb3f435); `r0015/mix-dgx` and `r0015/sft` chains (head round); `r0010` checkpoint (held by two
+  processes); held dirs; teacher campaigns' `rollouts.jsonl`; operator-soft `build-v2/v4` (22 GB, `served` points at
+  v2); `natlang-grpo-v2-archive` (22.9 GB of small rollout files); `ei-sources`, `broad-rl-tasks-20261031`,
+  `natlang-internal-spool` (registry sources); `program-tune-20261117` (37 GB, live units named it earlier); the
+  ~195 `runtime-*` dirs under `lfm3-rl-dgx-20261029` (hardlinked file pool: `du` per dir shows 700 MB each, real cost is
+  small, and hardlinks are not touched); HF/uv/playwright caches (regenerable but small or hardlinked).
+- **Left for a human:**
+  - `/tmp/claude-1000/-home-werg-natlang/4c9bd489-.../scratchpad` 12.4 GB (supervisor session: `compaction/` 3.8 GB,
+    `rows.jsonl` 2.5 GB written today, `ffnfix/` 0.7 GB, `parity-dgx-*` 0.7 GB): owner is the live session.
+  - `data/lfm3-rl-dgx-20261029/{sd-r1 2.8 GB, onpolicy67-native-core-effects-1102 1.5 GB, onpolicy67-core-effects-1102 1.1 GB}`
+    (Nov 1-2 RL runs, no registry entry, original collected rollouts: delete or archive?);
+    `data/b10-models` 3.6 GB (two identical-size Q8 GGUFs of the step-0 policy and a runtime tar, no reader found);
+    `data/memetic-e2e-v3` 4.2 GB (no registry entry).
+  - `natlang-operator-soft-20261120/build-v4` (13.2 GB) and `build-v2` (9.6 GB) on the HDD: is v4 superseding v2?
+  - `compiler-t2-20261126/warmstart-000000002` (1.9 GB): needed to restart T2 from scratch?
+  - A concurrent `rm-list` race (three ledger units ran list-3 at once) was harmless: every item is fail-closed and
+    each file went exactly once.
