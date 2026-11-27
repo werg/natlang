@@ -511,6 +511,12 @@ def remote_puller_blocks(collection: Path, procs, units, needle_constant='COMPAC
     return None
 
 
+def kept_back(action: dict, why: list, marker: bool) -> bool:
+    """An action the pass skips: a ``.keep-on-nvme`` marker keeps anything; holders and references (WHY) keep a move
+    or a drop, never a ``compact-groups``, which checks each sample and group itself."""
+    return marker or bool(why and action['op'] != 'compact-groups')
+
+
 GROUP_PASS_SECONDS = 300      # one collection's share of a pass: the moves after it keep their time
 
 
@@ -768,7 +774,10 @@ def apply_plan(driver, actions, args, procs, units, summary, deadline, configure
         why = [w for p in [str(path), *action.get('guard', ())] for w in references(p, *refs, [])]
         if action['op'] == 'delete':        # a consumer's config names what it reads (path or its link alias)
             why += [w for p in [str(path), *action.get('alias', ())] for w in references(p, [], [], list(configured))]
-        if why or keep_marker(path, driver):
+        # a live collection always has holders (its collector's log, a fill's reader): they keep it from a move,
+        # but compaction checks each sample and group itself (quiet, none open) and must not be gated by them. Gated
+        # here, no group of a live collection was ever compacted (v0013: 0 of 436 groups, root -14 GB/h, 2026-11-27)
+        if kept_back(action, why, keep_marker(path, driver)):
             summary['skipped'] += 1
             log(event='kept', path=str(path), reason=(why or ['marker .keep-on-nvme'])[:3])
             continue

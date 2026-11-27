@@ -494,3 +494,14 @@ def test_the_remote_pull_never_pulls_a_compacted_rollouts_file_again(tmp_path, m
     assert rc.pull('vm', work) >= 1
     assert not (local / 'rollouts.jsonl').exists() and ef.read_bytes(local / 'rollouts.jsonl') == data
     assert 'rollouts.jsonl.zst' in rc.PUSH_EXCLUDE and rc.COMPACTED_ROLLOUTS_EXCLUDED
+
+
+def test_a_live_collections_holders_never_keep_its_groups_from_compaction():
+    """2026-11-27: the move rule's holder check (a collector's open log) ran before the compact-groups branch, so no
+    group of a live collection was ever compacted (v0013: 0 of 436). Holders keep moves and drops, not compaction."""
+    import ei_round_tier as tier
+    held = ['pid 449124 fd /x/collect/v0013/fill.log']
+    assert not tier.kept_back({'op': 'compact-groups'}, held, False)
+    assert tier.kept_back({'op': 'move'}, held, False)
+    assert tier.kept_back({'op': 'compact-groups'}, [], True)          # the marker still keeps everything
+    assert not tier.kept_back({'op': 'move'}, [], False)
