@@ -14927,3 +14927,49 @@ Wave0093 retained a failed Luna generation exchange with `Error: terminated`, an
 ### 2026-11-26 — Join invocation-owned Native I/O before return
 
 A deferred no-model Node/Workerd control showed `void owned.read(); return 7` finishing its action, NL call and task before the Native read, leaving a spurious unfinished effect in the terminal capture. Retain accepted Native operation and authored helper promises under a logical invocation owner independent of trace recording, and drain before eval/async TS/NL completion. NativeRoots opt-out retains logical ownership. Lexical service authority, real request/completion causality and cancellation stay independent. Default enabled; `settleNativeEffects:false` restores legacy behavior. Internal TS import and unrelated-await controls required a shared compiler helper hook; no fake helper trace spans. See `NATIVE_EFFECT_SETTLEMENT_20261126.md` for checked controls and explicit sync/iterator limits. No teacher inference or original capture rewrite.
+
+## 2026-11-27 09:30 Compiler T1 (OPSD) run1 collapsed to one token; the twin is now scored by the frozen start policy (T1 diagnosis)
+
+**Observation.** T1 (`opsd_privileged train`, g4b, `compiler-t1/v2-contrast/run1`, code c3f37e9d3) logged divergence
+1e-7 and grad_norm 1e-5 from step ~293 on (step 360 at the end). The trajectory (`train.jsonl`, no restarts after the
+evening relaunch): steps 1-11 (LR warmup, essentially the start policy) 2e-3..9e-3 nats/token; steps 20-37 it *rose*
+to 5e-2 with grad_norm 3-7 (clipped at 1); then 3e-4 plateaus with dips (steps 58-72: 2e-5..3e-6) and a smooth
+exponential fall from step 292 (8e-5) to 1.2e-7.
+**Forward-only probe** (g4 A100 preemptible tenant, scratchpad `probe.py`; 15 twins, 8 validation + 7 train, start
+policy r0010 vs the step-356 factors):
+- Step 356: the student's NLL of its own sampled tokens is **25.6 nats/token** (start: 0.60), its entropy 0.003 (start
+  0.68), and KL from the start policy 28.7 nats. The argmax at every completion position of every twin is token 93800
+  (`))(`). The model is destroyed. Teacher and student agree to 1e-7 because both emit the same token with certainty,
+  with the true facts, another world's facts, or an empty guidance turn alike.
+- Start policy, the same twins: KL(twin||student) 5.8e-3, with another world's facts 5.1e-3, with an empty guidance
+  turn 3.0e-3, true vs wrong facts 1.5e-3 (decisive-evidence rows up to 1.1e-2).
+**Cause (bug, design defect of the objective as implemented).** `train_t1` scored the twin with the *live* policy
+(`twin_loss`: `_positions_hidden(learner, twin_ids, ...)` with `adapters=learner.bundles`, `rl/opsd_privileged.py`
+lines 365 and 374 at c3f37e9d3), with no CE (every twin is a failed episode, `verified` never set) and no anchor (the
+recipe's "KL anchor 0.01 via reference_view", NATLANG_COMPILER.md §9.3, was never built). Every input-independent
+policy is then a global minimum (divergence 0), and nothing ties the model to the start. The run walked into one:
+LoRA B norms are largest in layers 0-1 (FFN w1/w3 ~1.0), i.e. the input representation was erased. The divergence
+metric could not show this: it reads ~0 for a dead model. Mechanism predicts the direction (divergence to ~0) and the
+size (KL between two identical one-hot distributions is numerical noise, 1e-7).
+**Fix** (this commit): `twin_loss(teacher='start')` is the default: the twin is scored by the frozen start policy
+(`learner.reference_view()`, bare adapters and start rows; `_head(start=True)` uses the tied head, which holds the
+start rows); `--teacher live` opts back in. Per-step `student_nll` (own sampled tokens) and `student_entropy` are
+logged, so a collapse reads as NLL up / entropy down. `T1_SCHEMA` is `/2` and a `/1` learner state is refused (start a
+new run directory). Tests: `test_twin_loss_scores_the_twin_with_the_frozen_start_policy_by_default`,
+`test_start_head_ignores_live_trainable_rows`, `test_opsd_loss_reports_collapse_telemetry`.
+**Data finding (not fixed here, the next lever).** Even at the start policy the facts carry little: ~75% of the twin's
+divergence is the presence of a guidance turn (empty turn 3.0e-3, wrong world 5.1e-3 of 5.8e-3); the specific
+diagnosis moves ~1.5e-3 nats/token. Most twins are one-line contrast notes ("tool sequence diverged at action 0:
+attempt called read_code, whereas a verified run called eval") attached to every root call of the episode, mostly
+reasoning tokens (91% of completion tokens). OPSD from these facts is a weak, largely generic signal; richer
+diagnostic facts (verifier diffs naming no answer, decisive evidence: 1.1e-2) are what carries information.
+**Checked:** prompt rendering and placement (turn after the leading system turn, 45-66 tokens, positions aligned by
+`twin_sequences`' assertions); empty think blocks: 0 of 3,740 completions (all have reasoning; the "not applicable"
+in 35538c81c's inventory holds); shortcut mask (0% masked, as expected at these ratios); teacher is stop-gradient.
+**Not checked:** the start-teacher run itself (both Colab sessions were stopped by the owner 2026-11-27 morning; the
+DGX ledger had 15.6 GB free beside aei1); the step at which entropy first collapsed (only steps 0 and 356 measured;
+intermediate states were not kept); whether a live teacher with an anchor would also be stable.
+**T1 state.** run1 is discarded: its factors are a collapsed model and must not be merged or used (mirror
+`/mnt/external/dgx-moved-data/compiler-t1-20261126/run1/`, deletable). Its keeper `cmp-t1-keeper-3` is gone (Colab
+stopped). The rerun (`opsd_privileged train ... --out <new run dir>`, start teacher by default) goes on the next free
+GPU (a Colab session when the owner restores one, or the DGX when the ledger has ~20 GB).

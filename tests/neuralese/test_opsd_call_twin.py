@@ -90,8 +90,8 @@ def test_chunked_twin_loss_equals_one_pass():
     learner = SimpleNamespace()
     O_hidden, O_head = O._positions_hidden, O._head
     try:
-        O._positions_hidden = lambda _l, ids, pos, grad: torch.tanh(emb(torch.tensor(ids)).cumsum(0))[list(pos)]
-        O._head = lambda _l, rows: head(rows).float()
+        O._positions_hidden = lambda _l, ids, pos, grad, **_kw: torch.tanh(emb(torch.tensor(ids)).cumsum(0))[list(pos)]
+        O._head = lambda _l, rows, **_kw: head(rows).float()
         twin = twin_sequences(rendering(), [BOS, 4, 5, 6], [7, 8, 9, 10, 11], ['fact'])
         one = O.twin_loss(learner, twin, grad=True, chunk=100)
         g_one = emb.weight.grad.clone()
@@ -145,3 +145,70 @@ def test_head_is_differentiable_and_scores_trainable_rows():
     torch.testing.assert_close(logits[:, 0], h @ weight[0].float())
     logits.sum().backward()
     assert h.grad.abs().sum() > 0 and rows_param.grad.abs().sum() > 0
+
+
+def test_twin_loss_scores_the_twin_with_the_frozen_start_policy_by_default():
+    """T1 run1 (live teacher, no anchor) collapsed to an input-independent policy with divergence ~1e-7: the twin is
+    scored by the start policy (reference_view) unless ``teacher='live'``; the student is always the live policy."""
+    import contextlib
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import opsd_privileged as O
+    torch.manual_seed(0)
+    emb = torch.nn.Embedding(200, 8)
+    head = torch.nn.Linear(8, 20, bias=False)
+    delta = torch.nn.Parameter(torch.zeros(8))         # the "adapter": zero in the start policy
+    state = {'ref': False}
+    calls = []
+
+    @contextlib.contextmanager
+    def reference_view():
+        state['ref'] = True
+        try:
+            yield
+        finally:
+            state['ref'] = False
+    learner = SimpleNamespace(reference_view=reference_view)
+
+    def hidden(_l, ids, pos, *, grad, start=False):
+        calls.append((start, grad))
+        if start:
+            with reference_view():
+                return torch.tanh(emb(torch.tensor(ids)).cumsum(0))[list(pos)].detach()
+        return torch.tanh(emb(torch.tensor(ids)).cumsum(0) + delta)[list(pos)]
+    O_hidden, O_head = O._positions_hidden, O._head
+    try:
+        O._positions_hidden = hidden
+        O._head = lambda _l, rows, **_kw: head(rows).float()
+        with torch.no_grad():
+            delta.add_(0.5)                              # the live policy has moved away from the start
+        twin = twin_sequences(rendering(), [BOS, 4, 5, 6], [7, 8, 9, 10, 11], ['fact'])
+        O.twin_loss(learner, twin, grad=True)
+        assert calls == [(True, False), (False, True)]
+        assert delta.grad is not None and delta.grad.abs().sum() > 0
+        calls.clear()
+        out = O.twin_loss(learner, twin, grad=False, teacher='live')
+        assert calls == [(False, False), (False, False)]
+        assert out['student_entropy'] > 0 and out['student_nll'] > 0
+        with pytest.raises(ValueError):
+            O.twin_loss(learner, twin, grad=False, teacher='other')
+    finally:
+        O._positions_hidden, O._head = O_hidden, O_head
+
+
+def test_start_head_ignores_live_trainable_rows():
+    from types import SimpleNamespace
+    from natlang_neuralese.rl.opsd_privileged import _head
+    weight = torch.randn(12, 4, dtype=torch.bfloat16)
+    learner = SimpleNamespace(model=SimpleNamespace(lm_head=SimpleNamespace(weight=weight)),
+                              trainable_rows=SimpleNamespace(token_ids=torch.tensor([3]), rows=torch.randn(1, 4)))
+    h = torch.randn(5, 4)
+    torch.testing.assert_close(_head(learner, h, start=True), h @ weight.float().t())
+
+
+def test_opsd_loss_reports_collapse_telemetry():
+    student = torch.zeros(3, 10)
+    student[:, 2] = 30.0                                 # a collapsed student: one token everywhere
+    twin = student.clone()
+    _, metrics = opsd_loss(student, twin, torch.tensor([5, 6, 7]))
+    assert metrics['divergence'] < 1e-6
+    assert metrics['student_entropy'] < 1e-6 and metrics['student_nll'] > 20

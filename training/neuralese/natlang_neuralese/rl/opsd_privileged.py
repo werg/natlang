@@ -21,6 +21,11 @@ binds it to one model call of an archived rollout, where the learner's unit is a
    form. The anti-shortcut mask drops positions whose sampled token the twin prefers by more than ``max_log_ratio``
    nats (outside declared syntax positions). Cross-entropy applies only where ``verified`` marks a verified
    continuation: a failed episode's own tokens are never CE targets.
+4. Teacher (``train_t1 --teacher``): the twin is scored by the frozen start policy by default (``start``: the learner's
+   ``reference_view``, LoRA B = 0 and the start rows). The live-policy teacher (``live``, opt-in) shares the trained
+   weights, and with no CE and no anchor the objective's global minimum is any input-independent policy: the
+   2026-11-26 T1 run (v2-contrast/run1) collapsed to one token (id 93800, ``))(``) at every position by step ~293,
+   NLL of its own samples 25.6 nats, entropy 0.003, divergence 1e-7 (DECISIONS 2026-11-27).
 """
 from __future__ import annotations
 
@@ -100,10 +105,14 @@ def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0
     n = int(targets.numel())
     zero = student_logits.sum() * 0.0
     if n == 0:
-        return zero, {'n': 0., 'n_kept': 0., 'shortcut_masked_frac': 0., 'divergence': 0., 'n_verified': 0., 'ce': 0.}
+        return zero, {'n': 0., 'n_kept': 0., 'shortcut_masked_frac': 0., 'divergence': 0., 'n_verified': 0., 'ce': 0.,
+                      'student_nll': 0., 'student_entropy': 0.}
     targets = targets.long()
     with torch.no_grad():
         s_y = S.token_logprobs(student_logits.detach(), targets)
+        s_logp = torch.log_softmax(student_logits.detach().float(), -1)
+        student_entropy = float(-(s_logp.exp() * s_logp).sum(-1).mean())
+        del s_logp
         t_y = S.token_logprobs(twin_logits, targets)
         log_ratio = (t_y - s_y).float()
         shortcut = log_ratio > float(max_log_ratio)
@@ -133,7 +142,10 @@ def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0
             loss = loss + float(ce_weight) * ce
     metrics = {'n': float(n), 'n_kept': float(n_kept), 'shortcut_masked_frac': 1. - n_kept / n,
                'divergence': float(divergence.detach()), 'n_verified': float(n_verified), 'ce': float(ce.detach()),
-               'mean_log_ratio': float(log_ratio[kept].mean()) if n_kept else 0.}
+               'mean_log_ratio': float(log_ratio[kept].mean()) if n_kept else 0.,
+               # collapse telemetry: the student's NLL of its own sampled tokens and its entropy (a degenerate policy
+               # shows a high NLL and a near-zero entropy while the divergence reads ~0)
+               'student_nll': float(-s_y.float().mean()), 'student_entropy': student_entropy}
     return loss, metrics
 
 
@@ -148,7 +160,8 @@ def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0
 #        opsd_loss at the aligned completion positions. Per-step jsonl, resumable learner state, factor export,
 #        and a wrong-world control: the same divergence against twins carrying another world's facts.
 
-T1_SCHEMA = 'natlang.compiler.t1-opsd/1'
+T1_SCHEMA = 'natlang.compiler.t1-opsd/2'   # /2: frozen start-policy teacher by default; /1 states are not resumed
+TEACHERS = ('start', 'live')
 # verdicts that say only that the produced value was wrong (their detail is the value itself)
 ANSWER_VERDICT_OUTCOMES = frozenset({'semantic_mismatch', 'wrong_answer'})
 
@@ -327,9 +340,16 @@ def _twin_rows(path):
 ACTIVATION_GIB = 4.0   # saved activations of a student forward; layers beyond this recompute (lfm3_fast.set_checkpointing)
 
 
-def _positions_hidden(learner, ids, positions, *, grad):
+def _positions_hidden(learner, ids, positions, *, grad, start=False):
+    """Final hidden rows at ``positions``: the live policy, or with ``start`` the frozen start policy (no grad)."""
     from ..train import lfm3_fast
     tensor = torch.tensor(ids, device=learner.device)
+    if start:
+        if grad:
+            raise ValueError('the start policy is a frozen teacher')
+        with learner.reference_view(), torch.no_grad():   # bare base adapters and the start rows
+            h = lfm3_fast.hidden(learner.model, tensor)
+        return h[torch.tensor(positions, device=learner.device)]
     if grad:
         # the learner core's recompute plan: a 16k-token student forward kept every layer's activations and OOMed the L4
         lfm3_fast.set_checkpointing(learner.model, len(ids), ACTIVATION_GIB, parameterization='lora+rows')
@@ -338,7 +358,7 @@ def _positions_hidden(learner, ids, positions, *, grad):
         return h[torch.tensor(positions, device=learner.device)]
 
 
-def _head(learner, rows):
+def _head(learner, rows, *, start=False):
     """FP32 logits of ``rows`` under the policy's head, the trainable Neuralese rows scoring their ids (the rule of
     ``lfm3_fast._head_logits_chunk``). Differentiable: lfm3_fast's FP32-output ``torch.mm(out_dtype=...)`` has no
     autograd formula (``derivative for aten::mm is not implemented`` in the first T1 backward), so the head runs as an
@@ -349,42 +369,46 @@ def _head(learner, rows):
         cached = weight.detach().float()
         learner._opsd_head_fp32 = cached
     logits = rows.float() @ cached.t()
-    special = learner.trainable_rows
+    special = None if start else learner.trainable_rows   # start rows score through the frozen head
     if special is not None and special.token_ids.numel():
         logits = logits.clone()
         logits[:, special.token_ids] = rows.float() @ special.rows.float().t()
     return logits
 
 
-def twin_loss(learner, twin, *, grad, scale=1.0, chunk=256, **loss_options):
+def twin_loss(learner, twin, *, grad, scale=1.0, chunk=256, teacher='start', **loss_options):
     """``opsd_loss`` of one twin, its full-vocabulary logits formed ``chunk`` completion positions at a time (a long
     completion's [n, V] FP32 logits do not fit beside the model). With ``grad`` the chunks backpropagate one by one
     through the shared student hidden states, each weighted by its share of the positions times ``scale``. Returns
-    the position-weighted metrics."""
+    the position-weighted metrics. ``teacher``: ``'start'`` (frozen start policy, default) or ``'live'``."""
+    if teacher not in TEACHERS:
+        raise ValueError(f'OPSD teacher is one of {TEACHERS}')
+    start_teacher = teacher == 'start'
     with torch.no_grad():
-        t_rows = _positions_hidden(learner, twin.twin_ids, twin.twin_positions, grad=False)
+        t_rows = (_positions_hidden(learner, twin.twin_ids, twin.twin_positions, grad=False, start=True) if start_teacher
+                  else _positions_hidden(learner, twin.twin_ids, twin.twin_positions, grad=False))
     s_rows = _positions_hidden(learner, twin.student_ids, twin.student_positions, grad=grad)
     targets = torch.tensor(twin.targets, device=s_rows.device)
     n = len(twin.targets)
-    totals = {'divergence': 0., 'shortcut_masked_frac': 0., 'n': float(n)}
+    totals = {'divergence': 0., 'shortcut_masked_frac': 0., 'student_nll': 0., 'student_entropy': 0., 'n': float(n)}
     for start in range(0, n, chunk):
         stop = min(n, start + chunk)
         share = (stop - start) / n
         with torch.no_grad():
-            t = _head(learner, t_rows[start:stop])
+            t = _head(learner, t_rows[start:stop], start=True) if start_teacher else _head(learner, t_rows[start:stop])
         with torch.set_grad_enabled(grad):
             s = _head(learner, s_rows[start:stop])
             loss, metrics = opsd_loss(s, t, targets[start:stop], **loss_options)
             if grad:
                 (loss * share * scale).backward(retain_graph=stop < n)
-        totals['divergence'] += metrics['divergence'] * share
-        totals['shortcut_masked_frac'] += metrics['shortcut_masked_frac'] * share
+        for key in ('divergence', 'shortcut_masked_frac', 'student_nll', 'student_entropy'):
+            totals[key] += metrics[key] * share
     return totals
 
 
 def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=128.0, lr=3e-5, warmup=20,
              batch_twins=8, max_steps=None, kind='forward_kl', topk=None, max_log_ratio=6.0, state_every=25,
-             validation_limit=64, seed=0):
+             validation_limit=64, seed=0, teacher='start'):
     import json
     import random
     from pathlib import Path
@@ -405,6 +429,9 @@ def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=12
     step = 0
     state_dir = out / 'learner-state'
     if (state_dir / 'learner_manifest.json').exists():
+        saved = json.loads((state_dir / 'learner_manifest.json').read_text()).get('objective_version')
+        if saved != T1_SCHEMA:
+            raise ValueError(f'{state_dir} holds objective {saved!r}, not {T1_SCHEMA!r}: start a new run directory')
         restored = load_learner_state(state_dir, learner, optimizer)
         step = int(restored.get('learner_step') or 0)
     total_steps = max_steps or max(1, len(train_rows) // batch_twins)
@@ -418,13 +445,14 @@ def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=12
             facts = sample[(i + 1) % len(sample)]['facts'] if wrong and len(sample) > 1 else None
             twin = twin_of(row, facts)
             with torch.no_grad():
-                metrics = twin_loss(learner, twin, grad=False, kind=kind, topk=topk, max_log_ratio=max_log_ratio)
+                metrics = twin_loss(learner, twin, grad=False, kind=kind, topk=topk, max_log_ratio=max_log_ratio,
+                                    teacher=teacher)
             values.append(metrics['divergence'])
         return sum(values) / max(1, len(values))
 
     receipt = {'schema': T1_SCHEMA, 'twins': str(twins_path), 'checkpoint': str(checkpoint), 'rows': len(rows),
                'train_twins': len(train_rows), 'validation_twins': len(val_rows), 'rank': rank, 'alpha': alpha,
-               'lr': lr, 'kind': kind, 'topk': topk, 'max_log_ratio': max_log_ratio, 'code': code_provenance()}
+               'lr': lr, 'kind': kind, 'topk': topk, 'teacher': teacher, 'max_log_ratio': max_log_ratio, 'code': code_provenance()}
     if step == 0 and val_rows:
         receipt['validation_before'] = {'divergence': divergence_on(val_rows),
                                         'wrong_world_divergence': divergence_on(val_rows, wrong=True)}
@@ -437,11 +465,11 @@ def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=12
         for group in optimizer.param_groups:
             group['lr'] = lr * scale * group.get('lr_scale', 1.0)
         optimizer.zero_grad(set_to_none=True)
-        sums = {'divergence': 0., 'shortcut_masked_frac': 0., 'n': 0.}
+        sums = {'divergence': 0., 'shortcut_masked_frac': 0., 'student_nll': 0., 'student_entropy': 0., 'n': 0.}
         for row in batch:
             twin = twin_of(row)
             metrics = twin_loss(learner, twin, grad=True, scale=1.0 / len(batch), kind=kind, topk=topk,
-                                max_log_ratio=max_log_ratio)
+                                max_log_ratio=max_log_ratio, teacher=teacher)
             for key in sums:
                 sums[key] += metrics[key] / len(batch)
         grad_norm = float(torch.nn.utils.clip_grad_norm_(learner.trainable_parameters(), 1.0))
@@ -492,6 +520,8 @@ def main(argv=None):
     t.add_argument('--kind', choices=DIVERGENCES, default='forward_kl')
     t.add_argument('--topk', type=int)
     t.add_argument('--state-every', type=int, default=25, help='learner-state save interval in steps')
+    t.add_argument('--teacher', choices=TEACHERS, default='start',
+                   help='twin scorer: the frozen start policy (default) or the live policy (opt-in; collapsed T1 run1)')
     args = parser.parse_args(argv)
     if args.command == 'build':
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
@@ -507,7 +537,7 @@ def main(argv=None):
         tokenizer = AutoTokenizer.from_pretrained(args.base)
         result = train_t1(args.twins, args.out, checkpoint=args.checkpoint, base=args.base, tokenizer=tokenizer,
                           max_steps=args.max_steps, batch_twins=args.batch_twins, lr=args.lr, kind=args.kind,
-                          topk=args.topk, state_every=args.state_every)
+                          topk=args.topk, state_every=args.state_every, teacher=args.teacher)
     print(json.dumps(result, indent=2, default=str))
 
 
