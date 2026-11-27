@@ -159,8 +159,10 @@ def infra_lost(row: dict[str, Any]) -> bool:
     # 686 of 1,142 student rows, 0 model calls; the r0009 frontier counted 853 such rows as failures on 257 tasks).
     # NATLANG_ZERO_CALL_UNSCORED_LOST=0 counts them as failures again.
     calls = (row.get("execution_efficiency") or {}).get("model_calls")
-    return (row.get("reward") is None and calls == 0 and "memetic_success" not in row
-            and os.environ.get("NATLANG_ZERO_CALL_UNSCORED_LOST", "1") != "0")
+    zero_call_stall = (calls == 0 and "memetic_success" not in row
+                       and (row.get("reward") is None or row.get("outcome") == "budget_exhaustion"
+                            or row.get("resource_limit_reason") == "model_request_budget"))
+    return zero_call_stall and os.environ.get("NATLANG_ZERO_CALL_UNSCORED_LOST", "1") != "0"
 
 
 def pass_rate_counts(rows) -> tuple[int, int]:

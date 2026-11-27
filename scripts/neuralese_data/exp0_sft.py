@@ -401,13 +401,25 @@ def mask_empty_think(chains, tokenizer):
             cache[token] = not tokenizer.decode([token]).strip()
         return cache[token]
 
+    eos_ids = {t for t in (getattr(tokenizer, 'eos_token_id', None),
+                           tokenizer.convert_tokens_to_ids('<|im_end|>'),
+                           tokenizer.convert_tokens_to_ids('<|endoftext|>'))
+               if isinstance(t, int) and t >= 0}
     changed = 0
     for chain in chains:
         for _, length, row in chain['segs']:
             lead = empty_think_lead(row['sample'], close_id, blank)
             if not lead:
                 continue
-            lead = min(lead + 1, length) if first else lead
+            if first:
+                # Mirror serve/targets.py empty_think_first_end: never mask the ONLY non-EOS content token of a
+                # 1-token reasoning-free answer (which would leave only <|im_end|> supervised at weight 1.0).
+                sample = row['sample']
+                content_end = length
+                while content_end > lead and int(sample[content_end - 1]) in eos_ids:
+                    content_end -= 1
+                if lead + 1 < content_end:
+                    lead = min(lead + 1, length)
             weight = np.array(row['weight'], np.float32) if 'weight' in row else np.ones(length, np.float32)
             if weight[:lead].any():
                 weight[:lead] = 0

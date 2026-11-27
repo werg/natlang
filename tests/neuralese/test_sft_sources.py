@@ -245,9 +245,10 @@ def test_a_teacher_reply_without_reasoning_trains_only_the_action_after_the_empt
     assert s.think_context(renderer, 'october:luna-curricula', no_reasoning, target) == 3
     assert s.think_context(renderer, 'rl-own', {**no_reasoning, 'reasoning_content': 'plan'}, [7, 1, 3, 4, 5, 6]) == 0
     # except an own reply without reasoning (a decision readout the actor scored, never sampled): its empty think
-    # block is context and the option trains; own_empty_think='train' opts out
+    # block is context and the 1-token option trains (not masked into an <|im_end|>-only trap); own_empty_think='train' opts out
     readout = {'role': 'assistant', 'content': '"ENTY"'}
-    assert s.think_context(renderer, 'rl-own', readout, [1, 2, 7, 6]) == 3
+    assert s.think_context(renderer, 'rl-own', readout, [1, 2, 7, 6]) == 2
+    assert s.think_context(renderer, 'rl-own', readout, [1, 2, 7, 8, 6]) == 3
     assert s.think_context(renderer, 'rl-own', readout, [1, 2, 7, 6], own_empty_think='train') == 0
 
 
@@ -260,8 +261,8 @@ def test_a_teacher_reasoning_block_is_context_by_default_and_a_target_with_train
     for source in ('teacher', 'october:luna-curricula', 'live'):
         assert s.think_context(renderer, source, reasoning, target) == 4      # the summary and </think> are context
         assert s.think_context(renderer, source, reasoning, target, 'train') == 0
-    # train still keeps an empty think block as context
-    assert s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ''}, [1, 2, 3, 6], 'train') == 3
+    # train still keeps an empty think block as context (and masks first token on multi-token actions)
+    assert s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ''}, [1, 2, 3, 4, 6], 'train') == 3
     with pytest.raises(ValueError):
         s.think_context(renderer, 'teacher', reasoning, target, 'drop')
 
@@ -285,7 +286,7 @@ def test_a_weighted_teacher_think_block_trains_at_its_weight_and_its_lead_in_sta
                             {'target': narrated})
     assert row['weight'].tolist() == pytest.approx([0.25, 0.25, 0, 1, 1, 1, 1])
     # an empty block stays context; W 0 is context; W 1 is the full-weight train rule; own replies are untouched
-    empty = s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ' '}, [1, 2, 3, 6], 'train@0.1')
+    empty = s.think_context(renderer, 'teacher', {**reasoning, 'reasoning_content': ' '}, [1, 2, 3, 4, 6], 'train@0.1')
     assert empty == 3 and not isinstance(empty, s.WeightedLead)
     assert s.think_context(renderer, 'teacher', reasoning, target, 'train@0') == 4
     assert s.think_context(renderer, 'teacher', reasoning, target, 'train@1') == 0
@@ -397,7 +398,7 @@ def test_load_aux_masks_empty_think_drops_held_tasks_and_groups_units(tmp_path):
     def chain(task, rnd, sample):
         row = {'sample': np.array(sample, np.int32), 'invocation': 'i', 'index': 0}
         return {'ids': np.array([0] + sample, np.int32), 'segs': [(1, len(sample), row)], 'task': task, 'round': rnd}
-    chains = [chain('a', 'r1', [1, 2, 3, 6]), chain('a', 'r1', [7, 1, 3, 6]), chain('a', 'r2', [3, 6]),
+    chains = [chain('a', 'r1', [1, 2, 3, 4, 6]), chain('a', 'r1', [7, 1, 3, 6]), chain('a', 'r2', [3, 6]),
               chain('held', 'r3', [3, 6])]
     path = tmp_path / 'chains.pkl'
     path.write_bytes(pickle.dumps({'chains': chains}))
@@ -406,7 +407,7 @@ def test_load_aux_masks_empty_think_drops_held_tasks_and_groups_units(tmp_path):
     assert part['think_masked_rows'] == 1 and part['held_dropped'] == 1
     by_round = {u['chains'][0]['round']: u for u in units}
     assert set(by_round) == {'r1', 'r2'}
-    assert by_round['r1']['weighted'] == 1 + 4          # </think> \n\n and the token after them masked in the first chain
+    assert by_round['r1']['weighted'] == 2 + 4          # </think> \n\n and the token after them masked in the first chain
     assert by_round['r2']['weighted'] == 2
 
 

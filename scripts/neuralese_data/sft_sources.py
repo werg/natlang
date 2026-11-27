@@ -702,10 +702,36 @@ class TemplateRenderer:
     def render(self, messages, tools, target):
         from natlang_neuralese.serve.targets import target_items
         target = {k: v for k, v in target.items() if v is not None}
+        bad = _has_teacher_text_pollution(messages, target)
+        if bad is not None:
+            raise ValueError(f'refusing poisoned teacher_text rendering: {bad}')
         before, rest = target_items(self, list(messages), tools, target)
         if any(kind != 'tok' for kind, _ in before + rest):
             raise ValueError('native-state blocks in a text-only rendering')
         return [i for _, i in before], [i for _, i in rest]
+
+
+TEACHER_TEXT_PROMPT_MARKER = 'Explicit teacher text-Neuralese transport'
+
+
+def _has_teacher_text_pollution(messages, target=None):
+    for m in messages or ():
+        content = m.get('content')
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get('type') == 'teacher_text':
+                    return 'opaque teacher_text stub in messages'
+                if isinstance(part, dict) and isinstance(part.get('text'), str) and (
+                        TEACHER_TEXT_PROMPT_MARKER in part['text'] or '[[teacher-text' in part['text']):
+                    return 'teacher_text transport marker in messages'
+        elif isinstance(content, str) and (
+                TEACHER_TEXT_PROMPT_MARKER in content or '[[teacher-text' in content):
+            return 'teacher_text transport marker in messages'
+    if isinstance(target, dict):
+        t_content = target.get('content')
+        if isinstance(t_content, str) and ('[[teacher-text' in t_content or 'nzt1_' in t_content):
+            return 'teacher_text marker in target'
+    return None
 
 
 OWN_SOURCES = ('rl-own', 'jolt-guided')
@@ -1334,7 +1360,8 @@ def native_not_authored(episode):
 
 
 def has_native_state(episode):
-    return any(isinstance(m.get('content'), list) and any(isinstance(part, dict) and part.get('type') == 'native_state'
+    return any(isinstance(m.get('content'), list) and any(isinstance(part, dict)
+                                                           and part.get('type') in ('native_state', 'teacher_text')
                                                            for part in m['content'])
                for turn in episode['turns'] for m in turn['messages'])
 
@@ -1383,7 +1410,7 @@ def replay_episode(args, server, episode, env):
         seed_base=0, root_mode=episode.get('root_mode', 'student'), match_seeds_from=None, policy_checkpoint_sha256=None))
     entry = list(read_jsonl(directory / 'queue.jsonl'))[0]
     entry.update(seed=episode.get('seed') or entry['seed'], prompt_rendering='full', request_retries=0,
-                 context_tokens=replay_context_tokens(episode['source']))
+                 context_tokens=replay_context_tokens(episode['source']), text_neuralese_emulation=False)
     if authored_episode(episode):   # its trajectory was rendered reading Neuralese in context (reference_episodes.mjs)
         entry['in_context_neuralese'] = True
     (directory / 'queue.jsonl').write_text(json.dumps(entry, sort_keys=True) + '\n')
@@ -1718,6 +1745,8 @@ def drifted_success(record, turns=None, ambiguous=None):
     if ambiguous is None:     # ``ambiguous``: sibling_ambiguous(turns) computed already (``episode_facts``)
         ambiguous = turns is not None and sibling_ambiguous(turns)
     if ambiguous and not record.get('siblings_resolved'):
+        return False
+    if turns is not None and any(_has_teacher_text_pollution(t.get('messages'), t.get('target')) for t in turns):
         return False
     return (record.get('outcome') == SUCCESS and not record.get('exact') and record.get('unserved') == 0
             and 'missing' not in served and set(served) <= {'exact', 'reworded', 'drifted'}

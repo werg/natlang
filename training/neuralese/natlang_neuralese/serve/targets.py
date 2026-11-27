@@ -53,6 +53,10 @@ def opening_items(engine, messages, tools):
 
 def target_items(engine, messages, tools, target, *, response_tools=None):
     """Return (prompt items, target continuation items) under the runtime's exact chat rendering."""
+    for msg in messages or ():
+        content = msg.get("content") if isinstance(msg, dict) else None
+        if isinstance(content, list) and any(isinstance(p, dict) and p.get("type") == "teacher_text" for p in content):
+            raise RequestError("neuralese-grad-target", "refusing opaque teacher_text stub in training messages")
     prompt = engine.render_request(messages, tools, **({'response_tools':response_tools} if response_tools is not None else {}))
     full = engine.render_request(list(messages) + [target], tools, template=_closed_template(engine),
                                  **({'response_tools':response_tools} if response_tools is not None else {}))
