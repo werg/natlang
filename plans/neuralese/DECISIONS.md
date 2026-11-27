@@ -15251,3 +15251,18 @@ a `/proc` (cmdline, environ, cwd, exe, fds, maps) plus user-unit reference scan 
   - `compiler-t2-20261126/warmstart-000000002` (1.9 GB): needed to restart T2 from scratch?
   - A concurrent `rm-list` race (three ledger units ran list-3 at once) was harmless: every item is fail-closed and
     each file went exactly once.
+
+
+## 2026-11-27 10:15 CET — Stop pre-audit `grpo-v12-1`; launch Experiment W1 (`wfgrpo-folder-route`) on clean pin `9a6e7a4e9`
+
+- **Stopped `grpo-v12-1.service` and `grpo-v12-1-popheld-00000-1795767828.service`:**
+  - It ran on pre-audit pin `d1351eaab` (prior to Waves 1–4 fixes `cc247039a` and `9a6e7a4e9`: token-level 1.71× length bias, off-policy reverse-KL capping, unbounded memetic advantages, and un-filtered `teacher_text` `TeacherDemos`), and spent 65+ minutes without completing Step 1 because `--memetic-share 0.02` stalled 853s preparing one `ext_triviaqa_long_page_qa` memetic group.
+  - `row-000..row-098` of `v12` on `held-v3` remain resumable on disk.
+- **Launched Experiment W1 (`wfgrpo-folder-route`) on DGX + Pop (zero cloud spend, zero paid teachers):**
+  - **Code pin:** `/home/werg/data/workflow-compile-20261127/pin-9a6e7a4e9` (includes Waves 1–4 + `pop_start_serve_command`).
+  - **Start policy:** `aei1` `v12` (`919472c49381...`, baseline ~35.9% on `ext_decisions_folder_route`).
+  - **Workflow:** `ext_decisions_folder_route` (`route_folder.nl` `directory-reducer` + `intent.nl` `readout: decision`), 140 leak-free `support` tasks, 32 unseen `dev32` tasks (`confirm` + `held-v3/v4` excluded).
+  - **Recipe:** Pure on-policy binary GRPO (`--reward binary --loss-norm episode --lr 5e-5 --warmup 2 --kl-beta 0.02 --memetic-share 0 --sd-teacher-weight 0 --teacher-attempts 0 --lr-reference-group-units 1024 --min-groups 12 --max-groups 16 --group 8 --slots 64 --max-steps 15 --save-every 5 --held-remote pop --held-samples 2 --held-strict-series`), exporting compact Mode-P LoRA factors to `grpo-w1/factors`.
+  - **Success bar:** `>= +10 pts` paired lift on `dev32` over `step-00000` within 15 steps, with KL `<= 0.15` and clean behaviour probe.
+  - **Stop / pivot trigger:** Stop early if sentinel fires, behaviour shift trips, KL > 0.25, or step-10 `dev32` is `<= step-00000` by > 5 pts.
+  - **Next after W1:** Chain W2 (`auth_multi_round_state_games`, `v12=24.1%`) and W3 (`ext_decisions_tally`, `v12=67.9%`), run Layer-1 `calibrate-decisions` fast-path audit, and once local lift is confirmed, relaunch Colab A100 compute to scale both clean general-backbone GRPO (`grpo-v12-2` on `9a6e7a4e9`) and the workflow compiler suite.

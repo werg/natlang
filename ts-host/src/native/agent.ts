@@ -1818,6 +1818,7 @@ export class NativeToolAgent {
     // settles a confident choice; a borderline or risk-floor input takes the reasoned readout below. A failed scoring
     // request fails the readout as the reasoned path's own scoring would (no silent fallback).
     const compiledDecision = this.options.compiledDecision;
+    let fastPrefill: Awaited<ReturnType<typeof decide>> | undefined;
     if (compiledDecision && joint && replies && replies.length >= 2) {
       const scoredFast = await runInFrame(session.runtime.frame, () => decide({
         messages: encoded.messages, options: replies, cache_messages: cacheMessages,
@@ -1828,6 +1829,7 @@ export class NativeToolAgent {
       const fast = scoredFast.log_probs.length === replies.length && scoredFast.log_probs.every(v => Number.isFinite(v))
         ? scoredFast : undefined;
       if (fast) {
+        fastPrefill = fast;
         const temp = Math.max(1e-6, compiledDecision.temperature);
         const scaled = fast.log_probs.map(lp => lp / temp);
         const probs = softmax(scaled);
@@ -1876,13 +1878,15 @@ export class NativeToolAgent {
     const scoreOne = async (options: string[], open: boolean, reasoning?: DecisionReasoning) => {
       const turn = ++turns;
       // model-call-kind: decision-readout -- training/model-call-kinds.json
-      const scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options, cache_messages: cacheMessages,
+      const reuseFast = !reasoning && !open && fastPrefill && options === replies;
+      const scores = reuseFast ? fastPrefill! : await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options, cache_messages: cacheMessages,
         ...(open ? { open_reply: true } : {}),
         ...(reasoning?.ids?.length ? { reasoning_ids: reasoning.ids } : {}),
         ...(reasoning ? { reasoning: reasoning.text, reasoning_sample: { index: reasoning.index, samples: reasonings.length, action: reasoning.index === action } } : {}),
         ...(callId ? { invocation_id: callId, invocation_role: session.runtime.options.parentCallId ? 'child' as const : 'root' as const } : {}),
         ...(capturedGuidance ? { x_natlang_privileged_context: capturedGuidance } : {}),
         ...(adapters.length ? { adapters } : {}) }, session.runtime.signal));
+      if (reuseFast) fastPrefill = undefined;
       if (scores.log_probs.length !== options.length || scores.log_probs.some(value => !Number.isFinite(value)))
         throw new Error('decision readout returned no finite score for every option');
       // A decision readout is a model turn of its call's execution graph, like a generated turn (one per scored step).

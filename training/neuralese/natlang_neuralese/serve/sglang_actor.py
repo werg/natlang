@@ -1574,8 +1574,17 @@ class SglangEngine(Engine):
         if block is None:
             raise RequestError('neuralese-unknown-native-state', f'{block_id} is not in this server\'s store; PUT it first')
         if block.derivation is not None:
-            from ..model.native_state_derivation import verify_state_derivation
-            verify_state_derivation(self.store, block.load())
+            derivation_key = (block_id, json.dumps(block.derivation, sort_keys=True, separators=(',', ':')))
+            verified = getattr(self, '_verified_state_derivations', None)
+            if verified is None:
+                verified = self._verified_state_derivations = set()
+            if derivation_key not in verified:
+                from ..model.native_state_derivation import verify_state_derivation
+                verify_state_derivation(self.store, block.load())
+                with self._sglang_lock:
+                    if len(verified) >= 4096:
+                        verified.clear()
+                    verified.add(derivation_key)
         use = {**({'stop_gradient': True} if stop_gradient else {}),
                **({'source_occurrence': source_occurrence} if source_occurrence else {})}
         derivation = {'state_derivation': block.derivation} if block.derivation is not None else {}

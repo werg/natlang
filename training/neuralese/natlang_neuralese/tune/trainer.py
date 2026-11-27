@@ -713,7 +713,7 @@ class JointTrainer:
         gate trains while the request matches the recorded actor. Without them a family is declared at scale 1 and
         its leaf carries the current gate."""
         engine = self.engine
-        declarations, override, nodes = {}, {}, set()
+        declarations, override, override_family_keys, nodes = {}, {}, {}, set()
         for node in graph['nodes']:
             entries = []
             binding = binding_of(node['name'])
@@ -729,11 +729,17 @@ class JointTrainer:
                         scale = float.fromhex(raw) if isinstance(raw, str) else float(raw)
                         if scale <= 0:
                             continue  # the runtime served no family at a zero gate
+                    prior_key = override_family_keys.get(artifact)
+                    if prior_key is not None and prior_key != key:
+                        raise TuneMathError(
+                            f'family artifact {artifact} is bound by two distinct gates ({prior_key} and {key}) in one graph'
+                        )
                     frozen = engine.store.get_native_tensor_artifact(artifact).artifact.tensors
                     ratio = self.gates[key] / scale
                     # A gate multiplies the whole frozen delta: the core, or the B factor of free LoRA.
                     override[artifact] = {name: value * ratio if not name.startswith('lora_A.') else value
                                           for name, value in frozen.items()}
+                    override_family_keys[artifact] = key
                     entries.append({'id': artifact, 'scale': scale})
                 else:
                     artifact = self.state['node_artifacts'][item]
