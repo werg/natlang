@@ -20,7 +20,7 @@ export function makeViews(ctx) {
   const card = (title, right, ...kids) => h('div', { class: 'card' }, h('header', {}, h('h2', {}, title), right || null), ...kids);
   const more = (label, route) => h('button', { class: 'btn sm', type: 'button', onclick: () => go(route) }, label);
   const latestRound = state => (ei()?.rounds || []).filter(r => r.state === state).at(-1);
-  const heldLine = (g) => g ? `${g.candidate} measured ${g.candidate_result ? `${rate(g.candidate_result.rate)} (${g.candidate_result.counted ?? g.candidate_result.scored}/${g.candidate_result.ran} counted)` : 'not yet'}` : '';
+  const heldLine = (g) => g ? `${g.candidate} measured ${g.candidate_result ? `${rate(g.candidate_result.rate)} (${g.candidate_result.successes}/${g.candidate_result.counted ?? g.candidate_result.scored} samples${g.candidate_result.unscored ? `, ${g.candidate_result.unscored} unscored count as failures` : ''})` : 'not yet'}` : '';
 
   /* ---------- round pipeline strip ---------- */
   function stepsStrip(r) {
@@ -56,13 +56,15 @@ export function makeViews(ctx) {
     const perHour = actors.reduce((a, x) => a + (x.rate_h || 0), 0);
     const bits = [];
     if (train?.sft) bits.push(`${train.id} is training: SFT ${Math.round(100 * train.sft.step / train.sft.of)}%, published ${etaText(roundEta(train).publish, now())}.`);
-    else if (e.phase?.phase) bits.push(`Phase: ${e.phase.phase}.`);
+    else if (e.driver && e.driver.expected === false) bits.push(`Round driver ${e.phase?.waiting_on ? e.phase.waiting_on.replace(/^the round driver is not running \(|\)$/g, '') : 'paused'}.`);
+    else if (e.phase?.phase) bits.push(`Phase: ${e.phase.phase}${e.phase.waiting_on ? `, ${e.phase.waiting_on}` : ''}.`);
+    for (const r of grpoRuns()) bits.push(`GRPO ${r.group}: ${r.steps} step${r.steps === 1 ? '' : 's'}${r.phase?.event ? `, ${r.phase.event}` : ''}.`);
     if (prep) bits.push(`${prep.id} is being prepared.`);
     const el = h('div', { class: `card hero ${hv.level}` }, h('div', { class: 'q' }, `natlang training · ${e.run}`),
       h('div', { class: `big tone-${hv.level}` }, h('span', { 'aria-hidden': 'true' }, hv.level === 'ok' ? '✔' : hv.level === 'crit' ? '✖' : '▲'), hv.open.length ? `${hv.open.length} thing${hv.open.length === 1 ? '' : 's'} to look at` : 'All running'),
       h('div', { class: 'sub' }, bits.join(' ') || 'No round is active.'),
       h('div', { class: 'tiles' }, tile(`v${e.phase?.latest_version ?? '?'}`, `newest policy${e.lineage?.at(-1) ? '' : ''}`), tile(train ? `${Math.round(100 * (train.sft?.step || 0) / (train.sft?.of || 1))}%` : '—', train ? `${train.id} SFT` : 'no SFT'),
-        tile(`${compact(perHour)}/h`, 'fresh episodes'), tile(prog.tone === 'flat' && !prog.headline.includes('pts') ? prog.headline : prog.headline, prog.tone === 'flat' ? 'held pass rate' : 'held vs reference', prog.tone)));
+        tile(`${compact(perHour)}/h`, 'fresh episodes'), tile(prog.headline, prog.headline.includes('pts') ? (prog.sub.includes('fixed anchor') ? 'held vs anchor' : 'held vs reference') : 'held pass rate', prog.tone)));
     return el;
   }
   function progressCard(e) {
@@ -106,9 +108,9 @@ export function makeViews(ctx) {
     const c = e.colab;
     if (!c || c.balance == null) return card('Colab credits', null, h('div', { class: 'muted' }, c?.probe_error ? `Could not read the balance: ${c.probe_error}` : 'Reading the balance…'));
     const tone = c.runway_h < 4 ? 'crit' : c.runway_h < 12 ? 'warn' : 'ok';
-    const el = card('Colab credits', more('Machines', 'machines'),
-      h('div', { class: 'tiles' }, tile(`${c.balance.toFixed(0)}`, 'units left'), tile(`${c.rate}/h`, 'burning now'), tile(dur(c.runway_h * 3600), 'runway', tone)),
-      h('div', { class: 'small', style: 'margin-top:6px' }, `At this rate the balance is gone ≈ ${dayClock(c.empty_ts)}. ${tone === 'ok' ? '' : 'Refill before then. '}`, c.assignments != null ? `${c.assignments} session${c.assignments === 1 ? '' : 's'} assigned.` : ''));
+    const el = card(c.state === 'stopped' ? 'Colab credits (sessions stopped)' : 'Colab credits', more('Machines', 'machines'),
+      h('div', { class: 'tiles' }, tile(`${c.balance.toFixed(0)}`, 'units left'), tile(`${c.rate}/h`, 'burning now'), tile(dur(c.runway_h * 3600), 'runway', c.state === 'stopped' ? '' : tone)),
+      h('div', { class: 'small', style: 'margin-top:6px' }, `${c.state === 'stopped' ? `${c.note || 'Sessions stopped by the owner.'} ` : ''}At this rate the balance is gone ≈ ${dayClock(c.empty_ts)}. ${tone === 'ok' || c.state === 'stopped' ? '' : 'Refill before then. '}`, c.assignments != null ? `${c.assignments} session${c.assignments === 1 ? '' : 's'} assigned.` : ''));
     if ((c.hist || []).length > 3) el.append(h('div', { class: 'small muted', style: 'margin-top:6px' }, 'balance, recent'), spark(c.hist.map(x => x[1]), { label: 'Colab balance', slot: 3 }));
     return el;
   }
@@ -118,6 +120,14 @@ export function makeViews(ctx) {
     el.append(h('div', { class: 'timeline' }, evs.map(ev => h('div', { class: `ev ${ev.level === 'warn' ? 'warn' : ''} ${ev.level === 'ok' ? 'okev' : ''}` }, h('time', { title: dayClock(ev.ts) }, ago(ev.ts, now())), h('span', { class: 't' }, ev.text)))));
     if ((e.decisions || []).length) el.append(h('details', {}, h('summary', {}, 'Latest decisions'), h('ul', { class: 'plain small' }, e.decisions.slice(0, 5).map(d => h('li', {}, h('span', { class: 'muted' }, d.when.slice(5)), ' ', d.title)))));
     return el;
+  }
+  const grpoRuns = () => (snap()?.runs || []).filter(r => r.kind === 'grpo' && r.active);
+  /** A live GRPO run (the polish phase; its train.jsonl is read by the exporter): steps, last phase event, newest held result. */
+  function grpoCard(r) {
+    const held = latestHeld(r), quiet = r.last_ts ? now() - r.last_ts : null;
+    return card(`GRPO ${r.group}`, runLink(r.id), h('div', { class: 'kv small' }, h('span', {}, 'steps'), h('span', {}, String(r.steps ?? 0)), h('span', {}, 'phase'), h('span', {}, r.phase?.event || '—'),
+      h('span', {}, 'last write'), h('span', { class: quiet != null && quiet > 3600e3 ? 'tone-warn' : '' }, r.last_ts ? ago(r.last_ts, now()) : 'never'),
+      held ? [h('span', {}, 'newest held'), h('span', {}, `step ${held.step}: ${signed(held.delta_pts, 1)} pts`)] : null));
   }
   function overview(hv) {
     const e = ei(), v = h('div', { class: 'now' });
@@ -129,10 +139,12 @@ export function makeViews(ctx) {
     const train = latestRound('sft') || latestRound('ready'), prep = (e.rounds || []).filter(r => r.state === 'preparing').at(-1);
     if (train) v.append(roundCard(train, { compactCard: true }));
     if (prep) v.append(roundCard(prep, { compactCard: true }));
-    if (!train && !prep) v.append(h('div', { class: 'card muted' }, 'No round in flight.'));
+    for (const r of grpoRuns()) v.append(grpoCard(r));
+    if (!train && !prep && !grpoRuns().length) v.append(h('div', { class: 'card muted' }, 'No round or GRPO run in flight.'));
     v.append(progressCard(e), freshDataCard(e));
     v.append(section('Machines', 'tap one for its history'));
-    v.append(h('div', { class: 'machine-grid' }, machineMini('dgx', 'DGX', e), machineMini('colab-g4a', 'Colab A100', e), machineMini('pop', 'Pop', e), machineMini('colab-g4b', 'Colab L4', e)));
+    const colabOff = e.colab?.state === 'stopped';          // the owner stopped the Colab sessions: no cards for machines that are not there
+    v.append(h('div', { class: 'machine-grid' }, machineMini('dgx', 'DGX', e), colabOff ? null : machineMini('colab-g4a', 'Colab A100', e), machineMini('pop', 'Pop', e), colabOff ? null : machineMini('colab-g4b', 'Colab L4', e)));
     v.append(creditsCard(e), changesCard(e));
     return v;
   }
@@ -252,29 +264,29 @@ export function makeViews(ctx) {
   function resultRow(r) {
     const ci = r.task_se != null ? ` ±${(196 * r.task_se).toFixed(1)}` : '';
     return h('div', { class: 'mrow' }, h('div', { class: 'row between' }, h('b', {}, r.label), h('span', { class: 'big2' }, `${(100 * r.rate).toFixed(1)}%`, h('span', { class: 'muted small' }, ci))),
-      h('div', { class: 'row small muted' }, `${r.successes}/${r.counted ?? r.scored} counted of ${r.ran}`, ' · ', chip(`series ${String(r.series).slice(0, 4)}`), r.infra ? chip(`${r.infra} lost to infrastructure`, 'warn') : null, r.ran_out_rate != null ? chip(`ran out ${rate(r.ran_out_rate)}`) : null, r.neuralese_use != null ? chip(`Neuralese ${rate(r.neuralese_use)}`) : null, r.unpaired ? chip('unpaired copy') : null, ' ', ago(r.finished, now())));
+      h('div', { class: 'row small muted' }, `${r.successes}/${r.counted ?? r.scored} samples`, r.unscored ? ` · ${r.unscored} unscored count as failures` : '', ' · ', chip(r.set || 'held'), chip(`series ${String(r.series).slice(0, 4)}`), r.infra ? chip(`${r.infra} lost to infrastructure`, 'warn') : null, r.ran_out_rate != null ? chip(`ran out ${rate(r.ran_out_rate)}`) : null, r.neuralese_use != null ? chip(`Neuralese ${rate(r.neuralese_use)}`) : null, r.unpaired ? chip('unpaired copy') : null, ' ', ago(r.finished, now())));
   }
   function held() {
     const e = ei(), v = h('div', {});
     if (!snap()) return v.append(loading('')), v;
     const hd = e?.held;
-    v.append(h('div', { class: 'notice' }, 'Held-v3 is 256 tasks, 2 samples each, sampled at temperature 1. Only results of one measurement series (same scoring code, engine and sampling) are paired; the table says which series a result belongs to. Interval: 1.96 standard errors over tasks.'));
+    v.append(h('div', { class: 'notice' }, 'Held-v3 is 256 tasks, 2 samples each, sampled at temperature 1. A pass rate counts every planned sample: an unscored or timed-out sample is a failure (only an episode lost to infrastructure is left out). A pair across two measurement series is marked; one series is only comparable to itself, so the anchor and the reference are the fixed points. Interval: 1.96 standard errors over tasks.'));
     if (hd) {
       const g = hd.gate, prog = progress(e);
-      v.append(card('The gate', null, h('div', { class: `verdict tone-${prog.tone}` }, h('b', {}, prog.headline), h('span', {}, ` ${prog.sub}`)), h('div', { class: 'small' }, prog.detail),
+      v.append(card('The gate', null, h('div', { class: `verdict tone-${prog.tone}` }, h('b', {}, prog.headline), h('span', {}, ` ${prog.sub}`)), h('div', { class: 'small' }, prog.detail), hd.no_gain ? h('div', { class: 'notice warn', style: 'margin-top:8px' }, hd.no_gain.text || 'No policy beats the anchor.') : null,
         g ? h('div', { class: 'kv small', style: 'margin-top:8px' }, h('span', {}, 'candidate'), h('span', {}, heldLine(g)), h('span', {}, 'reference'), h('span', {}, g.reference_same_series ? `${g.reference} measured on the same series` : `${g.reference}: not yet measured on the candidate's series`),
-          h('span', {}, 'cadence'), h('span', {}, `every ${g.every ?? '?'} round${g.every === 1 ? '' : 's'} (${g.since_held ?? '?'} since the last)`), g.failing ? [h('span', {}, 'retries'), h('span', {}, `${g.failing.count}× since ${clock(g.failing.first_ts * 1000)}`)] : null) : null));
-      for (const p of hd.in_progress || []) v.append(card(`Measuring ${p.label} on Pop`, h('span', { class: 'muted small' }, `updated ${ago(p.updated, now())}`), meter(p.done / p.of, 'good'), h('div', { class: 'small' }, `${p.done} of ${p.of} episodes · ${dur((p.minutes || 0) * 60)} so far · ${p.eta_s ? `about ${dur(p.eta_s)} left (${clock(now() + p.eta_s * 1000)})` : ''}`)));
+          g?.anchor ? [h('span', {}, 'anchor'), h('span', {}, g.vs_anchor ? `${g.anchor}: ${signed(g.vs_anchor.delta_pts, 1)} pts (95% ${signed(g.vs_anchor.ci_pts[0], 1)} to ${signed(g.vs_anchor.ci_pts[1], 1)})` : g.anchor)] : null, g?.verdict ? [h('span', {}, 'last verdict'), h('span', {}, `${g.verdict.label}: ${g.verdict.verdict}${g.verdict.adopt ? ' (adopted)' : ''}${hd.no_gain ? '' : ''}`)] : null, h('span', {}, 'cadence'), h('span', {}, `every ${g.every ?? '?'} round${g.every === 1 ? '' : 's'} (${g.since_held ?? '?'} since the last)`), g.failing ? [h('span', {}, 'retries'), h('span', {}, `${g.failing.count}× since ${clock(g.failing.first_ts * 1000)}`)] : null) : null));
+      for (const p of hd.in_progress || []) v.append(card(`Measuring ${p.label} (${p.set || 'held'})`, h('span', { class: 'muted small' }, `updated ${ago(p.updated, now())}`), meter(p.done / p.of, 'good'), h('div', { class: 'small' }, `${p.done} of ${p.of} episodes · ${dur((p.minutes || 0) * 60)} so far · ${p.eta_s ? `about ${dur(p.eta_s)} left (${clock(now() + p.eta_s * 1000)})` : ''}`)));
       const pts = hd.results.map(r => ({ label: r.label.replace(/^v(\d+) \(.*\)$/, 'v$1 ref'), y: r.rate, lo: r.task_se != null ? r.rate - 1.96 * r.task_se : null, hi: r.task_se != null ? r.rate + 1.96 * r.task_se : null, series: r.series }));
       v.append(card('Pass rate by policy', null, pts.length ? ladder(pts, { height: 220 }) : h('div', { class: 'muted' }, 'No result yet.')));
-      if ((hd.pairs || []).length) v.append(card('Paired comparisons (same series)', null, h('div', { class: 'scroll', style: 'max-height:none' }, h('table', {}, h('thead', {}, h('tr', {}, ['pair', 'change', '95% interval'].map((c, i) => h('th', { class: i ? 'n' : '' }, c)))),
-        h('tbody', {}, [...hd.pairs].reverse().map(p => h('tr', { class: p.ci_pts[0] > 0 ? 'sig-good' : p.ci_pts[1] < 0 ? 'sig-bad' : '' }, h('td', {}, p.a, h('span', { class: 'muted' }, ' → '), p.b, h('div', { class: 'small muted' }, `${p.up} tasks up, ${p.down} down`)), h('td', { class: 'n' }, h('b', {}, signed(p.delta_pts, 1)), ' pts'), h('td', { class: 'n nowrap' }, `[${signed(p.ci_pts[0], 1)}, ${signed(p.ci_pts[1], 1)}]`)))))),
+      if ((hd.pairs || []).length) v.append(card('Paired comparisons', null, h('div', { class: 'scroll', style: 'max-height:none' }, h('table', {}, h('thead', {}, h('tr', {}, ['pair', 'change', '95% interval'].map((c, i) => h('th', { class: i ? 'n' : '' }, c)))),
+        h('tbody', {}, [...hd.pairs].reverse().map(p => h('tr', { class: p.ci_pts[0] > 0 ? 'sig-good' : p.ci_pts[1] < 0 ? 'sig-bad' : '' }, h('td', {}, p.a, h('span', { class: 'muted' }, ' → '), p.b, h('div', { class: 'small muted' }, `${p.up} tasks up, ${p.down} down`, p.same_series === false ? ' · across series' : '')), h('td', { class: 'n' }, h('b', {}, signed(p.delta_pts, 1)), ' pts'), h('td', { class: 'n nowrap' }, `[${signed(p.ci_pts[0], 1)}, ${signed(p.ci_pts[1], 1)}]`)))))),
         h('div', { class: 'panel-note' }, 'Task-level normal approximation of the per-task pass-rate change; an episode lost to infrastructure leaves its pair out of both sides, any other unscored episode counts as a failure. The driver\'s verdict uses the permutation test of held_eval.')));
       v.append(section('Every measurement'), h('div', { class: 'card mlist' }, [...hd.results].reverse().map(resultRow)));
-      if ((hd.queue || []).length) v.append(card('held-v4 queue', null, h('ul', { class: 'plain small' }, hd.queue.map(q => h('li', {}, `${q.label} · ${q.state} · ${(q.reasons || []).join(', ')} · queued ${ago(q.queued_at, now())}`)))));
+      if ((hd.queue || []).length) v.append(card('held-v4 queue', null, h('ul', { class: 'plain small' }, hd.queue.map(q => h('li', {}, `${q.label} · ${q.state}${q.rate != null ? ` · ${rate(q.rate)}` : ''} · ${(q.reasons || []).join(', ')} · queued ${ago(q.queued_at, now())}`)))));
     }
     const legacy = (snap().runs || []).filter(r => (r.held || []).length);
-    if (legacy.length) v.append(h('details', { class: 'card', style: 'margin-top:14px' }, h('summary', {}, `Earlier GRPO runs (retired): ${legacy.length} with held results`), h('table', {}, h('thead', {}, h('tr', {}, ['run', 'step', 'change', 'p'].map(c => h('th', {}, c)))),
+    if (legacy.length) v.append(h('details', { class: 'card', style: 'margin-top:14px' }, h('summary', {}, `GRPO runs with held results: ${legacy.length}`), h('table', {}, h('thead', {}, h('tr', {}, ['run', 'step', 'change', 'p'].map(c => h('th', {}, c)))),
       h('tbody', {}, legacy.flatMap(r => r.held.map(x => h('tr', {}, h('td', {}, h('a', { href: dl.ds('grpo:' + r.id.replace(/\./g, '/'), { part: 'held' }) }, r.id)), h('td', {}, x.step), h('td', {}, `${signed(x.delta_pts, 1)} pts`), h('td', {}, fmt(x.p, 2)))))))));
     return v;
   }
@@ -305,7 +317,7 @@ export function makeViews(ctx) {
     const e = ei(), v = h('div', {});
     if (!snap()) return v.append(loading('')), v;
     v.append(h('div', { class: 'notice' }, 'The GB10 shares one memory pool between CPU and GPU: "GPU memory" is system RAM, so the bars show ledger claims against total RAM. Ledger headroom is available memory minus what running claims still reserve.'));
-    v.append(h('div', { class: 'grid g2' }, machineDetail('dgx', 'DGX', 'GB10, unified memory', e), machineDetail('pop', 'Pop', 'RTX 4060 8 GB', e), machineDetail('colab-g4a', 'Colab A100', 'round learner and collection', e), machineDetail('colab-g4b', 'Colab L4', 'program tuning', e)));
+    v.append(h('div', { class: 'grid g2' }, machineDetail('dgx', 'DGX', 'GB10, unified memory', e), machineDetail('pop', 'Pop', 'RTX 4060 8 GB', e), ...(e?.colab?.state === 'stopped' ? [] : [machineDetail('colab-g4a', 'Colab A100', 'round learner and collection', e), machineDetail('colab-g4b', 'Colab L4', 'program tuning', e)])));
     v.append(creditsCard(e || {}));
     const c = e?.colab;
     if (c) {
@@ -393,7 +405,7 @@ export function makeViews(ctx) {
   /* ---------- More ---------- */
   function moreView(hv) {
     const items = [['units', 'Units', 'Everything systemd runs, grouped by what it does'], ['teachers', 'Teacher details', 'Per teacher outcomes, families, history'], ['data', 'Training data', 'Browse datasets, tasks, episodes and rounds'], ['backlog', 'Open items and fallow', 'In-flight work and built capabilities not in use'],
-      ['investigations', 'Investigations', 'Open questions with findings'], ['inbox', 'Inbox', 'Questions to the supervising agent and its answers'], ['events', 'All events', 'The driver\'s event log']];
+      ['inbox', 'Inbox', 'Questions to the supervising agent and its answers'], ['events', 'All events', 'The driver\'s event log']];
     const sum = inboxCounts();
     return h('div', { class: 'moremenu' }, items.map(([id, t, d]) => h('a', { class: 'card menuitem', href: `#${id}` }, h('div', { class: 'row' }, h('b', {}, t), id === 'inbox' && sum.unread ? chip(`${sum.unread} new`, 'ok') : null, id === 'inbox' && sum.waiting ? chip(`${sum.waiting} waiting`, 'open') : null), h('span', { class: 'muted small' }, d))));
   }

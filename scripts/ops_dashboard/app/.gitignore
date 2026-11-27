@@ -1,0 +1,6 @@
+node_modules/
+.tendriller/
+pages/*/dist/
+pages/*/engine/
+pages/*/preview/
+.tendriller

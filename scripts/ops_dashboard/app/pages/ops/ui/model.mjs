@@ -1,5 +1,4 @@
 // Pure helpers of the ops dashboard: formatting, health verdicts, series building. No DOM, no tendril: testable in node.
-import { editRef } from '../ops-protocol.mjs';
 
 export const num = v => typeof v === 'number' && Number.isFinite(v);
 
@@ -51,6 +50,8 @@ export function ema(points, alpha) {
 }
 
 export const SNAP_STALE_MS = 150_000;
+/** The snapshot schema this page reads (the exporter's `v`, export.py); another version is refused, never half-read. */
+export const SNAPSHOT_V = 4;
 const RUN_QUIET_MS = 6 * 3600_000;
 export const latestHeld = run => (run.held || []).filter(h => num(h.delta_pts)).sort((a, b) => (a.step ?? 0) - (b.step ?? 0)).at(-1);
 
@@ -88,9 +89,10 @@ export function health(snap, now, acked = {}, read = null) {
   if (feed.state === 'link_down') items.push({ id: 'link', level: 'warn', system: true,
     text: `No connection to the DGX: the last read failed at ${clock(feed.failAt)}${feed.error ? ` (${String(feed.error).slice(0, 120)})` : ''}. Showing data from ${dur(feed.age / 1000)} ago; the exporter itself may be fine.` });
   for (const a of snap.alerts || []) items.push({ id: a.id, level: a.level, text: a.text, machine: a.machine, unit: a.unit });
-  const gate = snap.ei?.held?.gate, pair = gate?.pair;
-  if (pair && pair.ci_pts[1] < 0) items.push({ id: `held:${gate.candidate}`, level: 'crit', text: `Held regression: ${gate.candidate} is ${signed(pair.delta_pts, 1)} pts against ${gate.reference} (95% interval ${signed(pair.ci_pts[0], 1)} to ${signed(pair.ci_pts[1], 1)}).` });
-  for (const r of snap.runs || []) {      // retired GRPO runs still alarm if one is live
+  const gate = snap.ei?.held?.gate;
+  for (const [pair, against] of [[gate?.vs_anchor, gate?.anchor], [gate?.pair, gate?.reference]])
+    if (pair && pair.ci_pts[1] < 0) items.push({ id: `held:${gate.candidate}:${against}`, level: 'crit', text: `Held regression: ${gate.candidate} is ${signed(pair.delta_pts, 1)} pts against ${against} (95% interval ${signed(pair.ci_pts[0], 1)} to ${signed(pair.ci_pts[1], 1)}).` });
+  for (const r of snap.runs || []) {      // a live GRPO run that goes quiet alarms
     if (!r.active) continue;
     if (r.last_ts && now - r.last_ts > RUN_QUIET_MS) items.push({ id: `quiet:${r.id}`, level: 'warn', text: `${r.id} wrote nothing for ${dur((now - r.last_ts) / 1000)}.`, run: r.id });
   }
@@ -102,7 +104,7 @@ export function health(snap, now, acked = {}, read = null) {
 
 /** This device's clock against the DGX's, from a signal's signing time: positive = device ahead. Includes the delivery latency. */
 export const clockSkew = (issuedAtMs, receivedAtMs) => num(issuedAtMs) && num(receivedAtMs) ? receivedAtMs - issuedAtMs : null;
-export const CLOCK_WARN_MS = 5000;
+export const CLOCK_WARN_MS = 1500;          // Chronolog drops signals signed more than 2 s ahead of the receiver's clock (feeds.mjs)
 
 /** Compact number: 1.2k, 4.5M. */
 export const compact = v => !num(v) ? '—' : Math.abs(v) >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : Math.abs(v) >= 1e4 ? `${Math.round(v / 1e3)}k` : Math.abs(v) >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : String(Math.round(v));
@@ -152,21 +154,25 @@ export function hourlyBars(hourly, now, hours = 12) {
   return Array.from({ length: hours }, (_, i) => { const t = top - (hours - 1 - i) * 3600e3, b = map.get(t) || {}; return { t, dgx: b.dgx || 0, colab: b.colab || 0, pop: b.pop || 0 }; });
 }
 
-/** Headline of "is training making progress?": the paired held result when there is one, else the newest measured pass rate. */
+/** Headline of "is training making progress?": the candidate against the fixed anchor (the start policy) when the exporter has the
+ * pair, else against its reference, else the newest measured pass rate. Rates count every planned sample (an unscored sample is a
+ * failure); the verdict line says how many consecutive rounds were neutral. */
 export function progress(ei) {
   const held = ei?.held;
   if (!held) return { tone: 'flat', headline: '—', sub: 'no held data yet', detail: '' };
-  const gate = held.gate, pair = gate?.pair;
+  const gate = held.gate, pair = gate?.vs_anchor || gate?.pair;
+  const against = gate?.vs_anchor ? `${gate.anchor ?? 'the start policy'} (fixed anchor)` : gate?.reference;
   const latest = [...(held.results || [])].filter(r => r.version != null).sort((a, b) => b.version - a.version)[0];
-  if (pair) {
+  const stale = held.no_gain ? ` ${held.no_gain.text || ''}`.trimEnd() : '';
+  if (pair && gate?.candidate) {
     const tone = pair.ci_pts[0] > 0 ? 'good' : pair.ci_pts[1] < 0 ? 'bad' : 'flat';
-    return { tone, headline: `${signed(pair.delta_pts, 1)} pts`, sub: `${gate.candidate} vs ${gate.reference}, held-v3 paired`,
-      detail: `95% interval ${signed(pair.ci_pts[0], 1)} to ${signed(pair.ci_pts[1], 1)} over ${pair.tasks} tasks: ${tone === 'good' ? 'a gain' : tone === 'bad' ? 'a regression' : 'not distinguishable from noise'}` };
+    return { tone, headline: `${signed(pair.delta_pts, 1)} pts`, sub: `${gate.candidate} vs ${against}, ${gate.candidate_result?.set || 'held'}${pair.same_series === false ? ', across series' : ', paired'}`,
+      detail: `95% interval ${signed(pair.ci_pts[0], 1)} to ${signed(pair.ci_pts[1], 1)} over ${pair.tasks} tasks: ${tone === 'good' ? 'a gain' : tone === 'bad' ? 'a regression' : 'not distinguishable from noise'}.${stale}` };
   }
   if (latest) {
     const prog = (held.in_progress || [])[0];
-    return { tone: 'flat', headline: rate(latest.rate), sub: `${latest.label} on held-v3, ${latest.scored}/${latest.ran} scored`,
-      detail: gate && !gate.reference_same_series ? `Not paired yet: the reference ${gate.reference} is re-measured on this series${prog ? ` (${prog.done}/${prog.of} episodes)` : ''}.` : 'Paired verdict pending.' };
+    return { tone: 'flat', headline: rate(latest.rate), sub: `${latest.label} on ${latest.set || 'held'}, ${latest.successes}/${latest.counted ?? latest.scored} samples${latest.unscored ? ` (${latest.unscored} unscored count as failures)` : ''}`,
+      detail: gate && !gate.reference_same_series ? `Not paired yet: ${gate.reference} is re-measured on this series${prog ? ` (${prog.done}/${prog.of} episodes)` : ''}.` : 'Paired verdict pending.' };
   }
   return { tone: 'flat', headline: '—', sub: 'no measured policy', detail: '' };
 }
@@ -188,22 +194,6 @@ export function activity(snap) {
   }
   for (const [key, n] of counts) { const [w, text] = key.split('|'); if (by[w]) by[w].push({ role: 'other', text: n > 1 ? `${text} ×${n}` : text }); }
   return by;
-}
-
-/** Per-run {step -> record} map to [{id, points:[{x: step, y}]}] in the given run order. */
-export function metricSeries(runs, ids, metric) {
-  const out = [];
-  for (const id of ids) {
-    const steps = runs.get(id);
-    if (!steps) continue;
-    const pts = [];
-    for (const [step, rec] of [...steps].sort((a, b) => a[0] - b[0])) {
-      const y = rec.metrics?.[metric];
-      if (num(y)) pts.push({ x: step, y });
-    }
-    if (pts.length) out.push({ id, label: id, points: pts });
-  }
-  return out;
 }
 
 export function metricNames(runs) {
@@ -238,14 +228,22 @@ export const matches = (row, q) => !q || Object.values(row).some(v => typeof v =
 export const LISTENER_LIVE_MS = 180_000;
 const ASKS = ['ask', 'request_stop'];
 
-/** The agent's listener heartbeat as carried by the participant's tick ({ts, listener}: both DGX epoch milliseconds). */
-export function listenerStatus(tick, nowMs = null) {
+/**
+ * Who takes a question: the inbox worker (unit ops-inbox: records the question, sends its receipt; `presence` is its liveness card
+ * from watchAgentPresence) and the supervising agent (reads the inbox and answers; its heartbeat `tick.listener` is the mtime of
+ * <dashboard>/inbox.listener, touched by every inbox.sh read; both are DGX epoch milliseconds in the agent program's tick).
+ * live = worker running and the supervising agent read the inbox recently; recorded = worker running, the agent has not looked
+ * lately (the answer waits for its next check); none = no worker; unknown = no tick from the DGX.
+ */
+export function listenerStatus(tick, nowMs = null, presence = null) {
   if (!tick) return { state: 'unknown', text: 'Waiting for the first tick from the DGX.' };
-  if (nowMs != null && nowMs - tick.ts > 120_000) return { state: 'unknown', text: `The participant on the DGX has not reported for ${dur((nowMs - tick.ts) / 1000)}, so whether the agent listens is unknown.` };
-  if (!num(tick.listener)) return { state: 'none', text: 'Nobody is listening: the agent has not started its inbox listener (inbox.sh wait).' };
-  const age = Math.max(0, tick.ts - tick.listener);
-  return age < LISTENER_LIVE_MS ? { state: 'live', age, text: `The agent is listening (heard ${dur(age / 1000)} ago).` }
-    : { state: 'stale', age, text: `Nobody is listening: the agent's inbox listener was last heard ${dur(age / 1000)} ago.` };
+  if (nowMs != null && (tick.at ?? nowMs) && nowMs - (tick.at ?? nowMs) > 120_000) return { state: 'unknown', text: `The agent program on the DGX has not reported for ${dur((nowMs - tick.at) / 1000)}, so whether the inbox is taken is unknown.` };
+  const worker = presence?.status;
+  if (worker !== 'available' && worker !== 'busy') return { state: 'none', text: worker === 'stale' || worker === 'stopped' ? 'The inbox worker (unit ops-inbox) is not running. Questions are kept and recorded when it returns.' : 'Looking for the inbox worker (unit ops-inbox).' };
+  const age = num(tick.listener) ? Math.max(0, tick.ts - tick.listener) : null;
+  if (age != null && age < LISTENER_LIVE_MS) return { state: 'live', age, text: `The inbox worker is running and the supervising agent read the inbox ${dur(age / 1000)} ago.` };
+  return { state: 'recorded', age, text: age == null ? 'The inbox worker records your question. The supervising agent has not read the inbox yet; it answers at its next check.'
+    : `The inbox worker records your question. The supervising agent last read the inbox ${dur(age / 1000)} ago; it answers at its next check.` };
 }
 
 /**
@@ -259,7 +257,7 @@ export function askState(inbox, pending, times, seen, kind, id) {
   if (queued) return { state: 'waiting', confirmed: false, failed: queued.state === 'uncertain', at: queued.ts, text: queued.input.text, op: queued.id };
   const a = (inbox?.asks || []).filter(x => ASKS.includes(x.kind) && subj(x.subject)).at(-1);
   if (!a) return null;
-  const ans = (inbox.answers || []).filter(x => x.ask === editRef(a.operationId)).at(-1);
+  const ans = (inbox.answers || []).filter(x => x.ask === a.operationId).at(-1);
   const at = times?.[a.operationId]?.at ?? null;
   if (!ans) return { state: 'waiting', confirmed: true, at, text: a.text, op: a.operationId };
   return { state: 'answered', at, text: a.text, answer: ans.text, op: a.operationId, answerOp: ans.operationId, unread: !(seen || []).includes(ans.operationId) };
@@ -271,6 +269,6 @@ export function inboxSummary(inbox, pending, seen) {
   const answered = new Set((inbox?.answers || []).map(x => x.ask));
   const known = new Set((inbox?.asks || []).map(a => a.operationId));
   const queued = (pending || []).filter(p => p.name === 'ask' && ASKS.includes(p.input?.kind) && !known.has(p.id)).length;
-  const unread = (inbox?.answers || []).filter(x => asks.some(a => editRef(a.operationId) === x.ask) && !(seen || []).includes(x.operationId)).length;
-  return { waiting: asks.filter(a => !answered.has(editRef(a.operationId))).length + queued, unread, total: asks.length + queued };
+  const unread = (inbox?.answers || []).filter(x => asks.some(a => a.operationId === x.ask) && !(seen || []).includes(x.operationId)).length;
+  return { waiting: asks.filter(a => !answered.has(a.operationId)).length + queued, unread, total: asks.length + queued };
 }

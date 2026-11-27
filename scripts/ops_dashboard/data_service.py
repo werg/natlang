@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """natlang ops data service: answers the ops page's on-demand queries and applies its edits.
 
-Runs as a child of the native participant (app/ops-peer.mjs) speaking JSON lines on stdin/stdout:
+Runs as a child of the agent program (app/pages/ops/agent.mjs) speaking JSON lines on stdin/stdout:
     request  {"id": n, "q": "data.item", "input": {...}}
     reply    {"id": n, "ok": true, "value": ...} | {"id": n, "ok": false, "error": "...", "code": "..."}
 The same handlers serve the local layout preview (preview_server.py). Everything is read lazily and bounded: no handler
 loads a whole multi-GB file; large JSONL files are read through byte-offset indexes cached under the dashboard dir.
 
 Query families: ops.* (exporter state), data.* (training data catalog, items, runs; data_catalog.py / data_items.py),
-edits.* (apply page edits to the edit layers; data_edits.py), inbox.* (questions from the page).
+edits.* (apply page edits to the edit layers; data_edits.py). The page's questions are not here: the inbox worker
+(app/pages/ops/inbox-worker.mjs) writes <dashboard>/inbox.jsonl itself.
 """
 import json
 import os
@@ -42,50 +43,6 @@ def handler(name):
     return wrap
 
 
-def jsonl_since(path, offset=0, max_bytes=4 << 20, keep=None):
-    """Records of a growing JSONL file after byte `offset` (complete lines only), at most `max_bytes` read from the end
-    when offset is 0. Returns (records, new_offset)."""
-    try:
-        size = os.path.getsize(path)
-    except OSError:
-        return [], 0
-    if offset > size:
-        offset = 0
-    start = offset if offset else max(0, size - max_bytes)
-    with open(path, 'rb') as f:
-        f.seek(start)
-        data = f.read(size - start)
-    skip = data.find(b'\n') + 1 if start and not offset else 0
-    body = data[skip:]
-    end = body.rfind(b'\n') + 1
-    recs = []
-    for raw in body[:end].splitlines():
-        try:
-            r = json.loads(raw)
-        except ValueError:
-            continue
-        if keep is None or keep(r):
-            recs.append(r)
-    return recs, start + skip + end
-
-
-def _mtime_ms(path):
-    try:
-        return int(os.path.getmtime(path) * 1000)
-    except OSError:
-        return None
-
-
-# ---------- ops: the exporter's state (export.py writes these files every 30 s) ----------
-
-@handler('ops.tick')
-def ops_tick(_):
-    return {'ts': int(time.time() * 1000), 'snapshot': _mtime_ms(OUT + '/latest.json'),
-            'metrics': _mtime_ms(OUT + '/metrics.jsonl'), 'machines': _mtime_ms(OUT + '/machines.jsonl'),
-            'events': _mtime_ms(OUT + '/events.jsonl'), 'edits': _mtime_ms(DATA + '/ops/data-edits/log.jsonl'),
-            'listener': _mtime_ms(DASH + '/inbox.listener')}       # the agent's `inbox.sh wait` touches this every 10 s
-
-
 @handler('ops.paths')
 def ops_paths(_):
     return {'telemetry': DASH + '/page-telemetry.jsonl'}
@@ -98,28 +55,6 @@ def ops_snapshot(_):
     except (OSError, ValueError) as e:
         raise QueryError(f'no exporter snapshot: {e}', 'unavailable')
     return rec.get('data')
-
-
-def _tail(name, inp, max_bytes, max_age_s):
-    off = int((inp or {}).get('offset') or 0)
-    cutoff = (time.time() - max_age_s) * 1000
-    recs, new = jsonl_since(f'{OUT}/{name}', off, max_bytes, keep=lambda r: (r.get('ts') or 0) >= cutoff)
-    return {'records': recs, 'offset': new}
-
-
-@handler('ops.metrics')
-def ops_metrics(inp):
-    return _tail('metrics.jsonl', inp, 6 << 20, 30 * 86400)
-
-
-@handler('ops.machines')
-def ops_machines(inp):
-    return _tail('machines.jsonl', inp, 2 << 20, 36 * 3600)
-
-
-@handler('ops.events')
-def ops_events(inp):
-    return _tail('events.jsonl', inp, 1 << 20, 7 * 86400)
 
 
 def _load_modules():

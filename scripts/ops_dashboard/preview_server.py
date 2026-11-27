@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Local layout preview of the natlang ops page with real data: serves the built page graph and answers the page's queries
-with the same handlers the native participant uses (data_service.py). It is not the application session: commands
+"""Local layout preview of the natlang ops page with real data: serves a built page graph and answers the page's queries
+with the same handlers the agent program uses (data_service.py). It is not the application session: commands
 (edits, asks) are kept in this process's memory, shown as previews and never applied. Loopback only.
 
-usage: preview_server.py [--page DIR] [--port 8765]     (run under the memory ledger; see README.md)
+usage: (cd app && node pages/ops/build.mjs --preview pages/ops/preview) && preview_server.py [--page DIR] [--port 8765]
+(run under the memory ledger; see README.md)
 """
 import argparse
 import http.server
@@ -50,7 +51,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if q.startswith(('edits.', 'inbox.')):
                 return self._json(403, {'error': 'native-only operation', 'code': 'forbidden'})
             try:
-                with LOCK:          # the data service is single-threaded by design (the native peer serializes it too)
+                with LOCK:          # the data service is single-threaded by design (the agent program serializes it too)
                     return self._json(200, data_service.answer(q, body.get('input')))
             except data_service.QueryError as e:
                 return self._json(400, {'error': str(e), 'code': e.code})
@@ -76,11 +77,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--page', default=os.path.expanduser('~/.local/share/tendriller/natlang-ops-app/page'))
+    ap.add_argument('--page', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app', 'pages', 'ops', 'preview'))
     ap.add_argument('--port', type=int, default=8765)
     args = ap.parse_args()
     data_service._load_modules()
-    import functools       # the page directory is rebuilt in place (build.mjs): resolve it per request, never chdir
+    import functools       # the page directory is rebuilt in place (build.mjs --preview): resolve it per request, never chdir
     srv = http.server.ThreadingHTTPServer(('127.0.0.1', args.port), functools.partial(Handler, directory=args.page))
     print(f'preview: http://127.0.0.1:{args.port}/', flush=True)
     srv.serve_forever()

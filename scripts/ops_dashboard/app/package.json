@@ -6,20 +6,20 @@
     "node": ">=24"
   },
   "scripts": {
-    "setup:prepare": "node account-setup.mjs prepare",
-    "setup:finish": "node account-setup.mjs finish",
-    "create": "node setup.mjs create",
-    "host:adopt": "node host-adoption.mjs",
     "init": "node setup.mjs init",
-    "enroll": "node setup.mjs enroll",
-    "pair": "node setup.mjs pair",
-    "build": "node build.mjs",
-    "peer": "node ops-peer.mjs"
+    "build": "node setup.mjs build",
+    "deploy": "node setup.mjs deploy",
+    "agent": "tendril agent run",
+    "inbox": "node pages/ops/inbox-worker.mjs",
+    "status": "tendril status",
+    "test": "node --test"
   },
   "dependencies": {
-    "@chronolog/peer-session": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-rc17/packages/chronolog-peer-session-6f8b00fb3a80854690689be959b1b1c062b0d460.tgz",
-    "@tendriller/core": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-rc17/packages/tendriller-sdk-0.3.0-rc.17.tgz",
-    "@tendriller/tools": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-rc17/packages/tendriller-tools-0.3.0-rc.17.tgz"
+    "@chronolog/authority": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-e87d62ac/packages/chronolog-authority-2e3df79f95fe043d08fbe976916cf24b67f0534e.tgz",
+    "@chronolog/peer-session": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-e87d62ac/packages/chronolog-peer-session-2e3df79f95fe043d08fbe976916cf24b67f0534e.tgz",
+    "@tendriller/core": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-e87d62ac/packages/tendriller-sdk-0.3.0-rc.17.tgz",
+    "@tendriller/tools": "file:../../../../.local/share/tendriller/natlang-ops-app/kit-e87d62ac/packages/tendriller-tools-0.3.0-rc.17.tgz",
+    "ws": "8.21.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2"

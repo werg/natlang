@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "service": "https://tendriller.dev",
+  "agent": {
+    "id": "ag_c3luwispkenkcbizv62y7wyv2g",
+    "handle": "natlang-ops",
+    "bio": "natlang ops dashboard: live DGX/aei1 state and the training-data viewer"
+  },
+  "pages": {
+    "ops": {
+      "id": "einq6bwtsfrq"
+    }
+  }
+}

@@ -22,7 +22,6 @@ from data_items import OPS, is_held
 
 LAYER = OPS + '/data-edits'
 ERRATA_FILE = OPS + '/pool-errata/ops-dashboard.jsonl'
-INBOX = DASH + '/inbox.jsonl'
 TASK_KINDS = ('task',)
 
 
@@ -140,43 +139,3 @@ def edits_layers(_):
     """The current layer state (for the agent and for checks)."""
     log = _log()
     return {'log': len(log), 'state': _fold(log), 'errata_file': ERRATA_FILE}
-
-
-@handler('inbox.sync')
-def inbox_sync(value):
-    """Mirror the retained asks and answers into <dashboard>/inbox.jsonl for the supervising agent (inbox.sh).
-
-    Input: the ``inbox`` query value ``{asks: [{operationId, kind, subject, text, author}], answers: [{ask, text, author,
-    operationId}]}``, or chat-style agent messages ``{messages: [{author, operationId, text, data?, inReplyTo?}]}`` (a
-    message without ``inReplyTo`` is an ask, its ``data`` may carry ``kind`` and ``subject``; one with it answers that
-    ask). The file format is the same for both."""
-    if isinstance(value.get('messages'), list):
-        value = chat_to_inbox(value['messages'])
-    answers = {}
-    for a in value.get('answers', []):
-        answers.setdefault(a['ask'], []).append({'text': a['text'], 'author': a.get('author'), 'op': a.get('operationId')})
-    lines = [json.dumps({'op': x['operationId'], 'kind': x['kind'], 'subject': x['subject'], 'text': x['text'], 'author': x.get('author'),
-                         'answers': answers.get(x['operationId'][-128:], [])}, ensure_ascii=False) + '\n' for x in value.get('asks', [])]
-    text = ''.join(lines)
-    try:
-        if open(INBOX).read() == text:
-            return {'asks': len(lines), 'changed': False}
-    except OSError:
-        pass
-    _atomic(INBOX, text)
-    return {'asks': len(lines), 'changed': True}
-
-
-def chat_to_inbox(messages):
-    """Chat-style messages -> the ``{asks, answers}`` shape of the ``inbox`` query."""
-    asks, answers = [], []
-    for m in messages:
-        if not isinstance(m, dict) or not m.get('operationId'):
-            continue
-        if m.get('inReplyTo'):
-            answers.append({'ask': str(m['inReplyTo'])[-128:], 'text': m.get('text', ''), 'author': m.get('author'), 'operationId': m['operationId']})
-        else:
-            data = m.get('data') if isinstance(m.get('data'), dict) else {}
-            asks.append({'operationId': m['operationId'], 'kind': data.get('kind', 'message'), 'subject': data.get('subject'),
-                         'text': m.get('text', ''), 'author': m.get('author')})
-    return {'asks': asks, 'answers': answers}

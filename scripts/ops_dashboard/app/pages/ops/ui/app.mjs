@@ -1,8 +1,7 @@
-import { num, fmt, gb, signed, dur, ago, clock, dayClock, shortUnit, health, metricSeries, askState, inboxSummary, listenerStatus, feedState, CLOCK_WARN_MS } from './model.mjs';
+import { num, fmt, gb, signed, dur, ago, clock, dayClock, shortUnit, health, askState, inboxSummary, listenerStatus, feedState, CLOCK_WARN_MS, SNAPSHOT_V } from './model.mjs';
 import { h, lineChart, valueTable, slotVar } from './charts.mjs';
 import { makeViews } from './views.mjs';
 import { dataView, link as dl } from './data.mjs';
-import { editRef } from '../ops-protocol.mjs';
 import { BUILD } from './connect.mjs';
 
 let src = null;      // the data source (session or preview), set by start()
@@ -12,7 +11,7 @@ const now = () => Date.now();
 
 /* ---------- state ---------- */
 const S = {
-  snap: null, live: new Map(), hist: new Map(), runs: new Map(), events: [], notices: new Map(),
+  snap: null, notices: new Map(),
   acked: store('ops.acked') || {}, slots: store('ops.slots') || {}, tab: 'overview', sel: new Set(), selTouched: false,
   smooth: store('ops.smooth') ?? 0.3, logy: false, extra: store('ops.extra') || '', tables: new Set(), open: new Set(), showAcked: false,
   q: '', procMachine: 'all', procState: 'live', evAll: false, hold: false, sent: 0, route: '', gate: null,
@@ -22,7 +21,7 @@ const S = {
 };
 const runLink = id => h('a', { class: 'btn sm', href: dl.run(id), title: 'Steps, selected groups, episodes and held evals of this run' }, 'Training data');
 const PRIMARY = [['overview', 'Now', '◉'], ['training', 'Rounds', '↻'], ['flow', 'Data', '≋'], ['held', 'Held-out', '✓'], ['machines', 'Machines', '▣'], ['more', 'More', '⋯']];
-const SECONDARY = [['units', 'Units'], ['teachers', 'Teachers'], ['data', 'Training data'], ['backlog', 'Open items'], ['investigations', 'Investigations'], ['inbox', 'Inbox'], ['events', 'Events']];
+const SECONDARY = [['units', 'Units'], ['teachers', 'Teachers'], ['data', 'Training data'], ['backlog', 'Open items'], ['inbox', 'Inbox'], ['events', 'Events']];
 const TABS = [...PRIMARY, ...SECONDARY];
 
 /* ---------- data intake ---------- */
@@ -35,7 +34,7 @@ function notice(key, text) { text ? S.notices.set(key, text) : S.notices.delete(
 
 const report = e => { try { src?.report?.(e); } catch {} };
 function takeSnapshot(rec) {
-  if (!rec?.data || rec.data.v !== 3) { report({ ev: 'snapshot_rejected', why: !rec?.data ? 'empty' : `version ${rec.data.v}` }); return; }
+  if (!rec?.data || rec.data.v !== SNAPSHOT_V) { report({ ev: 'snapshot_rejected', why: !rec?.data ? 'empty' : `version ${rec.data.v}` }); return; }
   if (S.snap && rec.data.ts < S.snap.ts) return;
   if (!S.snap) report({ ev: 'snapshot_first', age_s: Math.round((Date.now() - rec.data.ts) / 1000), runs: (rec.data.runs || []).length, machines: Object.keys(rec.data.machines || {}).length });
   S.snap = rec.data; S.snapCached = false;
@@ -45,59 +44,20 @@ function takeSnapshot(rec) {
   }
   schedule();
 }
-function takeMetric(rec) {
-  const d = rec.data;
-  if (!d?.run_id || !num(d.step)) return;
-  if (rec.type === 'train') {
-    if (!S.runs.has(d.run_id)) S.runs.set(d.run_id, new Map());
-    S.runs.get(d.run_id).set(d.step, { ...d, ts: rec.ts });
-  }
-  schedule();
-}
-function takeMachine(rec) {
-  const d = rec.data; if (!d?.machine) return;
-  const list = S.hist.get(d.machine) || S.hist.set(d.machine, []).get(d.machine);
-  list.push({ ts: rec.ts, ...d }); if (list.length > 1500) list.shift();
-  schedule();
-}
-function takeEvent(rec) { S.events.push({ ts: rec.ts, ...rec.data }); if (S.events.length > 400) S.events.shift(); schedule(); }
-
-/* Exporter state arrives through the session's on-demand queries; a tick names the files that changed. The snapshot is read
-   when a tick says it changed, and also (force) right after connecting, on coming back to the foreground and whenever no read
-   succeeded for a minute: a held tick says nothing about what changed while the page slept, and ticks may not arrive at all. */
-const offsets = { metrics: 0, machines: 0, events: 0 }, seen = {};
-let pulling = false, again = false;
-async function pull(tick, force = false) {
-  if (!src) return;
-  if (pulling) { again ||= force; return; }
-  pulling = true;
-  try {
-    if (force || S.snapCached || !S.snap || tick?.snapshot !== seen.snapshot) {
-      S.read.pending = true; freshness();
-      try {
-        const snap = await src.query('ops.snapshot');
-        S.read.okAt = now(); S.read.error = null;
-        seen.snapshot = tick?.snapshot; takeSnapshot({ data: snap }); notice('snap', '');
-      } catch (e) {
-        S.read.failAt = now(); S.read.error = e.message;
-        throw e;
-      } finally { S.read.pending = false; schedule(); }
-    }
-    const streams = S.tab === 'investigations' ? [['metrics', takeMetric]] : [];      // the snapshot carries everything else; the metric stream only feeds the old investigation charts
-    for (const [key, fn] of streams) {
-      if (offsets[key] && tick?.[key] === seen[key]) continue;
-      const r = await src.query(`ops.${key}`, { offset: offsets[key] });
-      for (const rec of r.records) fn(rec);
-      offsets[key] = r.offset; seen[key] = tick?.[key];
-    }
-  } catch (e) { notice('snap', `No connection to the DGX: ${e.message}`); report({ ev: 'pull_failed', error: String(e.message).slice(0, 200) }); }
-  finally {
-    pulling = false;
-    if (again) { again = false; void pull(src.ticks.get(), true); }
-  }
+/* Exporter state arrives as a live data feed (connect.mjs `src.snapshot`): the agent program on the DGX re-reads the exporter
+   snapshot every 10 s and pushes it when it changed; the page also pulls it right after connecting and on every new peer link.
+   A read that fails while the data is old raises "No connection to the DGX"; a read that succeeds but returns exporter data that
+   is already old raises "Exporter behind" (model.mjs feedState). When the page returns to the foreground it asks again. */
+let lastFeed = null;
+function takeFeed(f) {
+  S.read.pending = !!f.loading && !f.data;
+  if (f.error) { S.read.failAt = now(); S.read.error = String(f.error); notice('snap', `No connection to the DGX: ${S.read.error}`); report({ ev: 'pull_failed', error: S.read.error.slice(0, 200) }); }
+  else if (f.fetchedAtMs != null) { S.read.okAt = now(); S.read.error = null; notice('snap', ''); }
+  if (f.data && f.data !== lastFeed) { lastFeed = f.data; takeSnapshot({ data: f.data }); }
+  freshness(); schedule();
 }
 /** The page (re)opened or came back to the foreground: what it shows is held data until the next read answers. */
-function resumed() { S.read.since = now(); schedule(); void pull(src?.ticks.get(), true); }
+function resumed() { S.read.since = now(); schedule(); void src?.refresh?.().catch(() => {}); }
 
 /* ---------- colours: a run keeps its colour slot for good (colour follows the entity) ---------- */
 function slotOf(id) {
@@ -141,7 +101,7 @@ function rememberAsk(op, at) {
 }
 const syncAskTimes = () => { for (const p of src?.pending?.get() || []) if (p.name === 'ask' && p.ts) rememberAsk(p.id, p.ts); };
 const markSeen = ids => { const add = ids.filter(i => i && !S.seen.includes(i)); if (add.length) { S.seen = [...S.seen, ...add].slice(-300); store('ops.seen', S.seen); } };
-const listener = () => listenerStatus(S.tick, now());
+const listener = () => listenerStatus(S.tick && { ...S.tick, at: S.tickAt }, now(), src?.presence?.get());
 /** What became of the question asked about this item: sent and waiting (with the time), or the agent's answer inline. */
 function askStatus(kind, id) {
   const st = askState(src?.inbox.get(), src?.pending.get(), S.asks, S.seen, kind, id);
@@ -149,8 +109,8 @@ function askStatus(kind, id) {
   const when = st.at ? ` ${clock(st.at)}` : '';
   if (st.state === 'answered') return [h('span', { class: `chip ${st.unread ? 'ok' : ''}`, title: `Your question: ${st.text}` }, st.unread ? '✔ New answer' : '✔ Answered'),
     h('div', { class: 'answer' }, h('div', { class: 'small muted' }, `You asked${when}: ${st.text}`), h('b', {}, 'Agent: '), st.answer, st.unread ? h('button', { class: 'btn sm', type: 'button', style: 'margin-left:8px', onclick: () => { markSeen([st.answerOp]); render(); } }, 'Got it') : null)];
-  const ls = listener(), quiet = ls.state !== 'live';
-  const label = st.failed ? `Saved${when}, not sent yet` : `Sent${when}; waiting for the agent${quiet && ls.state !== 'unknown' ? ' (nobody is listening now)' : ''}`;
+  const ls = listener(), quiet = ls.state === 'none';
+  const label = st.failed ? `Saved${when}, not sent yet` : `Sent${when}; waiting for the agent${quiet && ls.state !== 'unknown' ? ' (the inbox worker is not running)' : ''}`;
   return [h('span', { class: `chip ${st.failed || (quiet && ls.state !== 'unknown') ? 'warn' : 'open'}`, title: st.failed ? 'The command is stored on this device and retries.' : st.confirmed === false ? 'Not yet confirmed by the journal.' : ls.text }, label)];
 }
 const askBtn = (kind, id, title, label = 'Ask') => {
@@ -196,24 +156,6 @@ function alertsView(hv) {
   return box;
 }
 
-/* ---------- investigations ---------- */
-function investigations() {
-  const v = h('div', {}), invs = S.snap?.investigations || [];
-  if (!invs.length) return v.append(h('div', { class: 'card muted' }, 'No open investigations.')), v;
-  for (const i of invs) {
-    const card = h('div', { class: 'card investigation', style: 'margin-bottom:14px' }, h('header', {}, h('h2', {}, i.title), h('span', { class: `chip ${i.status === 'open' ? 'open' : 'ok'}` }, i.status), ),
-      h('p', { style: 'font-weight:600' }, i.question), h('p', {}, i.summary), h('div', { class: 'muted small' }, `updated ${ago(i.updated_ts, now())}`));
-    card.append(h('details', { open: S.open.has(`f:${i.id}`) || undefined, ontoggle: e => e.target.open ? S.open.add(`f:${i.id}`) : S.open.delete(`f:${i.id}`) }, h('summary', {}, `${(i.findings || []).length} findings`),
-      (i.findings || []).map(f => h('div', { class: 'finding' }, h('span', { class: `chip ${f.status}` }, f.status === 'ruled_out' ? '✔ ruled out' : f.status === 'open' ? '… open' : 'evidence'), h('span', {}, f.text)))));
-    if ((i.next || []).length) card.append(h('div', { class: 'small', style: 'margin-top:6px' }, h('b', {}, 'Next: '), i.next.join(' · ')));
-    const charts = (i.charts || []).map(c => ({ ...c, series: metricSeries(S.runs, c.runs || [], c.metric).map(s => ({ ...s, label: s.id.replace(/^grpo-v\d\.(hunt\.)?/, ''), slot: slotOf(s.id) })) })).filter(c => c.series.length);
-    if (charts.length) card.append(h('div', { class: 'grid g2', style: 'margin-top:10px' }, charts.map(c => chartPanel({ key: `inv:${i.id}:${c.title}`, title: c.title, series: c.series, extra: { height: 200 } }))));
-    card.append(h('div', { class: 'row', style: 'margin-top:8px' }, askBtn('investigation', i.id, i.title), ...[...new Set([...(i.runs || []), ...(i.charts || []).flatMap(c => c.runs || [])])].slice(0, 6).map(r => h('a', { class: 'btn sm', href: dl.run(r) }, `data: ${r.replace(/^grpo-v\d\.(hunt\.)?/, '')}`))));
-    v.append(card);
-  }
-  return v;
-}
-
 /* ---------- shell ---------- */
 function data() {
   if (!src) return h('div', { class: 'card muted' }, 'Connect to read training data.');
@@ -222,8 +164,8 @@ function data() {
 function inbox() {
   const ib = src?.inbox.get() || { asks: [], answers: [] }, pend = (src?.pending.get() || []).filter(p => p.name === 'ask' && p.input?.kind !== 'ack_alert'), known = new Set(ib.asks.map(a => a.operationId));
   const v = h('div', {}), ls = listener();
-  v.append(h('div', { class: `card listener lst-${ls.state}` }, h('header', {}, h('h2', {}, 'Is the agent listening?'), h('span', { class: `chip ${ls.state === 'live' ? 'ok' : ls.state === 'unknown' ? '' : 'warn'}` }, ls.state === 'live' ? '✔ listening' : ls.state === 'unknown' ? 'unknown' : '▲ not listening')), h('div', {}, ls.text),
-    h('div', { class: 'small muted', style: 'margin-top:4px' }, 'The supervising agent runs a listener that blocks until you ask; it reports in every 10 seconds. A question you send while nobody listens is kept and is answered when the listener is re-armed.')));
+  v.append(h('div', { class: `card listener lst-${ls.state}` }, h('header', {}, h('h2', {}, 'Is the question taken?'), h('span', { class: `chip ${ls.state === 'live' || ls.state === 'recorded' ? 'ok' : ls.state === 'unknown' ? '' : 'warn'}` }, ls.state === 'live' ? '✔ agent reading' : ls.state === 'recorded' ? '✔ recorded' : ls.state === 'unknown' ? 'unknown' : '▲ no inbox worker')), h('div', {}, ls.text),
+    h('div', { class: 'small muted', style: 'margin-top:4px' }, 'A unit on the DGX (ops-inbox) records every question and confirms it; the supervising agent answers from its inbox at its next check. A question you send while the worker is down is kept in the journal and recorded when it returns.')));
   const items = [...pend.filter(p => !known.has(p.id)).map(p => ({ pending: p })), ...ib.asks.filter(a => a.kind !== 'ack_alert').map(a => ({ ask: a }))];
   if (!items.length) return v.append(h('div', { class: 'card muted' }, 'Nothing asked yet. Every alert, unit, open item and fallow row has an Ask button; the question and its answer show up on the item and here.')), v;
   const unread = [];
@@ -235,27 +177,27 @@ function inbox() {
         h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { class: 'btn sm', type: 'button', onclick: () => src.retry(p.id).then(render, e => notice('ask', `Retry failed: ${e.message}`)) }, 'Retry'), h('button', { class: 'btn sm', type: 'button', onclick: () => { src.dismiss(p.id); render(); } }, 'Discard'))));
       continue;
     }
-    const a = it.ask, ans = ib.answers.filter(x => x.ask === editRef(a.operationId)), at = S.asks[a.operationId]?.at;
+    const a = it.ask, ans = ib.answers.filter(x => x.ask === a.operationId), at = S.asks[a.operationId]?.at;
     for (const x of ans) if (!S.seen.includes(x.operationId)) unread.push(x.operationId);
     const fresh = ans.some(x => !S.seen.includes(x.operationId));
     v.append(h('div', { class: `card${fresh ? ' fresh' : ''}`, style: 'margin-bottom:10px' }, h('header', {}, h('h2', {}, a.subject.title || a.subject.id), h('span', { class: `chip ${a.kind === 'request_stop' ? 'crit' : ans.length ? 'ok' : 'open'}` }, a.kind === 'request_stop' ? 'stop request' : ans.length ? (fresh ? '✔ new answer' : '✔ answered') : 'waiting for the agent')),
       h('div', { class: 'small muted' }, at ? `Sent ${dayClock(at)}` : 'Sent earlier'), h('div', {}, a.text),
-      ans.length ? ans.map(x => h('div', { class: 'answer' }, h('b', {}, 'Agent: '), x.text)) : h('div', { class: 'small', style: 'margin-top:4px' }, `Not answered yet. ${ls.state === 'live' ? 'The agent is listening.' : ls.text}`)));
+      ans.length ? ans.map(x => h('div', { class: 'answer' }, h('b', {}, 'Agent: '), x.text)) : h('div', { class: 'small', style: 'margin-top:4px' }, `Not answered yet. ${ls.text}`)));
   }
   setTimeout(() => markSeen(unread), 1500);       // reading the inbox clears the unread badge (the cards above stay marked until the next visit)
   return v;
 }
 function inboxStrip() {
   const sum = inboxSummary(src?.inbox.get(), src?.pending.get(), S.seen), ls = listener();
-  const tone = sum.unread ? 'fresh' : sum.waiting && ls.state !== 'live' && ls.state !== 'unknown' ? 'warn' : '';
-  const status = ls.state === 'live' ? '✔ agent listening' : ls.state === 'unknown' ? 'listener unknown' : '▲ nobody listening';
+  const tone = sum.unread ? 'fresh' : sum.waiting && ls.state === 'none' ? 'warn' : '';
+  const status = ls.state === 'live' ? '✔ agent reading' : ls.state === 'recorded' ? '✔ question recorded' : ls.state === 'unknown' ? 'listener unknown' : '▲ no inbox worker';
   return h('a', { class: `card inboxstrip ${tone}`, href: '#inbox', 'aria-label': `Inbox: ${sum.waiting} waiting, ${sum.unread} new answers. ${ls.text}` },
     h('div', {}, h('b', {}, 'Inbox'), h('div', { class: 'small muted' }, sum.total ? `${sum.waiting} waiting for the agent · ${sum.unread} new answer${sum.unread === 1 ? '' : 's'}` : 'Ask the agent from any item')),
-    h('span', { class: `chip ${ls.state === 'live' ? 'ok' : ls.state === 'unknown' ? '' : 'warn'}` }, status));
+    h('span', { class: `chip ${ls.state === 'live' || ls.state === 'recorded' ? 'ok' : ls.state === 'unknown' ? '' : 'warn'}` }, status));
 }
 const inboxCounts = () => inboxSummary(src?.inbox.get(), src?.pending.get(), S.seen);
 const V = makeViews({ inboxStrip, inboxCounts, S, go: (...a) => go(...a), askBtn, alertsView, now, chartPanel, machineChip, meter, section, stat, runLink, openAsk, render: () => render() });
-const VIEWS = { overview: V.overview, training: V.training, flow: V.flow, held: V.held, machines: V.machines, units: V.units, teachers: V.teachers, backlog: V.backlog, more: V.more, events: V.events, data, investigations, inbox };
+const VIEWS = { overview: V.overview, training: V.training, flow: V.flow, held: V.held, machines: V.machines, units: V.units, teachers: V.teachers, backlog: V.backlog, more: V.more, events: V.events, data, inbox };
 function go(tab, route = '') { const hash = `#${tab}${route ? '/' + route : ''}`; if (location.hash !== hash) location.hash = hash; else { S.tab = tab; S.route = route; render(); } }
 function tabs(hv) {
   const nav = $('tabs'); nav.replaceChildren();
@@ -297,7 +239,7 @@ function freshness() {
     : feed.state === 'exporter_behind' ? `${held} · exporter behind`
     : age < 90e3 ? 'live' : held;
   const skewText = S.skew != null && Math.abs(S.skew) > CLOCK_WARN_MS
-    ? `This device's clock is ${dur(Math.abs(S.skew) / 1000)} ${S.skew > 0 ? 'ahead of' : 'behind'} the DGX. Past 10 s live data cannot pass; turn on automatic date and time.` : '';
+    ? `This device's clock is ${dur(Math.abs(S.skew) / 1000)} ${S.skew > 0 ? 'ahead of' : 'behind'} the DGX. Past 2 s the live data cannot pass either way; turn on automatic date and time.` : '';
   if ((S.notices.get('clock') || '') !== skewText) notice('clock', skewText);
 }
 function render() {
@@ -411,18 +353,19 @@ export function start(source) {
     setTimeout(() => { location.href = window.tendril?.identity?.base || location.href.split('?')[0]; }, 1500);
   });
   if (src.kind === 'preview') document.querySelector('.top .brand')?.append(h('span', { class: 'chip warn previewchip', title: 'A local preview of the page over the DGX exporter files and data service. Edits made here stay in this preview server and are not applied.' }, 'local preview'));
-  src.ticks.on(t => { if (t) { const was = listenerStatus(S.tick, now()).state; S.tick = t; if (listenerStatus(t, now()).state !== was) schedule(); void pull(t); } });
+  src.ticks.on(t => { if (t) { const was = listener().state; S.tick = t; S.tickAt = now(); if (listener().state !== was) schedule(); } });
+  src.presence?.on(() => schedule());
+  src.snapshot.on(takeFeed);
   src.clock?.on(v => { S.skew = v; });
   // a phone resumes a backgrounded page: its snapshot is held data until a fresh read answers (not an exporter alarm)
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resumed(); });
   addEventListener('pageshow', e => { if (e.persisted) resumed(); });
   for (const c of [src.edits, src.inbox, src.pending]) c.on(() => { if (S.tab === 'data' || S.tab === 'inbox') softRender(); else schedule(); });
   S.read.since = now();
-  void pull(src.ticks.get(), true);
-  // ticks drive refreshes; this fallback reads again whenever no read succeeded for a minute
-  setInterval(() => void pull(src.ticks.get(), !S.read.okAt || now() - S.read.okAt > 60000), 30000);
+  // the feed pushes; this fallback asks again whenever no read succeeded for a minute, and reads the metric stream while Investigations is open
+  setInterval(() => { if (!S.read.okAt || now() - S.read.okAt > 60000) void src.refresh?.().catch(() => {}) }, 30000);
   render();
 }
 export function showGate(node) { S.gate = node; render(); }
-{ const saved = store('ops.snap-cache'); if (saved?.v === 3 && !S.snap) { S.snap = saved; S.snapCached = true; } }
+{ const saved = store('ops.snap-cache'); if (saved?.v === SNAPSHOT_V && !S.snap) { S.snap = saved; S.snapCached = true; } }
 render();

@@ -20,7 +20,6 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(data_items, '_LINE_CACHE', {})
     monkeypatch.setattr(data_edits, 'LAYER', str(tmp_path / 'data-edits'))
     monkeypatch.setattr(data_edits, 'ERRATA_FILE', str(tmp_path / 'pool-errata' / 'ops-dashboard.jsonl'))
-    monkeypatch.setattr(data_edits, 'INBOX', str(tmp_path / 'inbox.jsonl'))
     monkeypatch.setattr(data_edits, 'is_held', lambda tid, row=None: tid.startswith('held:'))
 
 
@@ -31,19 +30,6 @@ def write_jsonl(path, recs, zst=False):
         text = zstandard.ZstdCompressor().compress(text)
     path.write_bytes(text)
     return str(path)
-
-
-def test_jsonl_since_offsets(tmp_path):
-    p = tmp_path / 'm.jsonl'
-    write_jsonl(p, [{'ts': 1, 'n': i} for i in range(5)])
-    recs, off = data_service.jsonl_since(str(p), 0)
-    assert [r['n'] for r in recs] == [0, 1, 2, 3, 4] and off == p.stat().st_size
-    with open(p, 'a') as f:
-        f.write(json.dumps({'ts': 2, 'n': 5}) + '\n{"partial":')
-    recs, off2 = data_service.jsonl_since(str(p), off)
-    assert [r['n'] for r in recs] == [5] and off2 < p.stat().st_size      # the partial line waits for its newline
-    tail, _ = data_service.jsonl_since(str(p), 0, max_bytes=40)
-    assert tail and tail[-1]['n'] == 5 and all('n' in r for r in tail)    # a cut first line is skipped, not parsed
 
 
 @pytest.mark.parametrize('zst', [False, True])
@@ -124,26 +110,6 @@ def test_edit_layers_refuse_held_and_route_kinds(tmp_path):
     assert state['sft:mix|row1']['excluded']['op'] == 's1' and state['pool:p|auth:x:1']['corrections'][0]['op'] == 'c1'
 
 
-def test_inbox_sync(tmp_path):
-    v = {'asks': [{'operationId': 'a1', 'kind': 'ask', 'subject': {'kind': 'unit', 'id': 'u'}, 'text': 'q', 'author': 'b'}],
-         'answers': [{'ask': 'a1', 'text': 'yes', 'author': 'n', 'operationId': 'x'}]}
-    assert data_edits.inbox_sync(v)['changed'] and not data_edits.inbox_sync(v)['changed']
-    line = json.loads(open(data_edits.INBOX).read())
-    assert line['answers'][0]['text'] == 'yes'
-
-
-
-def test_inbox_sync_accepts_chat_style_messages(tmp_path):
-    """The same inbox.jsonl from chat-style agent messages: no inReplyTo = an ask (data carries kind and subject)."""
-    old = {'asks': [{'operationId': 'a1', 'kind': 'ask', 'subject': {'kind': 'unit', 'id': 'u'}, 'text': 'q', 'author': 'b'}],
-           'answers': [{'ask': 'a1', 'text': 'yes', 'author': 'n', 'operationId': 'x'}]}
-    data_edits.inbox_sync(old)
-    want = open(data_edits.INBOX).read()
-    chat = {'messages': [{'author': 'b', 'operationId': 'a1', 'text': 'q', 'data': {'kind': 'ask', 'subject': {'kind': 'unit', 'id': 'u'}}},
-                         {'author': 'n', 'operationId': 'x', 'text': 'yes', 'inReplyTo': 'a1'}]}
-    assert data_edits.inbox_sync(chat) == {'asks': 1, 'changed': False} and open(data_edits.INBOX).read() == want
-
-
 def test_code_constants_parse(tmp_path, monkeypatch):
     src = tmp_path / 'grpo.py'
     src.write_text("POOLS = [resolve_str('data_hdd', 'a', 'cases.jsonl'),\n  resolve_str('data_nvme', 'b', 'cases.jsonl')]\n"
@@ -162,14 +128,3 @@ def test_live_grpo_constants_resolve():
     c = data_catalog.code_constants()
     # registry pools are JSONL task files (cases.jsonl, and since the M2 migration also tasks.jsonl)
     assert len(c['POOLS']['value']) >= 2 and all(p.endswith('.jsonl') for p in c['POOLS']['value'])
-
-
-def test_tick_carries_the_agents_inbox_listener_heartbeat(tmp_path, monkeypatch):
-    """`inbox.sh wait` touches <dashboard>/inbox.listener; the tick (pushed to the page every 10 s) carries its mtime, null when never started."""
-    monkeypatch.setattr(data_service, 'DASH', str(tmp_path))
-    monkeypatch.setattr(data_service, 'OUT', str(tmp_path / 'out'))
-    assert data_service.answer('ops.tick', None)['listener'] is None
-    (tmp_path / 'inbox.listener').write_text('')
-    import os
-    os.utime(tmp_path / 'inbox.listener', (1_700_000_000, 1_700_000_000))
-    assert data_service.answer('ops.tick', None)['listener'] == 1_700_000_000_000

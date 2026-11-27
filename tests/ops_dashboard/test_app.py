@@ -1,5 +1,6 @@
-"""The Tendriller application's own node tests (app/test): the WebSocket close guard and the module graph against the
-installed @tendriller/core and @chronolog/peer-session packages. Skipped when node 24 or the app's node_modules are absent."""
+"""The Tendriller application's own node tests (app/test): domain and reducers, the agent program's duties and live data feeds, the
+inbox worker, the browser-side helpers and the pure page model, against the installed @tendriller/core and @chronolog/peer-session
+packages. Skipped when node 24 or the app's node_modules are absent."""
 import os
 import shutil
 import subprocess

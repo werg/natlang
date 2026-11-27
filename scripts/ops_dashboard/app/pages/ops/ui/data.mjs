@@ -3,7 +3,6 @@
 // edits are declared commands (proposeEdit) applied by the native participant to the errata / exclusion / annotation layers.
 import { h } from './charts.mjs';
 import { fmt, ago, dayClock, signed } from './model.mjs';
-import { editRef } from '../ops-protocol.mjs';
 
 const enc = encodeURIComponent, dec = decodeURIComponent;
 export const link = {
@@ -54,12 +53,12 @@ function pending(ent, what) {
 /* ---------- edits state (retained query joined with native application records) ---------- */
 export function editsIndex(ctx) {
   const st = ctx.src.edits.get() || { edits: [], applications: [] };
-  const native = ctx.src.nativeDeviceId;
+  const native = ctx.src.agentKey;
   const appl = new Map();
   for (const x of st.applications) if (x.author === native || ctx.src.kind === 'preview') appl.set(x.edit, x);
   const byItem = new Map(), all = [];
   for (const e of st.edits) {
-    const rec = { ...e, application: appl.get(editRef(e.operationId)) || null };
+    const rec = { ...e, application: appl.get(e.operationId) || null };
     all.push(rec);
     const k = `${e.target.dataset}|${e.target.id}`;
     if (!byItem.has(k)) byItem.set(k, []);
