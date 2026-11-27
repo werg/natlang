@@ -259,7 +259,7 @@ function render() {
   const banner = S.gate || !src || S.tab === 'overview' ? null : (hv.open.length ? h('div', { class: 'alertline' }, h('span', { class: `tone-${hv.level}` }, levelIcon(hv.level), ` ${hv.open.length} open alert${hv.open.length > 1 ? 's' : ''}: `), hv.open[0].text, ' ', h('a', { href: '#overview' }, 'Now')) : null);
   if (banner) next.append(banner);
   if (S.gate) { next.append(S.gate); view.replaceChildren(next); return; }
-  if (!S.snap && S.tab !== 'data' && src) next.append(h('div', { class: 'notice' }, 'Connected. The first snapshot comes from the DGX within about 30 seconds. If nothing arrives in a minute, the exporter or the native ops participant on the DGX is not running.'));
+  if (!S.snap && S.tab !== 'data' && src) next.append(h('div', { class: 'notice' }, 'Connected. The first snapshot comes from the DGX within about 30 seconds. If nothing arrives in a minute, the exporter (unit ops-dashboard-export) or the agent program (unit ops-agent) on the DGX is not running.'));
   const sec = SECONDARY.find(([id]) => id === S.tab);
   if (sec && S.tab !== 'data') next.append(h('div', { class: 'pagehead' }, h('a', { href: '#more' }, '‹ More'), h('b', {}, sec[1])));
   try { next.append((VIEWS[S.tab] || VIEWS.overview)(hv)); } catch (e) { next.append(h('div', { class: 'alert crit' }, `This section failed to draw: ${e.message}`)); console.error(e); report({ ev: 'render_failed', tab: S.tab, error: String(e.message).slice(0, 200), stack: String(e.stack || '').slice(0, 300) }); }
@@ -344,7 +344,7 @@ export function start(source) {
   addEventListener('error', e => report({ ev: 'page_error', error: String(e.message).slice(0, 200), at: `${e.filename?.split('/').pop()}:${e.lineno}` }));
   addEventListener('unhandledrejection', e => report({ ev: 'page_rejection', error: String(e.reason?.message || e.reason).slice(0, 200) }));
   document.addEventListener('visibilitychange', () => report({ ev: 'visibility', state: document.visibilityState }));
-  // A tab stays pinned to the publication it opened (Tendriller keeps the pin on reload). When the participant announces
+  // A tab stays pinned to the publication it opened (Tendriller keeps the pin on reload). When the agent program announces
   // a newer build, move to the selected release once (the page's base URL); a second announcement of the same build is ignored.
   src.ticks.on(t => {
     const b = t?.page_build;

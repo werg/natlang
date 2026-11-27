@@ -1,6 +1,6 @@
 // Training data: catalog, dataset browser, task editor, trajectory / SFT row / chain viewers, step selection, compare, edits.
 // Routes live under #data/... (see route()). Everything is fetched on demand through ctx.src.query (native data service);
-// edits are declared commands (proposeEdit) applied by the native participant to the errata / exclusion / annotation layers.
+// edits are declared commands (proposeEdit) applied by the agent program to the errata / exclusion / annotation layers.
 import { h } from './charts.mjs';
 import { fmt, ago, dayClock, signed } from './model.mjs';
 
@@ -87,7 +87,7 @@ function itemStatus(list) {
 function statusChips(s) {
   return [s.excluded ? chip('⊘ excluded', 'crit', 'Excluded from training by an edit') : null, s.flagged ? chip('⚑ flagged', 'warn') : null,
     s.corrections ? chip(`✎ ${s.corrections} correction${s.corrections > 1 ? 's' : ''}`, 'evidence') : null, s.notes ? chip(`🗨 ${s.notes}`, '', 'annotations') : null,
-    s.pending ? chip(`${s.pending} pending`, 'open', 'Submitted; waiting for the native participant to apply it') : null];
+    s.pending ? chip(`${s.pending} pending`, 'open', 'Submitted; waiting for the agent program to apply it') : null];
 }
 
 /* ---------- entry ---------- */
@@ -484,7 +484,7 @@ function editPanel(ctx, target, it) {
 function editRow(e, ctx) {
   const ap = e.application;
   const state = ap ? { applied: chip('✔ applied', 'ok'), refused: chip('refused', 'crit'), failed: chip('failed', 'crit'), superseded: chip('superseded') }[ap.status] || chip(ap.status)
-    : chip(e.local ? `local: ${e.local}` : 'waiting for native', 'open', 'The native participant applies edits to the data layers and records the result.');
+    : chip(e.local ? `local: ${e.local}` : 'waiting for the agent program', 'open', 'The agent program applies edits to the data layers and records the result.');
   return h('li', {}, h('div', { class: 'row' }, h('b', {}, e.action), state, h('span', { class: 'muted small mono' }, (e.author || '').slice(0, 8))),
     e.text ? h('div', {}, e.text) : null, e.field ? h('div', { class: 'small muted' }, `field: ${e.field}`) : null,
     e.correction?.length ? h('details', {}, h('summary', {}, 'correction'), pre(e.correction.join(''))) : null,
@@ -522,7 +522,7 @@ function editForm(ctx, target, it, st) {
     f.status = 'Submitting…'; ctx.render();
     try {
       const r = await ctx.src.command('proposeEdit', input);
-      f.status = r.status === 'applied' ? (r.outcome === 'accepted' ? 'Recorded. The native participant applies it to the data layers.' : `Rejected: ${r.rejection || r.outcome}`) : 'Saved on this device; waiting for the native participant.';
+      f.status = r.status === 'applied' ? (r.outcome === 'accepted' ? 'Recorded. The agent program applies it to the data layers.' : `Rejected: ${r.rejection || r.outcome}`) : 'Saved on this device; waiting for the native participant.';
       if (r.outcome === 'accepted' || r.status !== 'applied') Object.assign(f, { text: '', correction: null, action: 'flag' });
     } catch (err) { f.status = `Not submitted: ${err.message}`; }
     ctx.render();
@@ -952,12 +952,12 @@ function taskRefsPage(ctx, taskId) {
 function editsPage(ctx, params) {
   const ed = editsIndex(ctx), f = params.state || '';
   const rows = ed.all.filter(e => !f || (f === 'pending' ? !e.application : e.application?.status === f)).reverse();
-  return h('div', {}, h('div', { class: 'notice' }, 'Every edit is a signed operation in the application journal. The native participant on the DGX applies it to an edit layer (', mono('ops/data-edits/'), ', and for RL task exclusions ', mono('ops/pool-errata/ops-dashboard.jsonl'), ') and records the outcome; live training files are never modified. Exclusions take effect when a run next starts or resumes.'),
+  return h('div', {}, h('div', { class: 'notice' }, 'Every edit is a signed operation in the application journal. The agent program on the DGX applies it to an edit layer (', mono('ops/data-edits/'), ', and for RL task exclusions ', mono('ops/pool-errata/ops-dashboard.jsonl'), ') and records the outcome; live training files are never modified. Exclusions take effect when a run next starts or resumes.'),
     h('div', { class: 'toolbar' }, h('span', { class: 'seg-ctl' }, [['', 'All'], ['pending', 'Pending'], ['applied', 'Applied'], ['refused', 'Refused']].map(([k, l]) => h('button', { 'aria-pressed': f === k, onclick: () => { location.hash = `#data/edits${qs({ state: k })}`; } }, l)))),
     h('div', { class: 'card flush' }, rows.length ? h('table', { class: 'items' }, h('thead', {}, h('tr', {}, ['item', 'action', 'reason / note', 'status', 'by'].map(x => h('th', {}, x)))),
       h('tbody', {}, rows.map(e => h('tr', {}, h('td', {}, a(link.item(e.target.dataset, e.target.id), mono(e.target.id)), h('div', { class: 'small muted' }, `${e.target.kind} · ${e.target.dataset}`)),
         h('td', {}, chip(e.action)), h('td', {}, e.text, e.field ? h('div', { class: 'small muted' }, `field ${e.field}`) : null),
-        h('td', {}, e.application ? [chip(e.application.status, e.application.status === 'applied' ? 'ok' : 'crit'), h('div', { class: 'small muted' }, e.application.detail)] : chip(e.local ? `local: ${e.local}` : 'waiting for native', 'open')),
+        h('td', {}, e.application ? [chip(e.application.status, e.application.status === 'applied' ? 'ok' : 'crit'), h('div', { class: 'small muted' }, e.application.detail)] : chip(e.local ? `local: ${e.local}` : 'waiting for the agent program', 'open')),
         h('td', { class: 'mono small' }, (e.author || '').slice(0, 8)))))) : h('div', { class: 'empty' }, 'No edits yet. Open any task, row or episode and use the Review and edit panel.')));
 }
 
