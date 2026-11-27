@@ -523,3 +523,113 @@ def test_ablation_reports_site_blind_and_whole_site_controls_by_source(tmp_path)
     for r in result['per_row']:
         assert ('shuffled_kb' in r) != (r['key'] in result['shuffled_kb_unavailable'])
     assert len({tuple(r['kb_peers']) for r in by_key.values()}) > 1
+    assert result['z_site_mean_cos'] is not None
+
+
+def test_compiled_site_bounded_state_residual_and_site_decorrelation():
+    from natlang_neuralese.compiler.run_t2 import site_decorrelation_loss
+    layout = (('layers.0.raw_k', (2, 4)), ('layers.0.v', (2, 4)))
+    cfg = CompiledSiteConfig(layout=layout, targets=('model.layers.0.self_attn.q_proj.weight',), rank=2, num_slots=4,
+                             value_dim=8, key_dim=4, num_heads=2, adapter_inner_rank=1, state_residual_scale=0.1)
+    head = CompiledSiteHead(cfg)
+    assert head.state_scale is not None
+    # Backward-compat: saved dict without state_residual_scale loads as 0.0 (unbounded legacy)
+    legacy_dict = cfg.to_dict()
+    legacy_dict.pop('state_residual_scale')
+    legacy_cfg = CompiledSiteConfig.from_dict(legacy_dict)
+    assert legacy_cfg.state_residual_scale == 0.0 and CompiledSiteHead(legacy_cfg).state_scale is None
+
+    # Bounded residual stays within +-state_scale even under huge linear weights
+    init_vals = {name: torch.zeros(3, *shape) for name, shape in layout}
+    with torch.no_grad():
+        for layer in head.state_out.values():
+            layer.bias.fill_(50.0)
+    out = head(init_vals, apply_dropout=False)
+    for name, _ in layout:
+        assert float(out.state_values[name].abs().max()) <= 0.1 + 1e-5
+
+    # Site decorrelation penalizes collapsed identical sites strictly more than orthogonal sites
+    z_same = [torch.ones(1, 4, 8), torch.ones(1, 4, 8)]
+    z_orth = [torch.tensor([[[1., 0., 0., 0., 0., 0., 0., 0.]] * 4]),
+              torch.tensor([[[0., 1., 0., 0., 0., 0., 0., 0.]] * 4])]
+    assert float(site_decorrelation_loss(z_same)) > float(site_decorrelation_loss(z_orth))
+
+
+def test_step_verifier_pairwise_within_task_ranking_cancels_task_difficulty(tmp_path):
+    from natlang_neuralese.train.step_verifier import VerifierTrainConfig, train_t0
+    feat_dir = tmp_path / 'feats'
+    feat_dir.mkdir()
+    torch.manual_seed(7)
+    # Every task has a large confounding task-level offset on dims 2..15, while true pass/fail signal is on dim 0.
+    # Within-task pairwise ranking should cleanly recover dim 0 and beat random on validation_within_task!
+    xs, meta = [], []
+    for task in range(24):
+        task_offset = torch.randn(16) * 4.0
+        task_offset[0] = 0.0
+        is_val = task >= 18
+        for ep in range(4):
+            label = ep % 2
+            for turn in range(2):
+                vec = task_offset.clone() + torch.randn(16) * 0.5
+                vec[0] = 2.0 if label else -2.0
+                xs.append(vec)
+                meta.append({'episode': f't{task}-e{ep}', 'task_id': f'task-{task}', 'family': 'famA',
+                             'turn': turn, 'boundary': turn, 'success': bool(label), 'validation': is_val})
+    torch.save({'hidden': torch.stack(xs), 'meta': meta}, feat_dir / 'shard-000.pt')
+    receipt = train_t0(feat_dir, tmp_path / 'out',
+                       cfg=VerifierTrainConfig(epochs=6, batch_size=32, pairwise_weight=2.0, dropout=0.1),
+                       device='cpu', progress_weighting=True)
+    assert receipt['auroc']['validation_within_task'] > 0.85
+    assert receipt['rows']['validation_mixed_tasks'] == 6
+
+
+def test_step_verifier_rich_score_boundary_matches_feature_dim():
+    from natlang_neuralese.train.step_verifier import StepVerifierHead
+    h = torch.randn(10, 8)
+    rich_head = StepVerifierHead(3 * 8 + 5, mlp_dim=16)
+    last_head = StepVerifierHead(8, mlp_dim=16)
+    p_rich = rich_head.score_boundary(h, prompt_end=4, boundary=9, scalars=[0.5, 0.2, -0.1, -0.5, 1.0])
+    p_last = last_head.score_boundary(h, prompt_end=4, boundary=9)
+    assert 0.0 <= p_rich <= 1.0 and 0.0 <= p_last <= 1.0
+
+
+def test_t3_mode_p_http_server_serves_compiled_site(tmp_path):
+    import threading
+    import urllib.request
+    from natlang_neuralese.compiler.per_call_hkb import PerCallNeuralHKBCompiler
+    from natlang_neuralese.compiler.t3_server import CompiledSiteService, make_http_server
+
+    engine, _, _ = _kb_fixture(tmp_path)
+    header = 'You are inside this call: f(x: string): string\n\nInstructions:\nCheck x.'
+    messages = [{'role': 'system', 'content': 't10 t11'}, {'role': 'user', 'content': header}]
+    from natlang_neuralese.compiler.compiled_site import init_header_state
+    init_id = init_header_state(engine, messages, [], header)
+    init_block = engine.store.get_native_state(init_id).block
+    targets = tuple(sorted(target_parameters(engine.shared_model)))
+    cfg = CompiledSiteConfig(layout=tuple(state_layout(init_block)), targets=targets, rank=2, num_slots=4,
+                             value_dim=16, key_dim=8, num_heads=2, adapter_inner_rank=1)
+    head = CompiledSiteHead(cfg)
+    adapter = create_compiler_adapter(engine, targets, 2)
+    compiler = PerCallNeuralHKBCompiler(engine, head, adapter_id=adapter, release_root=tmp_path / 'releases')
+    service = CompiledSiteService(compiler, compiler_sha='c' * 64, policy_sha='p' * 64)
+    server = make_http_server(service, host='127.0.0.1', port=0)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urllib.request.urlopen(f'http://127.0.0.1:{port}/health') as resp:
+            health = json.loads(resp.read().decode('utf-8'))
+        assert health['ok'] is True and health['mode'] == 'mode-p'
+        req = urllib.request.Request(
+            f'http://127.0.0.1:{port}/v1/natlang/compile-site',
+            data=json.dumps({'site_id': 'site-f', 'header': header, 'messages': messages}).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST',
+        )
+        with urllib.request.urlopen(req) as resp:
+            compiled = json.loads(resp.read().decode('utf-8'))
+        assert compiled['mode'] == 'mode-p'
+        assert compiled['adapterId'] and compiled['nativeStateId'] and compiled['cacheKey']
+    finally:
+        server.shutdown()
+        server.server_close()

@@ -7,6 +7,7 @@ import {
   compileOnCreateClosure,
   compiledCacheKey,
   createChooseTierPolicy,
+  createHttpJitCompiler,
 } from '../dist/runtime/jit.js';
 import {
   COMPILED_DECISION_SCHEMA,
@@ -263,6 +264,32 @@ test('Promoted crisp fast-paths emit standard cases.ts modules for runCrispCase'
       },
     ),
   );
+});
+
+test('createHttpJitCompiler posts site compile request to T3 Mode-P server and returns adapter+state', async () => {
+  const calls = [];
+  const fakeFetch = async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ adapterId: 'ad-mode-p', nativeStateId: 'nzs-mode-p' }),
+    };
+  };
+  const compile = createHttpJitCompiler('http://127.0.0.1:8775/', {
+    scopes: ['natlang:global', 'group:sql'],
+    fetchImpl: fakeFetch,
+  });
+  const res = await compile({
+    siteId: 'sql::query.nl',
+    resolvedHeaderText: 'You are inside this call: query(q: string): string',
+    partialArgsJson: '["strict"]',
+  });
+  assert.deepEqual(res, { adapterId: 'ad-mode-p', nativeStateId: 'nzs-mode-p' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://127.0.0.1:8775/v1/natlang/compile-site');
+  assert.equal(calls[0].body.site_id, 'sql::query.nl');
+  assert.deepEqual(calls[0].body.scopes, ['natlang:global', 'group:sql']);
 });
 
 test('compiler.jit binds the compiled adapter and instruction state on the frame the model call reads, and records them', async () => {

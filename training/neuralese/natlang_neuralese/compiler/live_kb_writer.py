@@ -183,6 +183,10 @@ class PplxWarmstartWriter(nn.Module):
         )
         writer_enc.checkpoint_views = True
         query_enc.checkpoint_views = True
+        # PplxWarmstartWriter.train() keeps both encoders in eval() mode (no dropout), so PPLXBlockEncoder only
+        # checkpoints view forwards during grad-enabled passes when checkpoint_eval_gradients is explicitly True.
+        writer_enc.checkpoint_eval_gradients = True
+        query_enc.checkpoint_eval_gradients = True
 
         if warmstart_dir is not None:
             w_sd = torch.load(writer_path, map_location='cpu', weights_only=True)

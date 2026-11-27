@@ -1482,9 +1482,10 @@ def round_validation(train_jsonl):
 
 
 NEUTRAL_ADOPT = os.environ.get('NATLANG_EI_NEUTRAL_ADOPT', '1') != '0'
-# Two consecutive neutral rounds switch SFT <-> GRPO only when this is set: the phase is a deliberate choice recorded in
-# DECISIONS, not an automatic consequence of underpowered held results (owner 2026-11-25).
-AUTO_PHASE_SWITCH = os.environ.get('NATLANG_EI_AUTO_PHASE_SWITCH', '0') == '1'
+# Two consecutive neutral measured rounds automatically switch SFT <-> GRPO (AGENTS.md: "SFT <-> GRPO switch after
+# two neutral measured rounds"), restarting from the newest held-adopted reference. Opt out with
+# NATLANG_EI_AUTO_PHASE_SWITCH=0 (or switch manually via `expert_iteration.py set-phase`).
+AUTO_PHASE_SWITCH = os.environ.get('NATLANG_EI_AUTO_PHASE_SWITCH', '1') != '0'
 
 
 def judge(vs_start, success_pts, fail_pts):
@@ -3312,9 +3313,9 @@ class PhaseController:
     - A candidate held does not adopt (failure, or neutral without gain) rolls the lineage back to the reference: the
       candidate and everything trained from it leave the lineage, so the previous policy is the reference's own
       predecessor, never the rejected one.
-    - With ``NATLANG_EI_AUTO_PHASE_SWITCH=1``, two consecutive neutral measured rounds switch the phase (sft -> grpo,
-      grpo -> sft), restarting from the reference (the newest held-adopted policy). Off by default: the phase is a
-      deliberate choice (``phase`` in the state file, DECISIONS)."""
+    - By default (``NATLANG_EI_AUTO_PHASE_SWITCH=1``; set ``0`` to opt out), two consecutive neutral measured rounds
+      switch the phase (sft -> grpo, grpo -> sft), restarting from the reference (the newest held-adopted policy).
+      Operators can also switch explicitly via ``expert_iteration.py set-phase``."""
 
     def __init__(self, state_path, *, state=None):
         self.path = Path(state_path)
@@ -5965,6 +5966,25 @@ def cycle(args):
     Cycle(args).run()
 
 
+def set_phase(args):
+    """Explicitly switch an async-drive loop's phase (sft <-> grpo) in phase-state.json with an audit history entry."""
+    state_path = Path(args.root) / 'phase-state.json'
+    ctrl = PhaseController(state_path)
+    old = ctrl.phase
+    ctrl.state['phase'] = args.phase
+    if args.reset_neutral:
+        ctrl.state['consecutive_neutral'] = 0
+    if args.from_reference:
+        ctrl._rollback()
+    event = {'action': 'set_phase', 'at': round(time.time(), 1), 'from': old, 'to': args.phase,
+             'reason': args.reason or 'operator set-phase', 'from_reference': bool(args.from_reference),
+             'consecutive_neutral': ctrl.state['consecutive_neutral'], 'current': ctrl.current}
+    ctrl.state['history'].append(event)
+    ctrl.save()
+    print(json.dumps(event, indent=2))
+    return 0
+
+
 def main():
     # one pipe and log per collection slot, plus the actor's: not the unit's soft 1024 (common/open_files.py)
     from natlang_neuralese.common.open_files import raise_open_files_limit
@@ -6414,9 +6434,17 @@ def main():
     pr.add_argument('--out', required=True)
     pr.add_argument('--base', help='the HF base snapshot (default: the checkpoint\'s own)')
     pr.add_argument('--label', required=True)
+    sp = sub.add_parser('set-phase', help='switch an async-drive loop between sft and grpo in phase-state.json')
+    sp.add_argument('--root', required=True, help='loop directory containing phase-state.json')
+    sp.add_argument('--phase', choices=('sft', 'grpo'), required=True)
+    sp.add_argument('--reason', default='')
+    sp.add_argument('--reset-neutral', action=argparse.BooleanOptionalAction, default=True)
+    sp.add_argument('--from-reference', action='store_true',
+                    help='roll lineage back to reference_policy when switching phase')
     args = parser.parse_args()
     rc = {'select': select, 'collect': collect, 'frontier': frontier, 'cycle': cycle, 'pop-held': pop_held,
-          'dgx-held': dgx_held, 'async-drive': async_drive, 'publish-round': publish_round}[args.command](args)
+          'dgx-held': dgx_held, 'async-drive': async_drive, 'publish-round': publish_round,
+          'set-phase': set_phase}[args.command](args)
     if rc:
         sys.exit(rc)
 

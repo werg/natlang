@@ -90,13 +90,14 @@ def twin_sequences(rendering, prompt_ids, completion_ids, fact_texts, *, receipt
 
 
 def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0.5, topk=None, syntax_mask=None,
-              max_log_ratio=6.0, verified=None, ce_weight=0.3):
+              max_log_ratio=6.0, verified=None, ce_weight=0.3, token_weights=None):
     """Masked OPSD divergence at aligned completion positions, plus CE on verified continuations only.
 
     ``student_logits`` [N, V] (with gradient) and ``twin_logits`` [N, V] (detached) at the N aligned completion
     positions; ``targets`` [N] the student's sampled tokens there. ``verified`` [N] bool marks positions of verified
-    continuations (a verified repair or success; default: none, so no CE). Returns ``(loss, metrics)``; the loss is the
-    mean divergence over kept positions plus ``ce_weight`` times the mean CE over verified positions."""
+    continuations (a verified repair or success; default: none, so no CE). ``token_weights`` [N] optional
+    non-negative per-position weights (detached) focusing gradient on guidance-divergent positions without biasing
+    the target distribution. Returns ``(loss, metrics)``."""
     from ..common import stable_softmax as S
     if kind not in DIVERGENCES:
         raise ValueError(f'OPSD divergence is one of {DIVERGENCES}')
@@ -105,7 +106,8 @@ def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0
     n = int(targets.numel())
     zero = student_logits.sum() * 0.0
     if n == 0:
-        return zero, {'n': 0., 'n_kept': 0., 'shortcut_masked_frac': 0., 'divergence': 0., 'n_verified': 0., 'ce': 0.,
+        return zero, {'n': 0., 'n_kept': 0., 'shortcut_masked_frac': 0., 'divergence': 0.,
+                      'focused_divergence': 0., 'n_verified': 0., 'ce': 0.,
                       'student_nll': 0., 'student_entropy': 0.}
     targets = targets.long()
     with torch.no_grad():
@@ -128,8 +130,15 @@ def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0
             head, ids = torch.topk(t_logp, min(int(topk), t_logp.shape[-1]), -1)
             tail = torch.logsumexp(t_logp.scatter(-1, ids, float('-inf')), -1)
             values = S.topk_tail_divergence(student_logits[kept], ids, head, kind, beta=beta, teacher_log_tail=tail)
-        divergence = values.float().mean()
+        unweighted = values.float().mean()
+        if token_weights is not None:
+            w = token_weights[kept].detach().to(device=values.device, dtype=torch.float32).clamp_min(0.0)
+            w_sum = w.sum()
+            divergence = (values.float() * (w / w_sum)).sum() if float(w_sum) > 0 else unweighted
+        else:
+            divergence = unweighted
     else:
+        unweighted = zero
         divergence = zero
     loss = divergence
     n_verified = 0
@@ -141,7 +150,8 @@ def opsd_loss(student_logits, twin_logits, targets, *, kind='forward_kl', beta=0
             ce = -S.token_logprobs(student_logits[mask], targets[mask]).float().mean()
             loss = loss + float(ce_weight) * ce
     metrics = {'n': float(n), 'n_kept': float(n_kept), 'shortcut_masked_frac': 1. - n_kept / n,
-               'divergence': float(divergence.detach()), 'n_verified': float(n_verified), 'ce': float(ce.detach()),
+               'divergence': float(unweighted.detach()), 'focused_divergence': float(divergence.detach()),
+               'n_verified': float(n_verified), 'ce': float(ce.detach()),
                'mean_log_ratio': float(log_ratio[kept].mean()) if n_kept else 0.,
                # collapse telemetry: the student's NLL of its own sampled tokens and its entropy (a degenerate policy
                # shows a high NLL and a near-zero entropy while the divergence reads ~0)
@@ -228,6 +238,13 @@ def build_t1_twins(collections, out, *, policy_sha256, tokenizer, max_tokens=163
     from .held_eval import training_exclusion_ids
     custody = ProtectedWorlds.load()
     rendering = lfm3_rendering(tokenizer)
+    if isinstance(policy_sha256, str):
+        allow_any = policy_sha256.lower() == 'any'
+        allowed_policies = None if allow_any else frozenset({policy_sha256})
+    else:
+        items = list(policy_sha256)
+        allow_any = any(str(x).lower() == 'any' for x in items)
+        allowed_policies = None if allow_any else frozenset(items)
     funnel = {'rollouts': 0, 'other_policy': 0, 'success_or_unscored': 0, 'held_excluded': 0, 'no_case': 0,
               'custody_refused': 0, 'no_facts': 0, 'contrast_feedback': 0,
               'episodes': 0, 'twins': 0, 'too_long': 0, 'validation_twins': 0}
@@ -257,7 +274,8 @@ def build_t1_twins(collections, out, *, policy_sha256, tokenizer, max_tokens=163
                             passing_by_task.setdefault(r['task_id'], r)
                 for rollout in rows_of_group:
                     funnel['rollouts'] += 1
-                    if (rollout.get('policy') or {}).get('checkpoint_sha256') != policy_sha256:
+                    ckpt_sha = (rollout.get('policy') or {}).get('checkpoint_sha256')
+                    if allowed_policies is not None and ckpt_sha not in allowed_policies:
                         funnel['other_policy'] += 1
                         continue
                     if rollout.get('unscored') or rollout.get('outcome') in SUCCESS_OUTCOMES or not rollout.get('outcome'):
@@ -376,45 +394,86 @@ def _head(learner, rows, *, start=False):
     return logits
 
 
-def twin_loss(learner, twin, *, grad, scale=1.0, chunk=256, teacher='start', **loss_options):
+def twin_loss(learner, twin, *, grad, scale=1.0, chunk=256, teacher='start', anchor_kl=0.0,
+              focus_divergent_tokens=False, focus_max_weight=10.0, **loss_options):
     """``opsd_loss`` of one twin, its full-vocabulary logits formed ``chunk`` completion positions at a time (a long
     completion's [n, V] FP32 logits do not fit beside the model). With ``grad`` the chunks backpropagate one by one
     through the shared student hidden states, each weighted by its share of the positions times ``scale``. Returns
-    the position-weighted metrics. ``teacher``: ``'start'`` (frozen start policy, default) or ``'live'``."""
+    the position-weighted metrics. ``teacher``: ``'start'`` (frozen start policy, default) or ``'live'``.
+
+    - ``anchor_kl`` (>0): adds ``anchor_kl * KL(p_0(·|x) || p_θ(·|x))`` preventing drift on non-divergent tokens.
+    - ``focus_divergent_tokens``: weights each kept position by ``clamp((KL(p_0(·|x,c) || p_0(·|x)) + 1e-4) / mean,
+      max=focus_max_weight)`` globally normalized across the completion so chunked == one-pass and gradients focus on
+      actual decision tokens where guidance shifts the start policy."""
+    from ..common import stable_softmax as S
     if teacher not in TEACHERS:
         raise ValueError(f'OPSD teacher is one of {TEACHERS}')
     start_teacher = teacher == 'start'
+    need_base = (anchor_kl > 0.0) or focus_divergent_tokens
     with torch.no_grad():
         t_rows = (_positions_hidden(learner, twin.twin_ids, twin.twin_positions, grad=False, start=True) if start_teacher
                   else _positions_hidden(learner, twin.twin_ids, twin.twin_positions, grad=False))
+        b_rows = (_positions_hidden(learner, twin.student_ids, twin.student_positions, grad=False, start=True)
+                  if need_base else None)
     s_rows = _positions_hidden(learner, twin.student_ids, twin.student_positions, grad=grad)
     targets = torch.tensor(twin.targets, device=s_rows.device)
     n = len(twin.targets)
-    totals = {'divergence': 0., 'shortcut_masked_frac': 0., 'student_nll': 0., 'student_entropy': 0., 'n': float(n)}
+    token_weights_all = None
+    base_guidance_kl_total = 0.0
+    if need_base and n > 0:
+        d0_chunks = []
+        with torch.no_grad():
+            for start in range(0, n, chunk):
+                stop = min(n, start + chunk)
+                t_c = _head(learner, t_rows[start:stop], start=True) if start_teacher else _head(learner, t_rows[start:stop])
+                b_c = _head(learner, b_rows[start:stop], start=True)
+                d0_chunks.append(S.divergence(b_c, t_c, 'forward_kl').detach().float())
+            d0_all = torch.cat(d0_chunks, dim=0)
+            base_guidance_kl_total = float(d0_all.mean())
+            if focus_divergent_tokens:
+                raw_w = d0_all + 1e-4
+                norm_w = (raw_w / raw_w.mean().clamp_min(1e-8)).clamp(max=float(focus_max_weight))
+                token_weights_all = norm_w / norm_w.mean().clamp_min(1e-8)
+
+    totals = {'divergence': 0., 'focused_divergence': 0., 'anchor_kl': 0., 'base_guidance_kl': base_guidance_kl_total,
+              'shortcut_masked_frac': 0., 'student_nll': 0., 'student_entropy': 0., 'n': float(n)}
     for start in range(0, n, chunk):
         stop = min(n, start + chunk)
         share = (stop - start) / n
         with torch.no_grad():
             t = _head(learner, t_rows[start:stop], start=True) if start_teacher else _head(learner, t_rows[start:stop])
+            b = _head(learner, b_rows[start:stop], start=True) if b_rows is not None else None
         with torch.set_grad_enabled(grad):
             s = _head(learner, s_rows[start:stop])
-            loss, metrics = opsd_loss(s, t, targets[start:stop], **loss_options)
+            w_chunk = token_weights_all[start:stop] if token_weights_all is not None else None
+            chunk_weight_scale = float(w_chunk.mean()) if w_chunk is not None else 1.0
+            loss, metrics = opsd_loss(s, t, targets[start:stop], token_weights=w_chunk, **loss_options)
+            total_loss = loss * chunk_weight_scale
+            anc_val = 0.0
+            if anchor_kl > 0.0 and b is not None:
+                anc = S.divergence(s, b, 'forward_kl').float().mean()
+                anc_val = float(anc.detach())
+                total_loss = total_loss + float(anchor_kl) * anc
             if grad:
-                (loss * share * scale).backward(retain_graph=stop < n)
+                (total_loss * share * scale).backward(retain_graph=stop < n)
         for key in ('divergence', 'shortcut_masked_frac', 'student_nll', 'student_entropy'):
             totals[key] += metrics[key] * share
+        totals['focused_divergence'] += metrics['focused_divergence'] * chunk_weight_scale * share
+        totals['anchor_kl'] += anc_val * share
     return totals
 
 
 def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=128.0, lr=3e-5, warmup=20,
              batch_twins=8, max_steps=None, kind='forward_kl', topk=None, max_log_ratio=6.0, state_every=25,
-             validation_limit=64, seed=0, teacher='start'):
+             validation_limit=64, seed=0, teacher='start', anchor_kl=0.02, focus_divergent_tokens=True,
+             focus_max_weight=10.0, export_checkpoint=None):
     import json
     import random
     from pathlib import Path
     from ..common.code_provenance import code_provenance
+    from ..common.hashing import sha256_file_hex
     from ..train.lfm3_learner import AdapterSpec, Lfm3Learner
-    from ..train.learner_state import load_learner_state, save_learner_state
+    from ..train.learner_state import export_merged_checkpoint, load_learner_state, save_learner_state
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     rendering = lfm3_rendering(tokenizer)
@@ -439,23 +498,29 @@ def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=12
     def twin_of(row, facts=None):
         return twin_sequences(rendering, row['prompt_ids'], row['completion_ids'], facts or row['facts'])
 
-    def divergence_on(sample, wrong=False):
-        values = []
+    def eval_sample(sample, wrong=False, *, eval_teacher=teacher):
+        agg = {'divergence': 0., 'focused_divergence': 0., 'anchor_kl': 0., 'base_guidance_kl': 0.,
+               'student_nll': 0., 'student_entropy': 0.}
         for i, row in enumerate(sample):
             facts = sample[(i + 1) % len(sample)]['facts'] if wrong and len(sample) > 1 else None
             twin = twin_of(row, facts)
             with torch.no_grad():
                 metrics = twin_loss(learner, twin, grad=False, kind=kind, topk=topk, max_log_ratio=max_log_ratio,
-                                    teacher=teacher)
-            values.append(metrics['divergence'])
-        return sum(values) / max(1, len(values))
+                                    teacher=eval_teacher, anchor_kl=anchor_kl,
+                                    focus_divergent_tokens=focus_divergent_tokens, focus_max_weight=focus_max_weight)
+            for k in agg:
+                agg[k] += metrics.get(k, 0.) / max(1, len(sample))
+        return agg
 
     receipt = {'schema': T1_SCHEMA, 'twins': str(twins_path), 'checkpoint': str(checkpoint), 'rows': len(rows),
                'train_twins': len(train_rows), 'validation_twins': len(val_rows), 'rank': rank, 'alpha': alpha,
-               'lr': lr, 'kind': kind, 'topk': topk, 'teacher': teacher, 'max_log_ratio': max_log_ratio, 'code': code_provenance()}
+               'lr': lr, 'kind': kind, 'topk': topk, 'teacher': teacher, 'anchor_kl': anchor_kl,
+               'focus_divergent_tokens': bool(focus_divergent_tokens), 'focus_max_weight': focus_max_weight,
+               'max_log_ratio': max_log_ratio, 'code': code_provenance()}
     if step == 0 and val_rows:
-        receipt['validation_before'] = {'divergence': divergence_on(val_rows),
-                                        'wrong_world_divergence': divergence_on(val_rows, wrong=True)}
+        before = eval_sample(val_rows, wrong=False)
+        wrong_b = eval_sample(val_rows, wrong=True)
+        receipt['validation_before'] = {**before, 'wrong_world_divergence': wrong_b['divergence']}
     log = (out / 'train.jsonl').open('a')
     cursor = step * batch_twins
     while step < total_steps and cursor < len(train_rows):
@@ -465,11 +530,13 @@ def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=12
         for group in optimizer.param_groups:
             group['lr'] = lr * scale * group.get('lr_scale', 1.0)
         optimizer.zero_grad(set_to_none=True)
-        sums = {'divergence': 0., 'shortcut_masked_frac': 0., 'student_nll': 0., 'student_entropy': 0., 'n': 0.}
+        sums = {'divergence': 0., 'focused_divergence': 0., 'anchor_kl': 0., 'base_guidance_kl': 0.,
+                'shortcut_masked_frac': 0., 'student_nll': 0., 'student_entropy': 0., 'n': 0.}
         for row in batch:
             twin = twin_of(row)
             metrics = twin_loss(learner, twin, grad=True, scale=1.0 / len(batch), kind=kind, topk=topk,
-                                max_log_ratio=max_log_ratio, teacher=teacher)
+                                max_log_ratio=max_log_ratio, teacher=teacher, anchor_kl=anchor_kl,
+                                focus_divergent_tokens=focus_divergent_tokens, focus_max_weight=focus_max_weight)
             for key in sums:
                 sums[key] += metrics[key] / len(batch)
         grad_norm = float(torch.nn.utils.clip_grad_norm_(learner.trainable_parameters(), 1.0))
@@ -484,13 +551,47 @@ def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=12
     save_learner_state(state_dir, learner, optimizer, learner_step=step, source_checkpoint_id=str(checkpoint),
                        objective_version=T1_SCHEMA)
     if val_rows:
-        receipt['validation_after'] = {'divergence': divergence_on(val_rows),
-                                       'wrong_world_divergence': divergence_on(val_rows, wrong=True)}
+        after = eval_sample(val_rows, wrong=False)
+        wrong_a = eval_sample(val_rows, wrong=True)
+        receipt['validation_after'] = {**after, 'wrong_world_divergence': wrong_a['divergence']}
     tensors, scales = learner.factor_tensors()
     torch.save({'tensors': tensors, 'scales': scales, 'spec': learner.spec.to_dict()}, out / 'factors.pt')
+    if export_checkpoint:
+        receipt['exported_checkpoint'] = export_merged_checkpoint(
+            learner, learner.state, export_checkpoint,
+            source_sha256=sha256_file_hex(checkpoint), learner_step=step,
+        )
     receipt['steps'] = step
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     return receipt
+
+
+def export_t1_checkpoint(factors_path, checkpoint, out_path, *, learner_step=0):
+    """Merge a trained T1 ``factors.pt`` into an immutable BF16 native checkpoint on CPU (exact FP32 merge)."""
+    import hashlib
+    import json
+    from pathlib import Path
+    from ..common.hashing import sha256_file_hex
+    from ..train.lfm3_learner import merge_policy_state
+    from ..train.learner_state import _write_merged
+    payload = torch.load(factors_path, map_location='cpu', weights_only=False)
+    tensors, scales, spec = payload['tensors'], payload['scales'], payload['spec']
+    state = torch.load(checkpoint, map_location='cpu', weights_only=False)
+    backbone, interface, changed = merge_policy_state(state, tensors, scales)
+    src_sha = sha256_file_hex(checkpoint)
+    h = hashlib.sha256()
+    h.update(src_sha.encode('utf-8'))
+    for k in sorted(tensors):
+        t = tensors[k].detach().cpu().contiguous()
+        h.update(k.encode('utf-8'))
+        h.update(t.numpy().tobytes())
+    effective_sha = h.hexdigest()
+    record = _write_merged(out_path, state, backbone, interface, learner_step=int(learner_step),
+                           adapter_spec=spec, effective_sha=effective_sha,
+                           source={'training_checkpoint_sha256': src_sha,
+                                   'training_checkpoint_bytes': Path(checkpoint).stat().st_size},
+                           tensors=tensors)
+    return {**record, 'changed_elements': changed, 'factors': str(factors_path)}
 
 
 def main(argv=None):
@@ -502,7 +603,8 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='command', required=True)
     b = sub.add_parser('build')
     b.add_argument('--collection', action='append', required=True)
-    b.add_argument('--policy-sha256', required=True)
+    b.add_argument('--policy-sha256', action='append', required=True,
+                   help="One or more policy SHA-256s, or 'any' to pool multiple collections.")
     b.add_argument('--tokenizer', required=True)
     b.add_argument('--out', required=True)
     b.add_argument('--max-episodes', type=int)
@@ -522,22 +624,38 @@ def main(argv=None):
     t.add_argument('--state-every', type=int, default=25, help='learner-state save interval in steps')
     t.add_argument('--teacher', choices=TEACHERS, default='start',
                    help='twin scorer: the frozen start policy (default) or the live policy (opt-in; collapsed T1 run1)')
+    t.add_argument('--anchor-kl', type=float, default=0.02,
+                   help='Anchor KL(p_0(·|x) || p_θ(·|x)) weight preventing drift on non-divergent tokens (0 opts out).')
+    t.add_argument('--focus-divergent-tokens', action=argparse.BooleanOptionalAction, default=True,
+                   help='Focus gradient on tokens where privileged guidance shifts p_0 (default: true).')
+    t.add_argument('--focus-max-weight', type=float, default=10.0)
+    t.add_argument('--export-checkpoint', help='Optional path to export a merged BF16 native checkpoint after training.')
+    e = sub.add_parser('export-checkpoint', help='Merge trained T1 factors.pt into a publishable BF16 native checkpoint on CPU')
+    e.add_argument('--factors', required=True)
+    e.add_argument('--checkpoint', required=True)
+    e.add_argument('--out', required=True)
+    e.add_argument('--step', type=int, default=0)
     args = parser.parse_args(argv)
     if args.command == 'build':
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
-        result = build_t1_twins(args.collection, args.out, policy_sha256=args.policy_sha256, tokenizer=tokenizer,
+        policies = args.policy_sha256[0] if len(args.policy_sha256) == 1 else args.policy_sha256
+        result = build_t1_twins(args.collection, args.out, policy_sha256=policies, tokenizer=tokenizer,
                                 max_episodes=args.max_episodes, held_manifest=args.held_manifest,
                                 use_contrast_feedback=args.contrast_feedback)
         from ..common.code_provenance import code_provenance
         Path(args.out + '.json').write_text(json.dumps({'schema': T1_SCHEMA, 'stage': 'build', 'funnel': result,
                                                         'collections': args.collection,
-                                                        'policy_sha256': args.policy_sha256,
+                                                        'policy_sha256': policies,
                                                         'code': code_provenance()}, indent=2) + '\n')
+    elif args.command == 'export-checkpoint':
+        result = export_t1_checkpoint(args.factors, args.checkpoint, args.out, learner_step=args.step)
     else:
         tokenizer = AutoTokenizer.from_pretrained(args.base)
         result = train_t1(args.twins, args.out, checkpoint=args.checkpoint, base=args.base, tokenizer=tokenizer,
                           max_steps=args.max_steps, batch_twins=args.batch_twins, lr=args.lr, kind=args.kind,
-                          topk=args.topk, state_every=args.state_every, teacher=args.teacher)
+                          topk=args.topk, state_every=args.state_every, teacher=args.teacher,
+                          anchor_kl=args.anchor_kl, focus_divergent_tokens=args.focus_divergent_tokens,
+                          focus_max_weight=args.focus_max_weight, export_checkpoint=args.export_checkpoint)
     print(json.dumps(result, indent=2, default=str))
 
 

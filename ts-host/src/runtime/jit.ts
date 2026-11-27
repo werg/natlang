@@ -216,3 +216,56 @@ export async function compileOnCreateClosure(
     createdAtMs: Date.now(),
   });
 }
+
+/**
+ * Create a live Mode-P T3 HTTP JIT compiler callback backed by `natlang_neuralese.compiler.t3_server`
+ * (`POST /v1/natlang/compile-site`). Plugs directly into `NatlangRuntimeOptions.compiler.jit.compile`.
+ */
+export function createHttpJitCompiler(
+  endpoint: string,
+  options: {
+    scopes?: readonly string[];
+    excludeTasks?: readonly string[];
+    timeoutMs?: number;
+    fetchImpl?: typeof fetch;
+  } = {},
+): (args: {
+  siteId: string;
+  resolvedHeaderText: string;
+  partialArgsJson?: string;
+}) => Promise<{ adapterId: string | null; nativeStateId: string | null }> {
+  const baseUrl = endpoint.replace(/\/+$/, '');
+  const doFetch = options.fetchImpl ?? globalThis.fetch;
+  return async args => {
+    const controller = options.timeoutMs ? new AbortController() : undefined;
+    const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : undefined;
+    try {
+      const response = await doFetch(`${baseUrl}/v1/natlang/compile-site`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          site_id: args.siteId,
+          header: args.resolvedHeaderText,
+          ...(args.partialArgsJson ? { partial_args_json: args.partialArgsJson } : {}),
+          ...(options.scopes ? { scopes: options.scopes } : {}),
+          ...(options.excludeTasks ? { exclude_tasks: options.excludeTasks } : {}),
+        }),
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`T3 compile-site failed (${response.status}): ${text.slice(0, 200)}`);
+      }
+      const payload = await response.json() as {
+        adapterId?: string | null;
+        nativeStateId?: string | null;
+      };
+      return {
+        adapterId: payload.adapterId ?? null,
+        nativeStateId: payload.nativeStateId ?? null,
+      };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+}

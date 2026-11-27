@@ -277,6 +277,7 @@ class CompiledSiteConfig:
     null_mass: float = 0.1             # null-memory restraint mass for evidence-weighted slot gating
     kv_drop: float = 0.0               # independent KV-channel dropout during training (T2 uses 0.1)
     adapter_drop: float = 0.0          # independent adapter-channel dropout during training (T2 uses 0.1)
+    state_residual_scale: float = 0.1  # >0: tanh-bounded KV/conv residual * learnable scale (prevents rollout KV degradation); 0: unbounded legacy
 
     def to_dict(self):
         return {
@@ -293,14 +294,19 @@ class CompiledSiteConfig:
             'null_mass': self.null_mass,
             'kv_drop': self.kv_drop,
             'adapter_drop': self.adapter_drop,
+            'state_residual_scale': self.state_residual_scale,
         }
 
     @classmethod
     def from_dict(cls, data):
-        # strict: a saved config naming a field this code does not have is another head, not a default
+        # strict: a saved config naming a field this code does not have is another head, not a default.
+        # Older configs without state_residual_scale used unbounded residuals (0.0).
+        extra = {key: (tuple(value) if key == 'taps' else value) for key, value in data.items()
+                 if key not in ('layout', 'targets')}
+        if 'state_residual_scale' not in extra:
+            extra['state_residual_scale'] = 0.0
         return cls(layout=tuple((name, tuple(shape)) for name, shape in data['layout']), targets=tuple(data['targets']),
-                   **{key: (tuple(value) if key == 'taps' else value) for key, value in data.items()
-                      if key not in ('layout', 'targets')})
+                   **extra)
 
 
 @dataclass
@@ -346,6 +352,10 @@ class CompiledSiteHead(nn.Module):
         for layer in self.state_out.values():
             nn.init.zeros_(layer.weight)
             nn.init.zeros_(layer.bias)
+        self.state_scale = (
+            nn.Parameter(torch.full((len(config.layout),), float(config.state_residual_scale)))
+            if float(config.state_residual_scale) > 0.0 else None
+        )
 
         # AdapterReader V2: per-family queries + optional per-target modulation -> factorized C = tanh(diag + U V^T)
         self.family_queries = nn.Parameter(torch.randn(config.adapter_heads, d) * d ** -.5)
@@ -490,8 +500,9 @@ class CompiledSiteHead(nn.Module):
             scores = scores + log_w[:, None, :]
             scores = scores.masked_fill(pad_mask[:, None, :], float('-inf'))
             mixed = (scores.softmax(-1) @ z_all)[0]                                    # [n, d]
-            for name, shape in self.config.layout:
-                delta = self.state_out[name.replace('.', '__')](mixed).reshape(mixed.shape[0], *shape)
+            for idx_layout, (name, shape) in enumerate(self.config.layout):
+                raw_delta = self.state_out[name.replace('.', '__')](mixed).reshape(mixed.shape[0], *shape)
+                delta = torch.tanh(raw_delta) * self.state_scale[idx_layout] if self.state_scale is not None else raw_delta
                 values[name] = values[name] + delta
 
         # AdapterReader V2 cores (factorized bounded cores per target)

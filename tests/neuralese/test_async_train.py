@@ -499,8 +499,11 @@ def test_two_neutral_measured_rounds_switch_phase_from_the_reference_and_back(tm
 
 
 
-def test_neutral_rounds_do_not_switch_phase_by_default(tmp_path):
+def test_neutral_rounds_switch_phase_by_default_and_respect_opt_out(tmp_path, monkeypatch):
     import expert_iteration as ei
+    assert ei.AUTO_PHASE_SWITCH is True
+    # Opt-out keeps the phase fixed across neutral rounds
+    monkeypatch.setattr(ei, 'AUTO_PHASE_SWITCH', False)
     ctrl = ei.PhaseController.initialize(tmp_path / 's.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64,
                                          held_every=1)
     for i in (1, 2, 3):
@@ -510,6 +513,22 @@ def test_neutral_rounds_do_not_switch_phase_by_default(tmp_path):
                                   'sha256': _policy(i)[1]})
         assert ev['action'] == 'adopt' and 'switch_phase' not in ev
     assert ctrl.phase == 'sft' and ctrl.current['sha256'] == _policy(3)[1]
+
+
+def test_set_phase_cli_switches_phase_and_records_history(tmp_path):
+    from types import SimpleNamespace
+    import expert_iteration as ei
+    root = tmp_path / 'ei'
+    root.mkdir()
+    ctrl = ei.PhaseController.initialize(root / 'phase-state.json', start_checkpoint='/ckpt/v0.pt', start_sha='0' * 64)
+    ctrl.state['consecutive_neutral'] = 3
+    ctrl.save()
+    rc = ei.set_phase(SimpleNamespace(root=str(root), phase='grpo', reason='3 neutral rounds',
+                                      reset_neutral=True, from_reference=False))
+    assert rc == 0
+    reloaded = ei.PhaseController(root / 'phase-state.json')
+    assert reloaded.phase == 'grpo' and reloaded.state['consecutive_neutral'] == 0
+    assert reloaded.state['history'][-1]['action'] == 'set_phase'
 
 
 def test_judge_adopts_neutral_and_rolls_back_only_a_significant_regression(monkeypatch):

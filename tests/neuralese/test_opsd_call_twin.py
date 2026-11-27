@@ -212,3 +212,33 @@ def test_opsd_loss_reports_collapse_telemetry():
     _, metrics = opsd_loss(student, twin, torch.tensor([5, 6, 7]))
     assert metrics['divergence'] < 1e-6
     assert metrics['student_entropy'] < 1e-6 and metrics['student_nll'] > 20
+
+
+def test_twin_loss_anchor_kl_and_focus_weights_match_one_pass_across_chunks():
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import opsd_privileged as O
+    torch.manual_seed(2)
+    emb = torch.nn.Embedding(200, 8)
+    head = torch.nn.Linear(8, 20, bias=False)
+    delta = torch.nn.Parameter(torch.full((8,), 0.25))
+    learner = SimpleNamespace()
+    O_hidden, O_head = O._positions_hidden, O._head
+    try:
+        def hidden(_l, ids, pos, *, grad, start=False):
+            h = torch.tanh(emb(torch.tensor(ids)).cumsum(0))
+            if start:
+                return h[list(pos)].detach()
+            return (h + delta)[list(pos)]
+        O._positions_hidden = hidden
+        O._head = lambda _l, rows, **_kw: head(rows).float()
+        twin = twin_sequences(rendering(), [BOS, 4, 5, 6], [7, 8, 9, 10, 11], ['fact'])
+        one = O.twin_loss(learner, twin, grad=True, chunk=100, anchor_kl=0.05, focus_divergent_tokens=True)
+        g_one = delta.grad.clone()
+        delta.grad = None
+        many = O.twin_loss(learner, twin, grad=True, chunk=2, anchor_kl=0.05, focus_divergent_tokens=True)
+        assert one['anchor_kl'] > 0 and one['base_guidance_kl'] > 0 and one['focused_divergence'] > 0
+        assert abs(one['focused_divergence'] - many['focused_divergence']) < 1e-5
+        assert abs(one['anchor_kl'] - many['anchor_kl']) < 1e-5
+        torch.testing.assert_close(delta.grad, g_one, rtol=1e-4, atol=1e-6)
+    finally:
+        O._positions_hidden, O._head = O_hidden, O_head

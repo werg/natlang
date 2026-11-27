@@ -55,7 +55,7 @@ RECEIPT_SCHEMA = 'natlang.compiler.t2-receipt/2'
 # /3 (2026-11-26): non-student target context masked, token-weighted rows, similarity-filled Live-KB positives with
 # distractor gradients. A learner state saved under another objective is not resumed (a head fit to /2 learned one
 # global adapter under the wrong objective; T2 restarts from the warm start).
-OBJECTIVE = 'unified-compiler-live-kb-maml-compositional/3'
+OBJECTIVE = 'unified-compiler-live-kb-maml-compositional/4'
 
 
 def _sha(text: str) -> str:
@@ -362,6 +362,36 @@ def _token_means(per_row, arms):
 ABLATION_ARMS = ('base', 'joint', 'kv_only', 'adapter_only', 'mean_core', 'shuffled', 'shuffled_slots', 'shuffled_kb')
 
 
+def site_decorrelation_loss(z_sites: list[torch.Tensor], *, var_floor: float = 0.5) -> torch.Tensor | None:
+    """VICReg-style batch decorrelation over distinct sites' mean slot vectors ``[1, M, d]``.
+
+    Prevents ``HeaderEncoder`` from collapsing distinct sites to a single global vector (observed in run1 where
+    pairwise cosine hit 0.998): penalizes squared off-diagonal cosine similarity between distinct sites and keeps
+    per-dimension std above ``var_floor``. Returns None when fewer than 2 distinct sites are present."""
+    if len(z_sites) < 2:
+        return None
+    pooled = torch.cat([z.float().mean(dim=1) for z in z_sites], dim=0)   # [K, d]
+    normed = torch.nn.functional.normalize(pooled, dim=-1)
+    gram = normed @ normed.t()                                            # [K, K]
+    k = gram.shape[0]
+    off_mask = ~torch.eye(k, dtype=torch.bool, device=gram.device)
+    cos_pen = gram[off_mask].pow(2).mean()
+    std = torch.sqrt(pooled.var(dim=0, unbiased=False) + 1e-4)
+    var_pen = torch.nn.functional.relu(float(var_floor) - std).mean()
+    return cos_pen + var_pen
+
+
+def mean_site_cosine(encoded_slots: dict) -> float | None:
+    """Mean off-diagonal cosine similarity between distinct sites' mean slot vectors (collapse diagnostic)."""
+    if len(encoded_slots) < 2:
+        return None
+    vecs = torch.cat([z.detach().float().mean(dim=1) for z, _ in encoded_slots.values()], dim=0)
+    normed = torch.nn.functional.normalize(vecs, dim=-1)
+    gram = normed @ normed.t()
+    off = ~torch.eye(gram.shape[0], dtype=torch.bool, device=gram.device)
+    return float(gram[off].mean())
+
+
 def ablation(engine, head, sites, rows, adapter_id, step, others, *, basis_module=None, writer=None, peer_pool=(),
              seed=0, index=None, k_pos=2, k_neg=2):
     """Mean dev CE per arm, overall, by ``source_kind`` and token-weighted.
@@ -446,6 +476,7 @@ def ablation(engine, head, sites, rows, adapter_id, step, others, *, basis_modul
                                  for kind in sorted({r['source_kind'] or 'unknown' for r in per_row})},
            'mean_ce_tokens': _token_means(per_row, ABLATION_ARMS),
            'base_minus_joint': None if mean['joint'] is None else mean['base'] - mean['joint'],
+           'z_site_mean_cos': mean_site_cosine(encoded),
            'shuffled_kb_unavailable': unavailable}
     for arm in ('shuffled', 'shuffled_slots', 'shuffled_kb', 'mean_core'):
         rows_, delta = paired(arm)
@@ -581,6 +612,7 @@ def train(args):
             adapter_inner_rank=args.inner_rank,
             kv_drop=args.kv_drop,
             adapter_drop=args.adapter_drop,
+            state_residual_scale=getattr(args, 'state_residual_scale', 0.1),
         )
         learn_basis = bool(args.learn_basis)
         adapter_id = None
@@ -731,6 +763,20 @@ def train(args):
                 basis_module=basis_module, **kb_args, backward=True, scale=row_scale,
             ))
 
+        # Site-distinctness regularizer across distinct sites in the batch (forbids z_site collapse to one global adapter)
+        site_var_loss_val = None
+        site_var_weight = float(getattr(args, 'site_var_weight', 0.05))
+        if site_var_weight > 0.0:
+            from .compiled_site import init_block_values
+            seen_sites = {}
+            for row in batch_rows:
+                if row['site'] not in seen_sites:
+                    seen_sites[row['site']] = head.encode(init_block_values(sites.block(row)))[0]
+            reg = site_decorrelation_loss(list(seen_sites.values()))
+            if reg is not None:
+                (reg * site_var_weight).backward()
+                site_var_loss_val = float(reg.detach())
+
         # FO-MAML episode: z_site meta-trained for few-shot Tier-1.5 refinement
         if args.meta_every > 0 and maml_sites and (step + 1) % args.meta_every == 0:
             episode_calls = rng.choice(maml_sites)
@@ -773,6 +819,7 @@ def train(args):
         log.write(json.dumps({
             'step': step, 'loss': sum(losses) / len(losses), 'losses': losses,
             'loss_tokens': sum(l * c for l, c in zip(losses, scales)), 'row_scales': scales,
+            'site_var_loss': site_var_loss_val,
             'maml_loss': maml_loss_val, 'comp_loss': comp_loss_val,
             'grad_norm': grad_norm, 'encoder_grad_norm': encoder_grad,
             'basis_grad_norm': basis_grad, 'writer_grad_norm': writer_grad,
@@ -810,6 +857,52 @@ def train(args):
     return 0
 
 
+def export_release(args):
+    """Export a Mode-P compiled-site release from any saved T2 ``learner-state.pt`` without waiting for step 5,000."""
+    from ..common.code_provenance import code_provenance
+    from ..serve import load_native_engine
+    from ..serve.store import TensorStore
+    from .compiled_site import (
+        CompiledSiteConfig, CompiledSiteHead, compile_release, create_compiler_adapter,
+        create_learned_compiler_basis,
+    )
+    saved = torch.load(args.state, map_location='cpu', weights_only=False)
+    config = CompiledSiteConfig.from_dict(saved['config'])
+    rows = list(_jsonl(args.rows))
+    row = (next((r for r in rows if r.get('site') == args.site), None)
+           if args.site else next((r for r in rows if r.get('split') == 'dev-seen'), rows[0]))
+    if row is None:
+        raise ValueError(f'site {args.site!r} not found in {args.rows}')
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    engine = load_native_engine(str(args.checkpoint), base=str(args.base), device=args.device,
+                                dtype=getattr(torch, args.dtype), training_state=False)
+    engine.store = TensorStore(out / 'store')
+    sites = Sites(engine, out)
+    basis_module = None
+    if saved.get('learn_basis') and saved.get('basis') is not None:
+        basis_module = create_learned_compiler_basis(engine, config.targets, config.rank)
+        basis_module.load_state_dict(saved['basis'])
+        basis_id, adapter_id = basis_module.save_artifact(engine)
+        basis_module.basis_id, basis_module.adapter_id = basis_id, adapter_id
+        basis_module = basis_module.to(args.device)
+    else:
+        adapter_id = create_compiler_adapter(engine, config.targets, config.rank)
+    head = CompiledSiteHead(config).to(args.device)
+    head.load_state_dict(saved['head'])
+    head.eval()
+    result = compile_release(
+        engine, head, adapter_id=adapter_id, init_block=sites.block(row),
+        basis_module=basis_module, out=out, site_id=row['site'],
+        provenance={'code': code_provenance(), 'step': saved.get('step'), 'source_state': str(args.state),
+                    'row': row['key'], 'header': row['header']},
+    )
+    (out / 'site-row.json').write_text(json.dumps(row))
+    print(json.dumps({'out': str(out), 'site': row['site'], 'step': saved.get('step'),
+                      'softStates': result.get('softStates'), 'artifacts': result.get('artifacts')}, indent=2))
+    return 0
+
+
 def _summary(rows_path):
     path = Path(rows_path).with_suffix('.summary.json')
     return json.loads(path.read_text()) if path.exists() else None
@@ -831,7 +924,7 @@ def main(argv=None):
     p.add_argument('--call-level', nargs='*', default=[], help='call_level_engine teach outputs (DIR or its call-level.jsonl.zst)')
     p.add_argument('--cases', nargs='*', default=[], help='more case rows for call-level tasks (case JSONL, or an authored pool\'s authored.jsonl); held closure is checked over them')
     p.add_argument('--out', required=True)
-    p.add_argument('--max-prompt-tokens', type=int, default=4096)
+    p.add_argument('--max-prompt-tokens', type=int, default=8192)
     p.add_argument('--per-site', type=int, default=8)
     p.add_argument('--min-per-site', type=int, default=2)
     p.add_argument('--dev-site-percent', type=int, default=10)
@@ -857,6 +950,10 @@ def main(argv=None):
     t.add_argument('--inner-rank', type=int, default=4)
     t.add_argument('--kv-drop', type=float, default=0.1)
     t.add_argument('--adapter-drop', type=float, default=0.1)
+    t.add_argument('--state-residual-scale', type=float, default=0.1,
+                   help='Initial scale of tanh-bounded KV/conv state residual (0: legacy unbounded residual).')
+    t.add_argument('--site-var-weight', type=float, default=0.05,
+                   help='Batch site-decorrelation/variance regularization weight preventing z_site collapse (0 opts out).')
     t.add_argument('--learn-basis', action=argparse.BooleanOptionalAction, default=True)
     t.add_argument('--live-kb', action=argparse.BooleanOptionalAction, default=True)
     t.add_argument('--writer-backend', choices=('pplx', 'embed'), default='pplx',
@@ -890,9 +987,20 @@ def main(argv=None):
     t.add_argument('--comp-weight', type=float, default=0.5)
     t.add_argument('--dev-rows', type=int, default=24)
     t.add_argument('--eval-every', type=int, default=50)
-    t.add_argument('--state-every', type=int, default=25)
+    t.add_argument('--state-every', type=int, default=100)
     t.add_argument('--seed', type=int, default=0)
     t.set_defaults(func=train)
+
+    er = sub.add_parser('export-release', help='Export a Mode-P compiled-site release from any saved T2 learner-state.pt')
+    er.add_argument('--state', type=Path, required=True)
+    er.add_argument('--rows', type=Path, required=True)
+    er.add_argument('--checkpoint', type=Path, required=True)
+    er.add_argument('--base', type=Path, required=True)
+    er.add_argument('--out', type=Path, required=True)
+    er.add_argument('--site', default=None, help='Optional site hash to export (default: first dev-seen row).')
+    er.add_argument('--device', default='cuda')
+    er.add_argument('--dtype', default='bfloat16')
+    er.set_defaults(func=export_release)
 
     args = parser.parse_args(argv)
     return args.func(args)

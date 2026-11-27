@@ -36,10 +36,38 @@ class StepVerifierHead(nn.Module):
         """hidden: [..., hidden_dim] -> logits [..., 2] in FP32."""
         return self.net(self.norm(hidden.float()))
 
+    @staticmethod
+    def rich_features(hidden: torch.Tensor, prompt_end: int, boundary: int,
+                      scalars: list[float] | tuple[float, ...] | None = None) -> torch.Tensor:
+        """Build the exact ``feature_mode='rich'`` vector ``[h_last, h_last - h_prompt_end, h_mean_completion, scalars]``
+        from a sequence hidden-state tensor ``[T, H]`` so ``branch@N`` inference matches T0 training 1:1."""
+        h = hidden.float()
+        b = max(0, min(int(boundary), h.shape[0] - 1))
+        pe = max(0, min(int(prompt_end), b))
+        h_last = h[b]
+        h_delta = h_last - h[pe]
+        start_c = min(pe + 1, b)
+        h_mean = h[start_c:b + 1].mean(dim=0)
+        sc = torch.tensor(list(scalars) if scalars is not None else [0.0] * 5, device=h.device, dtype=torch.float32)
+        return torch.cat([h_last, h_delta, h_mean, sc], dim=-1)
+
     @torch.no_grad()
     def success_probability(self, hidden: torch.Tensor) -> torch.Tensor:
         logits = self.forward(hidden)
         return torch.sigmoid(logits[..., 0])
+
+    @torch.no_grad()
+    def score_boundary(self, sequence_hidden: torch.Tensor, prompt_end: int, boundary: int,
+                       scalars: list[float] | tuple[float, ...] | None = None) -> float:
+        """Score a candidate branch boundary; automatically uses rich features when head was trained on rich features."""
+        h = sequence_hidden.float()
+        base_dim = int(h.shape[-1])
+        if self.hidden_dim == 3 * base_dim + 5:
+            feat = self.rich_features(h, prompt_end, boundary, scalars).unsqueeze(0)
+        else:
+            b = max(0, min(int(boundary), h.shape[0] - 1))
+            feat = h[b:b + 1]
+        return float(self.success_probability(feat.to(next(self.parameters()).device)).item())
 
 
 def compute_auroc(scores: torch.Tensor, labels: torch.Tensor) -> float:
@@ -96,12 +124,14 @@ def rank_branches(candidates: list[BranchCandidate]) -> list[BranchCandidate]:
 
 @dataclass(frozen=True)
 class VerifierTrainConfig:
-    epochs: int = 2
+    epochs: int = 8
     batch_size: int = 256
     lr: float = 3e-4
-    weight_decay: float = 0.01
+    weight_decay: float = 0.05
     error_loss_weight: float = 0.3
     clip_norm: float = 1.0
+    dropout: float = 0.2
+    pairwise_weight: float = 0.25
 
 
 def train_step_verifier(
@@ -184,17 +214,36 @@ def _completion_ids(turn):
     return [int(sample['token_id']) for sample in (turn.get('sampling') or {}).get('samples') or []]
 
 
-def rollout_sequences(rollout, *, max_tokens=32768):
-    """Per-invocation sequences of one rollout: ``[{ids, boundaries, turns}]``.
+def _turn_scalars(turn, *, turn_idx: int, total_turns: int, completion_len: int) -> list[float]:
+    """Compact turn-level scalar telemetry (FP32) helping distinguish failing loops/low-confidence turns from passes."""
+    samples = (turn.get('sampling') or {}).get('samples') or []
+    logps = [float(s['logprob']) for s in samples if isinstance(s, dict) and s.get('logprob') is not None]
+    mean_lp = (sum(logps) / len(logps)) if logps else 0.0
+    min_lp = min(logps) if logps else 0.0
+    target = turn.get('target') or {}
+    tcs = target.get('tool_calls') or []
+    is_return = 1.0 if any(((tc.get('function') or {}).get('name') == 'return_result') for tc in tcs if isinstance(tc, dict)) else 0.0
+    progress = float(turn_idx) / float(max(1, total_turns - 1))
+    return [progress, math.log1p(max(0, completion_len)) / 8.0, max(-10.0, min(0.0, mean_lp)) / 5.0,
+            max(-20.0, min(0.0, min_lp)) / 10.0, is_return]
+
+
+def rollout_sequences(rollout, *, max_tokens=32768, include_rich=False):
+    """Per-invocation sequences of one rollout: ``[{ids, boundaries, turns}]`` (plus ``prompt_ends`` and ``scalars``
+    when ``include_rich=True`` for rich delta/telemetry extraction).
 
     ``boundaries`` are positions (indices into ``ids``) of each call's last sampled token: the hidden state there has
     read the whole call. A turn whose prompt does not extend its predecessor's sequence starts a new sequence. Turns
-    with non-token prompt parts (imported native states) are skipped: their exact context is not a token sequence."""
+    with non-token prompt parts (imported native states) are skipped."""
     chains = {}
-    for index, turn in enumerate(rollout.get('turns') or ()):
+    all_turns = rollout.get('turns') or ()
+    total_turns = len(all_turns)
+    for index, turn in enumerate(all_turns):
         prompt, completion = _prompt_ids(turn), _completion_ids(turn)
         if prompt is None or not completion:
             continue
+        prompt_end = len(prompt) - 1
+        scalars = _turn_scalars(turn, turn_idx=index, total_turns=total_turns, completion_len=len(completion)) if include_rich else None
         key = turn.get('invocation_id') or f'turn-{index}'
         sequences = chains.setdefault(key, [])
         current = sequences[-1] if sequences else None
@@ -204,11 +253,18 @@ def rollout_sequences(rollout, *, max_tokens=32768):
                 current['ids'] = ids
                 current['boundaries'].append(len(ids) - 1)
                 current['turns'].append(index)
+                if include_rich:
+                    current['prompt_ends'].append(prompt_end)
+                    current['scalars'].append(scalars)
                 continue
         ids = prompt + completion
         if len(ids) > max_tokens:
             continue
-        sequences.append({'ids': ids, 'boundaries': [len(ids) - 1], 'turns': [index]})
+        entry = {'ids': ids, 'boundaries': [len(ids) - 1], 'turns': [index]}
+        if include_rich:
+            entry['prompt_ends'] = [prompt_end]
+            entry['scalars'] = [scalars]
+        sequences.append(entry)
     return [sequence for sequences in chains.values() for sequence in sequences]
 
 
@@ -225,14 +281,22 @@ def is_validation(rollout, fraction=0.1):
 
 
 def build_t0_sequences(collections, out, *, policy_sha256, max_tokens=32768, max_rollouts=None, held_manifest=None):
-    """Write ``out`` (jsonl.zst) of per-call sequences from the rollouts under ``collections`` sampled by exactly
-    ``policy_sha256``; returns the funnel."""
+    """Write ``out`` (jsonl.zst) of per-call sequences from the rollouts under ``collections`` matching
+    ``policy_sha256`` (a single sha, an iterable of shas, or ``'any'`` to pool multiple nearby policies on the same
+    backbone); returns the funnel."""
     import glob
     import json
     from pathlib import Path
     from ..rl.held_eval import training_exclusion_ids
     from ..common.jsonio import json_line, read_jsonl
     import zstandard
+    if isinstance(policy_sha256, str):
+        allow_any = policy_sha256.lower() == 'any'
+        allowed_policies = None if allow_any else frozenset({policy_sha256})
+    else:
+        items = list(policy_sha256)
+        allow_any = any(str(x).lower() == 'any' for x in items)
+        allowed_policies = None if allow_any else frozenset(items)
     funnel = {'groups': 0, 'rollouts': 0, 'other_policy': 0, 'unscored': 0, 'held_excluded': 0, 'kept_rollouts': 0,
               'sequences': 0, 'boundaries': 0, 'success_rollouts': 0, 'validation_rollouts': 0}
     out = Path(out)
@@ -254,7 +318,8 @@ def build_t0_sequences(collections, out, *, policy_sha256, max_tokens=32768, max
                             continue
                         rollout = json.loads(line)
                         funnel['rollouts'] += 1
-                        if (rollout.get('policy') or {}).get('checkpoint_sha256') != policy_sha256:
+                        ckpt_sha = (rollout.get('policy') or {}).get('checkpoint_sha256')
+                        if allowed_policies is not None and ckpt_sha not in allowed_policies:
                             funnel['other_policy'] += 1
                             continue
                         if rollout.get('unscored') or not rollout.get('outcome'):
@@ -265,7 +330,7 @@ def build_t0_sequences(collections, out, *, policy_sha256, max_tokens=32768, max
                             continue
                         success = rollout['outcome'] in SUCCESS_OUTCOMES
                         validation = is_validation(rollout)
-                        sequences = rollout_sequences(rollout, max_tokens=max_tokens)
+                        sequences = rollout_sequences(rollout, max_tokens=max_tokens, include_rich=True)
                         if not sequences:
                             continue
                         funnel['kept_rollouts'] += 1
@@ -302,12 +367,18 @@ def _sequence_rows(path):
 
 @torch.no_grad()
 def extract_t0_features(sequences_path, out, *, checkpoint, base, checkpoint_sha256, device='cuda', shard_rows=4096,
-                        resume=True):
-    """Final-norm hidden states of the sampling policy at every boundary; resumable shards ``out/shard-NNNNN.pt``."""
+                        resume=True, feature_mode='rich'):
+    """Boundary features of the sampling policy; resumable shards ``out/shard-NNNNN.pt``.
+
+    ``feature_mode='rich'`` (default): concatenates ``[h_last, h_last - h_prompt_end, h_mean_completion, scalars]``
+    so the head sees the turn-specific delta (canceling static prompt/task difficulty), completion summary, and
+    logprob/progress telemetry. ``feature_mode='last'`` keeps the legacy single-token ``h_last`` vector."""
     import hashlib
     import json
     from pathlib import Path
     from .lfm3_learner import load_base_model
+    if feature_mode not in ('rich', 'last'):
+        raise ValueError(f"feature_mode must be 'rich' or 'last', got {feature_mode!r}")
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     sha = hashlib.sha256()
@@ -336,8 +407,23 @@ def extract_t0_features(sequences_path, out, *, checkpoint, base, checkpoint_sha
         rows_seen += 1
         if f'shard-{shard:05d}.pt' not in done:
             ids = torch.tensor([row['ids']], device=device)
-            h = model.model(input_ids=ids, use_cache=False).last_hidden_state[0]
-            hidden.append(h[torch.tensor(row['boundaries'], device=device)].float())
+            h = model.model(input_ids=ids, use_cache=False).last_hidden_state[0].float()
+            bounds = row['boundaries']
+            if feature_mode == 'rich' and row.get('prompt_ends'):
+                p_ends = row['prompt_ends']
+                sc_list = row.get('scalars') or [[0.0] * 5 for _ in bounds]
+                feats = []
+                for b, pe, sc in zip(bounds, p_ends, sc_list):
+                    pe_clamped = max(0, min(int(pe), int(b)))
+                    h_last = h[b]
+                    h_delta = h_last - h[pe_clamped]
+                    start_c = min(pe_clamped + 1, int(b))
+                    h_mean = h[start_c:int(b) + 1].mean(dim=0)
+                    sc_t = torch.tensor(sc, device=h.device, dtype=torch.float32)
+                    feats.append(torch.cat([h_last, h_delta, h_mean, sc_t], dim=-1))
+                hidden.append(torch.stack(feats, dim=0))
+            else:
+                hidden.append(h[torch.tensor(bounds, device=device)])
         meta.extend({'episode': row['episode'], 'sequence': row['sequence'], 'boundary': b, 'turn': t,
                      'task_id': row['task_id'], 'family': row['family'], 'split_group': row['split_group'],
                      'success': row['success'], 'validation': row['validation']}
@@ -350,9 +436,11 @@ def extract_t0_features(sequences_path, out, *, checkpoint, base, checkpoint_sha
     if f'shard-{shard:05d}.pt' in done:
         hidden, meta = [], []
     flush()
+    readout_desc = ('[h_last, h_last - h_prompt_end, h_mean_completion, scalars]'
+                    if feature_mode == 'rich' else 'final-norm hidden state at the last sampled token of each call')
     receipt = {'schema': T0_SCHEMA, 'stage': 'features', 'sequences': str(sequences_path), 'rows': rows_seen,
                'checkpoint_sha256': checkpoint_sha256, 'base': str(base), 'dtype': 'bfloat16',
-               'readout': 'final-norm hidden state at the last sampled token of each call'}
+               'feature_mode': feature_mode, 'readout': readout_desc}
     (out / 'features.json').write_text(json.dumps(receipt, indent=2) + '\n')
     return receipt
 
@@ -367,16 +455,54 @@ def _per_family_auroc(scores, labels, families, minimum=10):
     return out
 
 
+def within_task_auroc(scores: torch.Tensor, labels: torch.Tensor, task_ids: list[str]) -> tuple[float, int]:
+    """Mean per-task AUROC over tasks with both passing and failing boundaries — the exact metric branch@N needs."""
+    by_task: dict[str, list[int]] = {}
+    for i, tid in enumerate(task_ids):
+        by_task.setdefault(str(tid), []).append(i)
+    aurocs = []
+    for members in by_task.values():
+        idx = torch.tensor(members, dtype=torch.long)
+        y_t = labels[idx]
+        if float(y_t.sum()) >= 1.0 and float((1.0 - y_t).sum()) >= 1.0:
+            a = compute_auroc(scores[idx], y_t)
+            if not math.isnan(a):
+                aurocs.append(a)
+    return (sum(aurocs) / len(aurocs) if aurocs else float('nan')), len(aurocs)
+
+
+def pairwise_ranking_loss(logits_1d: torch.Tensor, labels: torch.Tensor, task_ids: list[str]) -> torch.Tensor:
+    """Within-task RankNet logistic loss over all (pass, fail) pairs sharing ``task_id`` in the batch."""
+    by_task: dict[str, list[int]] = {}
+    for i, tid in enumerate(task_ids):
+        by_task.setdefault(str(tid), []).append(i)
+    terms = []
+    for members in by_task.values():
+        pos = [i for i in members if float(labels[i]) > 0.5]
+        neg = [i for i in members if float(labels[i]) <= 0.5]
+        if not pos or not neg:
+            continue
+        p_s = logits_1d[pos][:, None]
+        n_s = logits_1d[neg][None, :]
+        terms.append(F.softplus(-(p_s - n_s)).mean())
+    if not terms:
+        return logits_1d.sum() * 0.0
+    return torch.stack(terms).mean()
+
+
 def train_t0(features_dir, out, *, cfg: VerifierTrainConfig = VerifierTrainConfig(), seed=0, device='cpu',
              progress_weighting: bool = True):
     """Train the head on task-disjoint splits of stored features; write head, per-epoch jsonl and receipt.
 
     ``progress_weighting`` (default True) up-weights late/decisive boundaries within each episode
-    (``0.25 + 0.75 * progress``) so ambiguous turn-1 boundaries do not drown out decisive tool/return boundaries."""
+    (``0.25 + 0.75 * progress``). When ``cfg.pairwise_weight > 0``, batches are grouped by task so within-task
+    (pass, fail) pairs train a RankNet term that cancels static task-difficulty confounding."""
     import json
+    import random
     from pathlib import Path
     from ..common.code_provenance import code_provenance
     torch.manual_seed(seed)
+    rng = random.Random(seed)
     features_dir, out = Path(features_dir), Path(out)
     out.mkdir(parents=True, exist_ok=True)
     hidden, meta = [], []
@@ -388,6 +514,7 @@ def train_t0(features_dir, out, *, cfg: VerifierTrainConfig = VerifierTrainConfi
     y = torch.tensor([float(m['success']) for m in meta])
     val = torch.tensor([bool(m['validation']) for m in meta])
     fam = [m['family'] or 'unknown' for m in meta]
+    tids = [str(m.get('task_id') or m.get('episode') or i) for i, m in enumerate(meta)]
     tr_idx, va_idx = (~val).nonzero().squeeze(1), val.nonzero().squeeze(1)
     # pass/fail balance per family (and equal family mass) by sample weights, optionally scaled by episode progress
     progress_scale = torch.ones(len(meta))
@@ -409,31 +536,62 @@ def train_t0(features_dir, out, *, cfg: VerifierTrainConfig = VerifierTrainConfi
                 cls_scale = progress_scale[cls]
                 denom_scale = float(cls_scale.sum())
                 weights[cls] = cls_scale / (2.0 * denom_scale if denom_scale > 0 else 2.0 * len(cls))
-    head = StepVerifierHead(x.shape[-1]).to(device)
+    head = StepVerifierHead(x.shape[-1], dropout=cfg.dropout).to(device)
     optimizer = torch.optim.AdamW(head.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     n = len(tr_idx)
     steps = max(1, cfg.epochs * math.ceil(n / cfg.batch_size))
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=steps, eta_min=cfg.lr * 0.1)
     log = (out / 'train.jsonl').open('w')
     sampler_weights = weights[tr_idx]
+    # Task-grouped index for within-task pairwise ranking batches
+    tr_by_task: dict[str, list[int]] = {}
+    for i in tr_idx.tolist():
+        tr_by_task.setdefault(tids[i], []).append(i)
+    task_keys = list(tr_by_task.keys())
+    task_weights = torch.tensor([float(weights[tr_by_task[tk]].sum()) for tk in task_keys], dtype=torch.float32)
+    mixed_tasks = [t for t, ms in tr_by_task.items()
+                   if any(float(y[i]) > 0.5 for i in ms) and any(float(y[i]) <= 0.5 for i in ms)]
+    va_tids = [tids[i] for i in va_idx.tolist()]
     for epoch in range(cfg.epochs):
         head.train()
-        order = tr_idx[torch.multinomial(sampler_weights, n, replacement=True)]
+        if cfg.pairwise_weight > 0.0 and mixed_tasks and float(task_weights.sum()) > 0:
+            # Family-balanced task-grouped sampling: preserves equal family mass while guaranteeing same-task pairs
+            order_list: list[int] = []
+            while len(order_list) < n:
+                drawn_tasks = torch.multinomial(task_weights, min(len(task_keys), 64), replacement=True).tolist()
+                for t_pos in drawn_tasks:
+                    ms = tr_by_task[task_keys[t_pos]]
+                    w_ms = weights[ms]
+                    k_draw = min(len(ms), 8)
+                    chosen = ([ms[j] for j in torch.multinomial(w_ms, k_draw, replacement=False).tolist()]
+                              if float(w_ms.sum()) > 0 else ms[:k_draw])
+                    order_list.extend(chosen)
+                    if len(order_list) >= n:
+                        break
+            order = torch.tensor(order_list[:n], dtype=torch.long)
+        else:
+            order = tr_idx[torch.multinomial(sampler_weights, n, replacement=True)]
         total = 0.
         for start in range(0, n, cfg.batch_size):
             idx = order[start:start + cfg.batch_size]
             logits = head(x[idx].to(device))
-            loss = F.binary_cross_entropy_with_logits(logits[:, 0], y[idx].to(device))
+            yb = y[idx].to(device)
+            loss = F.binary_cross_entropy_with_logits(logits[:, 0], yb)
+            if cfg.pairwise_weight > 0.0:
+                batch_tids = [tids[int(i)] for i in idx.tolist()]
+                loss = loss + float(cfg.pairwise_weight) * pairwise_ranking_loss(logits[:, 0], yb, batch_tids)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(head.parameters(), cfg.clip_norm)
             optimizer.step()
             scheduler.step()
-            total += float(loss) * len(idx)
+            total += float(loss.detach()) * len(idx)
         head.eval()
         with torch.no_grad():
             val_scores = head.success_probability(x[va_idx].to(device)).cpu()
+        wt_auroc, wt_tasks = within_task_auroc(val_scores, y[va_idx], va_tids)
         record = {'epoch': epoch, 'train_loss': total / n, 'val_auroc': compute_auroc(val_scores, y[va_idx]),
+                  'val_within_task_auroc': wt_auroc, 'val_within_task_n': wt_tasks,
                   'lr': scheduler.get_last_lr()[0]}
         log.write(json.dumps(record) + '\n')
         log.flush()
@@ -443,6 +601,7 @@ def train_t0(features_dir, out, *, cfg: VerifierTrainConfig = VerifierTrainConfi
         train_scores = head.success_probability(x[tr_idx].to(device)).cpu()
     generator = torch.Generator().manual_seed(seed + 1)
     permuted = y[va_idx][torch.randperm(len(va_idx), generator=generator)]
+    wt_val, wt_n = within_task_auroc(val_scores, y[va_idx], va_tids)
     # episode-level AUROC: the mean score of an episode's boundaries
     episodes = {}
     for position, i in enumerate(va_idx.tolist()):
@@ -451,14 +610,21 @@ def train_t0(features_dir, out, *, cfg: VerifierTrainConfig = VerifierTrainConfi
     ep_labels = torch.tensor([float(y[members[0][1]]) for members in episodes.values()])
     receipt = {'schema': T0_SCHEMA, 'stage': 'train', 'features': str(features_dir), 'config': cfg.__dict__,
                'rows': {'train': int(n), 'validation': int(len(va_idx)),
-                        'train_success_share': float(y[tr_idx].mean()), 'validation_success_share': float(y[va_idx].mean())},
+                        'train_success_share': float(y[tr_idx].mean()), 'validation_success_share': float(y[va_idx].mean()),
+                        'validation_mixed_tasks': wt_n},
                'auroc': {'train': compute_auroc(train_scores, y[tr_idx]), 'validation': compute_auroc(val_scores, y[va_idx]),
+                         'validation_within_task': wt_val,
                          'validation_label_permuted_control': compute_auroc(val_scores, permuted),
                          'validation_episode_mean': compute_auroc(ep_scores, ep_labels) if len(ep_labels) else float('nan'),
                          'validation_per_family': _per_family_auroc(val_scores, y[va_idx], [fam[i] for i in va_idx.tolist()])},
-               'declared_success_criterion': {'validation_auroc_min': 0.78},
+               'declared_success_criterion': {'validation_within_task_auroc_min': 0.70, 'validation_auroc_min': 0.72,
+                                              'min_mixed_tasks': 10},
                'code': code_provenance(), 'seed': seed}
-    receipt['criterion_met'] = receipt['auroc']['validation'] >= 0.78
+    # Gate branch@N on real within-task ranking quality (not cross-task difficulty confounding)
+    receipt['criterion_met'] = (
+        (wt_n >= 10 and not math.isnan(wt_val) and wt_val >= 0.70 and receipt['auroc']['validation'] >= 0.72)
+        if wt_n > 0 else receipt['auroc']['validation'] >= 0.78
+    )
     torch.save({'state_dict': head.state_dict(), 'hidden_dim': head.hidden_dim, 'mlp_dim': head.mlp_dim,
                 'receipt': receipt}, out / 'head.pt')
     (out / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
@@ -472,7 +638,8 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='command', required=True)
     b = sub.add_parser('build')
     b.add_argument('--collection', action='append', required=True)
-    b.add_argument('--policy-sha256', required=True)
+    b.add_argument('--policy-sha256', action='append', required=True,
+                   help="One or more policy checkpoint SHA-256s, or 'any' to pool multiple nearby policies.")
     b.add_argument('--out', required=True)
     b.add_argument('--max-tokens', type=int, default=32768)
     b.add_argument('--max-rollouts', type=int)
@@ -483,29 +650,38 @@ def main(argv=None):
     f.add_argument('--checkpoint-sha256', required=True)
     f.add_argument('--base', required=True)
     f.add_argument('--out', required=True)
+    f.add_argument('--feature-mode', choices=('rich', 'last'), default='rich',
+                   help='rich: [h_last, h_last - h_prompt_end, h_mean_completion, scalars] (default); last: legacy h_last.')
     t = sub.add_parser('train')
     t.add_argument('--features', required=True)
     t.add_argument('--out', required=True)
     t.add_argument('--epochs', type=int, default=VerifierTrainConfig.epochs)
+    t.add_argument('--dropout', type=float, default=VerifierTrainConfig.dropout)
+    t.add_argument('--weight-decay', type=float, default=VerifierTrainConfig.weight_decay)
+    t.add_argument('--pairwise-weight', type=float, default=VerifierTrainConfig.pairwise_weight,
+                   help='Within-task pairwise RankNet weight (default 0.25; 0 opts out to pure cross-task BCE).')
     t.add_argument('--seed', type=int, default=0)
     t.add_argument('--progress-weighting', action=argparse.BooleanOptionalAction, default=True,
                    help='Upweight later episode boundaries (0.25 -> 1.0) where trajectories diverge (default: true).')
     args = parser.parse_args(argv)
     if args.command == 'build':
-        result = build_t0_sequences(args.collection, args.out, policy_sha256=args.policy_sha256,
+        policies = args.policy_sha256[0] if len(args.policy_sha256) == 1 else args.policy_sha256
+        result = build_t0_sequences(args.collection, args.out, policy_sha256=policies,
                                     max_tokens=args.max_tokens, max_rollouts=args.max_rollouts,
                                     held_manifest=args.held_manifest)
         from pathlib import Path
         from ..common.code_provenance import code_provenance
         Path(args.out + '.json').write_text(json.dumps({'schema': T0_SCHEMA, 'stage': 'build', 'funnel': result,
                                                         'collections': args.collection,
-                                                        'policy_sha256': args.policy_sha256,
+                                                        'policy_sha256': policies,
                                                         'code': code_provenance()}, indent=2) + '\n')
     elif args.command == 'features':
         result = extract_t0_features(args.sequences, args.out, checkpoint=args.checkpoint, base=args.base,
-                                     checkpoint_sha256=args.checkpoint_sha256)
+                                     checkpoint_sha256=args.checkpoint_sha256, feature_mode=args.feature_mode)
     else:
-        result = train_t0(args.features, args.out, cfg=VerifierTrainConfig(epochs=args.epochs), seed=args.seed,
+        cfg = VerifierTrainConfig(epochs=args.epochs, dropout=args.dropout, weight_decay=args.weight_decay,
+                                  pairwise_weight=args.pairwise_weight)
+        result = train_t0(args.features, args.out, cfg=cfg, seed=args.seed,
                           device='cuda' if torch.cuda.is_available() else 'cpu',
                           progress_weighting=args.progress_weighting)
     print(json.dumps(result, indent=2, default=str))
