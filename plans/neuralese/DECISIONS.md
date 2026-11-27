@@ -15082,3 +15082,97 @@ objective and data failure, not a merge, LR or eval bug.
    - Compare against the best measured policy on one series, not only against the previous round.
 4. First-principles side fix: keep an FP32 master of the merged policy across rounds. Today each round is merged into
    a BF16 checkpoint and the next round trains on that, which adds 30% random rounding noise per round.
+
+## 2026-11-27 Why SFT rounds give no held gain (investigator B)
+
+Independent of investigator A (briefed with the observations only; A's entry was read only after these measurements).
+Read-only analysis of existing artifacts, with CPU-only ledger units. No code changed. Scripts are in the session
+scratchpad (`inv/delta.py`, `inv/tok.py`, `inv/coll2.py`).
+
+**Cause (most likely).** Each round's update is not small. It is 2–3x larger than the full fine-tune that produced
+the last real gain (sft-v6). But it points nowhere useful.
+- About 35–50% of the loss is plain NLL on the student's own samples. Those targets sit at the policy's entropy
+  floor, and successes look token-for-token like failures. Many of them come from older policies (grpo-v3/v4, v0000).
+- The teacher part teaches short tool calls, with the reasoning masked. It does not teach the behaviour that held
+  actually fails on: auth tasks whose file effects are wrong even though the answer is right.
+- So the weights move by about 0.6% per round, and neither held nor the train tasks improve. This agrees with
+  investigator A: the failure is in the objective and the data, not in the mechanics.
+
+**Numbers**
+
+1. **Update size.** |ΔW|/|W| over the 9 LoRA families, with merged deltas checked against `s·B@A` from `sft/factors`:
+
+   | Change | Relative update | Held result |
+   |---|---|---|
+   | r0001 | 0.93% | +4.5 nominal; investigator A finds it is 52 dropped samples |
+   | r0012 | 0.57% | flat |
+   | r0013 | 0.63% | flat |
+   | r0014 | 0.66% | flat |
+   | sft-v9 → r0014, cumulative | 1.7% | flat |
+   | base → sft-v6 (full FT) | **0.27%** | **+5.9** |
+   | sft-v8 → sft-v9 (full FT) | 0.34% | — |
+
+   - Per family the rounds move 0.4–0.9% (w2 is smallest at 0.37–0.42%; q/k largest).
+   - LoRA B norms are 0.4–3.0, and A stays near its initialisation (norm about 37–55).
+   - The BF16 merge is exact (the published weights equal `bf16(W + s·B@A)` in 100% of elements) and keeps
+     97–100% of the update's projection.
+   - Rounding noise is about 20% of the update norm (w2 38–43%), and 18–42% of elements are erased.
+   - So the update is neither too small nor lost. An FP32 master across rounds is still right on first principles.
+2. **The own targets carry no token signal.** Sampled-token logprobs of 412 episodes from collection v0013 (policy
+   8143), 5.5M tokens:
+
+   | | Mean NLL | Tokens with NLL > 1 | Tokens with NLL > 2.3 | NLL mass in the top 5% of tokens |
+   |---|---|---|---|---|
+   | Successes | 0.609 | 22.2% | 8.4% | 31% |
+   | Failures | 0.617 | 22.5% | 8.5% | 31% |
+
+   - val-fixed-own sits at 0.598–0.604 in every round: the entropy floor.
+   - Fitting these tokens moves weights by sampling noise, with no expected direction beyond the small
+     success-selection term. That explains the within-round pattern: val rises at peak LR, then returns.
+3. **What the mix holds.**
+   - Loss share: rl-own 50% (r0012) / 54% (r0013) / 35% (r0014); filled 36–38%; teacher 6–15%.
+   - Own episodes from old policies: in r0012, grpo-v4/v3 are 22% of the target mass and v0000 to v0008 a further
+     12%. In r0014, v0010/v0011 are 33% and older collections about 30%.
+   - Auth is 29.5% of r0014's weighted target tokens, but 3.36M of them are own tokens against 0.53M teacher tokens.
+   - Teacher auth rows average about 94 tokens: short tool calls with their reasoning as context. Only 125 of 5,682
+     teacher auth rows do their file effects in `eval` code.
+   - The steps that hit about 7.5 loss in r0012/r0013 are Ambient replace-mode TM steps (81 of 354 and 92 of 439 steps;
+     grad norm 0.01–0.02). That inflated the logged mean loss (about 2.0); they are telemetry, not a fault.
+4. **What held fails on** (policy 9194; a subagent read 15 trajectories in full and counted all 512 episodes).
+   - Outcomes: semantic_mismatch 156, budget 41, repetition 17.
+   - Across all 256 tasks over 7 policies: 26 always fail, 57 always pass, 173 are mixed.
+   - Auth: 76 failed episodes. 61 of them failed the files check, and **in 40 of those the returned value was exactly
+     right**. File defects: expected path missing 39, wrong content 35, input not moved 22.
+   - Failed auth episodes use hand-typed `write_file` 70% of the time (passing ones 47%). They call child NL functions
+     24% of the time (passing ones 39%).
+   - Of the 15 episodes read: 8 capability errors (misread input, counting, rules, arithmetic), 5 protocol/effects
+     errors and 2 budget loops (children flailing on `no-such-function`).
+   - Several held-failure families have 0 teacher episodes in r0014: clinic_chair_day, library_loan_desk,
+     sluice_shift_desk, micro_codebase_repairs, ext_decisions_inbox.
+5. **Train-task pass rate.** On 91 train tasks scored in both v0008 (6f19, before r0012) and v0013 (8143, after
+   r0015): 0.501 → 0.485, up 38, down 42. A full scan of every collection was stopped after 45 min because HDD reads
+   ran at about 2 KB/s.
+
+**Not checked:**
+- Per-source base loss by forward pass (only fixed-val and sampled logprobs were used).
+- Teacher-pool quality and the correctness of drifted replays.
+- Whether own successes that pass the answer check but fail files enter the pool (the held files check is strict).
+- Per-task train pass rates on the HDD collections, including v0009–v0012.
+- The sft-v6 gain by family beyond the 11-22 entry.
+- KL between successive policies on held prompts.
+- Any GPU replay.
+
+**Simplest experiment with an expected held gain.**
+- One bounded round of on-policy GRPO (`grpo.py`, current defaults, binary reward that includes the files check)
+  from 9194.
+- Task pool: the train tasks of held's weak families (`auth_*`, `ext_decisions_*`, `inline_*`, `ext_natlang-codebase`,
+  held and siblings excluded), with pass band 0.1–0.9.
+- About 6–8 h on the DGX, then dgx-held at 4 samples against 9194 re-measured on the same pin.
+- Success: ≥ +3 pts, p < 0.1. Failure: ≤ −2 pts.
+- Rationale: failures in the same groups get negative advantage, which plain own-success SFT cannot supply. The
+  dominant held defect (right answer, wrong file effects) is exactly what a binary files-checked reward contrasts.
+- Cheaper SFT variant, if GRPO capacity is busy:
+  - Drop rl-own from policies other than the round's start policy.
+  - Keep own successes only from groups with pass rate ≤ 0.5.
+  - Add only teacher or own trajectories that pass the files check and do their effects in `eval` code, for the
+    held-weak auth families.
