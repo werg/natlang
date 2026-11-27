@@ -4177,7 +4177,11 @@ class AsyncRoundDriver:
         min_slots = min(int(getattr(self.a, 'collect_fit_min_slots', COLLECT_FIT_MIN_SLOTS) or 0), slots // 4)
         if room_gb is not None and min_slots > 0 and full > room_gb:
             fitted = fit_collection_slots(room_gb, slots, budget_of, min_slots)
-            if fitted is not None and fitted < slots:
+            # nothing fits: the smallest client waits for the least room. The full claim was the largest possible
+            # ask and sat at the queue head (Pop's v0013 client: 17 GB in an 8.5 GB room for 50 min, 2026-11-27,
+            # with the storage sweep blocked behind it)
+            fitted = min_slots if fitted is None else fitted
+            if fitted < slots:
                 start = room_slots = fitted
         return {'budget': budget_of(start), 'full': full, 'slots': start, 'room_slots': room_slots}
 

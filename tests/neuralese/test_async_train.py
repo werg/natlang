@@ -3094,7 +3094,10 @@ def test_a_waiting_dgx_side_collection_client_is_requeued_at_the_slots_that_fit(
     assert full == {'budget': 22, 'full': 22, 'slots': 64, 'room_slots': None}   # 20.2 x 1.1, over the 17 formula
     plan = d.client_plan(target, 17, room_gb=14.)
     assert plan['room_slots'] == plan['slots'] and plan['budget'] <= 14 and plan['slots'] >= 16
-    assert d.client_plan(target, 17, room_gb=7.)['room_slots'] is None     # below 16 slots: left as it is
+    # below 16 slots nothing fits: the smallest client (16 slots) waits, never the full claim, which sat at the
+    # queue head for 50 min with the storage sweep behind it (2026-11-27)
+    small = d.client_plan(target, 17, room_gb=7.)
+    assert small['slots'] == small['room_slots'] == 16 and small['budget'] < plan['budget'] <= 14
     unit = d.collection_unit(cur) + '-pop'
     queued = {unit: 22.2}
     monkeypatch.setattr(pop_rl_actor, 'pop_busy', lambda: None)
