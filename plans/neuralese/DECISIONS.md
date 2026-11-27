@@ -14989,3 +14989,96 @@ Owner also stopped both Colab GPU sessions (g4a A100, g4b L4) at 08:40: keepers 
 tunnels. T2 run2's learner state (step ~450) is on Drive and its logs to step 462 on the HDD mirror. aei1 SFT falls back
 to the DGX. Two independent investigations of why the SFT rounds give no held gain (v12 = sft-v9 on held-v3, a slide
 from +3.5 pts over three "neutral" rounds) are running.
+
+## 2026-11-27 Why SFT rounds give no held gain (investigator A)
+
+Question: why the aei1 SFT rounds do not improve LFM3-1.7B on held-v3. This was static analysis and offline statistics
+on existing artifacts only; the driver was not touched. Scripts are in the session scratchpad (`mine/merge_check.py`,
+`mine/mass.py`, `passrates/`). Verdict status: one investigator. A second, independent investigation runs separately.
+
+**Cause.** The training signal does not even raise pass rates on the tasks the rounds train. The mechanics work: the
+update is applied and published as trained. But 72% of the trained loss mass is the student's own sampled tokens, and
+plain NLL on these carries almost no expected gradient. What signal there is comes from about 300 own successes per
+round, with no negatives. The teacher share is aimed at task families that are not where held fails. So this is an
+objective and data failure, not a merge, LR or eval bug.
+
+**Evidence**
+- **Held is flat, and has been since sft-v9.** Counted over all 512 samples (unscored counted as failures), success
+  is: 9ebc 284, e15b (sft-v9) 294, 8e63 293, 3eb3 307, 6f19 312, 96e3 300, 401b 295, 9194 294.
+  - The "63.7% success" of 8e634a0f is 293/460 scored: 52 samples (18 infrastructure_error, 34 unresolved) were
+    dropped from the denominator. Over 512 it is 57.2%, the same as sft-v9. The later "+3.5 slide" sits within the
+    ±3 pt noise of 2 samples × 256 tasks.
+  - Every one of these measurements has a different `series.key` (the harness changed between each). Per prefix, held
+    stays at auth 0.48–0.53, curriculum 0.52–0.65 and ext 0.63–0.67 for all 7 policies.
+- **No gain on the training tasks themselves.** The pass-rate agent paired per-task pass rates from
+  `collect/v*/groups/*/rewards.jsonl` with the round mixes (`mix/rows.jsonl.zst`, `trained-units.json`).
+  - Tasks trained on own successes against untrained tasks from the same starting pass-rate band: −.012
+    [−.042, +.016] pooled over all rounds (n=1142 / 433), and −.041 [−.077, −.003] for r0012–r0015.
+  - The raw per-band shifts are regression to the mean, the same on untrained tasks: prior rate 1 → −.20 vs −.16; 0 → +.26 vs
+    +.17.
+  - Cleanest rounds (training episodes from older collections): r0010 +.055, r0013 −.045, r0015 −.027 (CIs cover 0).
+  - Teacher-only tasks (2.9k–10.8k per round) almost never appear in a student collection, so their effect cannot be
+    measured.
+- **The merge and publication are correct.** Checked r0014 → r0015: published minus start against
+  `s·B@A` from `sft/factors`.
+  - |ΔW|/|W| = 0.53%. The published delta has norm ratio 1.03 and cosine 0.958 with the trained delta.
+  - BF16 rounding is 30% of the delta norm (w2: cosine 0.896, 35% of elements below half a BF16 ulp). It is random
+    and does not remove the update.
+  - Step-0 validation of each round equals the previous round's final validation to ≤ 0.0004 (r0012 → r0013 →
+    r0014 → r0015), so what trains is what gets published.
+- **The update has a normal size but no direction.**
+  - Training loss is flat at about 0.52 over each round. Within a round, validation rises in the first 20–120 steps
+    and returns as the LR decays: r0014 fixed-own 0.6005 → 0.6063 → 0.6003, fixed-teacher 0.3746 → 0.3788 → 0.3725.
+  - Ambient `tm_kl` to the round's start reaches 0.002 by step about 30 and then stays flat for the rest of the
+    round. That is a noise-dominated walk, not a consistent drift.
+  - Fixed-teacher validation falls slowly across rounds (0.393 → 0.370), so the teacher tokens are learned.
+- **Composition of the r0015 target mass** (`mix-dgx/chains.pkl`, weight × `sampled`):
+  - Student-sampled: rl 31.5%, filled reasoning 29.4%, rl-neuralese-graph 8.0%, rl decision reasoning 3.5%. Total 72%.
+  - Teacher-written: teacher 17.7%, filled actions 5.8%, other 4%.
+  - rl-own is 283 admitted episodes, out of 24.7k candidate own successes.
+  - On the own tokens, NLL on the student's own nucleus samples is zero in expectation. Its only signal is
+    success-versus-average selection, estimated from about 300 trajectories of about 10k tokens each, with no failure
+    contrast. That predicts what was observed: a normal-size update, no movement on the trained tasks and a flat held.
+- **Data distribution.**
+  - The teacher part is 94% `ext_*` QA families (4,713 of about 5,000 episodes); auth is 106.
+  - Held is 39% auth (99 tasks), which is held's weakest prefix at about 0.49.
+  - Of held's 91 families, 64 appear in the mix (177 tasks).
+- **Validation instruments are weak.** `val-fixed/tasks.json` "own" is a single task, and "teacher" is 40 ext tasks.
+  The per-round validation verdicts cannot show task gains.
+
+**Checked:**
+- merge and publication numerics (r0014 → r0015)
+- validation continuity across r0012–r0015
+- loss normalisation (`exp0_sft.py` 1391: weighted mean)
+- Ambient additive TM size (`tm_kl` 0.002, so it barely restrains)
+- the nucleus NLL handles out-of-nucleus targets as finite (`lfm3_fast.py` 1663–1685)
+- target mass by source and `sampled` flag
+- frontier pass-rate spread: 410 tasks, broad 0–1
+- training-task pass rates per round
+- held results per policy and per prefix, and the denominator issue above
+
+**Not checked:**
+- the T=1 KL between successive policies on held prompts
+- per-token start-policy probabilities of the own targets (rows carry no behaviour logprobs)
+- the correctness of filled-reasoning hint gating
+- label correctness of drifted teacher replays (14.8k `replayed_drifted` admitted)
+- rounds r0002–r0008 in detail
+- the effect of teacher-only tasks on their own tasks (not measurable from collections)
+- the GPU learner bench
+
+**Fix (most direct).**
+1. Train the frontier tasks with a contrastive objective that uses the failures already collected.
+   - Every frontier task has 4–20 scored samples with pass rates spread over 0–1. That is exactly the GRPO or
+     advantage-weighted setting: success minus group mean, so failures push down.
+   - Concretely: switch aei1 to GRPO (`grpo.py`) on the frontier pool from the current policy, or make own episodes
+     enter SFT with advantage weights including negative ones.
+   - Stop spending 72% of the loss mass on unweighted own tokens: drop or downweight plain-NLL own successes and
+     filled-reasoning tokens.
+2. Point the teacher and corrective budget at held's weak families: auth, about 0.49, against ext at 0.65.
+3. Make the round gate meaningful.
+   - Validate on the trained frontier tasks' next-collection pass rates (the agent's paired statistic) instead of a
+     1-task own validation set.
+   - Count unscored held samples as failures in verdicts.
+   - Compare against the best measured policy on one series, not only against the previous round.
+4. First-principles side fix: keep an FP32 master of the merged policy across rounds. Today each round is merged into
+   a BF16 checkpoint and the next round trains on that, which adds 30% random rounding noise per round.
