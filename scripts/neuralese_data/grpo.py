@@ -1628,7 +1628,14 @@ def episode_advantages(episodes, stats=None):
         if std < 1e-6:
             return None
         base = max(mean, max(anchors))
-        return [(r - base) / (std + 1e-6) for r in rewards]
+        # Normalize by RMS deviation around `base` (not `std` around `mean`): when all episodes sit below
+        # `anchor` with tiny mutual spread (e.g. evaluation-cost differences), dividing by `std` explodes
+        # advantages to -100..-10,000+ and saturates the entire step's grad clip. RMS around `base` keeps
+        # |A_i| <= sqrt(N) while preserving ordering and zero positive advantage below `anchor`.
+        rms = math.sqrt(sum((r - base) ** 2 for r in rewards) / len(rewards))
+        if rms < 1e-6:
+            return None
+        return [(r - base) / (rms + 1e-6) for r in rewards]
     if not any(e.get('role') == 'teacher' for e in episodes):
         return group_advantages([e['reward'] for e in episodes]) if len(episodes) >= 2 else None
     from natlang_neuralese.rl.jolt import guided_advantages
@@ -5500,7 +5507,7 @@ def train(args):
                           task_reward_mean=round(sum(task_rewards) / max(1, len(task_rewards)), 4),
                           mean_sampled_per_call=round(sum(len(r['sample']) for c in chains for _, _, r in c['segs'])
                                                       / max(1, sum(len(c['segs']) for c in chains)), 1))
-        if not chains and not decisions:
+        if (not chains and not decisions) or (args.lr_reference_spread > 0 and step_data <= 0):
             log_line(log, {**record, 'event': 'no learning signal in these groups',
                            'phase_s': {k: round(v, 1) for k, v in phase.items()}})
             continue
@@ -5701,8 +5708,16 @@ def train(args):
                         rho = log_rho.clamp(max=20).exp()
                         advantage = token_advantage(chain, logp.device)
                         tail_floor = None if chain.get('role') in ('replay', 'sd_teacher') else args.tail_logp_floor
-                        weight, tail = policy_weight(rho, actor, advantage, args.rho_cap, tail_floor,
-                                                     unsampled_tail_exempt(chain, args))
+                        if chain.get('role') == 'teacher' and getattr(args, 'jolt_is_shaping', 'luffy') == 'luffy':
+                            # LUFFY policy shaping for JOLT+ guided teacher episodes: raw min(pi/mu, C) crushes
+                            # decisive novel insight tokens where pi << mu by ~85x. p / (p + 0.1) keeps gradient
+                            # alive on low-probability insight tokens while bounding max weight <= 1.0.
+                            p_stu = logp.detach().exp().float()
+                            weight = p_stu / (p_stu + 0.1)
+                            tail = torch.zeros_like(weight, dtype=torch.bool)
+                        else:
+                            weight, tail = policy_weight(rho, actor, advantage, args.rho_cap, tail_floor,
+                                                         unsampled_tail_exempt(chain, args))
                         if row_weight is not None:
                             weight = weight * row_weight
                         if args.second_close == 'context' and think_close is not None:
@@ -5721,17 +5736,22 @@ def train(args):
                             sums['close_push:' + (chain.get('role') or 'student')] += close_push(
                                 token_scale * advantage * weight, chain_targets, chain_p_close, think_close, thinking)
                     loss_terms = -(weight * advantage * policy_logp)
-                    if ref is not None:
-                        d = ref - logp
-                        kl = kl_term(d, args.kl_estimator)
+                    # Only apply reverse-KL penalty & KL telemetry to student-sampled tokens: applying k2 KL on
+                    # off-policy teacher/replay/JOLT+ tokens (A=0.05 vs kl_beta=0.02) hard-caps novel teacher tokens
+                    # at exp(2.5)*p_ref (~12% if p_ref=1%) and corrupts logged KL statistics.
+                    if ref is not None and chain.get('role') not in ('sd_teacher', 'replay', 'teacher'):
+                        kl_mask = torch.from_numpy(student_sampled_targets(chain)).to(logp.device)
                         if row_weight is not None:
-                            kl = kl * (row_weight > 0).to(kl.dtype)
-                        loss_terms = loss_terms + args.kl_beta * kl
-                        kl_stats(sums, d)
-                        if p_close_rows is not None:
-                            pull = d.detach() if args.kl_estimator == 'k2' else d.detach().exp() - 1
-                            sums['close_push:kl'] += close_push(token_scale * args.kl_beta * pull, chain_targets,
-                                                                chain_p_close, think_close, thinking)
+                            kl_mask = kl_mask & (row_weight > 0)
+                        if bool(kl_mask.any()):
+                            d = ref - logp
+                            kl = kl_term(d, args.kl_estimator) * kl_mask.to(logp.dtype)
+                            loss_terms = loss_terms + args.kl_beta * kl
+                            kl_stats(sums, d[kl_mask])
+                            if p_close_rows is not None:
+                                pull = (d.detach() if args.kl_estimator == 'k2' else d.detach().exp() - 1) * kl_mask.to(logp.dtype)
+                                sums['close_push:kl'] += close_push(token_scale * args.kl_beta * pull, chain_targets,
+                                                                    chain_p_close, think_close, thinking)
                     loss = loss + loss_terms.sum() * token_scale
                     twin = twin_rows(chain, logp.device) if chain.get('role') == RRL_ROLE else None
                     if twin is not None:
@@ -6397,11 +6417,14 @@ def build_parser():
     t.add_argument('--kl-estimator', choices=('k2', 'k3'), default='k2',
                    help='KL penalty as a loss: k2 = d^2/2 (gradient linear in d = logp_ref - logp), k3 = e^d - d - 1 '
                         '(unbounded gradient on rare tail tokens; grpo-v2-run1 step 7). The logged kl_mean is k3 either way')
+    t.add_argument('--jolt-is-shaping', choices=('luffy', 'tis'), default='luffy',
+                   help='importance shaping on JOLT+ guided teacher episodes: luffy = p/(p+0.1) (default, preserves '
+                        'gradient on novel insight tokens where pi << mu); tis = legacy min(pi/mu, rho_cap)')
     t.add_argument('--rho-cap', type=float, default=2.0)
-    t.add_argument('--loss-norm', choices=('episode', 'token'), default='token',
-                   help='episode: each trained episode contributes A_i * (mean over its trained units of w * logp), averaged '
-                        'over the step\'s episodes, the KL term the same way; token: one sum over all units / all units (until '
-                        '2026-11-13: an episode weighed by its length, failures are 1.7x longer, 97%% of the mass on reasoning)')
+    t.add_argument('--loss-norm', choices=('episode', 'token'), default='episode',
+                   help='episode (default): each trained episode contributes A_i * (mean over its trained units of w * logp), '
+                        'averaged over the step\'s episodes so sum(A_i)=0 cancels cleanly without length bias; token: legacy '
+                        'one sum over all units / all units (1.7x negative length bias because failures are longer)')
     t.add_argument('--top-p', type=float, default=RL_TOP_P,
                    help='nucleus of the sampling law at temperature 1, for collection, the held evals and the learner alike '
                         '(common.sampling.RL_TOP_P; 1.0: untruncated). The policy term scores the sampled token under the '

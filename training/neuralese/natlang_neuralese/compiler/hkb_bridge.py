@@ -228,8 +228,12 @@ class ScopedExperienceKB:
         return hits, total / denom
 
     def retrieve_unified_slots(self, query_key: torch.Tensor, *, scopes, exclude_tasks=(), max_slots: int = 16,
-                               threshold: float = 0.2, null_mass: float = 0.1, device: torch.device | str = 'cpu'):
-        """Stage C: padded ``(z_kb [1, M, Dv], k_kb [1, M, Dk], weights [1, M], valid [1, M])``, M = ``max_slots``."""
+                               threshold: float = 0.2, null_mass: float = 0.1, device: torch.device | str = 'cpu',
+                               normalize: bool = True):
+        """Stage C: padded ``(z_kb [1, M, Dv], k_kb [1, M, Dk], weights [1, M], valid [1, M])``, M = ``max_slots``.
+
+        Pass ``normalize=False`` when feeding directly into ``CompiledSiteHead._assemble_unified_slots``, which
+        applies ``null_mass`` itself (avoiding double null-mass gating)."""
         records, _ = self._search(query_key, scopes=scopes, exclude_tasks=exclude_tasks, top_k=max_slots,
                                   threshold=threshold, null_mass=null_mass)
         m = int(max_slots)
@@ -243,6 +247,6 @@ class ScopedExperienceKB:
         denom = float(null_mass) + float(raw.sum())
         z[0] = records.values.float().to(device)
         k[0] = records.keys.float().to(device)
-        w[0] = (raw / denom).to(device)
+        w[0] = ((raw / denom) if normalize else raw).to(device)
         valid[0] = records.valid.to(device)
         return z, k, w, valid

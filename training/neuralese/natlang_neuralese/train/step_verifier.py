@@ -217,7 +217,8 @@ def _completion_ids(turn):
 def _turn_scalars(turn, *, turn_idx: int, total_turns: int, completion_len: int) -> list[float]:
     """Compact turn-level scalar telemetry (FP32) helping distinguish failing loops/low-confidence turns from passes."""
     samples = (turn.get('sampling') or {}).get('samples') or []
-    logps = [float(s['logprob']) for s in samples if isinstance(s, dict) and s.get('logprob') is not None]
+    logps = [float(s['logp'] if s.get('logp') is not None else s['logprob'])
+             for s in samples if isinstance(s, dict) and (s.get('logp') is not None or s.get('logprob') is not None)]
     mean_lp = (sum(logps) / len(logps)) if logps else 0.0
     min_lp = min(logps) if logps else 0.0
     target = turn.get('target') or {}
@@ -563,7 +564,7 @@ def train_t0(features_dir, out, *, cfg: VerifierTrainConfig = VerifierTrainConfi
                     ms = tr_by_task[task_keys[t_pos]]
                     w_ms = weights[ms]
                     k_draw = min(len(ms), 8)
-                    chosen = ([ms[j] for j in torch.multinomial(w_ms, k_draw, replacement=False).tolist()]
+                    chosen = ([ms[j] for j in torch.multinomial(w_ms, k_draw, replacement=True).tolist()]
                               if float(w_ms.sum()) > 0 else ms[:k_draw])
                     order_list.extend(chosen)
                     if len(order_list) >= n:

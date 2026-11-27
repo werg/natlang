@@ -410,7 +410,8 @@ export async function runTiered(engine: TierEngine, settings: TierSettings, host
       servedBy = ladder.find(item => item.level < 3 && (item as ModelTier).model === lastPlan()?.model) ?? terminal;
     }
     const verdict = await Promise.resolve(servedBy.verify(input, output)).catch(error => `verify threw: ${message(error)}`);
-    if (verdict !== true && !last) {
+    const isTerminal = servedBy === terminal;
+    if (verdict !== true && !isTerminal) {
       note({ tier: servedBy.id, event: 'deopt', kind: 'verify', reason: typeof verdict === 'string' ? verdict : 'the output check failed', to: nextBelow(servedBy), call_id: callId, own: !!callId });
       continue;
     }

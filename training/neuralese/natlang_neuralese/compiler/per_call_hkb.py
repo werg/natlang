@@ -82,7 +82,8 @@ class PerCallNeuralHKBCompiler:
         if self.scoped_kb is not None and req.scopes:
             q_vec = self.writer.encode_query_texts(self.engine, [req.query_text or req.header])[0].detach().cpu()
             z_kb, k_kb, w_kb, kb_valid = self.scoped_kb.retrieve_unified_slots(
-                q_vec, scopes=list(req.scopes), exclude_tasks=set(req.exclude_tasks), max_slots=req.max_kb_slots)
+                q_vec, scopes=list(req.scopes), exclude_tasks=set(req.exclude_tasks), max_slots=req.max_kb_slots,
+                normalize=False)
             kb_hits = int(kb_valid.sum().item())
         extra_cores = None
         scope_writes: list[str] = []

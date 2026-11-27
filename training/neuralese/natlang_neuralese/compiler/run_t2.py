@@ -514,7 +514,10 @@ def _fo_maml_episode_step(engine, head, sites, site_calls, *, adapter_id, basis_
     gradient reaches the header encoder through ``z0`` and the head and basis directly (first-order meta-gradient), and
     a Reptile term pulls the encoder's ``z0`` toward ``z_K``. Returns the query loss."""
     from .compiled_site import init_block_values, site_loss
-    support, query = site_calls[:-1], site_calls[-1]
+    import random as _rnd
+    q_idx = _rnd.randrange(len(site_calls))
+    query = site_calls[q_idx]
+    support = [c for i, c in enumerate(site_calls) if i != q_idx]
     block = sites.block(query)
     z0 = head.encode(init_block_values(block))[0]
     with _frozen(head, basis_module):
@@ -527,6 +530,9 @@ def _fo_maml_episode_step(engine, head, sites, site_calls, *, adapter_id, basis_
                           basis_module=basis_module, apply_dropout=False, backward=True, scale=1. / len(support))
             if prox_lambda > 0.0:
                 (0.5 * float(prox_lambda) * (z - z_ref).pow(2).sum()).backward()
+            if z.grad is None:
+                break
+            torch.nn.utils.clip_grad_norm_([z], 1.0)
             z = (z.detach() - float(inner_lr) * z.grad).requires_grad_(True)
         z_k = z.detach()
     z_meta = z0 + (z_k - z0.detach())

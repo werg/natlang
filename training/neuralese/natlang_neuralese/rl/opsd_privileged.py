@@ -420,23 +420,51 @@ def twin_loss(learner, twin, *, grad, scale=1.0, chunk=256, teacher='start', anc
     n = len(twin.targets)
     token_weights_all = None
     base_guidance_kl_total = 0.0
-    if need_base and n > 0:
+    max_log_ratio = float(loss_options.get('max_log_ratio', 6.0))
+    syntax_mask_all = loss_options.get('syntax_mask')
+    # Single-pass precompute over chunks (no_grad): compute base_guidance_kl, focus weights, AND twin-wide
+    # total_kept_weight so chunked == one-pass exactly even when shortcut-masking drops peak-KL tokens.
+    total_kept_weight = 0.0
+    total_kept_count = 0
+    if n > 0:
         d0_chunks = []
+        kept_chunks = []
         with torch.no_grad():
             for start in range(0, n, chunk):
                 stop = min(n, start + chunk)
                 t_c = _head(learner, t_rows[start:stop], start=True) if start_teacher else _head(learner, t_rows[start:stop])
-                b_c = _head(learner, b_rows[start:stop], start=True)
-                d0_chunks.append(S.divergence(b_c, t_c, 'forward_kl').detach().float())
-            d0_all = torch.cat(d0_chunks, dim=0)
-            base_guidance_kl_total = float(d0_all.mean())
-            if focus_divergent_tokens:
-                raw_w = d0_all + 1e-4
-                norm_w = (raw_w / raw_w.mean().clamp_min(1e-8)).clamp(max=float(focus_max_weight))
-                token_weights_all = norm_w / norm_w.mean().clamp_min(1e-8)
+                s_c = _head(learner, s_rows.detach()[start:stop])
+                s_y = S.token_logprobs(s_c, targets[start:stop])
+                t_y = S.token_logprobs(t_c, targets[start:stop])
+                shortcut = (t_y - s_y).float() > max_log_ratio
+                if syntax_mask_all is not None:
+                    shortcut &= ~syntax_mask_all[start:stop].to(device=shortcut.device, dtype=torch.bool)
+                kept_chunks.append(~shortcut)
+                if need_base and b_rows is not None:
+                    b_c = _head(learner, b_rows[start:stop], start=True)
+                    d0_chunks.append(S.divergence(b_c, t_c, 'forward_kl').detach().float())
+            kept_all = torch.cat(kept_chunks, dim=0)
+            total_kept_count = int(kept_all.sum())
+            if need_base and d0_chunks:
+                d0_all = torch.cat(d0_chunks, dim=0)
+                base_guidance_kl_total = float(d0_all.mean())
+                if focus_divergent_tokens:
+                    raw_w = d0_all + 1e-4
+                    norm_w = (raw_w / raw_w.mean().clamp_min(1e-8)).clamp(max=float(focus_max_weight))
+                    token_weights_all = norm_w / norm_w.mean().clamp_min(1e-8)
+            if token_weights_all is not None and total_kept_count > 0:
+                total_kept_weight = float(token_weights_all[kept_all].clamp_min(0.0).sum())
+            else:
+                total_kept_weight = float(total_kept_count)
 
     totals = {'divergence': 0., 'focused_divergence': 0., 'anchor_kl': 0., 'base_guidance_kl': base_guidance_kl_total,
               'shortcut_masked_frac': 0., 'student_nll': 0., 'student_entropy': 0., 'n': float(n)}
+    # Detach a leaf at the LM-head boundary so the chunked head loop accumulates dL/ds_leaf and runs ONE
+    # backbone backward after the loop instead of ceil(n / chunk) full backbone recomputations.
+    s_leaf = s_rows.detach().requires_grad_(True) if (grad and n > 0) else s_rows
+    ce_weight = float(loss_options.get('ce_weight', 0.0))
+    verified_all = loss_options.get('verified')
+    chunk_loss_options = {k: v for k, v in loss_options.items() if k not in ('syntax_mask', 'verified', 'ce_weight')}
     for start in range(0, n, chunk):
         stop = min(n, start + chunk)
         share = (stop - start) / n
@@ -444,22 +472,37 @@ def twin_loss(learner, twin, *, grad, scale=1.0, chunk=256, teacher='start', anc
             t = _head(learner, t_rows[start:stop], start=True) if start_teacher else _head(learner, t_rows[start:stop])
             b = _head(learner, b_rows[start:stop], start=True) if b_rows is not None else None
         with torch.set_grad_enabled(grad):
-            s = _head(learner, s_rows[start:stop])
+            s = _head(learner, s_leaf[start:stop])
             w_chunk = token_weights_all[start:stop] if token_weights_all is not None else None
-            chunk_weight_scale = float(w_chunk.mean()) if w_chunk is not None else 1.0
-            loss, metrics = opsd_loss(s, t, targets[start:stop], token_weights=w_chunk, **loss_options)
-            total_loss = loss * chunk_weight_scale
+            syn_chunk = syntax_mask_all[start:stop] if syntax_mask_all is not None else None
+            loss, metrics = opsd_loss(s, t, targets[start:stop], token_weights=w_chunk, syntax_mask=syn_chunk,
+                                      **chunk_loss_options)
+            n_kept_c = metrics['n_kept']
+            if total_kept_weight > 0 and n_kept_c > 0:
+                kept_c_mask = kept_all[start:stop]
+                chunk_kept_w = float(w_chunk[kept_c_mask].clamp_min(0.0).sum()) if w_chunk is not None else float(n_kept_c)
+                div_share = chunk_kept_w / total_kept_weight
+            else:
+                div_share = 0.0
+            total_loss = loss * div_share
+            if verified_all is not None and ce_weight > 0:
+                v_mask = verified_all[start:stop].to(device=s.device, dtype=torch.bool)
+                if int(v_mask.sum()) > 0:
+                    ce_c = -S.token_logprobs(s[v_mask], targets[start:stop][v_mask]).float().mean()
+                    total_loss = total_loss + (ce_weight * share) * ce_c
             anc_val = 0.0
             if anchor_kl > 0.0 and b is not None:
                 anc = S.divergence(s, b, 'forward_kl').float().mean()
                 anc_val = float(anc.detach())
-                total_loss = total_loss + float(anchor_kl) * anc
-            if grad:
-                (total_loss * share * scale).backward(retain_graph=stop < n)
+                total_loss = total_loss + (float(anchor_kl) * share) * anc
+            if grad and total_loss.requires_grad:
+                (total_loss * scale).backward()
         for key in ('divergence', 'shortcut_masked_frac', 'student_nll', 'student_entropy'):
             totals[key] += metrics[key] * share
-        totals['focused_divergence'] += metrics['focused_divergence'] * chunk_weight_scale * share
+        totals['focused_divergence'] += metrics['focused_divergence'] * div_share
         totals['anchor_kl'] += anc_val * share
+    if grad and n > 0 and s_leaf.grad is not None:
+        s_rows.backward(s_leaf.grad)
     return totals
 
 
@@ -483,7 +526,7 @@ def train_t1(twins_path, out, *, checkpoint, base, tokenizer, rank=128, alpha=12
     rng = random.Random(seed)
     rng.shuffle(train_rows)
     learner = Lfm3Learner.from_checkpoint(checkpoint, base, AdapterSpec.for_sft(rank=rank, alpha=alpha), seed=seed,
-                                          compile_layers=False)
+                                          compile_layers=True)
     optimizer = learner.build_optimizer(lr)
     step = 0
     state_dir = out / 'learner-state'

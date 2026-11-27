@@ -992,8 +992,13 @@ def build_message(text: str, block_ids: list[str], call_prefix: str = "call", to
         reasoning = leading.group(1)
         text = text[leading.end():]
     elif "</think>" in text:  # thinking templates open the block in the generation prompt
-        head, _, text = text.partition("</think>")
-        reasoning = head
+        # Never split on a </think> that appears inside a later tool-call code string when <think> was not opened.
+        close_idx = text.find("</think>")
+        tool_positions = [p for m in ("<tool_call>", "<|tool_call_start|>") if (p := text.find(m)) >= 0]
+        first_tool = min(tool_positions) if tool_positions else len(text)
+        if close_idx < first_tool:
+            head, _, text = text.partition("</think>")
+            reasoning = head
     elif re.match(r"^\s*<think>", text):
         # Truncated before </think> on an explicit <think> reply: keep unfinished thought in reasoning, not content.
         reasoning = re.sub(r"^\s*<think>", "", text, count=1)

@@ -688,7 +688,8 @@ class SglangEngine(Engine):
                 metrics[key] = metrics.get(key, 0.0) + time.monotonic() - started
 
     def native_write_text(self, text, *, value_type=None, adapters=None, context=None):
-        if adapters or not self.sglang_url:
+        effective = self.native_default_adapters if adapters is None else (adapters or None)
+        if effective or not self.sglang_url:
             return self._measure_native_endpoint('write_text', lambda: super(SglangEngine, self).native_write_text(
                 text, value_type=value_type, adapters=adapters, context=context))
         return self._measure_native_endpoint('write_text_sglang', lambda: self._sglang_write_text(text, value_type, context))
@@ -709,7 +710,8 @@ class SglangEngine(Engine):
 
     def native_capture(self, prompt_token_ids, reply_token_ids, *, prompt_segments=None, select=None, value_type=None,
                        adapters=None):
-        if adapters or not self.sglang_url:
+        effective = self.native_default_adapters if adapters is None else (adapters or None)
+        if effective or not self.sglang_url:
             return self._measure_native_endpoint('capture', lambda: super(SglangEngine, self).native_capture(
                 prompt_token_ids, reply_token_ids, prompt_segments=prompt_segments, select=select,
                 value_type=value_type, adapters=adapters))
@@ -771,7 +773,8 @@ class SglangEngine(Engine):
         return self._capture_result(block, record, prefix, span, value_type, imports, blocks, text=text)
 
     def native_init_body(self, messages, tools, placeholder, text, *, adapters=None, **kwargs):
-        if adapters or not self.sglang_url or os.environ.get('NATLANG_SGLANG_INIT_BODY', '1') == '0':
+        effective = self.native_default_adapters if adapters is None else (adapters or None)
+        if effective or not self.sglang_url or os.environ.get('NATLANG_SGLANG_INIT_BODY', '1') == '0':
             return self._measure_native_endpoint('init_body', lambda: super(SglangEngine, self).native_init_body(
                 messages, tools, placeholder, text, adapters=adapters, **kwargs))
         return self._measure_native_endpoint('init_body_sglang', lambda: self._sglang_init_body(

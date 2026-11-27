@@ -1361,7 +1361,11 @@ class Engine:
             reply = reply[:end]
             think_open = self.tokenizer.convert_tokens_to_ids("<think>")
             think_close = self.tokenizer.convert_tokens_to_ids("</think>")
-            opened = (bool(prompt_token_ids) and prompt_token_ids[-1] == think_open) or think_open in reply
+            prompt_opened = bool(prompt_token_ids) and (
+                prompt_token_ids[-1] == think_open
+                or self.tokenizer.decode(prompt_token_ids[-16:], skip_special_tokens=False).rstrip().endswith("<think>")
+            )
+            opened = prompt_opened or think_open in reply
             if opened and think_close not in reply and isinstance(think_close, int) and think_close >= 0:
                 reply.append(think_close)
             start = end = len(reply)
@@ -1381,7 +1385,11 @@ class Engine:
             start = max((i + 1 for i, token in enumerate(reply[:end]) if token == think_close), default=0)
             # A prompt that opens the reasoning and a reply that never closes it has no content: it ran out inside
             # its reasoning, which is not the value's view.
-            if not start and prompt_token_ids and prompt_token_ids[-1] == self.tokenizer.convert_tokens_to_ids("<think>"):
+            prompt_opened = bool(prompt_token_ids) and (
+                prompt_token_ids[-1] == self.tokenizer.convert_tokens_to_ids("<think>")
+                or self.tokenizer.decode(prompt_token_ids[-16:], skip_special_tokens=False).rstrip().endswith("<think>")
+            )
+            if not start and prompt_opened:
                 raise RequestError("neuralese-native-capture", "the reply ended inside its reasoning: no content to capture")
         span = reply[start:end]
         markers = set(self.role_tokens.ids)

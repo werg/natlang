@@ -65,8 +65,9 @@ def target_items(engine, messages, tools, target, *, response_tools=None):
     if not starts:
         raise RequestError("neuralese-grad-target", "the rendered prompt has no generation prefix")
     prefix = before[starts[-1]:]
-    found = [index for index in range(len(after) - len(prefix), -1, -1)
-             if after[index:index + len(prefix)] == prefix]
+    min_index = starts[-1]
+    found = [index for index in range(len(after) - len(prefix), min_index - 1, -1)
+             if after[index:index + len(prefix)] == prefix and after[:index] == before[:min_index]]
     if found:
         rest = after[found[0] + len(prefix):]
     else:
@@ -128,8 +129,22 @@ def empty_think_first_end(tokenizer, target_message, target_ids):
         return 0
     if _reasoning_text(target_message):
         return 0
-    end = think_end(tokenizer, target_ids)
-    return min(end + 1, len(list(target_ids))) if end else 0
+    ids = list(target_ids)
+    end = think_end(tokenizer, ids)
+    if not end:
+        return 0
+    # Never mask the ONLY non-EOS content token of a 1-token reasoning-free answer (e.g. "yes", "no", "allow"),
+    # which would leave only <|im_end|> supervised at weight 1.0 (an immediate-EOS collapse trap).
+    eos_ids = {t for t in (getattr(tokenizer, "eos_token_id", None),
+                           tokenizer.convert_tokens_to_ids("<|im_end|>"),
+                           tokenizer.convert_tokens_to_ids("<|endoftext|>"))
+               if isinstance(t, int) and t >= 0}
+    content_end = len(ids)
+    while content_end > end and ids[content_end - 1] in eos_ids:
+        content_end -= 1
+    if end + 1 >= content_end:
+        return end
+    return min(end + 1, len(ids))
 
 
 def own_empty_think_context(tokenizer, target_message, target_ids):

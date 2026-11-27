@@ -185,6 +185,8 @@ export interface CompileClosureRequest {
  * Compile-on-creation hook for runtime-synthesized NL literals (`nl\`...\`` with captures)
  * and static partial applications (`.partial(arg)`, `.in(ctx)`).
  */
+const inflightCompiles = new WeakMap<CompiledSiteCache, Map<string, Promise<CompiledSiteEntry>>>();
+
 export async function compileOnCreateClosure(
   cache: CompiledSiteCache,
   req: CompileClosureRequest,
@@ -207,14 +209,31 @@ export async function compileOnCreateClosure(
   const cached = cache.get(provenance);
   if (cached) return cached;
 
-  const built = await compileFn(req, headerSha);
-  return cache.put({
-    tier: '1',
-    provenance,
-    adapterId: built.adapterId,
-    nativeStateId: built.nativeStateId,
-    createdAtMs: Date.now(),
-  });
+  let pendingMap = inflightCompiles.get(cache);
+  if (!pendingMap) {
+    pendingMap = new Map();
+    inflightCompiles.set(cache, pendingMap);
+  }
+  const key = `${provenance.siteId}:${provenance.headerSha}:${provenance.compilerSha}:${provenance.policySha}:${provenance.baseGgufSha256 ?? ''}`;
+  const existing = pendingMap.get(key);
+  if (existing) return existing;
+
+  const task = (async () => {
+    const built = await compileFn(req, headerSha);
+    return cache.put({
+      tier: '1',
+      provenance,
+      adapterId: built.adapterId,
+      nativeStateId: built.nativeStateId,
+      createdAtMs: Date.now(),
+    });
+  })();
+  pendingMap.set(key, task);
+  try {
+    return await task;
+  } finally {
+    pendingMap.delete(key);
+  }
 }
 
 /**
@@ -236,9 +255,10 @@ export function createHttpJitCompiler(
 }) => Promise<{ adapterId: string | null; nativeStateId: string | null }> {
   const baseUrl = endpoint.replace(/\/+$/, '');
   const doFetch = options.fetchImpl ?? globalThis.fetch;
+  const timeoutMs = options.timeoutMs ?? 15_000;
   return async args => {
-    const controller = options.timeoutMs ? new AbortController() : undefined;
-    const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : undefined;
+    const controller = timeoutMs > 0 ? new AbortController() : undefined;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
     try {
       const response = await doFetch(`${baseUrl}/v1/natlang/compile-site`, {
         method: 'POST',

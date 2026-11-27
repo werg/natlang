@@ -7,7 +7,7 @@ import {openCrispTrace} from './crisp-trace.js';
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
 import { authoredTextGuidance, guidanceForCall, programGuidanceProgram, type AuthoredTextGuidance } from '../guidance/program.js';
-import { writesContainsRefinement } from './writes.js';
+import { writesContainsRefinement, writesFields, writesProblem } from './writes.js';
 import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
@@ -1160,8 +1160,18 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
       if (failures.length) throw failureError(failures[0]!);
     }
     const value = toHost(structural);
+    // A compiled case must satisfy `ensures:` postconditions and `writes:` constraints before committing side effects.
+    if (definition.ensures?.length) {
+      const gate = ensuresGate(definition, inputs, childFrame, input.frame, task.model(definition.model), callId, nativeTrace.trace);
+      const ensureFailures = await gate(structural);
+      if (ensureFailures.length) throw failureError(ensureFailures[0]!);
+    }
     if (folder?.transaction.open) {
       const changes = folder.transaction.folder.diffSync().changes;
+      if (node.writes) {
+        const problem = writesProblem(writesFields(node.writes, env), env, definition.name, changes);
+        if (problem) throw new Error(problem);
+      }
       if (folder.mode === 'apply') {
         folder.transaction.validateSync();
         for (const transaction of input.extraTransactions) transaction.validateSync();
@@ -1180,9 +1190,9 @@ async function runCrispCase(input: { task: Frame['task']; frame: Frame; childFra
       capture.captureWrites.push({ name: cell.name, after: capture.ref(args[cell.name]) });
     }
     capture.executor = { ...capture.executor, kind: 'crisp', case_hash: item.hash };
+    nativeTrace.finish('done');
     task.record({ callId, parentCallId: input.frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id, name: definition.name,
       outcome: 'done', detail: `served by compiled case ${item.hash}`, events: nativeTrace.trace.events });
-    nativeTrace.finish('done');
     capture.finish({ outcome: 'done', detail: `served by compiled case ${item.hash}`, output: value, hasOutput: true, events: nativeTrace.trace.events, graphChildren: task.graphChildren(callId) });
     try {
       store.caseServed(item.hash, callId, false);

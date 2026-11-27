@@ -659,7 +659,9 @@ def topk_tail_divergence(student_logits, teacher_ids, teacher_logprobs, kind, *,
     elif kind == 'soft_ce':
         values = -torch.where(p > 0, p * logq, torch.zeros_like(p)).sum(-1)
     elif kind == 'reverse_kl':
-        values = kl(logq, q, logp)
+        # Guard against -inf teacher tail log-prob (when teacher mass sits entirely in top-k): floor at -80.0
+        # so q_tail * (logq_tail - logp_tail) stays finite and backward never yields NaN.
+        values = kl(logq, q, logp.clamp(min=-80.0))
     else:
         logm = torch.logaddexp(logp + math.log(beta), logq + math.log1p(-beta))
         values = beta * kl(logp, p, logm) + (1. - beta) * kl(logq, q, logm)

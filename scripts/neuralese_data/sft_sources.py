@@ -3918,6 +3918,7 @@ def build(args):
         trim_spec = {q['name']: q['share'] for q in aux_parts if q['share'] != 'all'}
         if own_share_of == 'actual' and args.own_loss_share:
             trim_spec['rl-own'] = args.own_loss_share
+            trim_spec['jolt-guided'] = args.own_loss_share
         all_chains[:], share_trim = trim_shares(all_chains, trim_spec)
         for name, n in share_trim['dropped_units'].items():
             (aux_report[name] if name in aux_report else funnel[name])['over_actual_share'] = n

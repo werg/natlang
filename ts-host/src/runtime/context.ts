@@ -282,8 +282,13 @@ export function descend(previous: ActiveCall, args: readonly unknown[]): Descent
     const before = previous.args[position], now = args[position];
     if (kind === 'integer') return Number.isSafeInteger(before) && Number.isSafeInteger(now) && (now as number) >= 0 &&
       (now as number) < (before as number);
-    if (kind === 'length') return (Array.isArray(before) && Array.isArray(now)) || (typeof before === 'string' && typeof now === 'string') ?
-      (now as { length: number }).length < (before as { length: number }).length : false;
+    if (kind === 'length') {
+      if ((Array.isArray(before) && Array.isArray(now)) || (typeof before === 'string' && typeof now === 'string'))
+        return (now as { length: number }).length < (before as { length: number }).length;
+      if ((before instanceof Set && now instanceof Set) || (before instanceof Map && now instanceof Map))
+        return now.size < before.size;
+      return false;
+    }
     // A part may be a primitive leaf (which has no parts of its own, so the chain ends there); an object part may not
     // repeat, which keeps a cyclic structure from being walked round and round.
     if (!isObject(before) || now === before) return false;

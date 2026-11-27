@@ -155,9 +155,44 @@ def colab_hosts(explicit=None):
     return list(parse_colab_hosts(explicit, ROOT / 'config.json'))
 
 
+_PROXY_HOST_CACHE = {}
+
+
+def _is_proxy_host(host):
+    """True when SSH config for ``host`` sets a ProxyCommand (e.g. Colab aliases where bare ssh auto-spawns a CPU VM)."""
+    if not host:
+        return False
+    if host not in _PROXY_HOST_CACHE:
+        try:
+            proxy = (ssh_options(host).get('proxycommand') or 'none').strip().lower()
+            _PROXY_HOST_CACHE[host] = bool(proxy and proxy != 'none')
+        except Exception:
+            _PROXY_HOST_CACHE[host] = False
+    return _PROXY_HOST_CACHE[host]
+
+
+def _control_master_alive(host, timeout=10):
+    try:
+        return subprocess.run(['ssh', '-O', 'check', host], stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=timeout).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def _ssh_base_args(host, connect_timeout=15):
+    args = ['ssh', '-o', f'ConnectTimeout={connect_timeout}', '-o', 'BatchMode=yes']
+    if _is_proxy_host(host):
+        args.extend(['-o', 'ControlMaster=no', '-o', 'ProxyCommand=/bin/false'])
+    return args
+
+
 def ssh_host(host, command, *, input=None, timeout=600, check=True):
-    """Run an SSH command on any remote host (Pop or Colab G4) over Tailscale."""
-    result = subprocess.run(['ssh', '-o', 'ConnectTimeout=15', '-o', 'BatchMode=yes', host, command], input=input,
+    """Run an SSH command on any remote host (Pop or Colab G4) over Tailscale or existing ControlMaster."""
+    if _is_proxy_host(host) and not _control_master_alive(host):
+        if check:
+            raise RuntimeError(f'Remote command on {host} refused: no active ControlMaster tunnel (refusing to auto-spawn Colab VM)')
+        return ''
+    result = subprocess.run([*_ssh_base_args(host, 15), host, command], input=input,
                             text=True, capture_output=True, timeout=timeout)
     if check and result.returncode:
         raise RuntimeError(f'Remote command on {host} failed ({result.returncode}): {command[:200]}: {result.stderr[-2000:]}')
@@ -165,11 +200,13 @@ def ssh_host(host, command, *, input=None, timeout=600, check=True):
 
 
 def host_reachable(host, timeout=20):
-    """True when ``host`` accepts batch SSH over Tailscale within ``timeout`` seconds."""
+    """True when ``host`` accepts batch SSH within ``timeout`` seconds without spawning a new ProxyCommand VM."""
     if not host:
         return False
+    if _is_proxy_host(host) and not _control_master_alive(host, timeout=min(timeout, 10)):
+        return False
     try:
-        return subprocess.run(['ssh', '-o', f'ConnectTimeout={min(timeout, 15)}', '-o', 'BatchMode=yes', host, 'true'],
+        return subprocess.run([*_ssh_base_args(host, min(timeout, 15)), host, 'true'],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout).returncode == 0
     except subprocess.TimeoutExpired:
         return False
@@ -616,8 +653,15 @@ def copy_resumable(source, dest, attempts=None, stall_seconds=120):
     attempts = attempts or int(os.environ.get('NATLANG_POP_COPY_ATTEMPTS', '5'))
     compress = [] if os.environ.get('NATLANG_COPY_COMPRESS', '1') == '0' else ['-z']
     for attempt in range(attempts):
+        remote_host = next((part.split(':', 1)[0] for part in (str(source), str(dest))
+                            if ':' in part and not part.startswith('/')), None)
+        ssh_e = []
+        if remote_host and _is_proxy_host(remote_host):
+            if not _control_master_alive(remote_host):
+                raise RuntimeError(f'rsync to/from {remote_host} refused: no active ControlMaster tunnel')
+            ssh_e = ['-e', 'ssh -o ControlMaster=no -o ProxyCommand=/bin/false -o BatchMode=yes']
         try:
-            subprocess.run(['rsync', '-a', *compress, '--partial', f'--timeout={stall_seconds}', source, dest],
+            subprocess.run(['rsync', '-a', *compress, *ssh_e, '--partial', f'--timeout={stall_seconds}', source, dest],
                            check=True, timeout=7200)
             return
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
@@ -2492,6 +2536,7 @@ def main(argv=None):
                 log(event='Remote RL actor cleanup failed', error=repr(cleanup)[:500])
         if isinstance(error, KeyboardInterrupt):
             raise
+        return 1
     return 0
 
 

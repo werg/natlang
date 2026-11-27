@@ -80,13 +80,14 @@ class Recipe:
     depth_penalty: dict = field(default_factory=lambda: {'tree': 1e-4, 'folder': 1e-4, 'lambda': 1e-4})
     tau: float = 1e-3
     a_max: float = 1.0
-    optimizer: dict = field(default_factory=lambda: {'name': 'adam', 'learning_rate': 2e-3})
+    optimizer: dict = field(default_factory=lambda: {'name': 'adam', 'learning_rate': 5e-5})
     level_lr_scale: dict = field(default_factory=lambda: {'tree': .25, 'folder': .5, 'lambda': 1.})
-    gate_learning_rate: float = 1e-2
+    gate_learning_rate: float = 2e-3
     target_classes: list | None = None
     free_lora_alpha: float | None = None
     # Soft instruction/skill states (plan §3.3): the shared native-state optimizer's settings.
-    state_optimizer: dict = field(default_factory=lambda: {'name': 'adam', 'learning_rate': 1e-3})
+    state_optimizer: dict = field(default_factory=lambda: {'name': 'adam', 'learning_rate': 2e-4})
+    grad_clip_norm: float | None = 1.0
     schedule: dict = field(default_factory=lambda: {'kind': 'warmup-cosine', 'warmup_ratio': .05, 'min_ratio': .1})
     objectives: list = field(default_factory=lambda: ['sft'])
     basis: str | None = None
@@ -868,6 +869,20 @@ class JointTrainer:
         gate_term = gate_l1({binding: torch.stack(values) for binding, values in by_binding.items()}, recipe.tau)
         if penalty.requires_grad or gate_term.requires_grad:
             (penalty + gate_term).backward()
+        # Clip gradients per group before stepping (prevents unclipped Adam blow-ups on small program datasets).
+        clip = recipe.grad_clip_norm
+        if clip is not None and clip > 0:
+            for node in active_nodes:
+                node_params = [v for v in leaves[node].values() if v.grad is not None]
+                if node_params:
+                    torch.nn.utils.clip_grad_norm_(node_params, float(clip))
+            for key in active_soft:
+                soft_params = [v for v in soft_leaves[key][2].values() if v.grad is not None]
+                if soft_params:
+                    torch.nn.utils.clip_grad_norm_(soft_params, float(clip))
+            gate_params = [v for v in self.gates.values() if v.grad is not None]
+            if gate_params:
+                torch.nn.utils.clip_grad_norm_(gate_params, float(clip))
         # One optimizer step per active node, through the immutable lineage/continuation contract, at its group's
         # scheduled rate.
         updates, rates, restarted = {}, {}, []
@@ -879,7 +894,7 @@ class JointTrainer:
             gradient = NativeTensorArtifact('adapter-gradient', engine.native_identity,
                                             {key: grad.detach().cpu() for key, grad in grads.items()}, artifact)
             options = dict(recipe.optimizer)
-            options['learning_rate'] = rates[node] = (options.get('learning_rate', 1e-3) * factor
+            options['learning_rate'] = rates[node] = (options.get('learning_rate', 5e-5) * factor
                                                       * recipe.level_lr_scale[self.nodes[node]['level']])
             if options['learning_rate'] <= 0:
                 continue

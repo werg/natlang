@@ -1434,7 +1434,7 @@ MIN_NEW_TOKENS = 5_000_000
 MAX_SUPPLY_WAIT_HOURS = 12.0
 SUPPLY_RECHECK_MINUTES = 45.0
 # the mix parts that are the policy's own successes (self-imitation), not new supervision
-OWN_PARTS = ('rl-own', 'own-neuralese-graph')
+OWN_PARTS = ('rl-own', 'own-neuralese-graph', 'jolt-guided')
 # a new teacher campaign episode younger than this waits for its fill instead of training raw (sft_sources FillPending)
 DEFER_UNFILLED_HOURS = 12.0
 # the lineage's fixed held-like validation set (sft_sources FixedVal), under the driver's root
@@ -3591,6 +3591,7 @@ class PhaseController:
             self.state['phase'] = 'grpo' if old == 'sft' else 'sft'
             self.state['consecutive_neutral'] = 0
             self._rollback()
+            self.state['since_held'] = 0
             event.update(switch_phase={'from': old, 'to': self.state['phase']},
                          start_policy=dict(self.state['reference_policy']))
         event['held_every'] = self.state['held_every']
@@ -5408,12 +5409,21 @@ class AsyncRoundDriver:
         self.handed_back = name
 
     def grpo_command(self, round_dir, policy):
-        return [PY, str(self.c.pin / 'scripts/neuralese_data/grpo.py'), 'train', '--work', str(round_dir / 'grpo'),
-                '--state-dir', str(round_dir / 'grpo-state'), '--checkpoint', policy['checkpoint'],
-                '--checkpoint-sha256', policy['sha256'], '--max-steps', str(self.a.grpo_steps),
-                '--held-every-hours', '0', '--teacher-attempts', str(self.a.teacher_attempts),
-                '--export-factors-dir', str(round_dir / 'grpo-factors'), '--unit-prefix', f'{self.a.name}-{round_dir.name}',
-                *self.a.grpo_extra.split()]
+        cmd = [PY, str(self.c.pin / 'scripts/neuralese_data/grpo.py'), 'train', '--work', str(round_dir / 'grpo'),
+               '--state-dir', str(round_dir / 'grpo-state'), '--checkpoint', policy['checkpoint'],
+               '--checkpoint-sha256', policy['sha256'], '--max-steps', str(self.a.grpo_steps),
+               '--held-every-hours', '0', '--teacher-attempts', str(self.a.teacher_attempts),
+               '--loss-norm', 'episode', '--explore-order', 'family', '--exclude-family-regex', '(?!)',
+               '--memetic-share', '0',
+               '--export-factors-dir', str(round_dir / 'grpo-factors'), '--unit-prefix', f'{self.a.name}-{round_dir.name}']
+        if getattr(self.a, 'neuralese_variants', None):
+            cmd.extend(['--neuralese-variants', str(self.a.neuralese_variants),
+                        '--neuralese-variant-share', str(getattr(self.a, 'neuralese_variant_share', 0.5))])
+        rates = self.root / 'collect' / f'v{self.controller.state.get("version_counter", 0):04d}-{policy["sha256"][:12]}' / 'tasks.rates.json'
+        if rates.is_file():
+            cmd.extend(['--pass-rates', str(rates)])
+        cmd.extend(self.a.grpo_extra.split())
+        return cmd
 
     def train_grpo(self, round_dir, policy):
         """Stage 2 of a GRPO round (the polish phase, §7): ``--grpo-steps`` on-policy steps from the current policy

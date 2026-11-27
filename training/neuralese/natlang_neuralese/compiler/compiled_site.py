@@ -547,13 +547,16 @@ def create_compiler_adapter(engine, targets, rank, owner=None, *, basis_id=None)
     return create_adapter(engine, options, owner).id
 
 
-def core_tensors(engine, adapter_id, cores):
-    """The adapter's coefficient tensors with the compiled cores (FP32, the artifact's own shapes)."""
+def core_tensors(engine, adapter_id, cores, *, device=None):
+    """The adapter's coefficient tensors with the compiled cores (FP32, the artifact's own shapes).
+
+    Keeps tensors on ``device`` (e.g. engine.device) instead of round-tripping through CPU store tensors."""
     record = engine.store.get_native_tensor_artifact(adapter_id)
     out = {}
     for name, stored in record.artifact.tensors.items():
         core = cores[name]
-        out[name] = core.reshape(stored.shape).to(device=stored.device, dtype=torch.float32)
+        target_dev = device if device is not None else stored.device
+        out[name] = core.reshape(stored.shape).to(device=target_dev, dtype=torch.float32)
     return out
 
 
@@ -587,51 +590,50 @@ def site_loss(
     ``extra_cores``: cores added to the head's in the shared basis (``C_scope``, ``C_body``, ``C_partial``)."""
     from ..serve.native_grad import native_graph_gradient
     init_vals = init_block_values(init_block)
-    compiled = head(
-        init_vals,
-        z_slots=z_slots,
-        slot_valid=slot_valid,
-        slot_weights=slot_weights,
-        z_kb=z_kb,
-        k_kb=k_kb,
-        w_kb=w_kb,
-        kb_valid=kb_valid,
-        kv=kv,
-        adapter=adapter,
-        apply_dropout=apply_dropout,
-    )
-    cores_eff = compiled.cores if extra_cores is None else compose_site_cores(compiled.cores, extra_cores)
-    state_id = site['state_id']
-    # the device of the stored state's tensors, as the tuner's state leaves are (``_leaf_block``)
-    device = next(iter(init_vals.values())).device
-    state_overrides = {state_id: compiled_block(init_block, compiled.state_values, device)}
-    state_modes = {state_id: 'same-base-adapter-state'}
-    specs = {
-        'adapter': {'kind': 'adapter', 'id': adapter_id},
-        'state': {'kind': 'native-state', 'id': state_id},
-    }
+    target_device = getattr(engine, 'device', None) or next(iter(init_vals.values())).device
+    grad_ctx = torch.enable_grad() if backward else torch.no_grad()
+    with grad_ctx:
+        compiled = head(
+            init_vals,
+            z_slots=z_slots,
+            slot_valid=slot_valid,
+            slot_weights=slot_weights,
+            z_kb=z_kb,
+            k_kb=k_kb,
+            w_kb=w_kb,
+            kb_valid=kb_valid,
+            kv=kv,
+            adapter=adapter,
+            apply_dropout=apply_dropout,
+        )
+        cores_eff = compiled.cores if extra_cores is None else compose_site_cores(compiled.cores, extra_cores)
+        state_id = site['state_id']
+        state_overrides = {state_id: compiled_block(init_block, compiled.state_values, target_device)}
+        state_modes = {state_id: 'same-base-adapter-state'}
+        specs = {
+            'adapter': {'kind': 'adapter', 'id': adapter_id},
+            'state': {'kind': 'native-state', 'id': state_id},
+        }
 
-    coefficients = core_tensors(engine, adapter_id, cores_eff)
-    leaves_override = {adapter_id: coefficients}
-    if basis_module is not None:
-        sample_device = next(iter(coefficients.values())).device
-        leaves_override[basis_module.basis_id] = basis_module.leaves_dict(device=sample_device)
+        coefficients = core_tensors(engine, adapter_id, cores_eff, device=target_device)
+        leaves_override = {adapter_id: coefficients}
+        if basis_module is not None:
+            leaves_override[basis_module.basis_id] = basis_module.leaves_dict(device=target_device)
 
-    body = {
-        'schema': 'natlang.native-gradient-request/1',
-        'native_identity': engine.native_identity,
-        'graph': site['graph'],
-        'invocation_adapters': {'turn': [{'id': adapter_id, 'scale': 1.0}]},
-        'adapter_gradient_precision': 'fp32',
-        'native_state_modes': state_modes,
-    }
+        body = {
+            'schema': 'natlang.native-gradient-request/1',
+            'native_identity': engine.native_identity,
+            'graph': site['graph'],
+            'invocation_adapters': {'turn': [{'id': adapter_id, 'scale': 1.0}]},
+            'adapter_gradient_precision': 'fp32',
+            'native_state_modes': state_modes,
+        }
 
-    def evaluate(loss, groups, meta):
-        if backward and loss.requires_grad:
-            (loss * scale).backward()
-        return float(loss.detach())
+        def evaluate(loss, groups, meta):
+            if backward and loss.requires_grad:
+                (loss * scale).backward()
+            return float(loss.detach())
 
-    with torch.enable_grad():
         return native_graph_gradient(
             engine,
             body,

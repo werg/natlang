@@ -298,7 +298,7 @@ def check_colab(w):
             props = dict(line.split('=', 1) for line in out.splitlines() if '=' in line)
             restarts = int(props.get('NRestarts') or 0)
             t = tunnels.setdefault(unit, {'restarts': restarts, 'down': 0})
-            rose = restarts - t['restarts']
+            rose = restarts if restarts < t['restarts'] else restarts - t['restarts']
             t['down'] = 0 if props.get('ActiveState') == 'active' else t['down'] + 1
             t['restarts'] = restarts
             if rose >= cfg['tunnel_restarts'] or t['down'] >= 2:
@@ -484,9 +484,9 @@ def run_checks(config, state, now, alerts_path, only=None):
             continue
         try:
             CHECK_FUNCS[name](w)
-        except Exception as e:  # a broken check is itself an alert; the others still run
+            ran.add(name)
+        except Exception as e:  # a broken check is itself an alert; preserve its active alerts (do not add to ran)
             w.alert('watchdog', f'error:{name}', 'warning', f'check {name} raised {type(e).__name__}: {e}'[:400])
-        ran.add(name)
     ran.add('watchdog')
     return w.finish(ran)
 
@@ -580,10 +580,15 @@ def cmd_wait(a):
     if 'cursor' not in wait_state:
         wait_state['cursor'] = start_cursor(alerts_path, time.time() - a.backlog_minutes * 60)
     started = time.time()
+    last_saved = json.dumps(wait_state, sort_keys=True)
+    save_json(state_path, wait_state)
     while True:
         watchdog_state = json.loads(STATE.read_text()) if STATE.exists() else {}
         lines = wait_once(alerts_path, wait_state, watchdog_state, time.time(), a.stale_minutes)
-        save_json(state_path, wait_state)
+        serialized = json.dumps(wait_state, sort_keys=True)
+        if serialized != last_saved:
+            save_json(state_path, wait_state)
+            last_saved = serialized
         if lines:
             print('\n'.join(lines), flush=True)
             return
