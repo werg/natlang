@@ -531,3 +531,106 @@ def test_colab_fit_reruns_segments_and_takes_a_claim_override(tmp_path, monkeypa
     assert len(runs) == 3 and (prog / 'fit' / 'release' / 'result.json').exists()
     command = runs[0]
     assert command[command.index('--vram-gib') + 1] == '10.0' and command[-2:] == ['--segment-steps', '10']
+
+
+def test_plan_safe_lr_and_epoch_cap_and_strict_support_guards(tmp_path):
+    prog = tmp_path / 'prog'
+    prog.mkdir()
+    (prog / 'split.json').write_text(json.dumps({'family': 'ext_decisions_tally'}))
+    (prog / 'rows.jsonl').write_text('\n'.join(json.dumps({'i': i}) for i in range(16)) + '\n')
+    (prog / 'rows.json').write_text(json.dumps({'rows': 16, 'tasks': 4}))
+    ckpt = tmp_path / 'ckpt.pt'
+    ckpt.write_bytes(b'ckpt')
+
+    # High LR (2e-3) is refused unless explicitly opted in.
+    with pytest.raises(SystemExit, match='exceeds safe LFM3 LoRA limit'):
+        P.main(['plan', '--dir', str(prog), '--checkpoint', str(ckpt), '--checkpoint-sha256', 'a' * 64,
+                '--base', '/hf', '--lr', '2e-3'])
+
+    # Strict support refuses tiny programs (< 32 rows / < 8 tasks).
+    with pytest.raises(SystemExit, match='only 16 support rows'):
+        P.main(['plan', '--dir', str(prog), '--checkpoint', str(ckpt), '--checkpoint-sha256', 'a' * 64,
+                '--base', '/hf', '--strict-support'])
+
+    # Safe defaults (lr=5e-5, depth_penalty=1e-3) + --max-epochs caps 60 steps on 16 rows (batch 8) to 4 steps.
+    P.main(['plan', '--dir', str(prog), '--checkpoint', str(ckpt), '--checkpoint-sha256', 'a' * 64,
+            '--base', '/hf', '--steps', '60', '--batch-rows', '8', '--max-epochs', '2.0'])
+    body = json.loads((prog / 'fit' / 'plan.json').read_text())
+    assert body['recipe']['optimizer']['learning_rate'] == pytest.approx(5e-5)
+    assert body['recipe']['depth_penalty']['tree'] == pytest.approx(1e-3)
+    assert body['recipe']['steps'] == 4
+
+
+def test_grpo_program_dry_run_wires_leak_free_support_and_dev_eval(tmp_path):
+    prog = tmp_path / 'ext_decisions_tally'
+    for sub in ('dev64', 'confirm'):
+        (prog / sub).mkdir(parents=True)
+        (prog / sub / 'manifest.json').write_text(json.dumps({'tasks': []}))
+    support_ids = ['t1', 't2', 't3']
+    (prog / 'split.json').write_text(json.dumps({
+        'family': 'ext_decisions_tally',
+        'ids': {'support': support_ids, 'dev': ['d1'], 'confirm': ['c1']},
+    }))
+    ckpt = tmp_path / 'v12.pt'
+    ckpt.write_bytes(b'ckpt')
+
+    rc = P.main([
+        'grpo', '--dir', str(prog), '--checkpoint', str(ckpt), '--checkpoint-sha256', 'b' * 64,
+        '--max-steps', '15', '--held-remote', 'pop', '--held-strict-series', '--dry-run',
+    ])
+    assert rc == 0
+    launch = json.loads((prog / 'grpo' / 'launch.json').read_text())
+    assert json.loads((prog / 'grpo' / 'support-task-ids.json').read_text()) == support_ids
+    cmd = launch['command']
+    assert cmd[cmd.index('--reward') + 1] == 'binary'
+    assert cmd[cmd.index('--held-manifest') + 1].endswith('dev64/manifest.json')
+    assert cmd[cmd.index('--exclude-manifest') + 1].endswith('confirm/manifest.json')
+    assert cmd[cmd.index('--held-remote') + 1] == 'pop'
+    assert '--held-strict-series' in cmd
+    assert launch['env']['NATLANG_ALLOW_UNREGISTERED_DATA'] == '1'
+
+
+def test_calibrate_decisions_fits_temperature_and_reports_fast_settlement(tmp_path):
+    prog = tmp_path / 'ext_decisions_route'
+    prog.mkdir()
+    (prog / 'split.json').write_text(json.dumps({'family': 'ext_decisions_route'}))
+    # Deliberately overconfident logits so T > 1 strictly lowers NLL and ECE,
+    # while high-confidence clear cases still settle fast.
+    fit_rows = []
+    for i in range(40):
+        if i % 5 == 0:
+            fit_rows.append({'option_logits': [4.0, -4.0, -4.0], 'target': 1, 'labels': ['allow', 'block', 'escalate']})
+        else:
+            fit_rows.append({'option_logits': [6.0, -4.0, -4.0], 'target': 0, 'labels': ['allow', 'block', 'escalate']})
+    eval_rows = [
+        {'option_logits': [12.0, -4.0, -4.0], 'target': 0, 'labels': ['allow', 'block', 'escalate']},
+        {'option_logits': [2.0, 1.5, -4.0], 'target': 1, 'labels': ['allow', 'block', 'escalate']},
+    ]
+    fit_path = tmp_path / 'fit_dec.jsonl'
+    eval_path = tmp_path / 'eval_dec.jsonl'
+    fit_path.write_text('\n'.join(json.dumps(r) for r in fit_rows) + '\n')
+    eval_path.write_text('\n'.join(json.dumps(r) for r in eval_rows) + '\n')
+
+    rc = P.main([
+        'calibrate-decisions', '--dir', str(prog), '--rows', str(fit_path), '--eval-rows', str(eval_path),
+        '--fast-threshold', '0.80', '--risk-thresholds', json.dumps({'block': 0.25}),
+    ])
+    assert rc == 0
+    report = json.loads((prog / 'fit' / 'decision-calibration.json').read_text())
+    assert report['temperature'] > 1.0
+    assert report['fit']['nll_after'] < report['fit']['nll_before']
+    assert report['eval']['fast_settled_count'] == 1
+    assert report['eval']['fast_settled_accuracy'] == 1.0
+
+
+def test_grpo_pop_start_serve_uses_serve_checkpoint_for_pruned_start_policies():
+    import grpo
+    eng = ['--host-profile', 'pop', '--kv-cache-dtype', 'fp8_e4m3', '--max-running', '20']
+    pruned_cmd = grpo.pop_start_serve_command('/ckpt.pt', 'a' * 64, 'c' * 40, eng, pruned=True)
+    assert pruned_cmd[0] == 'serve-checkpoint'
+    assert pruned_cmd[pruned_cmd.index('--commit') + 1] == 'c' * 40
+    assert pruned_cmd[pruned_cmd.index('--step') + 1] == '0'
+    full_cmd = grpo.pop_start_serve_command('/ckpt.pt', 'a' * 64, 'c' * 40, eng, pruned=False)
+    assert full_cmd[0] == 'start'
+
+

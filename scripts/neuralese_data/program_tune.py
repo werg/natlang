@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import shutil
 import sys
@@ -405,19 +406,53 @@ def manifest(family, base):
             'fallback': 'base', 'receipts': {}}
 
 
+DEFAULT_SFT_LR = 5e-5
+MAX_SAFE_SFT_LR = 5e-4
+DEFAULT_DEPTH_PENALTY = 1e-3
+
+
 def plan(args):
     directory = Path(args.dir)
     record = json.loads((directory / 'split.json').read_text())
-    if not (directory / 'rows.jsonl').exists():
+    rows_path = directory / 'rows.jsonl'
+    if not rows_path.exists():
         raise SystemExit('run `rows` first')
+    if args.lr > MAX_SAFE_SFT_LR and not getattr(args, 'allow_high_lr', False):
+        raise SystemExit(
+            f'--lr {args.lr} exceeds safe LFM3 LoRA limit {MAX_SAFE_SFT_LR} '
+            '(2e-3 collapsed ext_decisions_tally/tree by -30 to -40 pts); pass --allow-high-lr to override'
+        )
+    n_rows = sum(1 for line in rows_path.open(encoding='utf-8') if line.strip())
+    rows_meta = json.loads((directory / 'rows.json').read_text()) if (directory / 'rows.json').exists() else {}
+    n_tasks = int(rows_meta.get('tasks') or 0)
+    min_rows = int(getattr(args, 'min_rows', 0) or 0)
+    min_tasks = int(getattr(args, 'min_tasks', 0) or 0)
+    if getattr(args, 'strict_support', False):
+        min_rows = max(min_rows, 32)
+        min_tasks = max(min_tasks, 8)
+    if min_rows and n_rows < min_rows:
+        raise SystemExit(f'{directory}: only {n_rows} support rows (< --min-rows {min_rows}); collect more support data or use `grpo`')
+    if min_tasks and rows_meta and n_tasks < min_tasks:
+        raise SystemExit(f'{directory}: only {n_tasks} distinct support tasks (< --min-tasks {min_tasks}); collect more support data or use `grpo`')
+    steps = args.steps
+    max_epochs = getattr(args, 'max_epochs', None)
+    capped_steps = None
+    if not args.epochs and max_epochs is not None and max_epochs > 0 and n_rows > 0:
+        cap = max(1, math.ceil(float(max_epochs) * n_rows / max(1, args.batch_rows)))
+        if steps > cap:
+            capped_steps = cap
+            steps = cap
+    effective_epochs = (float(args.epochs) if args.epochs else (steps * args.batch_rows) / max(1, n_rows))
     sha = args.checkpoint_sha256 or sha256_file(args.checkpoint)
     fit = directory / 'fit'
     fit.mkdir(parents=True, exist_ok=True)
+    depth_penalty = float(getattr(args, 'depth_penalty', DEFAULT_DEPTH_PENALTY))
     recipe = {'parameterization': 'free-lora', 'ranks': {'tree': args.rank, 'folder': 0, 'lambda': 0},
               'level_lr_scale': {'tree': 1., 'folder': 1., 'lambda': 1.},
+              'depth_penalty': {'tree': depth_penalty, 'folder': depth_penalty, 'lambda': depth_penalty},
               'optimizer': {'name': 'adam', 'learning_rate': args.lr}, 'batch_rows': args.batch_rows,
               'prompt_weight': 0., 'seed': args.seed, **({'target_classes': args.targets} if args.targets else {}),
-              **({'epochs': args.epochs} if args.epochs else {'steps': args.steps})}
+              **({'epochs': args.epochs} if args.epochs else {'steps': steps})}
     student = {'checkpoint': logical(args.checkpoint)}
     exports = []
     if args.gguf_base_sha256:
@@ -428,10 +463,17 @@ def plan(args):
     body = {'manifest': manifest(record['family'], {'checkpoint_sha256': sha}),
             'engine': {'checkpoint': student['checkpoint'], 'base': args.base, 'device': args.device, 'dtype': args.dtype,
                        **({'store_scratch': args.store_scratch} if args.store_scratch else {})},
-            'student': student, 'rows': logical(directory / 'rows.jsonl'), 'recipe': recipe,
+            'student': student, 'rows': logical(rows_path), 'recipe': recipe,
             'exports': exports, 'label': f'program:{record["family"]}'}
     (fit / 'plan.json').write_text(json.dumps(body, indent=1) + '\n')
-    print(json.dumps({'plan': str(fit / 'plan.json'), 'recipe': recipe, 'exports': exports}))
+    summary = {'plan': str(fit / 'plan.json'), 'recipe': recipe, 'exports': exports,
+               'support_rows': n_rows, 'support_tasks': n_tasks or None,
+               'effective_epochs': round(effective_epochs, 2)}
+    if capped_steps is not None:
+        summary['capped_steps'] = capped_steps
+    if effective_epochs > 3.0 and n_rows > 1:
+        summary['warning'] = f'effective_epochs={effective_epochs:.1f} > 3.0 risks memorizing support rows'
+    print(json.dumps(summary))
 
 
 # ---- bank ------------------------------------------------------------------------------------------------------------
@@ -911,6 +953,206 @@ def colab_measure(args):
     return 0 if all(r.get('complete') for r in results.values()) else 3
 
 
+# ---- Per-workflow on-policy binary GRPO + local eval + Layer-1 decision calibration ----------------------------------
+def _resolve_dev_manifest(directory: Path, dev_split: str | None) -> Path:
+    if dev_split:
+        path = directory / dev_split / 'manifest.json'
+        if not path.exists():
+            raise SystemExit(f'{path}: dev manifest does not exist')
+        return path
+    for candidate in ('dev64', 'dev'):
+        path = directory / candidate / 'manifest.json'
+        if path.exists():
+            return path
+    raise SystemExit(f'{directory}: no dev64/manifest.json or dev/manifest.json found')
+
+
+def grpo_program(args):
+    """Per-workflow on-policy binary GRPO on one program's leak-free support split.
+
+    Trains strictly on DIR/split.json['ids']['support'] (excluding DIR/dev, DIR/confirm, and all held-v3/v4 sets),
+    evaluates periodically on DIR/<dev-split>/manifest.json, and exports compact Mode-P LoRA factors into
+    WORK/factors. Zero paid teacher calls required.
+    """
+    import shlex
+    import subprocess
+    directory = Path(args.dir).resolve()
+    record = json.loads((directory / 'split.json').read_text())
+    support_ids = list(record['ids']['support'])
+    if not support_ids:
+        raise SystemExit(f'{directory}: empty support split')
+    dev_manifest = _resolve_dev_manifest(directory, args.dev_split)
+    confirm_manifest = directory / 'confirm' / 'manifest.json'
+    work = Path(args.work).resolve() if args.work else (directory / 'grpo')
+    work.mkdir(parents=True, exist_ok=True)
+    task_ids_path = work / 'support-task-ids.json'
+    task_ids_path.write_text(json.dumps(support_ids, indent=1) + '\n')
+    pin = Path(args.pin).resolve() if args.pin else REPO
+    sha = args.checkpoint_sha256 or sha256_file(args.checkpoint)
+    py = str(pin / '.venv-neuralese' / 'bin' / 'python') if (pin / '.venv-neuralese' / 'bin' / 'python').exists() else sys.executable
+    unit_prefix = args.unit_prefix or f'proggrpo-{record["family"][:28]}'
+    cmd = [
+        py, str(pin / 'scripts' / 'neuralese_data' / 'grpo.py'), 'train',
+        '--work', str(work / 'run'),
+        '--state-dir', str(work / 'state'),
+        '--checkpoint', logical(args.checkpoint),
+        '--checkpoint-sha256', sha,
+        '--task-ids', str(task_ids_path),
+        '--held-manifest', str(dev_manifest),
+        '--reward', args.reward,
+        '--pass-band', str(args.pass_band[0]), str(args.pass_band[1]),
+        '--explore', str(args.explore),
+        '--lr', str(args.lr),
+        '--warmup', str(args.warmup),
+        '--kl-beta', str(args.kl_beta),
+        '--min-groups', str(args.min_groups),
+        '--max-groups', str(args.max_groups),
+        '--group', str(args.group),
+        '--slots', str(args.slots),
+        '--max-steps', str(args.max_steps),
+        '--save-every', str(args.save_every),
+        '--state-every', str(args.state_every),
+        '--branch-states', str(args.branch_states),
+        '--export-factors-dir', str(work / 'factors'),
+        '--held-samples', str(args.held_samples),
+        '--held-samples-start', str(args.held_samples),
+        '--held-every-hours', str(args.held_every_hours),
+        '--unit-prefix', unit_prefix,
+    ]
+    if confirm_manifest.exists():
+        cmd.extend(['--exclude-manifest', str(confirm_manifest)])
+    if args.pass_rates:
+        cmd.extend(['--pass-rates', logical(args.pass_rates)])
+    if args.held_remote and args.held_remote != 'none':
+        cmd.extend(['--held-remote', args.held_remote])
+    if args.held_strict_series:
+        cmd.append('--held-strict-series')
+    if args.extra:
+        cmd.extend(shlex.split(args.extra))
+    env = {
+        'NATLANG_REPO': str(pin),
+        'PYTHONPATH': f'{pin / "training" / "neuralese"}:{pin}',
+        'HF_HUB_OFFLINE': '1',
+        'NATLANG_ALLOW_UNREGISTERED_DATA': '1',
+    }
+    plan_record = {
+        'schema': 'natlang.program-grpo/1',
+        'family': record['family'],
+        'support_tasks': len(support_ids),
+        'dev_manifest': str(dev_manifest),
+        'confirm_excluded': str(confirm_manifest) if confirm_manifest.exists() else None,
+        'checkpoint': logical(args.checkpoint),
+        'checkpoint_sha256': sha,
+        'pin': str(pin),
+        'work': str(work),
+        'env': env,
+        'command': cmd,
+    }
+    (work / 'launch.json').write_text(json.dumps(plan_record, indent=1) + '\n')
+    if args.dry_run:
+        print(json.dumps(plan_record))
+        return 0
+    if args.ledger_unit:
+        ledger_cmd = [
+            '/usr/bin/python3', str(REPO / 'scripts' / 'memory_ledger.py'), 'run',
+            '--unit', args.ledger_unit,
+            '--budget-gb', str(args.budget_gb),
+            '--priority', args.priority,
+            '--class', 'experiment',
+            '--resumable',
+            '--workdir', str(pin),
+        ]
+        for k, v in env.items():
+            ledger_cmd.extend(['--env', f'{k}={v}'])
+        ledger_cmd.append('--')
+        ledger_cmd.extend(cmd)
+        subprocess.run(ledger_cmd, check=True)
+        print(json.dumps({'event': 'launched', 'unit': args.ledger_unit, 'work': str(work)}))
+        return 0
+    full_env = {**dict(__import__('os').environ), **env}
+    proc = subprocess.run(cmd, cwd=str(pin), env=full_env)
+    return int(proc.returncode)
+
+
+def calibrate_decisions(args):
+    """Layer-1 single-pass decision calibration (tune.decision_compile) for a workflow's readout: decision calls.
+
+    Reads JSONL rows of ``{"option_logits": [float, ...], "target": int, "labels": [str, ...]}`` (plus optional
+    ``--eval-rows``), fits scalar temperature T_f minimizing NLL, measures ECE & margin-gated fast-path settlement rate
+    (0 decode tokens when confident), and writes DIR/fit/decision-calibration.json.
+    """
+    import torch
+    import torch.nn.functional as F
+    from natlang_neuralese.tune.decision_compile import compute_ece, fit_temperature, should_settle_fast
+
+    directory = Path(args.dir).resolve()
+    family = json.loads((directory / 'split.json').read_text())['family'] if (directory / 'split.json').exists() else directory.name
+    fit_rows = read_jsonl(args.rows)
+    if not fit_rows:
+        raise SystemExit(f'{args.rows}: no decision rows to calibrate')
+    eval_rows = read_jsonl(args.eval_rows) if args.eval_rows else fit_rows
+
+    def _to_tensors(items):
+        logits = torch.tensor([row['option_logits'] for row in items], dtype=torch.float32)
+        targets = torch.tensor([int(row['target']) for row in items], dtype=torch.long)
+        labels = [list(row.get('labels') or [f'opt_{i}' for i in range(len(row['option_logits']))]) for row in items]
+        return logits, targets, labels
+
+    fit_logits, fit_targets, _ = _to_tensors(fit_rows)
+    eval_logits, eval_targets, eval_labels = _to_tensors(eval_rows)
+    cal = fit_temperature(fit_logits, fit_targets, min_temp=args.min_temp, max_temp=args.max_temp, steps=args.steps)
+    risk = json.loads(args.risk_thresholds) if args.risk_thresholds else None
+
+    with torch.no_grad():
+        scaled = eval_logits / cal.temperature
+        probs = F.softmax(scaled, dim=-1)
+        eval_nll_before = float(F.cross_entropy(eval_logits, eval_targets).item())
+        eval_nll_after = float(F.cross_entropy(scaled, eval_targets).item())
+        eval_ece_before = compute_ece(F.softmax(eval_logits, dim=-1), eval_targets)
+        eval_ece_after = compute_ece(probs, eval_targets)
+        eval_acc = float((probs.argmax(dim=-1) == eval_targets).float().mean().item())
+        settled_total, settled_correct = 0, 0
+        for i in range(len(eval_rows)):
+            settle, pred_label, _ = should_settle_fast(
+                probs[i], eval_labels[i], fast_threshold=args.fast_threshold, risk_thresholds=risk,
+            )
+            if settle:
+                settled_total += 1
+                if pred_label == eval_labels[i][int(eval_targets[i].item())]:
+                    settled_correct += 1
+
+    out_path = Path(args.out) if args.out else (directory / 'fit' / 'decision-calibration.json')
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    report = {
+        'schema': 'natlang.program-decision-calibration/1',
+        'family': family,
+        'fit_rows': len(fit_rows),
+        'eval_rows': len(eval_rows),
+        'temperature': round(cal.temperature, 6),
+        'fast_threshold': float(args.fast_threshold),
+        'risk_thresholds': risk,
+        'fit': {
+            'nll_before': round(cal.nll_before, 6),
+            'nll_after': round(cal.nll_after, 6),
+            'ece_before': round(cal.ece_before, 6),
+            'ece_after': round(cal.ece_after, 6),
+        },
+        'eval': {
+            'nll_before': round(eval_nll_before, 6),
+            'nll_after': round(eval_nll_after, 6),
+            'ece_before': round(eval_ece_before, 6),
+            'ece_after': round(eval_ece_after, 6),
+            'top1_accuracy': round(eval_acc, 6),
+            'fast_settled_count': settled_total,
+            'fast_settled_rate': round(settled_total / max(1, len(eval_rows)), 6),
+            'fast_settled_accuracy': round(settled_correct / settled_total, 6) if settled_total else None,
+        },
+    }
+    out_path.write_text(json.dumps(report, indent=1) + '\n')
+    print(json.dumps(report))
+    return 0
+
+
 # ---- teacher tasks ---------------------------------------------------------------------------------------------------
 def teacher_tasks(args):
     """A `teacher_gen.py` WORK directory over programs' support splits only: WORK/tasks.jsonl (support rows of every
@@ -976,13 +1218,66 @@ def main(argv=None):
     p.add_argument('--rank', type=int, default=16)
     p.add_argument('--targets', nargs='+', choices=('attention', 'conv-projection', 'mlp'),
                    help='target classes (default: all; training applies the adapter factored, NATLANG_FACTORED_LORA)')
-    p.add_argument('--lr', type=float, default=2e-3)
+    p.add_argument('--lr', type=float, default=DEFAULT_SFT_LR,
+                   help=f'LoRA Adam learning rate (default {DEFAULT_SFT_LR}; values > {MAX_SAFE_SFT_LR} require --allow-high-lr)')
+    p.add_argument('--allow-high-lr', action='store_true',
+                   help=f'permit --lr > {MAX_SAFE_SFT_LR} (unsafe on LFM3-1.7B free-LoRA)')
+    p.add_argument('--depth-penalty', type=float, default=DEFAULT_DEPTH_PENALTY,
+                   help=f'L2 anchor penalty on LoRA weights (default {DEFAULT_DEPTH_PENALTY})')
+    p.add_argument('--min-rows', type=int, default=0, help='refuse to write a plan below this many support rows')
+    p.add_argument('--min-tasks', type=int, default=0, help='refuse to write a plan below this many distinct support tasks')
+    p.add_argument('--strict-support', action='store_true',
+                   help='enforce safe production floors (--min-rows >= 32, --min-tasks >= 8)')
+    p.add_argument('--max-epochs', type=float, default=None,
+                   help='cap --steps to at most this many epochs over rows.jsonl (prevents tiny-set memorization)')
     p.add_argument('--batch-rows', type=int, default=8)
     p.add_argument('--epochs', type=float)
     p.add_argument('--steps', type=int, default=1)
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--gguf-base-sha256', help='sha256 of the base GGUF the LoRA exports bind to')
     p.add_argument('--hf-config', help='HF config directory of the base for the GGUF LoRA converter')
+    gp = sub.add_parser('grpo', help='per-workflow on-policy binary GRPO on DIR/support with dev evaluation')
+    gp.add_argument('--dir', required=True)
+    gp.add_argument('--checkpoint', required=True, help='start policy (native checkpoint)')
+    gp.add_argument('--checkpoint-sha256')
+    gp.add_argument('--pin', help='pinned repo checkout (default: current repo)')
+    gp.add_argument('--work', help='GRPO work directory (default: DIR/grpo)')
+    gp.add_argument('--dev-split', help='dev manifest directory name (default: dev64 if present else dev)')
+    gp.add_argument('--pass-rates', help='optional measured pass-rates JSON to seed task selection')
+    gp.add_argument('--reward', choices=('binary', 'graded'), default='binary')
+    gp.add_argument('--pass-band', type=float, nargs=2, default=[0.0, 0.99])
+    gp.add_argument('--explore', type=float, default=0.5)
+    gp.add_argument('--lr', type=float, default=1e-4)
+    gp.add_argument('--warmup', type=int, default=2)
+    gp.add_argument('--kl-beta', type=float, default=0.02)
+    gp.add_argument('--min-groups', type=int, default=12)
+    gp.add_argument('--max-groups', type=int, default=24)
+    gp.add_argument('--group', type=int, default=8)
+    gp.add_argument('--slots', type=int, default=48)
+    gp.add_argument('--max-steps', type=int, default=20)
+    gp.add_argument('--save-every', type=int, default=5)
+    gp.add_argument('--state-every', type=int, default=5)
+    gp.add_argument('--branch-states', type=int, default=2)
+    gp.add_argument('--held-remote', choices=('none', 'pop', 'colab_g4'), default='none')
+    gp.add_argument('--held-samples', type=int, default=2)
+    gp.add_argument('--held-every-hours', type=float, default=0.5)
+    gp.add_argument('--held-strict-series', action='store_true')
+    gp.add_argument('--unit-prefix')
+    gp.add_argument('--ledger-unit', help='if set, launch through scripts/memory_ledger.py under this systemd unit name')
+    gp.add_argument('--budget-gb', type=float, default=85.0)
+    gp.add_argument('--priority', choices=('low', 'medium', 'high'), default='high')
+    gp.add_argument('--extra', default='', help='extra CLI flags forwarded verbatim to grpo.py train')
+    gp.add_argument('--dry-run', action='store_true', help='write support-task-ids.json and launch.json without running')
+    cd = sub.add_parser('calibrate-decisions', help='Layer-1 single-pass decision temperature calibration & fast-path gate')
+    cd.add_argument('--dir', required=True)
+    cd.add_argument('--rows', required=True, help='JSONL of {"option_logits", "target", "labels"} for fitting T_f')
+    cd.add_argument('--eval-rows', help='optional held-out JSONL to measure calibrated ECE & fast-path settlement')
+    cd.add_argument('--out', help='output JSON report path (default: DIR/fit/decision-calibration.json)')
+    cd.add_argument('--fast-threshold', type=float, default=0.85)
+    cd.add_argument('--risk-thresholds', help='optional JSON map of {label: floor} forcing fallback')
+    cd.add_argument('--min-temp', type=float, default=0.1)
+    cd.add_argument('--max-temp', type=float, default=10.0)
+    cd.add_argument('--steps', type=int, default=80)
     v = sub.add_parser('release', help='DIR/fit/release: the fit\'s result and only its artifact closure (to serve)')
     v.add_argument('--dir', required=True)
     t = sub.add_parser('teacher-tasks', help='a teacher_gen.py WORK over the support split only')
@@ -1062,7 +1357,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     status = {'split': split, 'rows': rows, 'plan': plan, 'release': release, 'teacher-tasks': teacher_tasks,
               'bank': bank, 'colab-fit': colab_fit, 'colab-measure': colab_measure, 'colab-bank': colab_bank,
-              'subset': subset, 'merge': merge_release}[args.command](args)
+              'subset': subset, 'merge': merge_release, 'grpo': grpo_program,
+              'calibrate-decisions': calibrate_decisions}[args.command](args)
     return status if isinstance(status, int) else 0
 
 

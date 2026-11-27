@@ -4517,6 +4517,16 @@ def actor_command(args, work, source_sha):
     return command, f'http://127.0.0.1:{args.actor_port}'
 
 
+def pop_start_serve_command(checkpoint, source_sha, commit, pop_engine, *, pruned):
+    """Build the pop_rl_actor serve command for step 0: pruned/inference-only start checkpoints (e.g. aei1 published
+    policies and merged program fits) use `serve-checkpoint` because `start` / `write_actor_view` refuses checkpoints
+    whose optimizer state was already pruned."""
+    if pruned:
+        return ['serve-checkpoint', '--checkpoint', str(checkpoint), '--policy-id', str(source_sha),
+                '--commit', str(commit), '--step', '0', *pop_engine]
+    return ['start', '--checkpoint', str(checkpoint), '--policy-id', str(source_sha), *pop_engine]
+
+
 def train(args):
     import torch
     import behaviour_probe
@@ -4616,6 +4626,9 @@ def train(args):
     special = learner.special_ids
     native_rows = learner.native_rows
     # only what a pruned checkpoint needs stays on the host (the source backbone is 3.4 GB)
+    start_checkpoint_pruned = bool(
+        learner.checkpoint_state.get('optimizer_pruned') or learner.checkpoint_state.get('inference_only')
+    )
     state = {k: learner.checkpoint_state[k] for k in ('schema', 'model_config', 'interface_state', 'step')}
     learner.state = state
     import gc
@@ -5230,8 +5243,9 @@ def train(args):
                     log_line(log, {'event': 'held eval', 'remote': remote_profile, 'moved_start_policy_result': str(aside),
                                    'reason': f'measured on another Pop engine than {pop_format}'})
                 if not held_complete(base_out):
-                    evaluate(0, base_out, source_sha, ['start', '--checkpoint', args.checkpoint, '--policy-id', source_sha,
-                                                       *pop_engine])
+                    evaluate(0, base_out, source_sha, pop_start_serve_command(
+                        args.checkpoint, source_sha, run['code']['git_commit'], pop_engine,
+                        pruned=start_checkpoint_pruned))
                     if not held_complete(base_out):
                         raise RuntimeError(f'the start policy measurement ended without a result (see {work}/held-pop.log)')
                 ready = sorted(d for d in checkpoint_root.glob('step-*') if (d / 'sha256.txt').exists()

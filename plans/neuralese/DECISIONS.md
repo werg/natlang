@@ -15176,3 +15176,18 @@ the last real gain (sft-v6). But it points nowhere useful.
   - Keep own successes only from groups with pass rate ≤ 0.5.
   - Add only teacher or own trajectories that pass the files check and do their effects in `eval` code, for the
     held-weak auth families.
+
+## 2026-11-27 09:07 Supervisor takeover: stopped dead SFT/progtune/paid-teacher loops; launched bounded DGX+Pop GRPO (`grpo-v12-1`)
+
+- **Stopped wasteful/broken units immediately:**
+  1. `progtune-l4-fits5-a`, `progtune-l4-fits5-b`, `progtune-l4-seq-5`: dead-spinning on the owner-stopped L4 AND running an `LR=2e-3` (40x standard SFT LR), 60-step LoRA recipe on tiny row counts (`ext_decisions_tree`: 3 rows / 1 episode / 1 task -> loss `1.5e-5`, `repeated_action_rate` `0.0004 -> 0.4095`, dev64 `71.9% -> 32.0%` (`-39.8 pts`); `ext_decisions_tally`: 310 rows / 43 episodes -> loss `3.0e-4`, `repeated_action_rate` `0.0 -> 0.145`, dev64 `68.8% -> 39.1%` (`-29.7 pts`, p=0.0005)).
+  2. `aei1-teacher.service`: actively calling paid Anthropic (`claude-haiku-5-5`) and paid Vertex (`google/gemini-4-argon`, `google/gemini-3.1-pro-preview`) on `ext` QA tasks (`multihiertt`, `convfinqa`, `quality`) at ~95% `semantic_mismatch` while `aei1` is paused and Vertex status awaits owner decision.
+  3. `aei1-drive-1795765321.service`, `aei1-collect-v0013*`: stopped before `r0016` launched another zero-gain SFT round on the DGX.
+- **Watchdog updated:** removed stopped Colab sessions `g4a`/`g4b` from `ops/watchdog.json`; flagged stray Colab CPU assignment `m-s-euw4b0-2i5pk6q35r1ja` burning ~0.24 units/h.
+- **Experiment `grpo-v12-1` (declared before launch, DGX + Pop only, zero cloud spend):**
+  - Pin: `d1351eaab` (`/home/werg/data/lfm3-rl-dgx-20261029/ops/grpo-v12-1/pin-d1351eaab`).
+  - Start policy: `v12` (`919472c49381`, `aei1/r0014/policy/checkpoint.pt`; already measured on `held-v3` 57.4% and `held-v4` 57.9%).
+  - Objective: On-policy LoRA GRPO (`r=32, alpha=32, lr=1e-4, warmup=2, kl-beta=0.02`, `--reward binary` including strict file check, `--pass-rates v0012/tasks.rates.json`, `--pass-band 0.1 0.9`, `--explore 0.25`, `--min-groups 24 --max-groups 48 --slots 96`, `--max-steps 60 --save-every 10 --state-every 10 --branch-states`).
+  - Eval: parallel `--held-remote pop --held-samples 4 --held-samples-start 4 --held-every-hours 3 --held-strict-series` on `held-v3`.
+  - Success: paired `held-v3` (4 samples) `>= +2.5 pts` over `step-00000` (with positive `auth` file-check movement and lower loop/ran-out rate). Failure: `< -2.5 pts` at `p < 0.05` or learner sentinel -> stop and diagnose. Neutral at 60 steps: confirms general-pool GRPO plateau and triggers full shift to per-program/workflow specialization + deterministic/hybrid compilation.
+
