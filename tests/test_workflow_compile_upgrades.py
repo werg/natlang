@@ -235,3 +235,112 @@ def test_program_tune_extract_basis_and_grpo_dry_run(tmp_path):
     assert '--reward' in cmd and 'bounded-graded' in cmd
     assert '--lora-rank' in cmd and '8' in cmd
     assert '--concise-pass-bonus' in cmd and '0.05' in cmd
+
+
+class _TinyTokenizer:
+    def __call__(self, text, add_special_tokens=False):
+        return {'input_ids': [1 + (ord(ch) % 30) for ch in text[:32]] or [1]}
+
+
+class _TinyEngine:
+    def __init__(self, embed_dim=32):
+        self.tokenizer = _TinyTokenizer()
+        g = torch.Generator().manual_seed(42)
+        self.embed = torch.nn.Embedding(32, embed_dim)
+        with torch.no_grad():
+            self.embed.weight.copy_(torch.randn((32, embed_dim), generator=g) * 0.2)
+        port = type('Port', (), {'input_embedding_weight': self.embed.weight})()
+        self.shared_model = type('Model', (), {'port': port})()
+
+
+def test_hkb_two_mode_encoding_and_alternating_em_reproduction(tmp_path):
+    try:
+        from natlang_neuralese.compiler.hkb_bridge import ExperienceEntry, HeldAdmission, ScopedExperienceKB
+    except Exception as exc:
+        pytest.skip(f'hindsight-kb unavailable: {exc}')
+
+    from natlang_neuralese.compiler.hkb_em import (
+        EntryOptConfig,
+        HindsightEncodeConfig,
+        ReproductionConfig,
+        hindsight_encode_step,
+        optimize_kb_entry,
+        reproduction_step,
+    )
+    from natlang_neuralese.compiler.live_kb_writer import LiveExperienceWriter
+
+    torch.manual_seed(0)
+    engine = _TinyEngine(embed_dim=32)
+    writer = LiveExperienceWriter(embed_dim=32, value_dim=16, key_dim=8, num_heads=2, hidden_dim=32)
+    opt = torch.optim.AdamW(writer.parameters(), lr=1e-2)
+
+    # Mode 1: cross_peer strictly rejects self-leakage (source_task_id == target_task_id).
+    with pytest.raises(ValueError, match='cross_peer leakage'):
+        hindsight_encode_step(
+            writer, engine, opt,
+            [{'source_text': 'src', 'target': torch.zeros(16), 'source_task_id': 't1', 'target_task_id': 't1'}],
+            lambda z, k, tgts: (z - torch.stack(tgts)).pow(2).mean(),
+            cfg=HindsightEncodeConfig(mode='cross_peer'),
+        )
+
+    # Mode 1: valid cross_peer step reduces loss cleanly.
+    tgt_vec = torch.ones(16) * 0.3
+    m1 = hindsight_encode_step(
+        writer, engine, opt,
+        [{
+            'source_text': 'repair lesson alpha',
+            'query_text': 'call context beta',
+            'target': tgt_vec,
+            'source_task_id': 't1',
+            'target_task_id': 't2',
+        }],
+        lambda z, k, tgts: (z - torch.stack(tgts)).pow(2).mean(),
+        cfg=HindsightEncodeConfig(mode='cross_peer'),
+    )
+    assert m1['total_loss'] > 0.0
+
+    # Mode 2: E-step (direct KB entry drift on execution signal) -> M-step (encoder reproduces drifted entry).
+    admission = HeldAdmission(known=frozenset({'t1'}), excluded=frozenset())
+    kb_path = tmp_path / 'em.sqlite'
+    with ScopedExperienceKB(kb_path, admission=admission, key_dim=8, value_dim=16) as kb:
+        with torch.no_grad():
+            z0, k0 = writer.encode_experience_texts(engine, ['fix tool retry loop'])
+        kb.add(ExperienceEntry(
+            record_id='entry-1', scope='fn:state_games', key=k0[0], value=z0[0],
+            text='fix tool retry loop', task_ids=('t1',), strength=0.8,
+        ))
+
+        target_v = torch.linspace(-0.5, 0.5, 16)
+        target_q = torch.nn.functional.normalize(torch.linspace(1.0, -1.0, 8), dim=-1)
+        g = torch.Generator().manual_seed(9)
+        examples = []
+        for idx in range(8):
+            pos = target_v + 0.1 * torch.randn((16,), generator=g)
+            neg = -target_v + 0.1 * torch.randn((16,), generator=g)
+            examples.append({'group': f'g{idx}', 'feat': pos, 'query_key': target_q, 'reward': 1.0})
+            examples.append({'group': f'g{idx}', 'feat': neg, 'query_key': -target_q, 'reward': 0.0})
+
+        def score_fn(val, key, batch):
+            feats = torch.stack([b['feat'] for b in batch], dim=0)
+            return feats @ val, torch.zeros((len(batch),), dtype=torch.float32)
+
+        e_res = optimize_kb_entry(
+            z0[0], k0[0], score_fn, examples,
+            cfg=EntryOptConfig(steps=20, lr=0.1, key_lr=0.1, kl_beta=0.01, prox_lambda=0.01, eval_every=4),
+            kb=kb, scope='fn:state_games', record_id='entry-1',
+        )
+        assert e_res.accepted is True
+        assert e_res.drift_norm > 0.0
+        drifted = kb.iter_drifted_entries(scope='fn:state_games', only_unreproduced=True)
+        assert len(drifted) == 1 and drifted[0]['drift_step'] == 1
+
+        # M-step: encoder reproduces the drifted entry and marks it reproduced.
+        m_res = reproduction_step(
+            writer, engine, opt, kb,
+            scope='fn:state_games',
+            cfg=ReproductionConfig(steps=30, key_weight=0.5, mark_after=True),
+        )
+        assert m_res['entries'] == 1.0
+        assert m_res['final_loss'] < m_res['initial_loss'] * 0.25
+        assert m_res['marked'] == 1.0
+        assert kb.iter_drifted_entries(scope='fn:state_games', only_unreproduced=True) == []

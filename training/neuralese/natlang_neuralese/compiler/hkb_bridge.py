@@ -135,6 +135,12 @@ class ScopedExperienceKB:
             'lift_sum REAL NOT NULL, ema_lift REAL NOT NULL, last_reward REAL NOT NULL, '
             'PRIMARY KEY (scope, record_id))'
         )
+        self.kb.conn.execute(
+            'CREATE TABLE IF NOT EXISTS experience_drift ('
+            'scope TEXT NOT NULL, record_id TEXT NOT NULL, drift_step INTEGER NOT NULL, '
+            'reproduced_step INTEGER NOT NULL, drift_norm REAL NOT NULL, '
+            'PRIMARY KEY (scope, record_id))'
+        )
         self.kb.conn.commit()
 
     def _audit(self) -> None:
@@ -415,5 +421,112 @@ class ScopedExperienceKB:
             'DELETE FROM experience_outcomes WHERE scope=? AND record_id=?',
             removed,
         )
+        self.kb.conn.executemany(
+            'DELETE FROM experience_drift WHERE scope=? AND record_id=?',
+            removed,
+        )
         self.kb.conn.commit()
         return removed
+
+    # ---- Direct KB entry payload updates & drift tracking (EM reproduction targets) ---------------------------------
+    def update_entry_payload(
+        self,
+        scope: str,
+        record_id: str,
+        *,
+        new_value: torch.Tensor | None = None,
+        new_key: torch.Tensor | None = None,
+        new_compacted_state_id: str | None = None,
+        mark_drifted: bool = True,
+    ) -> dict[str, float]:
+        """Update an admitted KB entry's on-disk value/key/Neuralese state and record its drift for reproduction."""
+        if self._readonly:
+            raise ValueError('cannot update entry payload on a readonly ScopedExperienceKB')
+        scope = check_scope(scope)
+        rid = str(record_id)
+        int_id = record_key(scope, rid)
+        fetched = self.kb.fetch_records([int_id], scope=scope)
+        if not fetched:
+            raise KeyError(f'record ({scope!r}, {rid!r}) not found')
+        rec = fetched[0]
+        old_val = rec.value.detach().float().cpu()
+        old_key = rec.key.detach().float().cpu()
+        val = old_val if new_value is None else new_value.detach().float().cpu()
+        key = old_key if new_key is None else F.normalize(new_key.detach().float().cpu(), dim=-1)
+        if val.shape != (self.value_dim,) or not torch.isfinite(val).all():
+            raise ValueError(f'new_value must be finite shape ({self.value_dim},), got {tuple(val.shape)}')
+        if key.shape != (self.key_dim,) or not torch.isfinite(key).all():
+            raise ValueError(f'new_key must be finite shape ({self.key_dim},), got {tuple(key.shape)}')
+        meta = dict(rec.metadata)
+        if new_compacted_state_id is not None:
+            inner = dict(meta.get(META) or {})
+            inner['compacted_state_id'] = new_compacted_state_id
+            meta[META] = inner
+        self.kb.upsert([Record(rec.id, key, val, scope=rec.scope, metadata=meta)])
+        drift_norm = float(torch.linalg.vector_norm(val - old_val).item() + torch.linalg.vector_norm(key - old_key).item())
+        row = self.kb.conn.execute(
+            'SELECT drift_step, reproduced_step FROM experience_drift WHERE scope=? AND record_id=?',
+            (scope, rid),
+        ).fetchone()
+        prev_drift = 0 if row is None else int(row[0])
+        prev_repro = 0 if row is None else int(row[1])
+        next_drift = prev_drift + (1 if mark_drifted else 0)
+        self.kb.conn.execute(
+            'INSERT OR REPLACE INTO experience_drift '
+            '(scope, record_id, drift_step, reproduced_step, drift_norm) VALUES (?, ?, ?, ?, ?)',
+            (scope, rid, next_drift, prev_repro, drift_norm),
+        )
+        self.kb.conn.commit()
+        return {'drift_step': float(next_drift), 'reproduced_step': float(prev_repro), 'drift_norm': drift_norm}
+
+    def iter_drifted_entries(self, *, scope: str | None = None, only_unreproduced: bool = True) -> list[dict]:
+        """Return KB entries whose learned encodings drifted past the encoder's last reproduction pass."""
+        if not self.kb.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='experience_drift'"
+        ).fetchone():
+            return []
+        where = ['drift_step > reproduced_step'] if only_unreproduced else ['drift_step > 0']
+        params: list = []
+        if scope is not None:
+            where.append('scope = ?')
+            params.append(check_scope(scope))
+        rows = self.kb.conn.execute(
+            f'SELECT scope, record_id, drift_step, reproduced_step, drift_norm '
+            f'FROM experience_drift WHERE {" AND ".join(where)} ORDER BY drift_step DESC, drift_norm DESC',
+            tuple(params),
+        ).fetchall()
+        out: list[dict] = []
+        for sc, rid, d_step, r_step, d_norm in rows:
+            fetched = self.kb.fetch_records([record_key(sc, rid)], scope=sc)
+            if not fetched:
+                continue
+            rec = fetched[0]
+            meta = rec.metadata.get(META) or {}
+            out.append({
+                'scope': sc,
+                'record_id': rid,
+                'text': meta.get('text', ''),
+                'kind': meta.get('kind', 'success'),
+                'strength': float(rec.metadata.get(STRENGTH, 1.0)),
+                'key': rec.key.detach().float().cpu(),
+                'value': rec.value.detach().float().cpu(),
+                'compacted_state_id': meta.get('compacted_state_id'),
+                'drift_step': int(d_step),
+                'reproduced_step': int(r_step),
+                'drift_norm': float(d_norm),
+            })
+        return out
+
+    def mark_reproduced(self, pairs: list[tuple[str, str]]) -> int:
+        """Advance ``reproduced_step = drift_step`` after the hindsight encoder reproduces drifted entries."""
+        if self._readonly:
+            raise ValueError('cannot mark reproduced on a readonly ScopedExperienceKB')
+        updated = 0
+        for scope, rid in pairs:
+            cur = self.kb.conn.execute(
+                'UPDATE experience_drift SET reproduced_step = drift_step WHERE scope=? AND record_id=?',
+                (check_scope(scope), str(rid)),
+            )
+            updated += int(cur.rowcount or 0)
+        self.kb.conn.commit()
+        return updated
