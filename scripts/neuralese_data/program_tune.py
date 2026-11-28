@@ -1141,11 +1141,14 @@ def adapt_subspace_cmd(args):
     stats = collections.Counter()
     raw_rows = list(read_rows(Path(args.rollouts)))
     examples = []
+    max_turn_tokens = int(getattr(args, 'max_turn_tokens', 0) or 0)
     for idx, row in enumerate(raw_rows):
         rew = row.get('reward')
         if rew is None or row.get('unscored'):
             continue
         turns = _lower_subspace_rollout_turns(row, stats, states)
+        if max_turn_tokens > 0:
+            turns = [t for t in turns if (len(t['prompt']) + len(t['sample'])) <= max_turn_tokens]
         if not turns:
             continue
         r_val = episode_training_reward(rew.get('quality', 0.0), rew.get('graded'), mode=args.reward)
@@ -1160,7 +1163,7 @@ def adapt_subspace_cmd(args):
     dtype = getattr(torch, args.dtype)
     learner = Lfm3Learner.from_checkpoint(
         args.checkpoint, args.base, AdapterSpec.for_rl(rank=1, trainable_rows=False),
-        device=args.device, dtype=dtype, compile_layers=False,
+        device=args.device, dtype=dtype, compile_layers=(str(args.device).startswith('cuda') and not getattr(args, 'no_compile', False)),
     )
     device = learner.device
 
@@ -1710,6 +1713,9 @@ def main(argv=None):
     asub.add_argument('--eval-every', type=int, default=4)
     asub.add_argument('--min-query-gain', type=float, default=1e-4)
     asub.add_argument('--query-fraction', type=float, default=0.25)
+    asub.add_argument('--max-turn-tokens', type=int, default=6144,
+                      help='drop turns longer than this many prompt+sample tokens (0: no cap)')
+    asub.add_argument('--no-compile', action='store_true', help='disable torch.compile on LFM3 layers')
     asub.add_argument('--device', default='cuda')
     asub.add_argument('--dtype', default='bfloat16')
     cd = sub.add_parser('calibrate-decisions', help='Layer-1 single-pass decision temperature calibration & fast-path gate')

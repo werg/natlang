@@ -491,11 +491,23 @@ def fit_subspace_execution_accum(
     best_c = c0.clone()
     history: list[dict[str, float]] = [{'step': 0.0, 'query_score': base_q, 'query_kl': base_q_kl, 'prox_dist': 0.0}]
     last_sup_loss = float('nan')
+    import json as _json
+    import time as _time
+    print(_json.dumps({'event': 'adapt_subspace_start', 'support': len(support), 'query': len(query),
+                       'num_components': int(num_components), 'steps': int(cfg.steps),
+                       'base_query_score': round(base_q, 6), 'base_query_kl': round(base_q_kl, 6)}), flush=True)
 
     for step in range(1, cfg.steps + 1):
+        t0 = _time.monotonic()
         opt.zero_grad(set_to_none=True)
-        pol_sup, adv_sup, sup_score, sup_kl = _eval_no_grad(c, support)
-        ref_sup = torch.tensor([float(ep['ref_lp']) for ep in support], dtype=torch.float32)
+        if step == 1 and torch.equal(c.detach(), c0):
+            ref_sup = torch.tensor([float(ep['ref_lp']) for ep in support], dtype=torch.float32)
+            pol_sup = ref_sup.clone()
+            adv_sup = _group_advantages(support, pol_sup.device)
+            sup_score, sup_kl = 0.0, 0.0
+        else:
+            pol_sup, adv_sup, sup_score, sup_kl = _eval_no_grad(c, support)
+            ref_sup = torch.tensor([float(ep['ref_lp']) for ep in support], dtype=torch.float32)
         n_sup = float(len(support))
         raw_d = pol_sup - ref_sup
         clipped = raw_d.clamp(-float(cfg.dlogp_clip), float(cfg.dlogp_clip))
@@ -517,6 +529,8 @@ def fit_subspace_execution_accum(
         prox_val = float((0.5 * float(cfg.prox_lambda) * (c.detach() - c0).pow(2).sum()).item())
         last_sup_loss = -sup_score + prox_val
 
+        step_ev = {'event': 'adapt_subspace_step', 'step': step, 'support_loss': round(last_sup_loss, 6),
+                   'support_kl': round(sup_kl, 6), 'seconds': round(_time.monotonic() - t0, 2)}
         if step % cfg.eval_every == 0 or step == cfg.steps:
             _, _, q_score, q_kl = _eval_no_grad(c, query)
             dist = float((c.detach() - c0).norm().item())
@@ -528,10 +542,12 @@ def fit_subspace_execution_accum(
                 'query_kl': q_kl,
                 'prox_dist': dist,
             })
+            step_ev.update({'query_score': round(q_score, 6), 'query_kl': round(q_kl, 6), 'prox_dist': round(dist, 4)})
             if q_score > best_q + cfg.min_query_gain:
                 best_q = q_score
                 best_step = step
                 best_c = c.detach().clone()
+        print(_json.dumps(step_ev), flush=True)
 
     accepted = best_step > 0 and best_q > base_q + cfg.min_query_gain
     return LowDofExecResult(
