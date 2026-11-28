@@ -1078,16 +1078,44 @@ def grpo_program(args):
     return int(proc.returncode)
 
 
+def _lower_subspace_rollout_turns(row: dict, stats, states=None) -> list[dict]:
+    """Extract tokenized (prompt, sample) turns from either real grpo.py rollouts (via lower_rollout_turns)
+    or pre-tokenized {'prompt_ids', 'sample_ids'} test rows."""
+    raw_turns = row.get('turns') or ()
+    pre = [
+        {'prompt': [int(x) for x in t['prompt_ids']], 'sample': [int(x) for x in t['sample_ids']]}
+        for t in raw_turns
+        if t.get('prompt_ids') and t.get('sample_ids')
+    ]
+    if pre:
+        return pre
+    from grpo import trainable_rows
+    from lower_rollout_turns import episode_turns
+    calls = episode_turns(row, stats, states) if raw_turns else []
+    rows = trainable_rows(calls, stats)
+    out = []
+    for r in rows:
+        if r.get('imports'):
+            continue  # pure-token turns for O(1)-VRAM subspace scoring
+        p = [int(x) for x in r['prompt'].tolist()]
+        s = [int(x) for x in r['sample'].tolist()]
+        if p and s:
+            out.append({'prompt': p, 'sample': s})
+    return out
+
+
 def adapt_subspace_cmd(args):
     """Execution-grounded low-DOF subspace adaptation over a shared Mode-P LoRA basis (tune.low_dof).
 
-    Loads a shared ``FactorSubspaceBasis`` extracted from verified workflow LoRAs, scores on-policy support rollouts
-    (JSONL/zst rows carrying ``turns`` + ``reward``) under the frozen base + ``K`` scalar subspace coefficients, runs
-    KL-anchored advantage-weighted optimization gated by a mandatory held-out query split, and exports standard Mode-P
-    LoRA factors (``adapter_factors_fp32.safetensors`` + ``policy_manifest.json``) when accepted.
+    Loads a shared ``FactorSubspaceBasis`` extracted from verified workflow LoRAs, lowers real on-policy support
+    rollouts (``rollouts.jsonl[.zst]`` via ``lower_rollout_turns.episode_turns``), runs O(1)-turn-VRAM
+    KL-anchored advantage-weighted optimization gated by a mandatory held-out query split, and exports standard
+    Mode-P LoRA factors (``adapter_factors_fp32.safetensors`` + ``policy_manifest.json``) when accepted.
     """
+    import collections
     import torch
     from grpo import episode_training_reward
+    from lower_rollout_turns import NativeStates
     from natlang_neuralese.rl.episode_files import read_rows
     from natlang_neuralese.train.lfm3_fast import token_logprobs
     from natlang_neuralese.train.lfm3_learner import AdapterSpec, LayerAdapterBundle, Lfm3Learner, LinearFactorLeaf
@@ -1096,17 +1124,19 @@ def adapt_subspace_cmd(args):
         LowDofExecConfig,
         compose_subspace_factors,
         export_subspace_factors,
-        fit_subspace_execution,
+        fit_subspace_execution_accum,
     )
 
     basis = FactorSubspaceBasis.load(args.basis)
+    states = NativeStates(args.store_dir) if getattr(args, 'store_dir', None) else None
+    stats = collections.Counter()
     raw_rows = list(read_rows(Path(args.rollouts)))
     examples = []
     for idx, row in enumerate(raw_rows):
         rew = row.get('reward')
         if rew is None or row.get('unscored'):
             continue
-        turns = [t for t in (row.get('turns') or ()) if t.get('prompt_ids') and t.get('sample_ids')]
+        turns = _lower_subspace_rollout_turns(row, stats, states)
         if not turns:
             continue
         r_val = episode_training_reward(rew.get('quality', 0.0), rew.get('graded'), mode=args.reward)
@@ -1116,7 +1146,7 @@ def adapt_subspace_cmd(args):
             'turns': turns,
         })
     if len(examples) < 2:
-        raise SystemExit(f'{args.rollouts}: need >= 2 scored rollouts with prompt_ids/sample_ids, got {len(examples)}')
+        raise SystemExit(f'{args.rollouts}: need >= 2 lowerable scored rollouts, got {len(examples)} (stats={dict(stats)})')
 
     dtype = getattr(torch, args.dtype)
     learner = Lfm3Learner.from_checkpoint(
@@ -1125,20 +1155,15 @@ def adapt_subspace_cmd(args):
     )
     device = learner.device
 
-    # Precompute frozen reference mean log-prob per episode once (zero extra forward passes during inner loop).
-    def _episode_logp(ep, adapters):
-        totals = []
-        for turn in ep['turns']:
-            p_ids = [int(x) for x in turn['prompt_ids']]
-            s_ids = [int(x) for x in turn['sample_ids']]
-            seq = torch.tensor(p_ids + s_ids, dtype=torch.long, device=device)
-            lp = token_logprobs(learner.model, seq, len(p_ids), adapters=adapters, trainable_rows=False)
-            totals.append(lp.mean())
-        return torch.stack(totals).mean()
+    def _turn_logp(turn: dict, adapters):
+        p_ids = turn['prompt']
+        s_ids = turn['sample']
+        seq = torch.tensor(p_ids + s_ids, dtype=torch.long, device=device)
+        return token_logprobs(learner.model, seq, len(p_ids), adapters=adapters, trainable_rows=False).mean()
 
     with torch.no_grad():
         for ep in examples:
-            ep['ref_lp'] = float(_episode_logp(ep, ()).item())
+            ep['ref_lp'] = sum(float(_turn_logp(t, ()).item()) for t in ep['turns']) / len(ep['turns'])
 
     def _build_bundles(coeffs: torch.Tensor) -> tuple[LayerAdapterBundle, ...]:
         factors = compose_subspace_factors(basis, coeffs.to(device))
@@ -1152,11 +1177,8 @@ def adapt_subspace_cmd(args):
             for idx, layer in enumerate(learner.model.model.layers)
         )
 
-    def score_fn(coeffs: torch.Tensor, batch: list[dict]):
-        bundles = _build_bundles(coeffs)
-        pol = torch.stack([_episode_logp(ep, bundles) for ep in batch], dim=0)
-        ref = torch.tensor([ep['ref_lp'] for ep in batch], dtype=torch.float32, device=device)
-        return pol, ref
+    def turn_logp_fn(coeffs: torch.Tensor, turn: dict):
+        return _turn_logp(turn, _build_bundles(coeffs))
 
     cfg = LowDofExecConfig(
         steps=int(args.steps),
@@ -1167,7 +1189,7 @@ def adapt_subspace_cmd(args):
         min_query_gain=float(args.min_query_gain),
         query_fraction=float(args.query_fraction),
     )
-    res = fit_subspace_execution(score_fn, examples, num_components=basis.num_components, cfg=cfg)
+    res = fit_subspace_execution_accum(turn_logp_fn, examples, num_components=basis.num_components, cfg=cfg)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     exported = None
@@ -1200,6 +1222,7 @@ def extract_basis_cmd(args):
         args.factors,
         max_rank=int(args.max_rank),
         max_components=int(args.max_components),
+        include_family_slices=bool(getattr(args, 'family_slices', True)),
     )
     out = basis.save(args.out)
     report = {
@@ -1417,9 +1440,12 @@ def main(argv=None):
     eb.add_argument('--out', required=True, help='output directory for subspace_basis_fp32.safetensors + subspace_basis.json')
     eb.add_argument('--max-rank', type=int, default=16)
     eb.add_argument('--max-components', type=int, default=32)
+    eb.add_argument('--no-family-slices', dest='family_slices', action='store_false', default=True,
+                    help='disable per-family x layer-band basis expansion (use donor SVD directions only)')
     asub = sub.add_parser('adapt-subspace', help='execution-grounded low-DOF adaptation over a shared Mode-P LoRA subspace')
     asub.add_argument('--basis', required=True, help='FactorSubspaceBasis directory from extract-basis')
-    asub.add_argument('--rollouts', required=True, help='scored on-policy rollouts JSONL/zst with prompt_ids/sample_ids')
+    asub.add_argument('--rollouts', required=True, help='scored on-policy rollouts JSONL/zst')
+    asub.add_argument('--store-dir', help='optional actor native block store directory for lowering native_state turns')
     asub.add_argument('--checkpoint', required=True, help='start policy native checkpoint')
     asub.add_argument('--base', required=True, help='HF base model directory')
     asub.add_argument('--out', required=True, help='output directory for adapt-report.json and collapsed Mode-P LoRA factors')

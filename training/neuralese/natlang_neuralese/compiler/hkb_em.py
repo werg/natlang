@@ -231,6 +231,38 @@ class ReproductionConfig:
     mark_after: bool = True
 
 
+def reproduction_loss(
+    writer,
+    engine,
+    kb,
+    *,
+    scope: str | None = None,
+    only_unreproduced: bool = True,
+    key_weight: float = 0.5,
+    max_tokens: int = 128,
+) -> tuple[torch.Tensor | None, list[tuple[str, str]], dict[str, float]]:
+    """Differentiable M-step reproduction loss over unreproduced drifted KB entries.
+
+    Returns ``(loss_tensor, pairs, stats)`` WITHOUT stepping any optimizer so callers like ``run_t2.py`` can
+    backpropagate reproduction directly into their single ``MasterAdamW`` (avoiding dual FP32-master-copy conflicts).
+    """
+    entries = [e for e in kb.iter_drifted_entries(scope=scope, only_unreproduced=only_unreproduced) if e.get('text')]
+    if not entries:
+        return None, [], {'entries': 0.0, 'loss': 0.0}
+    texts = [e['text'] for e in entries]
+    device = next(writer.parameters()).device
+    target_z = torch.stack([e['value'].to(device=device, dtype=torch.float32) for e in entries], dim=0)
+    target_k = F.normalize(torch.stack([e['key'].to(device=device, dtype=torch.float32) for e in entries], dim=-1 if False else 0), dim=-1)
+    weights = torch.tensor([max(1e-3, float(e.get('strength', 1.0))) for e in entries], dtype=torch.float32, device=device)
+    weights = weights / weights.sum()
+    pred_z, pred_k = writer.encode_experience_texts(engine, texts, max_tokens=max_tokens)
+    val_err = (pred_z - target_z).pow(2).mean(dim=-1)
+    key_err = 1.0 - (F.normalize(pred_k, dim=-1) * target_k).sum(dim=-1)
+    loss = (weights * (val_err + float(key_weight) * key_err)).sum()
+    pairs = [(e['scope'], e['record_id']) for e in entries]
+    return loss, pairs, {'entries': float(len(entries)), 'loss': float(loss.detach().item())}
+
+
 def reproduction_step(
     writer,
     engine,

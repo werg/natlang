@@ -94,12 +94,18 @@ def test_low_dof_basis_extraction_roundtrip_and_export(tmp_path):
     d1 = _write_fake_factors(tmp_path / 'donor1', seed=1)
     d2 = _write_fake_factors(tmp_path / 'donor2', seed=2)
 
+    basis_plain = extract_factor_basis(
+        [tmp_path / 'donor1', tmp_path / 'donor2'], max_rank=8, max_components=4, include_family_slices=False
+    )
+    assert basis_plain.num_components == 2
+
+    # With default family slices enabled, even 2 donors expand into >= 3 orthonormal structured directions.
     basis = extract_factor_basis([tmp_path / 'donor1', tmp_path / 'donor2'], max_rank=8, max_components=4)
-    assert basis.num_components == 2
+    assert basis.num_components >= 3
 
     saved = basis.save(tmp_path / 'basis')
     reloaded = basis.load(saved)
-    assert reloaded.num_components == 2
+    assert reloaded.num_components == basis.num_components
 
     # Each donor lies exactly in the 2-component span: projecting d1 onto components recovers d1 exactly.
     flat_d1 = torch.cat([
@@ -119,7 +125,32 @@ def test_low_dof_basis_extraction_roundtrip_and_export(tmp_path):
     out_dir = export_subspace_factors(reloaded, coeffs, tmp_path / 'exported')
     assert (out_dir / 'adapter_factors_fp32.safetensors').exists()
     manifest = json.loads((out_dir / 'policy_manifest.json').read_text())
-    assert len(manifest['subspace_coeffs']) == 2
+    assert len(manifest['subspace_coeffs']) == reloaded.num_components
+
+
+def test_low_dof_execution_accum_matches_full_batch_and_rejects_overfit():
+    from natlang_neuralese.tune.low_dof import fit_subspace_execution_accum
+
+    true_dir = torch.tensor([1.0, -0.5, 0.25, 0.0])
+    examples = []
+    g = torch.Generator().manual_seed(7)
+    for task_idx in range(8):
+        pos = true_dir + 0.25 * torch.randn((4,), generator=g)
+        neg = -true_dir + 0.25 * torch.randn((4,), generator=g)
+        examples.append({'group': f'task-{task_idx}', 'ref_lp': 0.0, 'turns': [{'feat': pos}], 'reward': 1.0})
+        examples.append({'group': f'task-{task_idx}', 'ref_lp': 0.0, 'turns': [{'feat': neg}], 'reward': 0.0})
+
+    cfg = LowDofExecConfig(steps=16, lr=0.1, kl_beta=0.02, prox_lambda=0.01, eval_every=4)
+    res_full = fit_subspace_execution(
+        lambda c, b: (torch.stack([e['turns'][0]['feat'] for e in b]) @ c, torch.zeros(len(b))),
+        examples, num_components=4, cfg=cfg,
+    )
+    res_acc = fit_subspace_execution_accum(
+        lambda c, t: t['feat'] @ c,
+        examples, num_components=4, cfg=cfg,
+    )
+    assert res_acc.accepted is True
+    assert torch.allclose(res_acc.coeffs_best, res_full.coeffs_best, atol=1e-4)
 
 
 def test_low_dof_execution_accepts_signal_and_rejects_overfit():
@@ -348,9 +379,10 @@ def test_hkb_two_mode_encoding_and_alternating_em_reproduction(tmp_path):
 
 def test_run_t2_em_flags_and_program_tune_adapt_subspace_cli():
     from natlang_neuralese.compiler import run_t2
-    # Verify run_t2 exposes alternating EM defaults and adapt-subspace subcommand is registered cleanly.
     import inspect
     assert hasattr(run_t2, '_em_entry_drift_and_repro')
     sig = inspect.signature(run_t2._em_entry_drift_and_repro)
-    assert 'repro_steps' in sig.parameters and 'entry_steps' in sig.parameters
+    assert 'repro_optimizer' not in sig.parameters  # single MasterAdamW only
+    assert 'support_batch' in sig.parameters and 'query_batch' in sig.parameters and 'repro_weight' in sig.parameters
     assert hasattr(program_tune, 'adapt_subspace_cmd')
+    assert hasattr(program_tune, '_lower_subspace_rollout_turns')

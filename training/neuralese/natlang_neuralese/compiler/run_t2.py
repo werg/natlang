@@ -569,7 +569,6 @@ def _em_entry_drift_and_repro(
     engine,
     head,
     writer,
-    repro_optimizer,
     em_kb,
     sites,
     peer_clusters: list[list[dict]],
@@ -580,21 +579,33 @@ def _em_entry_drift_and_repro(
     entry_steps: int = 8,
     entry_lr: float = 0.05,
     prox_lambda: float = 0.05,
-    repro_steps: int = 8,
+    support_batch: int = 4,
+    query_batch: int = 2,
+    repro_weight: float = 0.5,
     repro_key_weight: float = 0.5,
-) -> dict:
-    """Mode-2 EM cycle inside ``run_t2``: E-step (direct KB entry drift with held-query gate) -> M-step (reproduction)."""
+) -> tuple[dict, list[tuple[str, str]]]:
+    """Mode-2 EM cycle inside ``run_t2`` using the main loop's SINGLE ``MasterAdamW`` (zero dual-master conflict).
+
+    1. E-step: pick a peer cluster with >= 3 disjoint tasks (1 source + mini-batch of support peers + held-out query
+       peers), optimize ONLY ``z_entry`` across all support peers with proximal L2 anchor, and persist to ``em_kb``
+       strictly when mean held-out query loss improves.
+    2. M-step: compute differentiable ``reproduction_loss`` over all unreproduced drifted entries and backprop
+       ``repro_weight * loss`` straight into ``writer`` so the main single ``optimizer.step()`` applies the update.
+    Returns ``(report_dict, pairs_to_mark_reproduced_after_step)``.
+    """
     from .compiled_site import site_loss
     from .hkb_bridge import ExperienceEntry, record_key
-    from .hkb_em import ReproductionConfig, reproduction_step
+    from .hkb_em import reproduction_loss
 
     e_accepted = False
     e_query_gain = 0.0
     e_drift_norm = 0.0
+    e_sup_n = 0
+    e_qry_n = 0
 
     if peer_clusters:
         cluster = rng.choice(peer_clusters)
-        # Partition by task so source, support, and query are strictly disjoint tasks (zero self-leakage).
+        # Partition strictly by task id so source, support batch, and query batch have zero task overlap.
         by_task: dict[str, list[dict]] = {}
         for row in cluster:
             by_task.setdefault(str(row['task']), []).append(row)
@@ -602,8 +613,12 @@ def _em_entry_drift_and_repro(
         if len(task_ids) >= 3:
             rng.shuffle(task_ids)
             src_row = by_task[task_ids[0]][0]
-            sup_row = by_task[task_ids[1]][0]
-            qry_row = by_task[task_ids[2]][0]
+            remaining = task_ids[1:]
+            n_qry = max(1, min(int(query_batch), len(remaining) // 3 or 1))
+            qry_rows = [by_task[tid][0] for tid in remaining[:n_qry]]
+            sup_rows = [by_task[tid][0] for tid in remaining[n_qry:n_qry + max(1, int(support_batch))]]
+            e_sup_n, e_qry_n = len(sup_rows), len(qry_rows)
+
             src_text = _experience_summary(src_row['header'], src_row['target'])
             scope = f"fn:{src_row['site'][:12]}"
             rid = src_row['key']
@@ -622,55 +637,63 @@ def _em_entry_drift_and_repro(
                     text=src_text, task_ids=(str(src_row['task']),), strength=1.0,
                 ))
 
-            # E-step: freeze head/basis/writer, optimize ONLY z_entry on support peer, gate strictly on query peer.
+            # E-step: freeze head/basis/writer, optimize ONLY z_entry across the support mini-batch, gate on query batch.
             with _frozen(head, basis_module, writer):
                 w_kb = torch.ones((1, 1), dtype=torch.float32, device=device)
                 v_kb = torch.ones((1, 1), dtype=torch.bool, device=device)
                 k_fixed = k0.view(1, 1, -1)
+
+                def _mean_query(z_vec: torch.Tensor) -> float:
+                    vals = [
+                        site_loss(
+                            engine, head, sites.row(qr), adapter_id=adapter_id, init_block=sites.block(qr),
+                            basis_module=basis_module, z_kb=z_vec.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb,
+                            kb_valid=v_kb, backward=False,
+                        )
+                        for qr in qry_rows
+                    ]
+                    return sum(vals) / len(vals)
+
                 with torch.no_grad():
-                    base_q = site_loss(
-                        engine, head, sites.row(qry_row), adapter_id=adapter_id, init_block=sites.block(qry_row),
-                        basis_module=basis_module, z_kb=z0.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb, kb_valid=v_kb,
-                        backward=False,
-                    )
+                    base_q = _mean_query(z0)
                 z_opt = z0.clone().requires_grad_(True)
                 z_optim = torch.optim.AdamW([z_opt], lr=entry_lr, weight_decay=0.0)
+                inv_sup = 1.0 / len(sup_rows)
                 for _ in range(max(1, int(entry_steps))):
                     z_optim.zero_grad(set_to_none=True)
-                    site_loss(
-                        engine, head, sites.row(sup_row), adapter_id=adapter_id, init_block=sites.block(sup_row),
-                        basis_module=basis_module, z_kb=z_opt.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb, kb_valid=v_kb,
-                        backward=True,
-                    )
+                    for sr in sup_rows:
+                        site_loss(
+                            engine, head, sites.row(sr), adapter_id=adapter_id, init_block=sites.block(sr),
+                            basis_module=basis_module, z_kb=z_opt.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb,
+                            kb_valid=v_kb, backward=True, scale=inv_sup,
+                        )
                     if prox_lambda > 0.0:
                         (0.5 * float(prox_lambda) * (z_opt - z0).pow(2).sum()).backward()
                     z_optim.step()
                 with torch.no_grad():
-                    new_q = site_loss(
-                        engine, head, sites.row(qry_row), adapter_id=adapter_id, init_block=sites.block(qry_row),
-                        basis_module=basis_module, z_kb=z_opt.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb, kb_valid=v_kb,
-                        backward=False,
-                    )
+                    new_q = _mean_query(z_opt)
                 e_query_gain = float(base_q - new_q)
                 if e_query_gain > 1e-4:
                     upd = em_kb.update_entry_payload(scope, rid, new_value=z_opt.detach().cpu(), mark_drifted=True)
                     e_accepted = True
                     e_drift_norm = float(upd['drift_norm'])
 
-    # M-step: train hindsight encoder to reproduce all unreproduced drifted entries on disk.
-    m_res = reproduction_step(
-        writer, engine, repro_optimizer, em_kb,
-        cfg=ReproductionConfig(steps=int(repro_steps), key_weight=float(repro_key_weight), mark_after=True),
+    # M-step: backprop reproduction loss directly into the single main MasterAdamW step.
+    r_loss, repro_pairs, r_stats = reproduction_loss(
+        writer, engine, em_kb, key_weight=float(repro_key_weight),
     )
+    if r_loss is not None and float(repro_weight) > 0.0:
+        (float(repro_weight) * r_loss).backward()
+
     return {
         'e_accepted': e_accepted,
+        'e_support_tasks': e_sup_n,
+        'e_query_tasks': e_qry_n,
         'e_query_gain': round(e_query_gain, 6),
         'e_drift_norm': round(e_drift_norm, 6),
-        'm_entries': int(m_res['entries']),
-        'm_initial_loss': round(float(m_res['initial_loss']), 6),
-        'm_final_loss': round(float(m_res['final_loss']), 6),
-        'm_marked': int(m_res['marked']),
-    }
+        'm_entries': int(r_stats['entries']),
+        'm_loss': round(float(r_stats['loss']), 6),
+    }, repro_pairs
 
 
 def train(args):
@@ -836,8 +859,9 @@ def train(args):
     # restored writer, refreshed every --kb-index-every steps)
     index = KbIndex(engine, writer, train_rows) if writer is not None and args.kb_index_every > 0 else None
     em_every = int(getattr(args, 'em_every', 0) or 0)
+    em_start_arg = int(getattr(args, 'em_start_step', -1))
+    em_start_step = max(int(args.warmup), 50) if em_start_arg < 0 else em_start_arg
     em_kb = None
-    repro_optimizer = None
     em_peer_clusters: list[list[dict]] = []
     if writer is not None and em_every > 0:
         from .hkb_bridge import HeldAdmission, ScopedExperienceKB
@@ -849,12 +873,6 @@ def train(args):
             key_dim=config.key_dim,
             value_dim=config.value_dim,
         )
-        repro_groups = []
-        if writer.fresh_parameters():
-            repro_groups.append({'params': writer.fresh_parameters(), 'lr': args.lr})
-        if writer.warm_parameters():
-            repro_groups.append({'params': writer.warm_parameters(), 'lr': getattr(args, 'warm_lr', 2e-5)})
-        repro_optimizer = MasterAdamW(repro_groups, weight_decay=args.weight_decay, betas=(.9, .95))
         by_fam: dict[str, list[dict]] = {}
         for r in train_rows:
             by_fam.setdefault(str(r.get('family') or r['site']), []).append(r)
@@ -942,21 +960,26 @@ def train(args):
                 scale=args.comp_weight, kb_args=comp_kb,
             )
 
-        grad_norm = float(torch.nn.utils.clip_grad_norm_(all_params, args.clip))
-        optimizer.step()
-        step += 1
-
         em_report = None
-        if em_kb is not None and repro_optimizer is not None and em_every > 0 and step % em_every == 0:
-            em_report = _em_entry_drift_and_repro(
-                engine, head, writer, repro_optimizer, em_kb, sites, em_peer_clusters,
+        em_repro_pairs: list[tuple[str, str]] = []
+        if em_kb is not None and em_every > 0 and (step + 1) >= em_start_step and (step + 1) % em_every == 0:
+            em_report, em_repro_pairs = _em_entry_drift_and_repro(
+                engine, head, writer, em_kb, sites, em_peer_clusters,
                 adapter_id=adapter_id, basis_module=basis_module, rng=rng,
                 entry_steps=int(getattr(args, 'em_entry_steps', 8)),
                 entry_lr=float(getattr(args, 'em_entry_lr', 0.05)),
                 prox_lambda=float(getattr(args, 'em_prox_lambda', 0.05)),
-                repro_steps=int(getattr(args, 'em_repro_steps', 8)),
+                support_batch=int(getattr(args, 'em_support_batch', 4)),
+                query_batch=int(getattr(args, 'em_query_batch', 2)),
+                repro_weight=float(getattr(args, 'em_repro_weight', 0.5)),
                 repro_key_weight=float(getattr(args, 'em_repro_key_weight', 0.5)),
             )
+
+        grad_norm = float(torch.nn.utils.clip_grad_norm_(all_params, args.clip))
+        optimizer.step()
+        step += 1
+        if em_kb is not None and em_repro_pairs:
+            em_kb.mark_reproduced(em_repro_pairs)
 
         encoder_grad = sum(float(p.grad.norm()) ** 2 for p in head.encoder.parameters() if p.grad is not None) ** .5
         basis_grad = (
@@ -1140,12 +1163,16 @@ def main(argv=None):
     t.add_argument('--comp-every', type=int, default=4)
     t.add_argument('--comp-weight', type=float, default=0.5)
     t.add_argument('--em-every', type=int, default=16,
-                   help='alternating Mode-2 EM cycle (direct KB entry drift + encoder reproduction) every N steps (0: off)')
+                   help='alternating Mode-2 EM cycle (direct KB entry drift + single-optimizer reproduction) every N steps (0: off)')
+    t.add_argument('--em-start-step', type=int, default=-1,
+                   help='first step at which EM runs (default -1: max(--warmup, 50) so head learns to read z_kb first)')
     t.add_argument('--em-kb', type=Path, default=None, help='optional ScopedExperienceKB SQLite path (default: RUN/em-kb.sqlite)')
     t.add_argument('--em-entry-steps', type=int, default=8)
     t.add_argument('--em-entry-lr', type=float, default=0.05)
     t.add_argument('--em-prox-lambda', type=float, default=0.05)
-    t.add_argument('--em-repro-steps', type=int, default=8)
+    t.add_argument('--em-support-batch', type=int, default=4, help='disjoint support peer tasks per E-step')
+    t.add_argument('--em-query-batch', type=int, default=2, help='disjoint held-out query peer tasks per E-step')
+    t.add_argument('--em-repro-weight', type=float, default=0.5, help='M-step reproduction loss weight in main MasterAdamW step')
     t.add_argument('--em-repro-key-weight', type=float, default=0.5)
     t.add_argument('--dev-rows', type=int, default=24)
     t.add_argument('--eval-every', type=int, default=50)

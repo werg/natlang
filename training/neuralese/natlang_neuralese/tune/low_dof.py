@@ -118,13 +118,39 @@ def _orthonormal_span(matrices: list[torch.Tensor], max_rank: int) -> torch.Tens
     return (q @ u_r[:, :k]).contiguous()
 
 
+def _family_and_band(param_name: str, max_layer: int) -> tuple[str, int]:
+    """Bucket a parameter name into (projection family, layer third 0/1/2) for structured low-DOF slicing."""
+    parts = param_name.split('.')
+    layer_idx = 0
+    for i, part in enumerate(parts):
+        if part == 'layers' and i + 1 < len(parts) and parts[i + 1].isdigit():
+            layer_idx = int(parts[i + 1])
+            break
+    if 'self_attn' in param_name:
+        fam = 'self_attn'
+    elif 'conv' in param_name:
+        fam = 'conv'
+    elif 'feed_forward' in param_name or 'mlp' in param_name:
+        fam = 'feed_forward'
+    else:
+        fam = 'other'
+    band = min(2, (3 * layer_idx) // max(1, max_layer + 1))
+    return fam, band
+
+
 def extract_factor_basis(
     factor_dirs: list[str | Path],
     *,
     max_rank: int = 16,
     max_components: int = 32,
+    include_family_slices: bool = True,
 ) -> FactorSubspaceBasis:
-    """Build a shared low-DOF subspace basis from one or more verified Mode-P LoRA factor exports."""
+    """Build a shared low-DOF subspace basis from one or more verified Mode-P LoRA factor exports.
+
+    When ``include_family_slices`` is True and donor SVD yields fewer than ``max_components`` global directions
+    (e.g. cold-start with 1-3 donor workflows), appends orthonormal projection-family x layer-band slices of the
+    top donor direction so ``adapt-subspace`` has structured low-DOF expressivity immediately without overfitting.
+    """
     if not factor_dirs:
         raise ValueError('extract_factor_basis requires at least one factor directory')
     if max_rank < 1 or max_components < 1:
@@ -178,13 +204,45 @@ def extract_factor_basis(
     mat = torch.stack(flat_rows, dim=0)  # [D, total]
     _, s_vals, vh = torch.linalg.svd(mat, full_matrices=False)
     k = max(1, min(int(max_components), int(vh.shape[0])))
-    s_keep = s_vals[:k].contiguous()
-    vh_keep = vh[:k]  # [K, total], each row unit L2 norm across all layers
+    basis_rows = [vh[i].clone() for i in range(k)]
+    s_list = [float(s_vals[i].item()) for i in range(k)]
+
+    if include_family_slices and len(basis_rows) < int(max_components):
+        max_layer = 0
+        for name in target_names:
+            parts = name.split('.')
+            for i, p in enumerate(parts):
+                if p == 'layers' and i + 1 < len(parts) and parts[i + 1].isdigit():
+                    max_layer = max(max_layer, int(parts[i + 1]))
+        buckets: dict[tuple[str, int], list[str]] = {}
+        for name in target_names:
+            buckets.setdefault(_family_and_band(name, max_layer), []).append(name)
+        if len(buckets) > 1:
+            anchor = vh[0]
+            anchor_s = float(s_vals[0].item()) if s_vals.numel() else 1.0
+            for bucket_key in sorted(buckets):
+                if len(basis_rows) >= int(max_components):
+                    break
+                vec = torch.zeros_like(anchor)
+                for name in buckets[bucket_key]:
+                    lo, hi, _ = slices[name]
+                    vec[lo:hi] = anchor[lo:hi]
+                # Modified Gram-Schmidt orthogonalization against existing basis rows
+                for prev in basis_rows:
+                    vec = vec - float((vec @ prev).item()) * prev
+                norm = float(torch.linalg.vector_norm(vec).item())
+                if norm > 1e-5:
+                    basis_rows.append((vec / norm).contiguous())
+                    s_list.append(anchor_s * norm)
+
+    vh_keep = torch.stack(basis_rows, dim=0)
+    s_keep = torch.tensor(s_list, dtype=torch.float32)
+    k_final = vh_keep.shape[0]
 
     components: dict[str, torch.Tensor] = {}
     for name in target_names:
         lo, hi, shape2 = slices[name]
-        components[name] = vh_keep[:, lo:hi].reshape(k, *shape2).contiguous()
+        components[name] = vh_keep[:, lo:hi].reshape(k_final, *shape2).contiguous()
 
     return FactorSubspaceBasis(
         target_names=target_names,
@@ -353,6 +411,111 @@ def fit_subspace_execution(
                 q_tensor, q_kl = _eval_objective(c, query)
                 q_score = float(q_tensor.item())
                 dist = float((c - c0).norm().item())
+            history.append({
+                'step': float(step),
+                'support_loss': last_sup_loss,
+                'support_kl': sup_kl,
+                'query_score': q_score,
+                'query_kl': q_kl,
+                'prox_dist': dist,
+            })
+            if q_score > best_q + cfg.min_query_gain:
+                best_q = q_score
+                best_step = step
+                best_c = c.detach().clone()
+
+    accepted = best_step > 0 and best_q > base_q + cfg.min_query_gain
+    return LowDofExecResult(
+        accepted=accepted,
+        best_step=best_step,
+        base_query_score=base_q,
+        best_query_score=best_q,
+        final_support_loss=last_sup_loss,
+        coeffs_best=best_c if accepted else c0.clone(),
+        history=history,
+    )
+
+
+def fit_subspace_execution_accum(
+    turn_logp_fn,
+    examples: list[dict],
+    *,
+    num_components: int,
+    init_coeffs: torch.Tensor | None = None,
+    cfg: LowDofExecConfig = LowDofExecConfig(),
+) -> LowDofExecResult:
+    """O(1)-turn-VRAM exact gradient-accumulated execution adaptation over ``K`` subspace coefficients.
+
+    Unlike ``fit_subspace_execution`` (which holds an entire batch's autograd graph at once), this runs:
+      1. ``torch.no_grad()`` pass over support episodes to compute exact episode mean log-probs and group-centered
+         advantages + per-episode chain-rule gradient weights ``dL/d(pol_lp_i)``.
+      2. One-turn-at-a-time ``backward()`` pass accumulating exact gradients into ``coeffs.grad`` and freeing each
+         turn's activations immediately — safe for 20k-token multi-turn Natlang episodes on 16-80 GB GPUs.
+    Each example carries ``reward``, ``ref_lp`` (float), ``turns`` (non-empty list), and optional ``group``.
+    ``turn_logp_fn(coeffs, turn) -> scalar_tensor`` returns the mean token log-probability of one turn.
+    """
+    support, query = split_support_and_query(examples, query_fraction=cfg.query_fraction)
+    c0 = (
+        torch.zeros((int(num_components),), dtype=torch.float32)
+        if init_coeffs is None
+        else init_coeffs.detach().float().reshape(-1).clone()
+    )
+    if c0.numel() != int(num_components):
+        raise ValueError(f'init_coeffs length {c0.numel()} != num_components {num_components}')
+    c = c0.clone().requires_grad_(True)
+    opt = torch.optim.AdamW([c], lr=cfg.lr, weight_decay=0.0)
+
+    def _eval_no_grad(c_val: torch.Tensor, batch: list[dict]) -> tuple[torch.Tensor, torch.Tensor, float, float]:
+        pol_vals = []
+        ref_vals = []
+        with torch.no_grad():
+            for ep in batch:
+                turns = ep['turns']
+                t_sum = 0.0
+                for turn in turns:
+                    t_sum += float(turn_logp_fn(c_val, turn).detach().item())
+                pol_vals.append(t_sum / len(turns))
+                ref_vals.append(float(ep['ref_lp']))
+        pol = torch.tensor(pol_vals, dtype=torch.float32)
+        ref = torch.tensor(ref_vals, dtype=torch.float32)
+        adv = _group_advantages(batch, pol.device)
+        dlogp = pol - ref
+        kl_k2 = float((0.5 * dlogp.pow(2).mean()).item())
+        score = float(((adv * dlogp).mean() - float(cfg.kl_beta) * 0.5 * dlogp.pow(2).mean()).item())
+        return pol, adv, score, kl_k2
+
+    _, _, base_q, base_q_kl = _eval_no_grad(c0, query)
+    best_q = base_q
+    best_step = 0
+    best_c = c0.clone()
+    history: list[dict[str, float]] = [{'step': 0.0, 'query_score': base_q, 'query_kl': base_q_kl, 'prox_dist': 0.0}]
+    last_sup_loss = float('nan')
+
+    for step in range(1, cfg.steps + 1):
+        opt.zero_grad(set_to_none=True)
+        pol_sup, adv_sup, sup_score, sup_kl = _eval_no_grad(c, support)
+        ref_sup = torch.tensor([float(ep['ref_lp']) for ep in support], dtype=torch.float32)
+        n_sup = float(len(support))
+        # Exact d(-pg_score)/d(pol_lp_i) = (-adv_i + kl_beta * (pol_lp_i - ref_lp_i)) / N
+        ep_weights = (-adv_sup + float(cfg.kl_beta) * (pol_sup - ref_sup)) / n_sup
+        for ep, w_ep in zip(support, ep_weights.tolist()):
+            if abs(w_ep) < 1e-12:
+                continue
+            turns = ep['turns']
+            turn_w = float(w_ep) / float(len(turns))
+            for turn in turns:
+                (turn_logp_fn(c, turn) * turn_w).backward()
+        if cfg.prox_lambda > 0.0:
+            (0.5 * float(cfg.prox_lambda) * (c - c0).pow(2).sum()).backward()
+        if cfg.clip_norm > 0:
+            torch.nn.utils.clip_grad_norm_([c], cfg.clip_norm)
+        opt.step()
+        prox_val = float((0.5 * float(cfg.prox_lambda) * (c.detach() - c0).pow(2).sum()).item())
+        last_sup_loss = -sup_score + prox_val
+
+        if step % cfg.eval_every == 0 or step == cfg.steps:
+            _, _, q_score, q_kl = _eval_no_grad(c, query)
+            dist = float((c.detach() - c0).norm().item())
             history.append({
                 'step': float(step),
                 'support_loss': last_sup_loss,
