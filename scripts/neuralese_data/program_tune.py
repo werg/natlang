@@ -1078,6 +1078,120 @@ def grpo_program(args):
     return int(proc.returncode)
 
 
+def adapt_subspace_cmd(args):
+    """Execution-grounded low-DOF subspace adaptation over a shared Mode-P LoRA basis (tune.low_dof).
+
+    Loads a shared ``FactorSubspaceBasis`` extracted from verified workflow LoRAs, scores on-policy support rollouts
+    (JSONL/zst rows carrying ``turns`` + ``reward``) under the frozen base + ``K`` scalar subspace coefficients, runs
+    KL-anchored advantage-weighted optimization gated by a mandatory held-out query split, and exports standard Mode-P
+    LoRA factors (``adapter_factors_fp32.safetensors`` + ``policy_manifest.json``) when accepted.
+    """
+    import torch
+    from grpo import episode_training_reward
+    from natlang_neuralese.rl.episode_files import read_rows
+    from natlang_neuralese.train.lfm3_fast import token_logprobs
+    from natlang_neuralese.train.lfm3_learner import AdapterSpec, LayerAdapterBundle, Lfm3Learner, LinearFactorLeaf
+    from natlang_neuralese.tune.low_dof import (
+        FactorSubspaceBasis,
+        LowDofExecConfig,
+        compose_subspace_factors,
+        export_subspace_factors,
+        fit_subspace_execution,
+    )
+
+    basis = FactorSubspaceBasis.load(args.basis)
+    raw_rows = list(read_rows(Path(args.rollouts)))
+    examples = []
+    for idx, row in enumerate(raw_rows):
+        rew = row.get('reward')
+        if rew is None or row.get('unscored'):
+            continue
+        turns = [t for t in (row.get('turns') or ()) if t.get('prompt_ids') and t.get('sample_ids')]
+        if not turns:
+            continue
+        r_val = episode_training_reward(rew.get('quality', 0.0), rew.get('graded'), mode=args.reward)
+        examples.append({
+            'group': str(row.get('task_id') or f'task-{idx}'),
+            'reward': float(r_val),
+            'turns': turns,
+        })
+    if len(examples) < 2:
+        raise SystemExit(f'{args.rollouts}: need >= 2 scored rollouts with prompt_ids/sample_ids, got {len(examples)}')
+
+    dtype = getattr(torch, args.dtype)
+    learner = Lfm3Learner.from_checkpoint(
+        args.checkpoint, args.base, AdapterSpec.for_rl(rank=1, trainable_rows=False),
+        device=args.device, dtype=dtype, compile_layers=False,
+    )
+    device = learner.device
+
+    # Precompute frozen reference mean log-prob per episode once (zero extra forward passes during inner loop).
+    def _episode_logp(ep, adapters):
+        totals = []
+        for turn in ep['turns']:
+            p_ids = [int(x) for x in turn['prompt_ids']]
+            s_ids = [int(x) for x in turn['sample_ids']]
+            seq = torch.tensor(p_ids + s_ids, dtype=torch.long, device=device)
+            lp = token_logprobs(learner.model, seq, len(p_ids), adapters=adapters, trainable_rows=False)
+            totals.append(lp.mean())
+        return torch.stack(totals).mean()
+
+    with torch.no_grad():
+        for ep in examples:
+            ep['ref_lp'] = float(_episode_logp(ep, ()).item())
+
+    def _build_bundles(coeffs: torch.Tensor) -> tuple[LayerAdapterBundle, ...]:
+        factors = compose_subspace_factors(basis, coeffs.to(device))
+        per_layer: dict[int, dict[str, LinearFactorLeaf]] = {i: {} for i in range(len(learner.model.model.layers))}
+        for param_name, (layer_idx, _kind, short_name) in learner.target_map.items():
+            if param_name in factors:
+                b, a = factors[param_name]
+                per_layer[layer_idx][short_name] = LinearFactorLeaf(a=a, b=b, scale=1.0)
+        return tuple(
+            LayerAdapterBundle(layer_idx=idx, layer_kind=('attn' if layer.is_attention_layer else 'conv'), **per_layer[idx])
+            for idx, layer in enumerate(learner.model.model.layers)
+        )
+
+    def score_fn(coeffs: torch.Tensor, batch: list[dict]):
+        bundles = _build_bundles(coeffs)
+        pol = torch.stack([_episode_logp(ep, bundles) for ep in batch], dim=0)
+        ref = torch.tensor([ep['ref_lp'] for ep in batch], dtype=torch.float32, device=device)
+        return pol, ref
+
+    cfg = LowDofExecConfig(
+        steps=int(args.steps),
+        lr=float(args.lr),
+        kl_beta=float(args.kl_beta),
+        prox_lambda=float(args.prox_lambda),
+        eval_every=int(args.eval_every),
+        min_query_gain=float(args.min_query_gain),
+        query_fraction=float(args.query_fraction),
+    )
+    res = fit_subspace_execution(score_fn, examples, num_components=basis.num_components, cfg=cfg)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    exported = None
+    if res.accepted:
+        exported = str(export_subspace_factors(basis, res.coeffs_best, out))
+    report = {
+        'schema': 'natlang.program-adapt-subspace/1',
+        'basis': str(Path(args.basis).resolve()),
+        'rollouts': str(Path(args.rollouts).resolve()),
+        'examples': len(examples),
+        'num_components': basis.num_components,
+        'accepted': bool(res.accepted),
+        'best_step': int(res.best_step),
+        'base_query_score': round(float(res.base_query_score), 6),
+        'best_query_score': round(float(res.best_query_score), 6),
+        'coeffs': [round(float(x), 8) for x in res.coeffs_best.detach().cpu().tolist()],
+        'exported_factors': exported,
+        'history': res.history,
+    }
+    (out / 'adapt-report.json').write_text(json.dumps(report, indent=1) + '\n', encoding='utf-8')
+    print(json.dumps(report))
+    return 0
+
+
 def extract_basis_cmd(args):
     """Extract a shared low-DOF Mode-P LoRA subspace basis from verified workflow factor exports."""
     from natlang_neuralese.tune.low_dof import extract_factor_basis
@@ -1303,6 +1417,22 @@ def main(argv=None):
     eb.add_argument('--out', required=True, help='output directory for subspace_basis_fp32.safetensors + subspace_basis.json')
     eb.add_argument('--max-rank', type=int, default=16)
     eb.add_argument('--max-components', type=int, default=32)
+    asub = sub.add_parser('adapt-subspace', help='execution-grounded low-DOF adaptation over a shared Mode-P LoRA subspace')
+    asub.add_argument('--basis', required=True, help='FactorSubspaceBasis directory from extract-basis')
+    asub.add_argument('--rollouts', required=True, help='scored on-policy rollouts JSONL/zst with prompt_ids/sample_ids')
+    asub.add_argument('--checkpoint', required=True, help='start policy native checkpoint')
+    asub.add_argument('--base', required=True, help='HF base model directory')
+    asub.add_argument('--out', required=True, help='output directory for adapt-report.json and collapsed Mode-P LoRA factors')
+    asub.add_argument('--reward', choices=('binary', 'graded', 'bounded-graded'), default='bounded-graded')
+    asub.add_argument('--steps', type=int, default=24)
+    asub.add_argument('--lr', type=float, default=0.05)
+    asub.add_argument('--kl-beta', type=float, default=0.01)
+    asub.add_argument('--prox-lambda', type=float, default=0.05)
+    asub.add_argument('--eval-every', type=int, default=4)
+    asub.add_argument('--min-query-gain', type=float, default=1e-4)
+    asub.add_argument('--query-fraction', type=float, default=0.25)
+    asub.add_argument('--device', default='cuda')
+    asub.add_argument('--dtype', default='bfloat16')
     cd = sub.add_parser('calibrate-decisions', help='Layer-1 single-pass decision temperature calibration & fast-path gate')
     cd.add_argument('--dir', required=True)
     cd.add_argument('--rows', required=True, help='JSONL of {"option_logits", "target", "labels"} for fitting T_f')
@@ -1394,6 +1524,7 @@ def main(argv=None):
               'bank': bank, 'colab-fit': colab_fit, 'colab-measure': colab_measure, 'colab-bank': colab_bank,
               'subset': subset, 'merge': merge_release, 'grpo': grpo_program,
               'extract-basis': extract_basis_cmd,
+              'adapt-subspace': adapt_subspace_cmd,
               'calibrate-decisions': calibrate_decisions}[args.command](args)
     return status if isinstance(status, int) else 0
 

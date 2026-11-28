@@ -344,3 +344,13 @@ def test_hkb_two_mode_encoding_and_alternating_em_reproduction(tmp_path):
         assert m_res['final_loss'] < m_res['initial_loss'] * 0.25
         assert m_res['marked'] == 1.0
         assert kb.iter_drifted_entries(scope='fn:state_games', only_unreproduced=True) == []
+
+
+def test_run_t2_em_flags_and_program_tune_adapt_subspace_cli():
+    from natlang_neuralese.compiler import run_t2
+    # Verify run_t2 exposes alternating EM defaults and adapt-subspace subcommand is registered cleanly.
+    import inspect
+    assert hasattr(run_t2, '_em_entry_drift_and_repro')
+    sig = inspect.signature(run_t2._em_entry_drift_and_repro)
+    assert 'repro_steps' in sig.parameters and 'entry_steps' in sig.parameters
+    assert hasattr(program_tune, 'adapt_subspace_cmd')

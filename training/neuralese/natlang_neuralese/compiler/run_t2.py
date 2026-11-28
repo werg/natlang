@@ -565,6 +565,114 @@ def _compositional_step(engine, head, sites, row, *, adapter_id, basis_module, s
                      apply_dropout=False, backward=True, scale=scale, **(kb_args or {}))
 
 
+def _em_entry_drift_and_repro(
+    engine,
+    head,
+    writer,
+    repro_optimizer,
+    em_kb,
+    sites,
+    peer_clusters: list[list[dict]],
+    *,
+    adapter_id: str,
+    basis_module,
+    rng: random.Random,
+    entry_steps: int = 8,
+    entry_lr: float = 0.05,
+    prox_lambda: float = 0.05,
+    repro_steps: int = 8,
+    repro_key_weight: float = 0.5,
+) -> dict:
+    """Mode-2 EM cycle inside ``run_t2``: E-step (direct KB entry drift with held-query gate) -> M-step (reproduction)."""
+    from .compiled_site import site_loss
+    from .hkb_bridge import ExperienceEntry, record_key
+    from .hkb_em import ReproductionConfig, reproduction_step
+
+    e_accepted = False
+    e_query_gain = 0.0
+    e_drift_norm = 0.0
+
+    if peer_clusters:
+        cluster = rng.choice(peer_clusters)
+        # Partition by task so source, support, and query are strictly disjoint tasks (zero self-leakage).
+        by_task: dict[str, list[dict]] = {}
+        for row in cluster:
+            by_task.setdefault(str(row['task']), []).append(row)
+        task_ids = list(by_task.keys())
+        if len(task_ids) >= 3:
+            rng.shuffle(task_ids)
+            src_row = by_task[task_ids[0]][0]
+            sup_row = by_task[task_ids[1]][0]
+            qry_row = by_task[task_ids[2]][0]
+            src_text = _experience_summary(src_row['header'], src_row['target'])
+            scope = f"fn:{src_row['site'][:12]}"
+            rid = src_row['key']
+            fetched = em_kb.kb.fetch_records([record_key(scope, rid)], scope=scope)
+            device = next(head.parameters()).device
+            if fetched:
+                z0 = fetched[0].value.detach().float().to(device)
+                k0 = fetched[0].key.detach().float().to(device)
+            else:
+                with torch.no_grad():
+                    z_init, k_init = writer.encode_experience_texts(engine, [src_text])
+                z0 = z_init[0].detach().float().to(device)
+                k0 = k_init[0].detach().float().to(device)
+                em_kb.add(ExperienceEntry(
+                    record_id=rid, scope=scope, key=k0.cpu(), value=z0.cpu(),
+                    text=src_text, task_ids=(str(src_row['task']),), strength=1.0,
+                ))
+
+            # E-step: freeze head/basis/writer, optimize ONLY z_entry on support peer, gate strictly on query peer.
+            with _frozen(head, basis_module, writer):
+                w_kb = torch.ones((1, 1), dtype=torch.float32, device=device)
+                v_kb = torch.ones((1, 1), dtype=torch.bool, device=device)
+                k_fixed = k0.view(1, 1, -1)
+                with torch.no_grad():
+                    base_q = site_loss(
+                        engine, head, sites.row(qry_row), adapter_id=adapter_id, init_block=sites.block(qry_row),
+                        basis_module=basis_module, z_kb=z0.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb, kb_valid=v_kb,
+                        backward=False,
+                    )
+                z_opt = z0.clone().requires_grad_(True)
+                z_optim = torch.optim.AdamW([z_opt], lr=entry_lr, weight_decay=0.0)
+                for _ in range(max(1, int(entry_steps))):
+                    z_optim.zero_grad(set_to_none=True)
+                    site_loss(
+                        engine, head, sites.row(sup_row), adapter_id=adapter_id, init_block=sites.block(sup_row),
+                        basis_module=basis_module, z_kb=z_opt.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb, kb_valid=v_kb,
+                        backward=True,
+                    )
+                    if prox_lambda > 0.0:
+                        (0.5 * float(prox_lambda) * (z_opt - z0).pow(2).sum()).backward()
+                    z_optim.step()
+                with torch.no_grad():
+                    new_q = site_loss(
+                        engine, head, sites.row(qry_row), adapter_id=adapter_id, init_block=sites.block(qry_row),
+                        basis_module=basis_module, z_kb=z_opt.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb, kb_valid=v_kb,
+                        backward=False,
+                    )
+                e_query_gain = float(base_q - new_q)
+                if e_query_gain > 1e-4:
+                    upd = em_kb.update_entry_payload(scope, rid, new_value=z_opt.detach().cpu(), mark_drifted=True)
+                    e_accepted = True
+                    e_drift_norm = float(upd['drift_norm'])
+
+    # M-step: train hindsight encoder to reproduce all unreproduced drifted entries on disk.
+    m_res = reproduction_step(
+        writer, engine, repro_optimizer, em_kb,
+        cfg=ReproductionConfig(steps=int(repro_steps), key_weight=float(repro_key_weight), mark_after=True),
+    )
+    return {
+        'e_accepted': e_accepted,
+        'e_query_gain': round(e_query_gain, 6),
+        'e_drift_norm': round(e_drift_norm, 6),
+        'm_entries': int(m_res['entries']),
+        'm_initial_loss': round(float(m_res['initial_loss']), 6),
+        'm_final_loss': round(float(m_res['final_loss']), 6),
+        'm_marked': int(m_res['marked']),
+    }
+
+
 def train(args):
     from ..common.code_provenance import code_provenance
     from ..common.hashing import sha256_file_hex
@@ -727,6 +835,31 @@ def train(args):
     # the writer's keys of the train pool: positives are filled by similarity from it (rebuilt on a resume from the
     # restored writer, refreshed every --kb-index-every steps)
     index = KbIndex(engine, writer, train_rows) if writer is not None and args.kb_index_every > 0 else None
+    em_every = int(getattr(args, 'em_every', 0) or 0)
+    em_kb = None
+    repro_optimizer = None
+    em_peer_clusters: list[list[dict]] = []
+    if writer is not None and em_every > 0:
+        from .hkb_bridge import HeldAdmission, ScopedExperienceKB
+        em_kb_path = getattr(args, 'em_kb', None) or (run / 'em-kb.sqlite')
+        train_task_ids = frozenset(str(r['task']) for r in train_rows)
+        em_kb = ScopedExperienceKB(
+            em_kb_path,
+            admission=HeldAdmission(known=train_task_ids, excluded=frozenset()),
+            key_dim=config.key_dim,
+            value_dim=config.value_dim,
+        )
+        repro_groups = []
+        if writer.fresh_parameters():
+            repro_groups.append({'params': writer.fresh_parameters(), 'lr': args.lr})
+        if writer.warm_parameters():
+            repro_groups.append({'params': writer.warm_parameters(), 'lr': getattr(args, 'warm_lr', 2e-5)})
+        repro_optimizer = MasterAdamW(repro_groups, weight_decay=args.weight_decay, betas=(.9, .95))
+        by_fam: dict[str, list[dict]] = {}
+        for r in train_rows:
+            by_fam.setdefault(str(r.get('family') or r['site']), []).append(r)
+        em_peer_clusters = [rows for rows in by_fam.values() if len({str(r['task']) for r in rows}) >= 3]
+
     abl_args = dict(basis_module=basis_module, writer=writer, peer_pool=train_rows, seed=args.seed, index=index,
                     k_pos=args.kb_pos, k_neg=args.kb_neg)
     if step == 0 and not resumed and dev_rows:
@@ -813,6 +946,18 @@ def train(args):
         optimizer.step()
         step += 1
 
+        em_report = None
+        if em_kb is not None and repro_optimizer is not None and em_every > 0 and step % em_every == 0:
+            em_report = _em_entry_drift_and_repro(
+                engine, head, writer, repro_optimizer, em_kb, sites, em_peer_clusters,
+                adapter_id=adapter_id, basis_module=basis_module, rng=rng,
+                entry_steps=int(getattr(args, 'em_entry_steps', 8)),
+                entry_lr=float(getattr(args, 'em_entry_lr', 0.05)),
+                prox_lambda=float(getattr(args, 'em_prox_lambda', 0.05)),
+                repro_steps=int(getattr(args, 'em_repro_steps', 8)),
+                repro_key_weight=float(getattr(args, 'em_repro_key_weight', 0.5)),
+            )
+
         encoder_grad = sum(float(p.grad.norm()) ** 2 for p in head.encoder.parameters() if p.grad is not None) ** .5
         basis_grad = (
             sum(float(p.grad.norm()) ** 2 for p in basis_module.parameters() if p.grad is not None) ** .5
@@ -827,6 +972,7 @@ def train(args):
             'loss_tokens': sum(l * c for l, c in zip(losses, scales)), 'row_scales': scales,
             'site_var_loss': site_var_loss_val,
             'maml_loss': maml_loss_val, 'comp_loss': comp_loss_val,
+            'em': em_report,
             'grad_norm': grad_norm, 'encoder_grad_norm': encoder_grad,
             'basis_grad_norm': basis_grad, 'writer_grad_norm': writer_grad,
             'lr': optimizer.param_groups[0]['lr'], 'tokens': tokens,
@@ -860,6 +1006,8 @@ def train(args):
         provenance={'receipt': receipt['code'], 'step': step, 'row': release_row['key'], 'header': release_row['header']},
     )
     (run / 'release' / 'site-row.json').write_text(json.dumps(release_row))
+    if em_kb is not None:
+        em_kb.close()
     return 0
 
 
@@ -991,6 +1139,14 @@ def main(argv=None):
     t.add_argument('--reptile-weight', type=float, default=0.1)
     t.add_argument('--comp-every', type=int, default=4)
     t.add_argument('--comp-weight', type=float, default=0.5)
+    t.add_argument('--em-every', type=int, default=16,
+                   help='alternating Mode-2 EM cycle (direct KB entry drift + encoder reproduction) every N steps (0: off)')
+    t.add_argument('--em-kb', type=Path, default=None, help='optional ScopedExperienceKB SQLite path (default: RUN/em-kb.sqlite)')
+    t.add_argument('--em-entry-steps', type=int, default=8)
+    t.add_argument('--em-entry-lr', type=float, default=0.05)
+    t.add_argument('--em-prox-lambda', type=float, default=0.05)
+    t.add_argument('--em-repro-steps', type=int, default=8)
+    t.add_argument('--em-repro-key-weight', type=float, default=0.5)
     t.add_argument('--dev-rows', type=int, default=24)
     t.add_argument('--eval-every', type=int, default=50)
     t.add_argument('--state-every', type=int, default=100)
