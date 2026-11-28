@@ -515,14 +515,15 @@ def test_four_design_improvements_end_to_end(tmp_path):
     (work / 'decisions').mkdir(parents=True)
     (work / 'decisions' / 'step-00001.jsonl').write_text(
         '\n'.join([
-            json.dumps({'option_scores': [3.0, -1.0], 'chosen': 0, 'quality': 1.0, 'labels': ['yes', 'no']}),
-            json.dumps({'option_scores': [-1.0, 2.5], 'chosen': 1, 'quality': 1.0, 'labels': ['yes', 'no']}),
+            json.dumps({'learner_scores': [3.0, -1.0, -5.0], 'chosen': 0, 'advantage': 0.5, 'options': 3}),
+            json.dumps({'actor_scores': [-1.0, 2.5], 'chosen': 1, 'quality': 1.0, 'labels': ['yes', 'no']}),
             json.dumps({'option_scores': [0.5, 0.4], 'chosen': 0, 'quality': 0.0, 'labels': ['yes', 'no']}),
         ]) + '\n',
         encoding='utf-8',
     )
     extracted = program_tune.extract_grpo_decision_rows(work)
-    assert len(extracted) == 2
+    assert len(extracted) == 3
+    assert sum(r['correct'] for r in extracted) == 2
     manifest_path = tmp_path / 'natlang.adapters.json'
     manifest_path.write_text(json.dumps({'schema': 'natlang.adapters/v1', 'digest': '0' * 64}), encoding='utf-8')
     rc = program_tune.main([
@@ -530,6 +531,9 @@ def test_four_design_improvements_end_to_end(tmp_path):
         '--attach-manifest', str(manifest_path), '--binding-key', 'intent',
     ])
     assert rc == 0
+    cal_report = json.loads((tmp_path / 'fit' / 'decision-calibration.json').read_text(encoding='utf-8'))
+    assert cal_report['label_source'] == 'grpo-episode-outcome'
+    assert cal_report['temperature'] > 0.0
     updated_manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     assert 'intent' in updated_manifest['decisionCalibration']
     assert updated_manifest['digest'] != '0' * 64

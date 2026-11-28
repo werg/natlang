@@ -64,20 +64,42 @@ def fit_temperature(
         nll0 = float(F.cross_entropy(logits, y).item())
         ece0 = compute_ece(p0, y)
 
-    log_t = torch.zeros((), dtype=torch.float32, device=logits.device, requires_grad=True)
-    opt = torch.optim.LBFGS([log_t], lr=0.25, max_iter=steps, line_search_fn="strong_wolfe")
+    finite_mask = torch.isfinite(logits)
 
-    def closure():
-        opt.zero_grad()
-        t = torch.clamp(log_t.exp(), min=min_temp, max=max_temp)
-        loss = F.cross_entropy(logits / t, y)
-        loss.backward()
-        return loss
+    def _scale(t_val: float) -> torch.Tensor:
+        return torch.where(finite_mask, logits / float(t_val), logits)
 
-    opt.step(closure)
-    t_final = float(torch.clamp(log_t.detach().exp(), min=min_temp, max=max_temp).item())
+    def _nll(t_val: float) -> float:
+        return float(F.cross_entropy(_scale(t_val), y).item())
+
+    # 1D bounded global minimization in log(T) via coarse grid + golden-section refinement:
+    # avoids LBFGS line-search overflow on sharp/clamped logit distributions and guarantees global min.
+    lo_log = math.log(float(min_temp))
+    hi_log = math.log(float(max_temp))
+    grid_n = max(16, int(steps))
+    grid = [lo_log + (hi_log - lo_log) * i / grid_n for i in range(grid_n + 1)]
     with torch.no_grad():
-        scaled = logits / t_final
+        vals = [_nll(math.exp(g)) for g in grid]
+        best_i = min(range(len(vals)), key=lambda i: vals[i])
+        a = grid[max(0, best_i - 1)]
+        b = grid[min(len(grid) - 1, best_i + 1)]
+        phi = (math.sqrt(5.0) - 1.0) / 2.0
+        c = b - phi * (b - a)
+        d = a + phi * (b - a)
+        fc = _nll(math.exp(c))
+        fd = _nll(math.exp(d))
+        for _ in range(40):
+            if fc < fd:
+                b, d, fd = d, c, fc
+                c = b - phi * (b - a)
+                fc = _nll(math.exp(c))
+            else:
+                a, c, fc = c, d, fd
+                d = a + phi * (b - a)
+                fd = _nll(math.exp(d))
+        t_final = math.exp(0.5 * (a + b))
+        t_final = min(float(max_temp), max(float(min_temp), t_final))
+        scaled = _scale(t_final)
         nll1 = float(F.cross_entropy(scaled, y).item())
         ece1 = compute_ece(F.softmax(scaled, dim=-1), y)
 

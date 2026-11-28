@@ -1274,10 +1274,14 @@ def extract_basis_cmd(args):
 
 
 def extract_grpo_decision_rows(work_dir: str | Path) -> list[dict]:
-    """Extract calibration rows ``{"option_logits", "target", "labels"}`` from GRPO's ``WORK/decisions/step-*.jsonl``.
+    """Extract calibration rows from GRPO's ``WORK/decisions/step-*.jsonl``.
 
-    Keeps positive-advantage (passing-episode) decision records where ``scores`` and ``chosen`` (or ``target``) are
-    present so ``calibrate-decisions`` can run with zero extra GPU compute directly on logged GRPO traces.
+    - When a record carries an explicit ground-truth ``target``, emits a supervised row
+      ``{"option_logits", "target", "labels"}``.
+    - Otherwise emits an episode-outcome row ``{"option_logits", "chosen", "correct", "labels"}``
+      covering BOTH positive-advantage (``correct=1``) and negative-advantage (``correct=0``)
+      episodes so temperature calibration honestly corrects multi-token logit overconfidence
+      instead of fitting a tautology on passing ``chosen == argmax`` rows alone.
     """
     dec_dir = Path(work_dir) / 'decisions'
     if not dec_dir.is_dir():
@@ -1285,27 +1289,121 @@ def extract_grpo_decision_rows(work_dir: str | Path) -> list[dict]:
     rows: list[dict] = []
     for path in sorted(dec_dir.glob('step-*.jsonl')):
         for rec in read_jsonl(path):
-            scores = rec.get('option_scores') or rec.get('scores') or rec.get('option_logits')
+            scores = (
+                rec.get('option_scores')
+                or rec.get('scores')
+                or rec.get('option_logits')
+                or rec.get('learner_scores')
+                or rec.get('actor_scores')
+            )
             if not isinstance(scores, list) or len(scores) < 2:
                 continue
-            # Prefer explicit target; otherwise use chosen option on positive-advantage/passing episodes.
+            raw_labels = rec.get('labels')
+            if not isinstance(raw_labels, list) or len(raw_labels) != len(scores):
+                opt_field = rec.get('options')
+                raw_labels = opt_field if (isinstance(opt_field, list) and len(opt_field) == len(scores)) else None
+            labels = [str(x) for x in raw_labels] if raw_labels is not None else [f'opt_{i}' for i in range(len(scores))]
             target = rec.get('target')
-            if target is None:
-                adv = rec.get('advantage')
-                quality = rec.get('quality')
-                if (quality is not None and float(quality) < 1.0) or (quality is None and adv is not None and float(adv) <= 0.0):
-                    continue
-                target = rec.get('chosen')
-                if target is None:
-                    target = rec.get('choice')
-            if target is None:
+            if target is not None:
+                idx = int(target)
+                if 0 <= idx < len(scores):
+                    rows.append({'option_logits': [float(x) for x in scores], 'target': idx, 'labels': labels})
                 continue
-            idx = int(target)
+            chosen = rec.get('chosen')
+            if chosen is None:
+                chosen = rec.get('choice')
+            if chosen is None:
+                continue
+            idx = int(chosen)
             if not (0 <= idx < len(scores)):
                 continue
-            labels = list(rec.get('labels') or rec.get('options') or [f'opt_{i}' for i in range(len(scores))])
-            rows.append({'option_logits': [float(x) for x in scores], 'target': idx, 'labels': labels})
+            quality = rec.get('quality')
+            adv = rec.get('advantage')
+            if quality is not None:
+                correct = 1 if float(quality) >= 1.0 else 0
+            elif adv is not None:
+                correct = 1 if float(adv) > 0.0 else 0
+            else:
+                continue
+            rows.append({
+                'option_logits': [float(x) for x in scores],
+                'chosen': idx,
+                'correct': correct,
+                'labels': labels,
+            })
     return rows
+
+
+def _fit_outcome_temperature(
+    logits: 'torch.Tensor',
+    chosen: 'torch.Tensor',
+    correct: 'torch.Tensor',
+    *,
+    min_temp: float = 0.1,
+    max_temp: float = 100.0,
+    steps: int = 80,
+) -> tuple[float, float, float, float, float]:
+    """Fit scalar temperature T_f minimizing binary NLL of p_chosen(T_f) vs episode outcome y in {0, 1}."""
+    import math
+    import torch
+    import torch.nn.functional as F
+
+    finite_mask = torch.isfinite(logits)
+    y = correct.float()
+    row_idx = torch.arange(logits.shape[0], device=logits.device)
+
+    def _p_chosen(t_val: float) -> 'torch.Tensor':
+        scaled = torch.where(finite_mask, logits / float(t_val), logits)
+        probs = F.softmax(scaled, dim=-1)
+        return probs[row_idx, chosen].clamp(1e-7, 1.0 - 1e-7)
+
+    def _bce(p: 'torch.Tensor') -> float:
+        return float(F.binary_cross_entropy(p, y).item())
+
+    def _bin_ece(p: 'torch.Tensor', n_bins: int = 10) -> float:
+        ece = 0.0
+        n = max(1, y.numel())
+        edges = torch.linspace(0.0, 1.0, n_bins + 1, device=p.device)
+        for b in range(n_bins):
+            lo, hi = edges[b], edges[b + 1]
+            m = (p >= lo) & (p <= hi if b == n_bins - 1 else p < hi)
+            cnt = int(m.sum().item())
+            if cnt > 0:
+                ece += (cnt / n) * abs(float(y[m].mean().item()) - float(p[m].mean().item()))
+        return float(ece)
+
+    with torch.no_grad():
+        p0 = _p_chosen(1.0)
+        nll0 = _bce(p0)
+        ece0 = _bin_ece(p0)
+        lo_log = math.log(float(min_temp))
+        hi_log = math.log(float(max_temp))
+        grid_n = max(24, int(steps))
+        grid = [lo_log + (hi_log - lo_log) * i / grid_n for i in range(grid_n + 1)]
+        vals = [_bce(_p_chosen(math.exp(g))) for g in grid]
+        best_i = min(range(len(vals)), key=lambda i: vals[i])
+        a = grid[max(0, best_i - 1)]
+        b = grid[min(len(grid) - 1, best_i + 1)]
+        phi = (math.sqrt(5.0) - 1.0) / 2.0
+        c = b - phi * (b - a)
+        d = a + phi * (b - a)
+        fc, fd = _bce(_p_chosen(math.exp(c))), _bce(_p_chosen(math.exp(d)))
+        for _ in range(40):
+            if fc < fd:
+                b, d, fd = d, c, fc
+                c = b - phi * (b - a)
+                fc = _bce(_p_chosen(math.exp(c)))
+            else:
+                a, c, fc = c, d, fd
+                d = a + phi * (b - a)
+                fd = _bce(_p_chosen(math.exp(d)))
+        t_final = min(float(max_temp), max(float(min_temp), math.exp(0.5 * (a + b))))
+        p1 = _p_chosen(t_final)
+        nll1 = _bce(p1)
+        ece1 = _bin_ece(p1)
+        if nll1 > nll0:
+            return 1.0, nll0, nll0, ece0, ece0
+        return t_final, nll0, nll1, ece0, ece1
 
 
 def calibrate_decisions(args):
@@ -1331,52 +1429,108 @@ def calibrate_decisions(args):
     if not fit_rows:
         raise SystemExit('no decision rows to calibrate')
     eval_rows = read_jsonl(args.eval_rows) if args.eval_rows else fit_rows
+    outcome_mode = all('target' not in r and 'correct' in r for r in fit_rows)
 
-    def _to_tensors(items):
-        logits = torch.tensor([row['option_logits'] for row in items], dtype=torch.float32)
-        targets = torch.tensor([int(row['target']) for row in items], dtype=torch.long)
+    def _pad_logits(items):
+        max_k = max(len(row['option_logits']) for row in items)
+        padded = [
+            [float(x) for x in row['option_logits']] + [float('-inf')] * (max_k - len(row['option_logits']))
+            for row in items
+        ]
         labels = [list(row.get('labels') or [f'opt_{i}' for i in range(len(row['option_logits']))]) for row in items]
-        return logits, targets, labels
+        return torch.tensor(padded, dtype=torch.float32), labels
 
-    fit_logits, fit_targets, _ = _to_tensors(fit_rows)
-    eval_logits, eval_targets, eval_labels = _to_tensors(eval_rows)
-    cal = fit_temperature(fit_logits, fit_targets, min_temp=args.min_temp, max_temp=args.max_temp, steps=args.steps)
     risk = json.loads(args.risk_thresholds) if args.risk_thresholds else None
-
-    with torch.no_grad():
-        scaled = eval_logits / cal.temperature
-        probs = F.softmax(scaled, dim=-1)
-        eval_nll_before = float(F.cross_entropy(eval_logits, eval_targets).item())
-        eval_nll_after = float(F.cross_entropy(scaled, eval_targets).item())
-        eval_ece_before = compute_ece(F.softmax(eval_logits, dim=-1), eval_targets)
-        eval_ece_after = compute_ece(probs, eval_targets)
-        eval_acc = float((probs.argmax(dim=-1) == eval_targets).float().mean().item())
-        settled_total, settled_correct = 0, 0
-        for i in range(len(eval_rows)):
-            settle, pred_label, _ = should_settle_fast(
-                probs[i], eval_labels[i], fast_threshold=args.fast_threshold, risk_thresholds=risk,
+    if outcome_mode:
+        fit_logits, _ = _pad_logits(fit_rows)
+        fit_chosen = torch.tensor([int(r['chosen']) for r in fit_rows], dtype=torch.long)
+        fit_correct = torch.tensor([int(r['correct']) for r in fit_rows], dtype=torch.long)
+        eval_logits, eval_labels = _pad_logits(eval_rows)
+        eval_chosen = torch.tensor([int(r['chosen']) for r in eval_rows], dtype=torch.long)
+        eval_correct = torch.tensor([int(r['correct']) for r in eval_rows], dtype=torch.long)
+        t_final, nll0, nll1, ece0, ece1 = _fit_outcome_temperature(
+            fit_logits, fit_chosen, fit_correct,
+            min_temp=args.min_temp, max_temp=max(float(args.max_temp), 100.0), steps=args.steps,
+        )
+        with torch.no_grad():
+            row_idx = torch.arange(eval_logits.shape[0])
+            p_raw = F.softmax(eval_logits, dim=-1)[row_idx, eval_chosen].clamp(1e-7, 1.0 - 1e-7)
+            scaled = torch.where(torch.isfinite(eval_logits), eval_logits / t_final, eval_logits)
+            probs = F.softmax(scaled, dim=-1)
+            p_cal = probs[row_idx, eval_chosen].clamp(1e-7, 1.0 - 1e-7)
+            eval_nll_before = float(F.binary_cross_entropy(p_raw, eval_correct.float()).item())
+            eval_nll_after = float(F.binary_cross_entropy(p_cal, eval_correct.float()).item())
+            _, _, _, eval_ece_before, _ = _fit_outcome_temperature(
+                eval_logits, eval_chosen, eval_correct, min_temp=1.0, max_temp=1.0, steps=1,
             )
-            if settle:
-                settled_total += 1
-                if pred_label == eval_labels[i][int(eval_targets[i].item())]:
-                    settled_correct += 1
+            # compute calibrated binary ECE on eval
+            y_f = eval_correct.float()
+            eval_ece_after = 0.0
+            edges = torch.linspace(0.0, 1.0, 11)
+            for b in range(10):
+                lo, hi = edges[b], edges[b + 1]
+                m = (p_cal >= lo) & (p_cal <= hi if b == 9 else p_cal < hi)
+                cnt = int(m.sum().item())
+                if cnt > 0:
+                    eval_ece_after += (cnt / max(1, y_f.numel())) * abs(float(y_f[m].mean().item()) - float(p_cal[m].mean().item()))
+            eval_acc = float(y_f.mean().item())
+            settled_total, settled_correct = 0, 0
+            for i in range(len(eval_rows)):
+                k_i = len(eval_labels[i])
+                settle, _, _ = should_settle_fast(
+                    probs[i, :k_i], eval_labels[i], fast_threshold=args.fast_threshold, risk_thresholds=risk,
+                )
+                if settle:
+                    settled_total += 1
+                    settled_correct += int(eval_correct[i].item())
+        cal_temp = t_final
+        fit_summary = {'nll_before': round(nll0, 6), 'nll_after': round(nll1, 6), 'ece_before': round(ece0, 6), 'ece_after': round(ece1, 6)}
+        label_source = 'grpo-episode-outcome'
+    else:
+        fit_logits, _ = _pad_logits(fit_rows)
+        fit_targets = torch.tensor([int(row['target']) for row in fit_rows], dtype=torch.long)
+        eval_logits, eval_labels = _pad_logits(eval_rows)
+        eval_targets = torch.tensor([int(row['target']) for row in eval_rows], dtype=torch.long)
+        cal = fit_temperature(fit_logits, fit_targets, min_temp=args.min_temp, max_temp=args.max_temp, steps=args.steps)
+        cal_temp = cal.temperature
+        fit_summary = {
+            'nll_before': round(cal.nll_before, 6),
+            'nll_after': round(cal.nll_after, 6),
+            'ece_before': round(cal.ece_before, 6),
+            'ece_after': round(cal.ece_after, 6),
+        }
+        with torch.no_grad():
+            scaled = torch.where(torch.isfinite(eval_logits), eval_logits / cal.temperature, eval_logits)
+            probs = F.softmax(scaled, dim=-1)
+            eval_nll_before = float(F.cross_entropy(eval_logits, eval_targets).item())
+            eval_nll_after = float(F.cross_entropy(scaled, eval_targets).item())
+            eval_ece_before = compute_ece(F.softmax(eval_logits, dim=-1), eval_targets)
+            eval_ece_after = compute_ece(probs, eval_targets)
+            eval_acc = float((probs.argmax(dim=-1) == eval_targets).float().mean().item())
+            settled_total, settled_correct = 0, 0
+            for i in range(len(eval_rows)):
+                k_i = len(eval_labels[i])
+                settle, pred_label, _ = should_settle_fast(
+                    probs[i, :k_i], eval_labels[i], fast_threshold=args.fast_threshold, risk_thresholds=risk,
+                )
+                if settle:
+                    settled_total += 1
+                    if pred_label == eval_labels[i][int(eval_targets[i].item())]:
+                        settled_correct += 1
+        label_source = 'supervised-target'
 
     out_path = Path(args.out) if args.out else (directory / 'fit' / 'decision-calibration.json')
     out_path.parent.mkdir(parents=True, exist_ok=True)
     report = {
         'schema': 'natlang.program-decision-calibration/1',
         'family': family,
+        'label_source': label_source,
         'fit_rows': len(fit_rows),
         'eval_rows': len(eval_rows),
-        'temperature': round(cal.temperature, 6),
+        'temperature': round(cal_temp, 6),
         'fast_threshold': float(args.fast_threshold),
         'risk_thresholds': risk,
-        'fit': {
-            'nll_before': round(cal.nll_before, 6),
-            'nll_after': round(cal.nll_after, 6),
-            'ece_before': round(cal.ece_before, 6),
-            'ece_after': round(cal.ece_after, 6),
-        },
+        'fit': fit_summary,
         'eval': {
             'nll_before': round(eval_nll_before, 6),
             'nll_after': round(eval_nll_after, 6),
@@ -1395,7 +1549,7 @@ def calibrate_decisions(args):
         manifest = json.loads(m_path.read_text(encoding='utf-8'))
         cal_map = dict(manifest.get('decisionCalibration') or {})
         binding_key = getattr(args, 'binding_key', None) or family
-        entry = {'temperature': round(cal.temperature, 6), 'fastThreshold': float(args.fast_threshold)}
+        entry = {'temperature': round(cal_temp, 6), 'fastThreshold': float(args.fast_threshold)}
         if risk:
             entry['riskThresholds'] = risk
         cal_map[binding_key] = entry
