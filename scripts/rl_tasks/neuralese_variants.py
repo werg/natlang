@@ -83,6 +83,28 @@ AUTHORED = {
                                         'read_rows gives a private note on a slice of the rows. You may split a long '
                                         'table into slices, read each, and answer from the notes together with your '
                                         'own exact counting and comparison in eval.'),
+    'ext_decisions_tally': ('summarize_batch', {'items': 'string[]', 'rubric': 'string'},
+                            'Read items against rubric and write a compact private note of the exact classification '
+                            'counts and any borderline edge cases found in this batch.',
+                            'summarize_batch gives a private note of batch classifications. You may split long '
+                            'lists into batches, inspect each with summarize_batch, and aggregate the exact totals.'),
+    'ext_decisions_folder_route': ('inspect_file', {'filename': 'string', 'content': 'string', 'folders': 'string[]'},
+                                   'Read content of filename and write a private note identifying the exact destination '
+                                   'folder from folders and the decisive evidence in content.',
+                                   'inspect_file gives a private note of which folder a file belongs in. You may '
+                                   'inspect files with it and route each to its exact target path.'),
+    'auth_multi_round_state_games': ('track_state', {'history': 'string', 'goal': 'string'},
+                                     'Read history and write a compact private note of the exact current game state, '
+                                     'legal transitions, and remaining constraints needed for goal.',
+                                     'track_state gives a private note of the exact current state and constraints. '
+                                     'You may update your state summary across rounds instead of repeating actions.'),
+    'ext_natlang-codebase_natlang_codebase_mentions': ('digest_file', {'path': 'string', 'excerpt': 'string', 'question': 'string'},
+                                                       'Read excerpt of path for question and write a private note of '
+                                                       'the exact symbol names, file paths, and facts relevant to question, '
+                                                       'or that this excerpt has none.',
+                                                       'digest_file gives a private note of what one codebase file says '
+                                                       'about question. You may scan candidate files with it and '
+                                                       'synthesize the verified answer from the notes.'),
 }
 
 

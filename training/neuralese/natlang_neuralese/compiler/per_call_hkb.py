@@ -48,15 +48,17 @@ class PerCallNeuralHKBCompiler:
     """One-pass call-entry compiler: header + retrieved experience + scope cores, cached by provenance key."""
 
     def __init__(self, engine, head: CompiledSiteHead, *, adapter_id: str, release_root: str | Path,
-                 writer=None, scoped_kb=None, basis_module: LearnedBankBasis | None = None):
-        if (scoped_kb is None) != (writer is None):
-            raise ValueError('retrieval needs both the experience KB and the writer whose space its records are in')
+                 writer=None, scoped_kb=None, basis_module: LearnedBankBasis | None = None,
+                 native_query_projector=None):
+        if scoped_kb is not None and writer is None and native_query_projector is None:
+            raise ValueError('retrieval needs either a writer or a native_query_projector for the experience KB')
         self.engine = engine
         self.head = head.eval()
         self.adapter_id = adapter_id
         self.release_root = Path(release_root)
         self.release_root.mkdir(parents=True, exist_ok=True)
         self.writer = writer.eval() if writer is not None else None
+        self.native_query_projector = native_query_projector.eval() if native_query_projector is not None else None
         self.scoped_kb = scoped_kb
         self.basis_module = basis_module
         self._cache: dict[str, dict] = {}
@@ -80,7 +82,12 @@ class PerCallNeuralHKBCompiler:
         z_kb = k_kb = w_kb = kb_valid = None
         kb_hits = 0
         if self.scoped_kb is not None and req.scopes:
-            q_vec = self.writer.encode_query_texts(self.engine, [req.query_text or req.header])[0].detach().cpu()
+            if self.native_query_projector is not None:
+                init_vals = init_block_values(init_block)
+                taps = [init_vals[name].float().flatten(1)[None] for name in self.head.taps]
+                q_vec = self.native_query_projector(taps)[0].detach().cpu()
+            else:
+                q_vec = self.writer.encode_query_texts(self.engine, [req.query_text or req.header])[0].detach().cpu()
             z_kb, k_kb, w_kb, kb_valid = self.scoped_kb.retrieve_unified_slots(
                 q_vec, scopes=list(req.scopes), exclude_tasks=set(req.exclude_tasks), max_slots=req.max_kb_slots,
                 normalize=False)

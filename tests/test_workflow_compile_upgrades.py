@@ -386,3 +386,79 @@ def test_run_t2_em_flags_and_program_tune_adapt_subspace_cli():
     assert 'support_batch' in sig.parameters and 'query_batch' in sig.parameters and 'repro_weight' in sig.parameters
     assert hasattr(program_tune, 'adapt_subspace_cmd')
     assert hasattr(program_tune, '_lower_subspace_rollout_turns')
+
+
+def test_compiler_fixes_1_to_5(tmp_path):
+    # Fix #1: NativeQueryProjector distills cleanly to teacher 128-d query targets & PerCall accepts projector without writer.
+    from natlang_neuralese.compiler.native_query import NativeQueryProjector, distill_native_query_projector
+    torch.manual_seed(0)
+    proj = NativeQueryProjector(tap_dims=(16, 16, 16), key_dim=128, hidden_dim=32)
+    opt = torch.optim.AdamW(proj.parameters(), lr=1e-2)
+    taps = [torch.randn(4, 5, 16) for _ in range(3)]
+    teacher_q = torch.nn.functional.normalize(torch.randn(4, 128), dim=-1)
+    first = distill_native_query_projector(proj, opt, taps, teacher_q)
+    for _ in range(25):
+        last = distill_native_query_projector(proj, opt, taps, teacher_q)
+    assert last['mean_cosine'] > first['mean_cosine'] + 0.3
+
+    # Fix #2: run_t2.native_state_refs extracts referenced block IDs cleanly.
+    from natlang_neuralese.compiler import run_t2
+    msgs = [{'role': 'user', 'content': [{'type': 'native_state', 'id': 'nzs1_aabbcc'}]}]
+    assert run_t2.native_state_refs(msgs) == ['nzs1_aabbcc']
+
+    # Fix #3: neuralese_variants AUTHORED covers all 4 active workflows & program_tune forwards flags.
+    sys.path.insert(0, str(REPO / 'scripts' / 'rl_tasks'))
+    import neuralese_variants
+    for fam in (
+        'ext_decisions_tally',
+        'ext_decisions_folder_route',
+        'auth_multi_round_state_games',
+        'ext_natlang-codebase_natlang_codebase_mentions',
+    ):
+        assert fam in neuralese_variants.AUTHORED
+
+    # Fix #4 & #5: project_factor_cores + adapter_distillation_loss + tap_source='hidden' train cleanly.
+    from natlang_neuralese.compiler.compiled_site import (
+        CompiledSiteConfig,
+        CompiledSiteHead,
+        adapter_distillation_loss,
+        project_factor_cores,
+    )
+    _write_fake_factors(tmp_path / 'win_lora', seed=3, rank=4, scale=1.0)
+    targets = ('model.layers.0.self_attn.q_proj', 'model.layers.0.feed_forward.w1')
+    left_b = {
+        'model.layers.0.self_attn.q_proj': torch.eye(16, 4),
+        'model.layers.0.feed_forward.w1': torch.eye(20, 4),
+    }
+    right_b = {
+        'model.layers.0.self_attn.q_proj': torch.eye(12, 4),
+        'model.layers.0.feed_forward.w1': torch.eye(12, 4),
+    }
+    tgt_cores = project_factor_cores(str(tmp_path / 'win_lora'), left_b, right_b)
+    assert set(tgt_cores.keys()) == set(targets)
+
+    cfg = CompiledSiteConfig(
+        layout=(('layers.0.v', (8,)),),
+        targets=targets,
+        rank=4,
+        num_slots=4,
+        value_dim=32,
+        key_dim=16,
+        num_heads=4,
+        adapter_heads=4,
+        adapter_inner_rank=0,
+        tap_source='hidden',
+        hidden_tap_dims=(16, 16),
+    )
+    head = CompiledSiteHead(cfg)
+    h_opt = torch.optim.AdamW(head.parameters(), lr=2e-2)
+    init_vals = {'layers.0.v': torch.zeros(3, 8)}
+    hidden_taps = [torch.randn(1, 3, 16), torch.randn(1, 3, 16)]
+    loss0 = float(adapter_distillation_loss(head, init_vals, tgt_cores, hidden_taps=hidden_taps).item())
+    for _ in range(25):
+        h_opt.zero_grad(set_to_none=True)
+        loss = adapter_distillation_loss(head, init_vals, tgt_cores, hidden_taps=hidden_taps)
+        loss.backward()
+        h_opt.step()
+    loss1 = float(adapter_distillation_loss(head, init_vals, tgt_cores, hidden_taps=hidden_taps).item())
+    assert loss1 < loss0 * 0.25

@@ -1031,6 +1031,11 @@ def grpo_program(args):
         cmd.extend(['--held-remote', args.held_remote])
     if args.held_strict_series:
         cmd.append('--held-strict-series')
+    if getattr(args, 'neuralese_variants', None):
+        cmd.extend([
+            '--neuralese-variants', logical(args.neuralese_variants),
+            '--neuralese-variant-share', str(args.neuralese_variant_share),
+        ])
     if args.extra:
         cmd.extend(shlex.split(args.extra))
     env = {
@@ -1429,6 +1434,9 @@ def main(argv=None):
     gp.add_argument('--held-samples', type=int, default=2)
     gp.add_argument('--held-every-hours', type=float, default=0.5)
     gp.add_argument('--held-strict-series', action='store_true')
+    gp.add_argument('--neuralese-variants', help='optional neuralese_variants.py JSONL so GRPO exercises producer->consumer Neuralese turns')
+    gp.add_argument('--neuralese-variant-share', type=float, default=0.25,
+                    help='fraction of groups using the Neuralese variant when --neuralese-variants is set (default 0.25)')
     gp.add_argument('--unit-prefix')
     gp.add_argument('--ledger-unit', help='if set, launch through scripts/memory_ledger.py under this systemd unit name')
     gp.add_argument('--budget-gb', type=float, default=85.0)

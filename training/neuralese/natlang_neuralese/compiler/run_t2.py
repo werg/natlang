@@ -93,15 +93,32 @@ def _experience_summary(header: str, target: dict) -> str:
     return f'{sig}\nVerified reply: {content}'.strip()
 
 
-def imports_native_state(messages):
-    """Whether a call's messages carry a native-state part (an episode's Neuralese value or compaction capture)."""
+def native_state_refs(messages) -> list[str]:
+    """Collect every ``native_state`` block id referenced inside a call's messages (Neuralese values & compactions)."""
+    refs: list[str] = []
     def walk(value):
         if isinstance(value, dict):
-            return value.get('type') == 'native_state' or any(walk(item) for item in value.values())
-        if isinstance(value, list):
-            return any(walk(item) for item in value)
+            if value.get('type') == 'native_state' and value.get('id'):
+                refs.append(str(value['id']))
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+    walk(messages)
+    return list(dict.fromkeys(refs))
+
+
+def imports_native_state(messages):
+    """Whether a call's messages carry a native-state part (an episode's Neuralese value or compaction capture)."""
+    return bool(native_state_refs(messages))
+
+
+def _block_file_exists(store_dir: Path, block_id: str) -> bool:
+    if '_' not in block_id:
         return False
-    return walk(messages)
+    suffix = block_id.split('_', 1)[1]
+    return (store_dir / 'blocks' / suffix[:2] / f'{block_id}.safetensors').is_file()
 
 
 def prepare(args):
@@ -128,7 +145,7 @@ def prepare(args):
     funnel = {
         'groups': len(groups), 'cases': len(cases), 'excluded_cases': len(excluded),
         'rollouts': 0, 'held_excluded_rollouts': 0, 'unknown_case_rollouts': 0, 'failed_rollouts': 0,
-        'calls': 0, 'no_header': 0, 'imports_native_state': 0, 'too_long': 0, 'kept_calls': 0,
+        'calls': 0, 'no_header': 0, 'imports_native_state': 0, 'admitted_native_state': 0, 'too_long': 0, 'kept_calls': 0,
         'call_level_rows': 0, 'call_level_unverified': 0, 'call_level_unknown_case': 0,
         'call_level_held_excluded': 0, 'call_level_kept': 0,
     }
@@ -158,11 +175,24 @@ def prepare(args):
                 if header is None or not sampling:
                     funnel['no_header'] += 1
                     continue
-                if imports_native_state(turn['messages']):
-                    # a state produced in its episode lives only in that collection's actor store (a live aei1 store
-                    # is not read here); the training engine could not render the call, so it is left out and counted
-                    funnel['imports_native_state'] += 1
-                    continue
+                state_refs = native_state_refs(turn['messages'])
+                resolved_store = None
+                if state_refs:
+                    # Fix #2: admit Neuralese/compacted calls when every referenced block exists on disk (fail-closed if missing).
+                    candidate_stores = []
+                    if getattr(args, 'store_dir', None):
+                        candidate_stores.append(Path(args.store_dir))
+                    candidate_stores.append(Path(group).parents[1] / 'actor' / 'store')
+                    admit = bool(getattr(args, 'admit_native_state', True))
+                    if admit:
+                        for st in candidate_stores:
+                            if st.is_dir() and all(_block_file_exists(st, bid) for bid in state_refs):
+                                resolved_store = str(st.resolve())
+                                break
+                    if resolved_store is None:
+                        funnel['imports_native_state'] += 1
+                        continue
+                    funnel['admitted_native_state'] += 1
                 tokens = sum(len(part.get('token_ids') or ()) for part in sampling.get('prompt') or ())
                 if tokens > args.max_prompt_tokens:
                     funnel['too_long'] += 1
@@ -179,6 +209,7 @@ def prepare(args):
                     'policy': (rollout.get('policy') or {}).get('checkpoint_sha256'),
                     'messages': turn['messages'], 'tools': turn.get('tools') or [],
                     'target': turn['target'], 'prompt_tokens': tokens,
+                    **({'native_state_refs': state_refs, 'store_dir': resolved_store} if state_refs else {}),
                     'experience_text': _experience_summary(header, turn['target']),
                 })
                 funnel['kept_calls'] += 1
@@ -756,7 +787,12 @@ def train(args):
 
     basis_module = None
     if learn_basis:
-        basis_module = create_learned_compiler_basis(engine, config.targets, config.rank)
+        init_factors = list(getattr(args, 'init_basis_factors', None) or ())
+        if init_factors and saved is None:
+            from .compiled_site import create_learned_compiler_basis_from_factors
+            basis_module = create_learned_compiler_basis_from_factors(engine, init_factors, config.targets, config.rank)
+        else:
+            basis_module = create_learned_compiler_basis(engine, config.targets, config.rank)
         if saved is not None and saved.get('basis') is not None:
             basis_module.load_state_dict(saved['basis'])
             basis_id, adapter_id = basis_module.save_artifact(engine)
@@ -878,6 +914,11 @@ def train(args):
             by_fam.setdefault(str(r.get('family') or r['site']), []).append(r)
         em_peer_clusters = [rows for rows in by_fam.values() if len({str(r['task']) for r in rows}) >= 3]
 
+    distill_items: list[dict] = []
+    distill_manifest = getattr(args, 'distill_adapters', None)
+    if distill_manifest:
+        distill_items = json.loads(Path(distill_manifest).read_text(encoding='utf-8'))
+
     abl_args = dict(basis_module=basis_module, writer=writer, peer_pool=train_rows, seed=args.seed, index=index,
                     k_pos=args.kb_pos, k_neg=args.kb_neg)
     if step == 0 and not resumed and dev_rows:
@@ -960,6 +1001,23 @@ def train(args):
                 scale=args.comp_weight, kb_args=comp_kb,
             )
 
+        distill_loss_val = None
+        distill_every = int(getattr(args, 'distill_adapter_every', 4) or 0)
+        distill_weight = float(getattr(args, 'distill_adapter_weight', 1.0) or 0.0)
+        if distill_items and distill_every > 0 and distill_weight > 0.0 and (step + 1) % distill_every == 0:
+            from .compiled_site import adapter_distillation_loss, init_block_values, project_factor_cores
+            item = rng.choice(distill_items)
+            # Match a train row with the target header or write its header state directly.
+            match = next((r for r in train_rows if r['header'] == item.get('header') or r.get('family') == item.get('family')), None)
+            if match is not None and basis_module is not None:
+                left_b = {n: basis_module.left[n.replace('.', '__')].detach() for n in basis_module.targets}
+                right_b = {n: basis_module.right[n.replace('.', '__')].detach() for n in basis_module.targets}
+                tgt_cores = project_factor_cores(item['factor_dir'], left_b, right_b)
+                if tgt_cores:
+                    d_loss = adapter_distillation_loss(head, init_block_values(sites.block(match)), tgt_cores)
+                    (distill_weight * d_loss).backward()
+                    distill_loss_val = float(d_loss.detach().item())
+
         em_report = None
         em_repro_pairs: list[tuple[str, str]] = []
         if em_kb is not None and em_every > 0 and (step + 1) >= em_start_step and (step + 1) % em_every == 0:
@@ -995,6 +1053,7 @@ def train(args):
             'loss_tokens': sum(l * c for l, c in zip(losses, scales)), 'row_scales': scales,
             'site_var_loss': site_var_loss_val,
             'maml_loss': maml_loss_val, 'comp_loss': comp_loss_val,
+            'distill_adapter_loss': distill_loss_val,
             'em': em_report,
             'grad_norm': grad_norm, 'encoder_grad_norm': encoder_grad,
             'basis_grad_norm': basis_grad, 'writer_grad_norm': writer_grad,
@@ -1105,6 +1164,10 @@ def main(argv=None):
     p.add_argument('--per-site', type=int, default=8)
     p.add_argument('--min-per-site', type=int, default=2)
     p.add_argument('--dev-site-percent', type=int, default=10)
+    p.add_argument('--store-dir', type=Path, default=None,
+                   help='actor native block store directory for admitting Neuralese/compacted native_state calls')
+    p.add_argument('--admit-native-state', action=argparse.BooleanOptionalAction, default=True,
+                   help='admit calls importing native_state when all referenced block files exist on disk (default: on)')
     p.set_defaults(func=prepare)
 
     t = sub.add_parser('train')
@@ -1132,6 +1195,14 @@ def main(argv=None):
     t.add_argument('--site-var-weight', type=float, default=0.05,
                    help='Batch site-decorrelation/variance regularization weight preventing z_site collapse (0 opts out).')
     t.add_argument('--learn-basis', action=argparse.BooleanOptionalAction, default=True)
+    t.add_argument('--init-basis-factors', nargs='*', default=[],
+                   help='verified Mode-P LoRA factor dirs to warm-start LearnedBankBasis from real adaptation deltas (instead of base weight SVD)')
+    t.add_argument('--distill-adapters', type=Path, default=None,
+                   help='JSON list of {"family"|"header", "factor_dir"} verified RL LoRAs for 2nd-Futamura adapter distillation')
+    t.add_argument('--distill-adapter-every', type=int, default=4)
+    t.add_argument('--distill-adapter-weight', type=float, default=1.0)
+    t.add_argument('--tap-source', choices=('state', 'hidden'), default='state',
+                   help='HeaderEncoder input taps: .nzs state rows (default) or LFM3 residual-stream hidden states')
     t.add_argument('--live-kb', action=argparse.BooleanOptionalAction, default=True)
     t.add_argument('--writer-backend', choices=('pplx', 'embed'), default='pplx',
                    help='pplx: hindsight-kb PPLXBlockEncoder H/Q warm-started from 000000002 (Stage C); embed: CPU unit-test stand-in')

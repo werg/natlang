@@ -115,6 +115,15 @@ class LiveExperienceWriter(nn.Module):
         embeds, mask = self.embed_texts(engine, texts, max_tokens=max_tokens)
         return self.encode_query_embeds(embeds, mask=mask)
 
+    def encode_experience_blocks(self, engine, texts: list[str], *, max_tokens: int = 128, max_slots: int = 8):
+        """Multi-block interface parity with ``PplxWarmstartWriter`` (returns list of ``(keys [M, Dk], vals [M, Dv])``)."""
+        z, k = self.encode_experience_texts(engine, texts, max_tokens=max_tokens)
+        return [(k[i:i + 1], z[i:i + 1]) for i in range(len(texts))]
+
+    def encode_query_blocks(self, engine, texts: list[str], *, max_tokens: int = 128):
+        q = self.encode_query_texts(engine, texts, max_tokens=max_tokens)
+        return [q[i:i + 1] for i in range(len(texts))]
+
     def warm_parameters(self) -> list[nn.Parameter]:
         return []
 
@@ -137,9 +146,10 @@ class PplxWarmstartWriter(nn.Module):
         self.query_encoder = query_encoder
         self.value_dim = int(value_dim)
         self.key_dim = int(key_dim)
-        # Lightweight FP32 learned attention pooler reducing variable-length PPLX token keys/values to 1 slot/record
-        self.pool_query = nn.Parameter(torch.randn(1, self.key_dim, dtype=torch.float32) * 0.02)
-        self.query_pool = nn.Parameter(torch.randn(1, self.key_dim, dtype=torch.float32) * 0.02)
+        # Lightweight FP32 learned attention pooler (zero-init residual over L2-norm salience so step 0 preserves
+        # 000000002's sharp trained block keys rather than washing them out with a random query vector).
+        self.pool_query = nn.Parameter(torch.zeros(1, self.key_dim, dtype=torch.float32))
+        self.query_pool = nn.Parameter(torch.zeros(1, self.key_dim, dtype=torch.float32))
 
     @classmethod
     def from_warmstart(
@@ -217,12 +227,41 @@ class PplxWarmstartWriter(nn.Module):
 
     def _pool_kv(self, keys: torch.Tensor, values: torch.Tensor | None, pool_vec: torch.Tensor):
         kf = keys.float()
-        weights = (kf @ pool_vec.float().T).squeeze(-1).softmax(dim=0)
+        # Preserve native block salience at step 0 (when pool_vec == 0) via log-norm weighting + learned query bias.
+        salience = torch.linalg.vector_norm(kf, dim=-1).clamp_min(1e-6).log()
+        logits = salience + (F.normalize(kf, dim=-1) @ pool_vec.float().T).squeeze(-1)
+        weights = logits.softmax(dim=0)
         k_out = F.normalize((weights[:, None] * kf).sum(dim=0), dim=-1)
         if values is None:
             return k_out, None
         v_out = (weights[:, None] * values.float()).sum(dim=0)
         return k_out, v_out
+
+    def encode_experience_blocks(
+        self, engine, texts: list[str], *, max_tokens: int = 512, max_slots: int = 8,
+    ) -> list[tuple[torch.Tensor, torch.Tensor]]:
+        """Preserve 000000002's native multi-block keys and values (up to ``max_slots`` highest-salience blocks/text)
+        without collapsing them into a single pooled slot."""
+        out: list[tuple[torch.Tensor, torch.Tensor]] = []
+        for text in texts:
+            blocks = self.writer_encoder.encode_blocks([text], 'full')
+            ks = torch.cat([b.keys.float() for b in blocks if len(b.keys)], dim=0)
+            vs = torch.cat([b.values.float() for b in blocks if len(b.keys)], dim=0)
+            if max_slots > 0 and ks.shape[0] > max_slots:
+                top_idx = torch.linalg.vector_norm(ks, dim=-1).topk(int(max_slots)).indices.sort().values
+                ks = ks[top_idx]
+                vs = vs[top_idx]
+            out.append((F.normalize(ks, dim=-1), vs))
+        return out
+
+    def encode_query_blocks(self, engine, texts: list[str], *, max_tokens: int = 512) -> list[torch.Tensor]:
+        """Return native multi-block normalized query keys ``[M, Dk]`` per text from 000000002's ``query_Q``."""
+        out: list[torch.Tensor] = []
+        for text in texts:
+            blocks = self.query_encoder.encode_blocks([text], 'forward')
+            ks = torch.cat([b.keys.float() for b in blocks if len(b.keys)], dim=0)
+            out.append(F.normalize(ks, dim=-1))
+        return out
 
     def encode_experience_texts(self, engine, texts: list[str], *, max_tokens: int = 512):
         """Encode each experience text via ``PPLXBlockEncoder`` -> ``(z_kb [B, Dv], k_kb [B, Dk])`` in FP32."""
@@ -251,6 +290,15 @@ class PplxWarmstartWriter(nn.Module):
         if getattr(self.writer_encoder, 'value_head', None) is not None:
             fresh.extend(self.writer_encoder.value_head.parameters())
         return fresh
+
+    def encode_experience_blocks(self, engine, texts: list[str], *, max_tokens: int = 128, max_slots: int = 8):
+        """Multi-block interface parity with ``PplxWarmstartWriter`` (returns list of ``(keys [M, Dk], vals [M, Dv])``)."""
+        z, k = self.encode_experience_texts(engine, texts, max_tokens=max_tokens)
+        return [(k[i:i + 1], z[i:i + 1]) for i in range(len(texts))]
+
+    def encode_query_blocks(self, engine, texts: list[str], *, max_tokens: int = 128):
+        q = self.encode_query_texts(engine, texts, max_tokens=max_tokens)
+        return [q[i:i + 1] for i in range(len(texts))]
 
     def warm_parameters(self) -> list[nn.Parameter]:
         """Warm-started 000000002 ``H_key``/backbone & ``Q`` parameters trained at ``warm_lr`` (2e-5)."""

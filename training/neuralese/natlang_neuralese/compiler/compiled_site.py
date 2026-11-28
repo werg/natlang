@@ -262,6 +262,111 @@ def create_learned_compiler_basis(engine, targets, rank, owner=None) -> LearnedB
     return LearnedBankBasis(svd, basis_id=basis_rec.id, adapter_id=adapter_rec.id)
 
 
+def create_learned_compiler_basis_from_factors(
+    engine,
+    factor_dirs: list[str],
+    targets,
+    rank: int,
+    owner=None,
+) -> LearnedBankBasis:
+    """Warm-start ``LearnedBankBasis`` from real execution-winning RL LoRA deltas (``tune.low_dof.extract_factor_basis``)
+    instead of frozen base-weight SVD, falling back to base SVD only for targets absent from the donor factors."""
+    from ..model.native_adapters import create_adapter
+    from ..tune.learned.bank import SharedBasis, weight_svd_basis
+    from ..tune.low_dof import extract_factor_basis
+
+    target_list = list(targets)
+    r = int(rank)
+    sub = extract_factor_basis(factor_dirs, max_rank=r, max_components=1, include_family_slices=False)
+    fallback = weight_svd_basis(engine, target_list, r)
+    left: dict[str, torch.Tensor] = {}
+    right: dict[str, torch.Tensor] = {}
+    warmed = 0
+    for name in target_list:
+        if name in sub.left_u and name in sub.right_v:
+            u = sub.left_u[name].float()
+            v = sub.right_v[name].float()
+            fb_l = fallback.left[name].float()
+            fb_r = fallback.right[name].float()
+            if u.shape[0] == fb_l.shape[0] and v.shape[0] == fb_r.shape[0]:
+                # Pad remaining columns (if donor effective rank < r) from base SVD orthogonalized columns.
+                k_u = min(r, u.shape[1])
+                k_v = min(r, v.shape[1])
+                l_mat = fb_l.clone()
+                r_mat = fb_r.clone()
+                l_mat[:, :k_u] = u[:, :k_u]
+                r_mat[:, :k_v] = v[:, :k_v]
+                left[name] = l_mat.contiguous()
+                right[name] = r_mat.contiguous()
+                warmed += 1
+                continue
+        left[name] = fallback.left[name].float().clone()
+        right[name] = fallback.right[name].float().clone()
+
+    shared = SharedBasis(
+        dict(fallback.native_identity),
+        r,
+        left,
+        right,
+        {'kind': 'lora-delta-svd', 'donors': list(sub.donors), 'warmed_targets': warmed},
+    )
+    basis_rec = shared.to_artifact(engine, owner=owner)
+    adapter_rec = create_adapter(
+        engine,
+        {'kind': 'xs', 'rank': r, 'parameter_names': target_list, 'basis_id': basis_rec.id},
+        owner,
+    )
+    return LearnedBankBasis(shared, basis_id=basis_rec.id, adapter_id=adapter_rec.id)
+
+
+def project_factor_cores(
+    factor_dir: str,
+    left_basis: dict[str, torch.Tensor],
+    right_basis: dict[str, torch.Tensor],
+) -> dict[str, torch.Tensor]:
+    """Project a verified Mode-P LoRA export into ``(left_basis, right_basis)`` -> target cores ``C* = U^T (s B A) V``."""
+    from ..tune.low_dof import _load_factor_dir
+
+    entries, _ = _load_factor_dir(factor_dir)
+    cores: dict[str, torch.Tensor] = {}
+    for name, (b, a, scale) in entries.items():
+        if name not in left_basis or name not in right_basis:
+            continue
+        u = left_basis[name].detach().float().cpu()
+        v = right_basis[name].detach().float().cpu()
+        if u.shape[0] != b.shape[0] or v.shape[0] != a.shape[1]:
+            continue
+        # Least-squares core in possibly non-orthonormal learned basis: pinv(U) @ (s B A) @ pinv(V)^T
+        u_pinv = torch.linalg.pinv(u)
+        v_pinv_t = torch.linalg.pinv(v).transpose(0, 1)
+        core = float(scale) * ((u_pinv @ b) @ (a @ v_pinv_t))
+        cores[name] = core.reshape(-1).contiguous()
+    return cores
+
+
+def adapter_distillation_loss(
+    head: 'CompiledSiteHead',
+    init_values: dict[str, torch.Tensor],
+    target_cores: dict[str, torch.Tensor],
+    *,
+    hidden_taps: list[torch.Tensor] | None = None,
+) -> torch.Tensor:
+    """2nd-Futamura adapter distillation loss: regress ``head``'s predicted cores onto execution-winning LoRA cores."""
+    compiled = head(init_values, hidden_taps=hidden_taps, kv=False, adapter=True, apply_dropout=False)
+    losses = []
+    for name, tgt in target_cores.items():
+        if name not in compiled.cores:
+            continue
+        pred = compiled.cores[name].float()
+        t = tgt.detach().to(device=pred.device, dtype=torch.float32)
+        if pred.shape != t.shape:
+            continue
+        losses.append(F.mse_loss(pred, t))
+    if not losses:
+        raise ValueError('adapter_distillation_loss: no overlapping target cores with head')
+    return torch.stack(losses).mean()
+
+
 @dataclass(frozen=True)
 class CompiledSiteConfig:
     layout: tuple                      # ((state tensor name, row shape), ...)
@@ -278,6 +383,8 @@ class CompiledSiteConfig:
     kv_drop: float = 0.0               # independent KV-channel dropout during training (T2 uses 0.1)
     adapter_drop: float = 0.0          # independent adapter-channel dropout during training (T2 uses 0.1)
     state_residual_scale: float = 0.1  # >0: tanh-bounded KV/conv residual * learnable scale (prevents rollout KV degradation); 0: unbounded legacy
+    tap_source: str = 'state'          # 'state': .nzs state rows (default) | 'hidden': LFM3 residual-stream hidden taps
+    hidden_tap_dims: tuple = ()        # tap widths when tap_source == 'hidden'
 
     def to_dict(self):
         return {
@@ -295,16 +402,22 @@ class CompiledSiteConfig:
             'kv_drop': self.kv_drop,
             'adapter_drop': self.adapter_drop,
             'state_residual_scale': self.state_residual_scale,
+            'tap_source': self.tap_source,
+            'hidden_tap_dims': list(self.hidden_tap_dims),
         }
 
     @classmethod
     def from_dict(cls, data):
         # strict: a saved config naming a field this code does not have is another head, not a default.
         # Older configs without state_residual_scale used unbounded residuals (0.0).
-        extra = {key: (tuple(value) if key == 'taps' else value) for key, value in data.items()
+        extra = {key: (tuple(value) if key in ('taps', 'hidden_tap_dims') else value) for key, value in data.items()
                  if key not in ('layout', 'targets')}
         if 'state_residual_scale' not in extra:
             extra['state_residual_scale'] = 0.0
+        if 'tap_source' not in extra:
+            extra['tap_source'] = 'state'
+        if 'hidden_tap_dims' not in extra:
+            extra['hidden_tap_dims'] = ()
         return cls(layout=tuple((name, tuple(shape)) for name, shape in data['layout']), targets=tuple(data['targets']),
                    **extra)
 
@@ -334,7 +447,10 @@ class CompiledSiteHead(nn.Module):
         shapes = dict(config.layout)
         taps = config.taps or tuple(default_taps(config.layout))
         self.taps = tuple(taps)
-        tap_dims = tuple(math.prod(shapes[name]) for name in self.taps)
+        if config.tap_source == 'hidden' and config.hidden_tap_dims:
+            tap_dims = tuple(int(d) for d in config.hidden_tap_dims)
+        else:
+            tap_dims = tuple(math.prod(shapes[name]) for name in self.taps)
         self.encoder = HeaderEncoder(HeaderEncoderConfig(tap_dims=tap_dims, num_slots=config.num_slots,
                                                          value_dim=config.value_dim, key_dim=config.key_dim,
                                                          num_heads=config.num_heads))
@@ -381,10 +497,16 @@ class CompiledSiteHead(nn.Module):
         self.core_scale = nn.Parameter(torch.ones(config.adapter_heads))
         self.float()
 
-    def encode(self, init_values):
-        """``(z_site, k_site, weights, token context [1, n, d])`` from the header's text-state tensors."""
+    def encode(self, init_values, *, hidden_taps: list[torch.Tensor] | None = None):
+        """``(z_site, k_site, weights, token context [1, n, d])`` from state rows or LFM3 residual-stream hidden taps."""
         device = self.family_queries.device
-        taps = [init_values[name].to(device=device, dtype=torch.float32).flatten(1)[None] for name in self.taps]
+        if hidden_taps is not None:
+            taps = [
+                (t.to(device=device, dtype=torch.float32) if t.ndim == 3 else t.to(device=device, dtype=torch.float32)[None])
+                for t in hidden_taps
+            ]
+        else:
+            taps = [init_values[name].to(device=device, dtype=torch.float32).flatten(1)[None] for name in self.taps]
         context = self.encoder.context(taps)
         z, k, w = self.encoder.pool(context)
         return z, k, w, context
@@ -455,6 +577,7 @@ class CompiledSiteHead(nn.Module):
         self,
         init_values,
         *,
+        hidden_taps=None,
         z_slots=None,
         slot_valid=None,
         slot_weights=None,
@@ -466,7 +589,7 @@ class CompiledSiteHead(nn.Module):
         adapter: bool = True,
         apply_dropout: bool = True,
     ):
-        """Compile one site from its header text state ``init_values``.
+        """Compile one site from its header text state ``init_values`` (or LFM3 ``hidden_taps``).
 
         - ``z_slots`` ([1, M, d]) replaces the slots read from the header (a Tier-1.5 refined ``z_site``, an FO-MAML
           inner step, a shuffled control).
@@ -475,7 +598,7 @@ class CompiledSiteHead(nn.Module):
         - ``kv`` / ``adapter`` False leave that half at its step-0 value (the text state / a zero core): the reader
           ablations. During training each is dropped independently with ``kv_drop`` / ``adapter_drop``.
         """
-        z_site, k_site, w_site, context = self.encode(init_values)
+        z_site, k_site, w_site, context = self.encode(init_values, hidden_taps=hidden_taps)
         z_s = z_site if z_slots is None else z_slots.to(context)
         w_s = w_site if slot_weights is None else slot_weights.to(context)
         if w_s.shape[:2] != z_s.shape[:2]:
