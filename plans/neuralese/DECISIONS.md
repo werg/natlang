@@ -15296,3 +15296,20 @@ a `/proc` (cmdline, environ, cwd, exe, fds, maps) plus user-unit reference scan 
   - **Recipe:** Calibrated on-policy binary GRPO + rare-success self-distillation (`--lr 1e-4 --warmup 2 --kl-beta 0.01 --lr-reference-spread 6 --lr-reference-group-units 1024 --reward binary --loss-norm episode --sd-weight 0.1 --memetic-share 0 --sd-teacher-weight 0 --teacher-attempts 0 --max-steps 15 --save-every 5 --held-remote pop --held-samples 2 --held-strict-series`).
   - **Success bar:** `>= +10 pts` paired lift on unseen `dev` (`48` episodes) over `step-00000` within 15 steps, with `close_ratio >= 0.40` and `kl <= 0.15`.
   - **Stop trigger:** Stop early if `close_ratio < 0.25`, `kl > 0.20`, sentinel fires, or `step-00010` `dev` regresses > 5 pts.
+
+
+## 2026-11-28 14:43 CET — Experiment W2 complete (`dev` +27.1 pts `p=0.006`, untouched `confirm` 0.0 pts binary / +0.135 graded / -56% calls); W3 (`wfgrpo-tally`) running with `bounded-graded`
+
+- **Experiment W2 (`wfgrpo-state-games`, 15/15 steps complete on DGX, pin `2f10acbf0`, `lr=1e-4, kl_beta=0.01, sd_weight=0.1`):**
+  - Clean optimization trajectory: `kl=0.00761`, `close_ratio=0.430`, zero OOMs, zero actor mismatches. Extracted 142-target Mode-P `FactorSubspaceBasis` (`9` orthonormal structured components) to `/home/werg/data/workflow-compile-20261127/subspace-basis-w2`; reclaimed 11 GB (`grpo-w2/run/{actor,groups}`).
+  - **Strict-series unseen `dev` (`24` tasks × 2 = `48` eps, `warnings=[]`, `infra_lost=0`, 2 timeouts counted conservatively as failures):**
+    - `step-00000` (`v12` base): `14/48 (29.2%)`, `graded_reward=0.3772`, `budget_exhaustion=22 (45.8%)`, `model_calls=1376`
+    - `step-00005`: `17/48 (35.4%, +6.3)`, `graded_reward=0.449`, `loop_rate=31.2%`
+    - `step-00010`: `18/48 (37.5%, +8.3)`, `graded_reward=0.512`, `loop_rate=25.0%`
+    - `step-00015`: **`27/48 (56.25%, +27.1 pts)`** (`95%` bootstrap CI `[+10.4, +43.8]`, permutation `p=0.0060`, McNemar exact `p=0.0023` with 15 up vs 2 down, task sign `p=0.0129`), `graded_reward=0.6690 (+0.2918)`, `budget_exhaustion=4 (-37.5 pts, p=0.0004)`, `model_calls=624 (-54.7%)`. Lifted both shared game-families (`6/30 -> 16/30`) and unseen game-families (`8/18 -> 11/18`).
+  - **Untouched leak-free `confirm` (`10` tasks × 2 = `20` eps, `warnings=[]`, `infra_lost=0`):**
+    - `base`: `5/20 (25.0%)`, `graded_reward=0.4255`, `budget_exhaustion=2 (10.0%)`, `semantic_mismatch=13`, `model_calls=325`
+    - `step-00015`: **`5/20 (25.0%, 0.0 pts)`** (`95%` CI `[-20.0, +20.0]`, 2 up / 2 down), **`graded_reward=0.5609 (+0.1354)`**, **`budget_exhaustion=0 (-10.0 pts)`**, `semantic_mismatch=15`, **`model_calls=143 (-56.0%)`**.
+  - **Diagnosis & verdict (mixed-positive — strong protocol/efficiency & graded generalization, binary pass ceiling on hard L3 `semantic_mismatch`):** W2 reliably cured multi-round looping/stalling (`-55%` to `-56%` calls, `budget_exhaustion` near zero) and raised `graded_reward` on both `dev` (`+0.292`) and untouched `confirm` (`+0.135`). However, `confirm` was already low-loop (`10%`) and dominated by exact-arithmetic L3 `semantic_mismatch` (`65%`) where pure binary GRPO gets zero gradient signal whenever all 8 samples miss exact final state. This directly motivates `--reward bounded-graded` (partial fail capped `[0.0, 0.49]`, full pass `1.0`) deployed in W3+.
+- **Experiment W3 (`wfgrpo-tally.service`, `ext_decisions_tally`, pin `e14c91b84`, `--reward bounded-graded --concise-pass-bonus 0.05 --lora-rank 16 --lr 1e-4 --kl-beta 0.01 --sd-weight 0.1`):**
+  - Running cleanly on DGX (Step 4/15 complete, `kl=0.00180`, `close_ratio=1.709`, `rho=1.0003`); Pop `step-00000` `dev32` baseline = `45/64 (70.31%)`. Holding Colab A100 OFF (`$0.00/hr`, `63.20` units preserved) until W3 `dev32` checkpoints + W4 (`ext_natlang-codebase_mentions` with `sealed-fanin` Neuralese) confirm reproducible lift.
