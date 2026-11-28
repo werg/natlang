@@ -938,10 +938,21 @@ def train(args):
             key_dim=config.key_dim,
             value_dim=config.value_dim,
         )
+        from .live_kb_writer import _shares_closure
         by_fam: dict[str, list[dict]] = {}
         for r in train_rows:
             by_fam.setdefault(str(r.get('family') or r['site']), []).append(r)
-        em_peer_clusters = [rows for rows in by_fam.values() if len({str(r['task_id']) for r in rows}) >= 3]
+
+        def _has_disjoint_closure(cluster_rows: list[dict], min_count: int = 3) -> bool:
+            kept: list[dict] = []
+            for cand in cluster_rows:
+                if not any(_shares_closure(cand, k) for k in kept):
+                    kept.append(cand)
+                    if len(kept) >= min_count:
+                        return True
+            return False
+
+        em_peer_clusters = [c_rows for c_rows in by_fam.values() if _has_disjoint_closure(c_rows, 3)]
 
     distill_items: list[dict] = []
     distill_manifest = getattr(args, 'distill_adapters', None)
