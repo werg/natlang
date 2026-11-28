@@ -1096,8 +1096,9 @@ def _lower_subspace_rollout_turns(row: dict, stats, states=None) -> list[dict]:
         return pre
     from grpo import trainable_rows
     from lower_rollout_turns import episode_turns
+    from natlang_neuralese.common.sampling import RL_TOP_P
     calls = episode_turns(row, stats, states) if raw_turns else []
-    rows = trainable_rows(calls, stats)
+    rows = trainable_rows(calls, stats, RL_TOP_P)
     out = []
     for r in rows:
         imps = list(r.get('imports') or ())
