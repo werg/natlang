@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import math
 import re
 from pathlib import Path
 
@@ -118,11 +119,23 @@ class ScopedExperienceKB:
         self.admission = admission
         self.key_dim, self.value_dim = int(key_dim), int(value_dim)
         self.kb = SQLiteKB(path, self.key_dim, self.value_dim, index=index, readonly=readonly, **kb_options)
+        self._readonly = bool(readonly)
         try:
             self._audit()
+            if not self._readonly:
+                self._ensure_outcomes_table()
         except BaseException:
             self.kb.close()
             raise
+
+    def _ensure_outcomes_table(self) -> None:
+        self.kb.conn.execute(
+            'CREATE TABLE IF NOT EXISTS experience_outcomes ('
+            'scope TEXT NOT NULL, record_id TEXT NOT NULL, injections INTEGER NOT NULL, '
+            'lift_sum REAL NOT NULL, ema_lift REAL NOT NULL, last_reward REAL NOT NULL, '
+            'PRIMARY KEY (scope, record_id))'
+        )
+        self.kb.conn.commit()
 
     def _audit(self) -> None:
         if not self.kb.conn.execute("SELECT 1 FROM sqlite_master WHERE name='record_tasks'").fetchone():
@@ -250,3 +263,157 @@ class ScopedExperienceKB:
         w[0] = ((raw / denom) if normalize else raw).to(device)
         valid[0] = records.valid.to(device)
         return z, k, w, valid
+
+    # ---- Stage-B Neuralese payloads & outcome-driven credit assignment ----------------------------------------------
+    def retrieve_neuralese_payloads(
+        self,
+        query_key: torch.Tensor,
+        *,
+        scopes,
+        exclude_tasks=(),
+        top_k: int = 8,
+        threshold: float = 0.2,
+        null_mass: float = 0.1,
+    ) -> dict:
+        """Stage A/B retrieval returning Neuralese ``compacted_state_id`` blocks (served today on all 4 engines)
+        plus concise text fallbacks and ``used`` ``(scope, record_id)`` pairs for ``record_outcomes``."""
+        hits, gate = self.retrieve(
+            query_key, scopes=scopes, exclude_tasks=exclude_tasks,
+            top_k=top_k, threshold=threshold, null_mass=null_mass,
+        )
+        blocks = []
+        text_fallbacks = []
+        used = []
+        for hit in hits:
+            used.append((hit.scope, hit.record_id))
+            item = {
+                'record_id': hit.record_id,
+                'scope': hit.scope,
+                'kind': hit.kind,
+                'weight': round(float(hit.weight), 6),
+                'similarity': round(float(hit.similarity), 6),
+            }
+            if hit.compacted_state_id:
+                blocks.append({**item, 'compacted_state_id': hit.compacted_state_id})
+            else:
+                text_fallbacks.append({**item, 'text': hit.text})
+        return {'gate': round(float(gate), 6), 'blocks': blocks, 'text_fallbacks': text_fallbacks, 'used': used}
+
+    def record_outcomes(
+        self,
+        used: list[tuple[str, str]],
+        *,
+        reward: float,
+        baseline_reward: float,
+        lr: float = 0.25,
+        ema_alpha: float = 0.2,
+        min_strength: float = 0.05,
+    ) -> dict[str, dict[str, float]]:
+        """Counterfactual outcome credit assignment: update EMA lift and live record ``strength`` in SQLite.
+
+        Positive counterfactual lift (``reward > baseline_reward``) increases the record's retrieval strength (up to
+        1.0); zero or negative lift decays it toward ``min_strength`` so weak records naturally drop out of top-k
+        selection and become candidates for ``prune_weak``.
+        """
+        if self._readonly:
+            raise ValueError('cannot record outcomes on a readonly ScopedExperienceKB')
+        if not used:
+            return {}
+        lift = float(reward) - float(baseline_reward)
+        updates: list[Record] = []
+        summary: dict[str, dict[str, float]] = {}
+        seen: set[tuple[str, str]] = set()
+        for scope, rid in used:
+            key_pair = (check_scope(scope), str(rid))
+            if key_pair in seen:
+                continue
+            seen.add(key_pair)
+            int_id = record_key(*key_pair)
+            fetched = self.kb.fetch_records([int_id], scope=key_pair[0])
+            if not fetched:
+                continue
+            rec = fetched[0]
+            meta = dict(rec.metadata)
+            old_strength = float(meta.get(STRENGTH, 1.0))
+            new_strength = min(1.0, max(float(min_strength), old_strength * math.exp(float(lr) * lift)))
+            meta[STRENGTH] = new_strength
+            updates.append(Record(rec.id, rec.key, rec.value, scope=rec.scope, metadata=meta))
+            row = self.kb.conn.execute(
+                'SELECT injections, lift_sum, ema_lift FROM experience_outcomes WHERE scope=? AND record_id=?',
+                key_pair,
+            ).fetchone()
+            if row is None:
+                inj, lift_sum, ema_lift = 1, lift, lift
+            else:
+                inj = int(row[0]) + 1
+                lift_sum = float(row[1]) + lift
+                ema_lift = (1.0 - float(ema_alpha)) * float(row[2]) + float(ema_alpha) * lift
+            self.kb.conn.execute(
+                'INSERT OR REPLACE INTO experience_outcomes '
+                '(scope, record_id, injections, lift_sum, ema_lift, last_reward) VALUES (?, ?, ?, ?, ?, ?)',
+                (key_pair[0], key_pair[1], inj, lift_sum, ema_lift, float(reward)),
+            )
+            summary[f'{key_pair[0]}:{key_pair[1]}'] = {
+                'injections': float(inj),
+                'ema_lift': round(ema_lift, 6),
+                'old_strength': round(old_strength, 6),
+                'new_strength': round(new_strength, 6),
+            }
+        self.kb.conn.commit()
+        if updates:
+            self.kb.upsert(updates)
+        return summary
+
+    def outcome_stats(self, scope: str | None = None) -> list[dict]:
+        """Tracked outcome credit-assignment statistics for admitted records."""
+        if not self.kb.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='experience_outcomes'"
+        ).fetchone():
+            return []
+        if scope is not None:
+            check_scope(scope)
+            rows = self.kb.conn.execute(
+                'SELECT scope, record_id, injections, lift_sum, ema_lift, last_reward '
+                'FROM experience_outcomes WHERE scope=? ORDER BY ema_lift DESC',
+                (scope,),
+            ).fetchall()
+        else:
+            rows = self.kb.conn.execute(
+                'SELECT scope, record_id, injections, lift_sum, ema_lift, last_reward '
+                'FROM experience_outcomes ORDER BY ema_lift DESC'
+            ).fetchall()
+        return [
+            {
+                'scope': r[0],
+                'record_id': r[1],
+                'injections': int(r[2]),
+                'mean_lift': float(r[3]) / max(1, int(r[2])),
+                'ema_lift': float(r[4]),
+                'last_reward': float(r[5]),
+            }
+            for r in rows
+        ]
+
+    def prune_weak(self, *, min_injections: int = 5, min_ema_lift: float = 0.0) -> list[tuple[str, str]]:
+        """Remove records with at least ``min_injections`` observations whose ``ema_lift < min_ema_lift``."""
+        if self._readonly:
+            raise ValueError('cannot prune a readonly ScopedExperienceKB')
+        rows = self.kb.conn.execute(
+            'SELECT scope, record_id FROM experience_outcomes WHERE injections >= ? AND ema_lift < ?',
+            (int(min_injections), float(min_ema_lift)),
+        ).fetchall()
+        if not rows:
+            return []
+        by_scope: dict[str, list[int]] = {}
+        removed: list[tuple[str, str]] = []
+        for scope, rid in rows:
+            by_scope.setdefault(scope, []).append(record_key(scope, rid))
+            removed.append((scope, rid))
+        for scope, ids in by_scope.items():
+            self.kb.delete(ids, scope=scope)
+        self.kb.conn.executemany(
+            'DELETE FROM experience_outcomes WHERE scope=? AND record_id=?',
+            removed,
+        )
+        self.kb.conn.commit()
+        return removed

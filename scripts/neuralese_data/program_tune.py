@@ -1005,6 +1005,10 @@ def grpo_program(args):
         '--lr', str(args.lr),
         '--warmup', str(args.warmup),
         '--kl-beta', str(args.kl_beta),
+        '--lora-rank', str(args.lora_rank),
+        '--lr-reference-spread', str(args.lr_reference_spread),
+        '--sd-weight', str(args.sd_weight),
+        '--concise-pass-bonus', str(args.concise_pass_bonus),
         '--min-groups', str(args.min_groups),
         '--max-groups', str(args.max_groups),
         '--group', str(args.group),
@@ -1072,6 +1076,28 @@ def grpo_program(args):
     full_env = {**dict(__import__('os').environ), **env}
     proc = subprocess.run(cmd, cwd=str(pin), env=full_env)
     return int(proc.returncode)
+
+
+def extract_basis_cmd(args):
+    """Extract a shared low-DOF Mode-P LoRA subspace basis from verified workflow factor exports."""
+    from natlang_neuralese.tune.low_dof import extract_factor_basis
+
+    basis = extract_factor_basis(
+        args.factors,
+        max_rank=int(args.max_rank),
+        max_components=int(args.max_components),
+    )
+    out = basis.save(args.out)
+    report = {
+        'schema': 'natlang.program-extract-basis/1',
+        'out': str(out),
+        'num_components': basis.num_components,
+        'targets': len(basis.target_names),
+        'donors': list(basis.donors),
+        'singular_values': [round(float(v), 6) for v in basis.singular_values.tolist()],
+    }
+    print(json.dumps(report))
+    return 0
 
 
 def calibrate_decisions(args):
@@ -1244,12 +1270,16 @@ def main(argv=None):
     gp.add_argument('--work', help='GRPO work directory (default: DIR/grpo)')
     gp.add_argument('--dev-split', help='dev manifest directory name (default: dev64 if present else dev)')
     gp.add_argument('--pass-rates', help='optional measured pass-rates JSON to seed task selection')
-    gp.add_argument('--reward', choices=('binary', 'graded'), default='binary')
+    gp.add_argument('--reward', choices=('binary', 'graded', 'bounded-graded'), default='bounded-graded')
     gp.add_argument('--pass-band', type=float, nargs=2, default=[0.0, 0.99])
     gp.add_argument('--explore', type=float, default=0.5)
     gp.add_argument('--lr', type=float, default=1e-4)
     gp.add_argument('--warmup', type=int, default=2)
-    gp.add_argument('--kl-beta', type=float, default=0.02)
+    gp.add_argument('--kl-beta', type=float, default=0.01)
+    gp.add_argument('--lora-rank', type=int, default=16)
+    gp.add_argument('--lr-reference-spread', type=int, default=6)
+    gp.add_argument('--sd-weight', type=float, default=0.1)
+    gp.add_argument('--concise-pass-bonus', type=float, default=0.05)
     gp.add_argument('--min-groups', type=int, default=12)
     gp.add_argument('--max-groups', type=int, default=24)
     gp.add_argument('--group', type=int, default=8)
@@ -1268,6 +1298,11 @@ def main(argv=None):
     gp.add_argument('--priority', choices=('low', 'medium', 'high'), default='high')
     gp.add_argument('--extra', default='', help='extra CLI flags forwarded verbatim to grpo.py train')
     gp.add_argument('--dry-run', action='store_true', help='write support-task-ids.json and launch.json without running')
+    eb = sub.add_parser('extract-basis', help='extract a low-DOF shared Mode-P LoRA subspace basis from workflow factor exports')
+    eb.add_argument('--factors', nargs='+', required=True, help='one or more verified factor directories (adapter_factors_fp32.safetensors)')
+    eb.add_argument('--out', required=True, help='output directory for subspace_basis_fp32.safetensors + subspace_basis.json')
+    eb.add_argument('--max-rank', type=int, default=16)
+    eb.add_argument('--max-components', type=int, default=32)
     cd = sub.add_parser('calibrate-decisions', help='Layer-1 single-pass decision temperature calibration & fast-path gate')
     cd.add_argument('--dir', required=True)
     cd.add_argument('--rows', required=True, help='JSONL of {"option_logits", "target", "labels"} for fitting T_f')
@@ -1358,6 +1393,7 @@ def main(argv=None):
     status = {'split': split, 'rows': rows, 'plan': plan, 'release': release, 'teacher-tasks': teacher_tasks,
               'bank': bank, 'colab-fit': colab_fit, 'colab-measure': colab_measure, 'colab-bank': colab_bank,
               'subset': subset, 'merge': merge_release, 'grpo': grpo_program,
+              'extract-basis': extract_basis_cmd,
               'calibrate-decisions': calibrate_decisions}[args.command](args)
     return status if isinstance(status, int) else 0
 

@@ -713,8 +713,11 @@ class Collector:
                                if r.get('event') == 'finish' and r.get('key') == entry['key']), None)
                 outcomes.append(entry_outcome(entry, packet[entry['index']], finish))
             binary = {reward for _, reward, _ in outcomes}
-            graded = {graded for _, _, graded in outcomes}
-            advantage_rewards = binary if getattr(self.args, 'reward', 'graded') == 'binary' else graded
+            reward_mode = getattr(self.args, 'reward', 'graded')
+            advantage_rewards = {
+                None if b is None else episode_training_reward(b, g, mode=reward_mode)
+                for _, b, g in outcomes
+            }
             if len(binary) == 1 and None not in binary and len(advantage_rewards) == 1 and self.prior is not None:
                 success = binary.pop() == 1.0
                 a, b = self.prior.beta(info['task_id'])
@@ -1512,6 +1515,50 @@ def think_close_id(collector):
     return collector.think_close
 
 
+def episode_training_reward(quality, graded, *, mode='graded'):
+    """Map an episode's binary acceptance ``quality`` and optional ``graded`` partial credit to its RL training reward.
+
+    - ``binary``: exact binary acceptance (0.0 or 1.0).
+    - ``graded``: raw ``graded`` reward when present, else ``quality``.
+    - ``bounded-graded``: exact full pass always earns 1.0, while partial failures stay strictly bounded in [0.0, 0.49]
+      (``min(0.49, max(0.0, graded * 0.49))``), giving dense signal on multi-item workflows while guaranteeing every
+      passing episode strictly dominates every partial failure.
+    """
+    q = float(quality)
+    if mode == 'binary':
+        return q
+    if mode == 'bounded-graded':
+        if q >= 1.0:
+            return 1.0
+        if graded is None:
+            return 0.0
+        return min(0.49, max(0.0, float(graded) * 0.49))
+    return q if graded is None else float(graded)
+
+
+def apply_concise_pass_bonus(episodes, bonus):
+    """Reward shorter passing rollouts strictly among passing episodes in a mixed (pass + fail) group.
+
+    Because the bonus is bounded by ``bonus`` (e.g. 0.05) and applied ONLY when a group has >= 2 passing episodes AND
+    >= 1 failing episode (never on all-pass groups or memetic anchor groups), it breaks ties in favor of concise
+    winning reasoning without ever creating pressure toward premature ``</think>`` collapse.
+    """
+    b = float(bonus or 0.0)
+    if b <= 0.0 or len(episodes) < 3 or any(e.get('anchor') is not None for e in episodes):
+        return
+    passing = [e for e in episodes if float(e.get('quality', 0.0)) >= 1.0]
+    failing = [e for e in episodes if float(e.get('quality', 0.0)) < 1.0]
+    if len(passing) < 2 or not failing:
+        return
+    tokens = [int(e.get('sampled_tokens', 0)) for e in passing]
+    lo, hi = min(tokens), max(tokens)
+    if hi <= lo:
+        return
+    span = float(hi - lo)
+    for ep, tok in zip(passing, tokens):
+        ep['reward'] = float(ep['reward']) + b * ((hi - tok) / span)
+
+
 def load_group(collector, group, stats):
     """(task_id, [episode dicts with 'reward', 'rows'], versions) of one scored group."""
     from natlang_neuralese.rl.episode_files import read_rows
@@ -1557,14 +1604,16 @@ def load_group(collector, group, stats):
             continue
         quality = float(reward['quality'])
         graded = reward.get('graded')
-        binary = getattr(getattr(collector, 'args', None), 'reward', 'graded') == 'binary'
+        reward_mode = getattr(getattr(collector, 'args', None), 'reward', 'graded')
         memetic = reward.get('memetic') or {}
-        episodes.append({'reward': quality if binary or graded is None else float(graded),
+        episodes.append({'reward': episode_training_reward(quality, graded, mode=reward_mode),
                          **({'anchor': float(memetic['anchor'])} if 'anchor' in memetic else {}),
                          **({'memetic': memetic} if memetic else {}),
-                         'quality': quality, 'rows': rows, 'decisions': decisions,
+                         'quality': quality, 'sampled_tokens': sampled, 'rows': rows, 'decisions': decisions,
                          'task_id': row['task_id'], 'round': group,
                          'outcome': row.get('outcome'), 'role': role})
+    concise_bonus = float(getattr(getattr(collector, 'args', None), 'concise_pass_bonus', 0.0) or 0.0)
+    apply_concise_pass_bonus(episodes, concise_bonus)
     return info['task_id'], episodes, info['versions']
 
 
@@ -6357,10 +6406,13 @@ def build_parser():
                         'episodes (--no-memetic-nested-slots opts out)')
     t.add_argument('--memetic-group', type=int, default=4)
     t.add_argument('--memetic-model-requests', type=int, default=64)
-    t.add_argument('--reward', choices=('graded', 'binary'), default='graded',
-                   help='advantage reward: graded (task_rollouts.graded_reward: partial credit for the file effects an '
-                        'episode with only answer/file checks failed achieved; owner 2026-11-13) or binary acceptance. '
-                        'Task pass rates for selection stay binary')
+    t.add_argument('--reward', choices=('graded', 'binary', 'bounded-graded'), default='graded',
+                   help='advantage reward: graded (task_rollouts.graded_reward), binary acceptance, or bounded-graded '
+                        '(exact full pass = 1.0, partial failure capped in [0.0, 0.49] so passes always dominate '
+                        'partial failures while preserving multi-item gradient signal). Selection stays binary')
+    t.add_argument('--concise-pass-bonus', type=float, default=0.0,
+                   help='optional pass-only conciseness tiebreaker (e.g. 0.05) added strictly among >=2 passing '
+                        'episodes in mixed pass+fail groups; never fires on all-pass groups or failing episodes')
     t.add_argument('--exclude-ids', action='append', default=[],
                    help='JSONL of pool rows never selected ({"id": ...} per line; wrong oracles, garbled tasks); '
                         'default: every ops/pool-errata/*.jsonl')
