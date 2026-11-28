@@ -345,11 +345,11 @@ def related_peer(peer, row):
 
 
 class KbIndex:
-    """The writer's keys of a peer pool, computed without gradient and refreshed by the trainer (a stale retrieval
-    index, as retrieval-augmented trainers keep one): ``build_live_kb_slots`` fills positives by query similarity from
-    it where a row has too few labelled relatives."""
+    """The writer's multi-block keys of a peer pool (preserving 000000002's sharp span keys via MaxSim scoring),
+    computed without gradient and refreshed by the trainer: ``build_live_kb_slots`` fills positives by query
+    similarity from it where a row has too few labelled relatives."""
 
-    def __init__(self, engine, writer, pool, *, batch=32):
+    def __init__(self, engine, writer, pool, *, batch=32, max_slots=4):
         self.keys = {}
         texts = [(p['key'], p['experience_text']) for p in pool if p.get('experience_text')]
         was_training = writer.training
@@ -357,19 +357,24 @@ class KbIndex:
         with torch.no_grad():
             for start in range(0, len(texts), batch):
                 part = texts[start:start + batch]
-                _, k = writer.encode_experience_texts(engine, [text for _, text in part])
-                for (key, _), value in zip(part, k.float()):
-                    self.keys[key] = value.detach()
+                blocks = writer.encode_experience_blocks(
+                    engine, [text for _, text in part], max_slots=int(max_slots),
+                )
+                for (key, _), (ks, _vs) in zip(part, blocks):
+                    self.keys[key] = F.normalize(ks.detach().float(), dim=-1)  # [M_p, Dk]
         writer.train(was_training)
 
     def nearest(self, query, peers, k):
-        """The ``k`` peers whose indexed key is most similar to ``query`` ([1, Dk] or [Dk], detached)."""
+        """The ``k`` peers with highest MaxSim against ``query`` (``[M_q, Dk]`` or ``[Dk]``, detached)."""
         peers = [p for p in peers if p['key'] in self.keys]
         if not peers or k <= 0:
             return []
-        q = query.detach().float().reshape(-1)
-        keys = torch.stack([self.keys[p['key']].to(q.device) for p in peers])
-        order = torch.argsort(keys @ q, descending=True)[:k].tolist()
+        q = F.normalize(query.detach().float().reshape(-1, query.shape[-1]), dim=-1)  # [M_q, Dk]
+        scores = []
+        for p in peers:
+            pk = self.keys[p['key']].to(q.device)  # [M_p, Dk]
+            scores.append(float((pk @ q.T).max().item()))
+        order = torch.argsort(torch.tensor(scores), descending=True)[:k].tolist()
         return [peers[i] for i in order]
 
 
@@ -381,6 +386,7 @@ def build_live_kb_slots(
     *,
     k_pos: int = 2,
     k_neg: int = 2,
+    max_slots_per_peer: int = 4,
     temperature: float = 0.25,
     sim_threshold: float = -0.25,
     null_restraint: bool = False,
@@ -389,52 +395,46 @@ def build_live_kb_slots(
     neg_grad: bool = True,
     chosen: list | None = None,
 ):
-    """Live-KB slots ``(z_kb [1, M, Dv], k_kb [1, M, Dk], w_kb [1, M], valid [1, M])`` for one training row.
+    """Live-KB multi-block slots ``(z_kb [1, M, Dv], k_kb [1, M, Dk], w_kb [1, M], valid [1, M])`` for one row.
 
-    - Positives: related peers' verified experience (``related_peer``: same task family or same site), encoded live
-      (gradients reach ``writer``). With an ``index``, a row with fewer than ``k_pos`` relatives is filled with the
-      peers nearest its query in the index (2026-11-26: 71% of T2 train rows had no same-family peer and saw no
-      positive at all; retrieval by similarity is how the KB is read at serving). A peer that is the row itself, its
-      task or a source-group sibling is never used: its experience text could carry this call's answer
-      (``plans/NATLANG_COMPILER.md`` §9.4: related, non-identical peers, ``exclude_tasks`` enforced).
-    - Distractors: unrelated peers under the same exclusion, encoded with gradient (``neg_grad`` False encodes them
-      without), so the writer's keys also learn to score down what does not help.
-    - ``null_restraint``: distractors only, at their real retrieval weights, so the head learns to leave memory that
-      does not apply (plan: null-memory / already-solved examples train restraint). Zeroing the weights instead would
-      only mask the slots and teach nothing.
-    - ``rng`` draws relatives and distractors (None: the first in pool order). ``chosen``, when given, receives the
-      keys of the peers used, positives first.
-    Weights are a differentiable function of query-key similarity, so the keys and queries train too."""
+    Preserves 000000002's native multi-block keys/values via ``encode_experience_blocks`` & ``encode_query_blocks``
+    (scoring each retrieved block by MaxSim across the query's blocks so fine-grained span alignment isn't washed out).
+    """
     device = writer.pool_query.device
     query_text = row.get('experience_query') or row.get('header') or row.get('binding') or ''
-    q = writer.encode_query_texts(engine, [query_text])  # [1, Dk]
+    q_blocks = writer.encode_query_blocks(engine, [query_text])[0]  # [M_q, Dk]
     usable = [p for p in peer_pool if p.get('experience_text') and not _shares_closure(p, row)]
     related = [p for p in usable if related_peer(p, row)]
     unrelated = [p for p in usable if not related_peer(p, row)]
     pick = (lambda pool, k: rng.sample(pool, min(k, len(pool)))) if rng is not None else (lambda pool, k: pool[:k])
     pos_rows = [] if null_restraint else pick(related, k_pos)
     if not null_restraint and index is not None and len(pos_rows) < k_pos:
-        pos_rows += index.nearest(q, unrelated, k_pos - len(pos_rows))
+        pos_rows += index.nearest(q_blocks, unrelated, k_pos - len(pos_rows))
     taken = {p['key'] for p in pos_rows}
     neg_rows = pick([p for p in unrelated if p['key'] not in taken], k_neg)
     if chosen is not None:
         chosen.extend(p['key'] for p in [*pos_rows, *neg_rows])
     z_parts, k_parts = [], []
     if pos_rows:
-        z_live, k_live = writer.encode_experience_texts(engine, [p['experience_text'] for p in pos_rows])
-        z_parts.append(z_live)
-        k_parts.append(k_live)
+        for ks, vs in writer.encode_experience_blocks(
+            engine, [p['experience_text'] for p in pos_rows], max_slots=int(max_slots_per_peer),
+        ):
+            k_parts.append(ks)
+            z_parts.append(vs)
     if neg_rows:
         with torch.set_grad_enabled(torch.is_grad_enabled() and neg_grad):
-            z_neg, k_neg_t = writer.encode_experience_texts(engine, [p['experience_text'] for p in neg_rows])
-        z_parts.append(z_neg)
-        k_parts.append(k_neg_t)
+            for ks, vs in writer.encode_experience_blocks(
+                engine, [p['experience_text'] for p in neg_rows], max_slots=int(max_slots_per_peer),
+            ):
+                k_parts.append(ks)
+                z_parts.append(vs)
     if not z_parts:
         return (torch.zeros((1, 0, writer.value_dim), device=device), torch.zeros((1, 0, writer.key_dim), device=device),
                 torch.zeros((1, 0), device=device), torch.zeros((1, 0), device=device, dtype=torch.bool))
     z_all = torch.cat(z_parts, dim=0).unsqueeze(0)  # [1, M, Dv]
     k_all = torch.cat(k_parts, dim=0).unsqueeze(0)  # [1, M, Dk]
-    sims = (q.unsqueeze(1) * k_all).sum(dim=-1)     # [1, M]
+    # Differentiable MaxSim across query blocks: [1, M, M_q] -> max over query blocks -> [1, M]
+    sims = torch.matmul(k_all, q_blocks.T.unsqueeze(0)).max(dim=-1).values
     w_all = F.softplus((sims - float(sim_threshold)) / max(1e-3, float(temperature)))
     valid = torch.ones((1, z_all.shape[1]), device=device, dtype=torch.bool)
     return z_all, k_all, w_all, valid

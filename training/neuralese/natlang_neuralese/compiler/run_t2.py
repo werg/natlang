@@ -975,19 +975,24 @@ def train(args):
             position += 1
         batch_sites = [sites.row(row) for row in batch_rows]
         scales = row_loss_scales([target_tokens(site) for site in batch_sites], args.loss_weighting, args.row_token_cap)
+        kb_warmup_active = writer is not None and step < int(getattr(args, 'kb_warmup_steps', 0) or 0)
         for row, site, row_scale in zip(batch_rows, batch_sites, scales):
             tokens += len(site['graph']['nodes'][0]['token_ids'])
             kb_args = {}
             if writer is not None:
-                null_step = rng.random() < args.null_kb_prob
+                null_step = False if kb_warmup_active else (rng.random() < args.null_kb_prob)
                 z_kb, k_kb, w_kb, v_kb = build_live_kb_slots(
                     engine, writer, row, train_rows, k_pos=args.kb_pos, k_neg=args.kb_neg,
                     null_restraint=null_step, rng=rng, index=index, neg_grad=args.kb_neg_grad,
                 )
                 kb_args = {'z_kb': z_kb, 'k_kb': k_kb, 'w_kb': w_kb, 'kb_valid': v_kb}
+            # During dedicated KB-to-position warmup, disable AdapterReader so z_kb -> Mode-P header position state
+            # residuals (state_out + H_val) cannot be bypassed and must learn LFM3's pre-RoPE KV + conv geometry first.
             losses.append(site_loss(
                 engine, head, site, adapter_id=adapter_id, init_block=sites.block(row),
-                basis_module=basis_module, **kb_args, backward=True, scale=row_scale,
+                basis_module=basis_module, **kb_args,
+                kv=True, adapter=(not kb_warmup_active), apply_dropout=(not kb_warmup_active),
+                backward=True, scale=row_scale,
             ))
 
         # Site-distinctness regularizer across distinct sites in the batch (forbids z_site collapse to one global adapter)
@@ -1246,6 +1251,9 @@ def main(argv=None):
                    help="the pplx backbone's FLA/causal-conv/Liger kernels (default: on for CUDA, as 000000002 trained)")
     t.add_argument('--kb-pos', type=int, default=2)
     t.add_argument('--kb-neg', type=int, default=2)
+    t.add_argument('--kb-warmup-steps', type=int, default=250,
+                   help='initial steps focusing exclusively on z_kb -> Mode-P position state residuals (adapter=False, '
+                        'no null restraint) so H_val and state_out warm up for LFM3 before joint training (0: off)')
     t.add_argument('--kb-index-every', type=int, default=250,
                    help="refresh the writer's key index of the train pool every N steps; positives are filled by "
                         'similarity from it where a row has too few same-family/same-site peers (0: no fill)')

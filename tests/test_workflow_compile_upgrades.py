@@ -476,3 +476,76 @@ def test_compiler_fixes_1_to_5(tmp_path):
     from natlang_neuralese.compiler.live_kb_writer import PplxWarmstartWriter
     src = inspect.getsource(PplxWarmstartWriter.encode_experience_blocks)
     assert 'writer_encoder.encode_blocks' in src
+
+
+def test_four_design_improvements_end_to_end(tmp_path):
+    # Improvement #2: sealed_fanin_variant enforces information bottleneck + total_tokens pass-only conciseness.
+    sys.path.insert(0, str(REPO / 'scripts' / 'rl_tasks'))
+    import neuralese_variants
+    fake_row = {
+        'id': 'ext:test:1',
+        'family': 'ext_decisions_tally',
+        'curriculum': {'external': {'framing': 'plain'}},
+        'semantics': {
+            'root': 'main.nl',
+            'inputs': {'items': ['a', 'b'], 'rubric': 'r'},
+            'files': {'main.nl': '---\nargs:\n  items: "string[]"\nreturns: "number"\n---\nCount matching items.\n'},
+        },
+    }
+    h_name, h_args, h_instr, h_note = neuralese_variants.AUTHORED['ext_decisions_tally']
+    sealed = neuralese_variants.sealed_fanin_variant(
+        fake_row, f'{h_name}.nl', neuralese_variants.helper_file(h_args, h_instr), h_note, max_note_tokens=96,
+    )
+    assert sealed['curriculum']['external']['framing'] == neuralese_variants.SEALED_FRAMING
+    assert sealed['curriculum']['external']['neuralese_bottleneck'] is True
+    assert '96 tokens' in sealed['semantics']['files'][f'main/{h_name}.nl']
+    assert 'Information-bottleneck contract' in sealed['semantics']['files']['main.nl']
+
+    eps = [
+        {'quality': 1.0, 'reward': 1.0, 'sampled_tokens': 300, 'total_tokens': 600},
+        {'quality': 1.0, 'reward': 1.0, 'sampled_tokens': 300, 'total_tokens': 1600},
+        {'quality': 0.0, 'reward': 0.0, 'sampled_tokens': 100, 'total_tokens': 400},
+    ]
+    grpo.apply_concise_pass_bonus(eps, 0.05)
+    assert eps[0]['reward'] == pytest.approx(1.05)
+    assert eps[1]['reward'] == pytest.approx(1.00)
+
+    # Improvement #4: extract_grpo_decision_rows + calibrate-decisions --from-grpo-work --attach-manifest.
+    work = tmp_path / 'grpo_work'
+    (work / 'decisions').mkdir(parents=True)
+    (work / 'decisions' / 'step-00001.jsonl').write_text(
+        '\n'.join([
+            json.dumps({'option_scores': [3.0, -1.0], 'chosen': 0, 'quality': 1.0, 'labels': ['yes', 'no']}),
+            json.dumps({'option_scores': [-1.0, 2.5], 'chosen': 1, 'quality': 1.0, 'labels': ['yes', 'no']}),
+            json.dumps({'option_scores': [0.5, 0.4], 'chosen': 0, 'quality': 0.0, 'labels': ['yes', 'no']}),
+        ]) + '\n',
+        encoding='utf-8',
+    )
+    extracted = program_tune.extract_grpo_decision_rows(work)
+    assert len(extracted) == 2
+    manifest_path = tmp_path / 'natlang.adapters.json'
+    manifest_path.write_text(json.dumps({'schema': 'natlang.adapters/v1', 'digest': '0' * 64}), encoding='utf-8')
+    rc = program_tune.main([
+        'calibrate-decisions', '--dir', str(tmp_path), '--from-grpo-work', str(work),
+        '--attach-manifest', str(manifest_path), '--binding-key', 'intent',
+    ])
+    assert rc == 0
+    updated_manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    assert 'intent' in updated_manifest['decisionCalibration']
+    assert updated_manifest['digest'] != '0' * 64
+
+    # Improvement #3: SharedBasisBCADispatcher exact match to dense (U @ C @ V^T) across mixed concurrent sites.
+    from natlang_neuralese.serve.shared_basis_bca import SharedBasisBCADispatcher
+    torch.manual_seed(1)
+    u = torch.randn(10, 4)
+    v = torch.randn(8, 4)
+    disp = SharedBasisBCADispatcher({'proj': u}, {'proj': v})
+    c1 = torch.randn(4, 4)
+    c2 = torch.randn(4, 4)
+    disp.register_site('siteA', {'proj': c1})
+    disp.register_site('siteB', {'proj': c2})
+    x = torch.randn(3, 5, 8)
+    out = disp.apply_delta('proj', x, ['siteA', None, 'siteB'], scales=[1.0, 1.0, 0.5])
+    assert torch.allclose(out[0], x[0] @ (u @ c1 @ v.T).T, atol=1e-5)
+    assert torch.allclose(out[1], torch.zeros(5, 10), atol=1e-6)
+    assert torch.allclose(out[2], 0.5 * (x[2] @ (u @ c2 @ v.T).T), atol=1e-5)

@@ -1537,11 +1537,12 @@ def episode_training_reward(quality, graded, *, mode='graded'):
 
 
 def apply_concise_pass_bonus(episodes, bonus):
-    """Reward shorter passing rollouts strictly among passing episodes in a mixed (pass + fail) group.
+    """Reward token-efficient passing rollouts strictly among passing episodes in a mixed (pass + fail) group.
 
-    Because the bonus is bounded by ``bonus`` (e.g. 0.05) and applied ONLY when a group has >= 2 passing episodes AND
-    >= 1 failing episode (never on all-pass groups or memetic anchor groups), it breaks ties in favor of concise
-    winning reasoning without ever creating pressure toward premature ``</think>`` collapse.
+    Ranks passing episodes by total episode tokens (``prompt_tokens + sampled_tokens`` when available, else
+    ``sampled_tokens``) so both concise reasoning AND prompt-token savings from Neuralese/compaction earn positive
+    tie-breaker credit. Applied ONLY when a group has >= 2 passing episodes AND >= 1 failing episode (never on
+    all-pass groups or memetic anchor groups), so it can never induce ``</think>`` collapse or reward-hack unused writes.
     """
     b = float(bonus or 0.0)
     if b <= 0.0 or len(episodes) < 3 or any(e.get('anchor') is not None for e in episodes):
@@ -1550,7 +1551,7 @@ def apply_concise_pass_bonus(episodes, bonus):
     failing = [e for e in episodes if float(e.get('quality', 0.0)) < 1.0]
     if len(passing) < 2 or not failing:
         return
-    tokens = [int(e.get('sampled_tokens', 0)) for e in passing]
+    tokens = [int(e.get('total_tokens', e.get('sampled_tokens', 0))) for e in passing]
     lo, hi = min(tokens), max(tokens)
     if hi <= lo:
         return
@@ -1587,6 +1588,8 @@ def load_group(collector, group, stats):
         rows = trainable_rows(calls, stats, collector.args.top_p)
         decisions = decision_turns(row, stats, collector.states) if row.get('turns') else []
         sampled = sum(len(r['sample']) for r in rows)
+        prompt_toks = sum(len(r['prompt']) for r in rows)
+        consumed_states = sum(len(r.get('imports') or ()) for r in rows)
         collector.generated += sampled
         collector.episodes += 1
         if reward is None or row.get('unscored'):
@@ -1609,7 +1612,9 @@ def load_group(collector, group, stats):
         episodes.append({'reward': episode_training_reward(quality, graded, mode=reward_mode),
                          **({'anchor': float(memetic['anchor'])} if 'anchor' in memetic else {}),
                          **({'memetic': memetic} if memetic else {}),
-                         'quality': quality, 'sampled_tokens': sampled, 'rows': rows, 'decisions': decisions,
+                         'quality': quality, 'sampled_tokens': sampled,
+                         'total_tokens': prompt_toks + sampled, 'consumed_native_states': consumed_states,
+                         'rows': rows, 'decisions': decisions,
                          'task_id': row['task_id'], 'round': group,
                          'outcome': row.get('outcome'), 'role': role})
     concise_bonus = float(getattr(getattr(collector, 'args', None), 'concise_pass_bonus', 0.0) or 0.0)

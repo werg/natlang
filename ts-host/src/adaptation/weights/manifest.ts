@@ -55,6 +55,14 @@ export type SoftState = { readonly binding: string; readonly kind: 'instructions
  * the llama.cpp fork with `--native-state`, the in-page engine as `native_states`, native servers by upload. */
 export const softStateFile = (state: Pick<SoftState, 'state'>): string => `states/${state.state}.nzs`;
 
+/** Per-binding single-pass decision calibration (`program_tune.py calibrate-decisions`), enabling 0-decode-token
+ * fast-path settlement when calibrated max option probability clears `fastThreshold` and every `riskThresholds` floor. */
+export type DecisionCalibration = {
+  readonly temperature: number;
+  readonly fastThreshold: number;
+  readonly riskThresholds?: Readonly<Record<string, number>>;
+};
+
 export type WeightManifest = {
   readonly schema: typeof WEIGHTS_SCHEMA;
   readonly program: { readonly id: string; readonly buildHash: string };
@@ -71,6 +79,8 @@ export type WeightManifest = {
   readonly scales: Readonly<Record<string, number>>;
   /** Reduced stacks (sorted artifact IDs) validated as usable when some artifacts are unavailable. */
   readonly validatedReductions: readonly (readonly string[])[];
+  /** Optional calibrated single-pass decision settlement parameters keyed by definition ID or name. */
+  readonly decisionCalibration?: Readonly<Record<string, DecisionCalibration>>;
   /** What runs when a binding's stack cannot be served. Only the compatible base executor is declared today. */
   readonly fallback: 'base';
   /** Build receipts (data, training, export); opaque here. */
@@ -175,6 +185,25 @@ export function validateManifest(value: unknown): asserts value is WeightManifes
   }
   for (const [node, scale] of Object.entries(manifest.scales ?? fail('scales missing')))
     if (!nodes.has(node) || !Number.isFinite(scale)) fail(`scale for ${node} must name a node and be finite`);
+  if (manifest.decisionCalibration !== undefined) {
+    if (!manifest.decisionCalibration || typeof manifest.decisionCalibration !== 'object' || Array.isArray(manifest.decisionCalibration))
+      fail('decisionCalibration must be a record');
+    for (const [key, entry] of Object.entries(manifest.decisionCalibration)) {
+      if (!isString(key) || !entry || typeof entry !== 'object') fail(`decisionCalibration[${key}] is malformed`);
+      if (!Number.isFinite(entry.temperature) || entry.temperature <= 0)
+        fail(`decisionCalibration[${key}].temperature must be finite and > 0`);
+      if (!Number.isFinite(entry.fastThreshold) || entry.fastThreshold <= 0 || entry.fastThreshold > 1)
+        fail(`decisionCalibration[${key}].fastThreshold must be in (0, 1]`);
+      if (entry.riskThresholds !== undefined) {
+        if (!entry.riskThresholds || typeof entry.riskThresholds !== 'object' || Array.isArray(entry.riskThresholds))
+          fail(`decisionCalibration[${key}].riskThresholds must be a record`);
+        for (const [label, floor] of Object.entries(entry.riskThresholds)) {
+          if (!isString(label) || !Number.isFinite(floor) || floor < 0 || floor > 1)
+            fail(`decisionCalibration[${key}].riskThresholds[${label}] must be in [0, 1]`);
+        }
+      }
+    }
+  }
   if (manifest.fallback !== 'base') fail('fallback must be base');
   if (!Array.isArray(manifest.validatedReductions)) fail('validatedReductions missing');
   if (manifest.digest !== manifestDigest(manifest)) fail('digest does not match content');

@@ -1273,12 +1273,48 @@ def extract_basis_cmd(args):
     return 0
 
 
+def extract_grpo_decision_rows(work_dir: str | Path) -> list[dict]:
+    """Extract calibration rows ``{"option_logits", "target", "labels"}`` from GRPO's ``WORK/decisions/step-*.jsonl``.
+
+    Keeps positive-advantage (passing-episode) decision records where ``scores`` and ``chosen`` (or ``target``) are
+    present so ``calibrate-decisions`` can run with zero extra GPU compute directly on logged GRPO traces.
+    """
+    dec_dir = Path(work_dir) / 'decisions'
+    if not dec_dir.is_dir():
+        return []
+    rows: list[dict] = []
+    for path in sorted(dec_dir.glob('step-*.jsonl')):
+        for rec in read_jsonl(path):
+            scores = rec.get('option_scores') or rec.get('scores') or rec.get('option_logits')
+            if not isinstance(scores, list) or len(scores) < 2:
+                continue
+            # Prefer explicit target; otherwise use chosen option on positive-advantage/passing episodes.
+            target = rec.get('target')
+            if target is None:
+                adv = rec.get('advantage')
+                quality = rec.get('quality')
+                if (quality is not None and float(quality) < 1.0) or (quality is None and adv is not None and float(adv) <= 0.0):
+                    continue
+                target = rec.get('chosen')
+                if target is None:
+                    target = rec.get('choice')
+            if target is None:
+                continue
+            idx = int(target)
+            if not (0 <= idx < len(scores)):
+                continue
+            labels = list(rec.get('labels') or rec.get('options') or [f'opt_{i}' for i in range(len(scores))])
+            rows.append({'option_logits': [float(x) for x in scores], 'target': idx, 'labels': labels})
+    return rows
+
+
 def calibrate_decisions(args):
     """Layer-1 single-pass decision calibration (tune.decision_compile) for a workflow's readout: decision calls.
 
-    Reads JSONL rows of ``{"option_logits": [float, ...], "target": int, "labels": [str, ...]}`` (plus optional
-    ``--eval-rows``), fits scalar temperature T_f minimizing NLL, measures ECE & margin-gated fast-path settlement rate
-    (0 decode tokens when confident), and writes DIR/fit/decision-calibration.json.
+    Reads JSONL rows of ``{"option_logits": [float, ...], "target": int, "labels": [str, ...]}`` (or extracts them
+    directly from ``--from-grpo-work WORK/decisions/step-*.jsonl``), fits scalar temperature T_f minimizing NLL,
+    measures ECE & margin-gated fast-path settlement rate (0 decode tokens when confident), writes
+    DIR/fit/decision-calibration.json, and optionally attaches ``decisionCalibration`` into a WeightManifest JSON.
     """
     import torch
     import torch.nn.functional as F
@@ -1286,9 +1322,14 @@ def calibrate_decisions(args):
 
     directory = Path(args.dir).resolve()
     family = json.loads((directory / 'split.json').read_text())['family'] if (directory / 'split.json').exists() else directory.name
-    fit_rows = read_jsonl(args.rows)
+    if getattr(args, 'from_grpo_work', None):
+        fit_rows = extract_grpo_decision_rows(args.from_grpo_work)
+    elif args.rows:
+        fit_rows = read_jsonl(args.rows)
+    else:
+        raise SystemExit('calibrate-decisions requires either --rows or --from-grpo-work')
     if not fit_rows:
-        raise SystemExit(f'{args.rows}: no decision rows to calibrate')
+        raise SystemExit('no decision rows to calibrate')
     eval_rows = read_jsonl(args.eval_rows) if args.eval_rows else fit_rows
 
     def _to_tensors(items):
@@ -1348,6 +1389,24 @@ def calibrate_decisions(args):
         },
     }
     out_path.write_text(json.dumps(report, indent=1) + '\n')
+    attach = getattr(args, 'attach_manifest', None)
+    if attach:
+        m_path = Path(attach)
+        manifest = json.loads(m_path.read_text(encoding='utf-8'))
+        cal_map = dict(manifest.get('decisionCalibration') or {})
+        binding_key = getattr(args, 'binding_key', None) or family
+        entry = {'temperature': round(cal.temperature, 6), 'fastThreshold': float(args.fast_threshold)}
+        if risk:
+            entry['riskThresholds'] = risk
+        cal_map[binding_key] = entry
+        manifest['decisionCalibration'] = cal_map
+        # Reseal digest matching ts-host manifestDigest(rest, 'natlang.adapters/v1')
+        rest = {k: v for k, v in manifest.items() if k != 'digest'}
+        manifest['digest'] = hashlib.sha256(
+            f'natlang.adapters/v1\n{json.dumps(rest, sort_keys=True, separators=(",", ":"))}'.encode('utf-8')
+        ).hexdigest()
+        m_path.write_text(json.dumps(manifest, indent=1) + '\n', encoding='utf-8')
+        report['attached_manifest'] = str(m_path)
     print(json.dumps(report))
     return 0
 
@@ -1500,9 +1559,12 @@ def main(argv=None):
     asub.add_argument('--dtype', default='bfloat16')
     cd = sub.add_parser('calibrate-decisions', help='Layer-1 single-pass decision temperature calibration & fast-path gate')
     cd.add_argument('--dir', required=True)
-    cd.add_argument('--rows', required=True, help='JSONL of {"option_logits", "target", "labels"} for fitting T_f')
+    cd.add_argument('--rows', help='JSONL of {"option_logits", "target", "labels"} for fitting T_f')
+    cd.add_argument('--from-grpo-work', help='extract decision rows directly from GRPO WORK/decisions/step-*.jsonl')
     cd.add_argument('--eval-rows', help='optional held-out JSONL to measure calibrated ECE & fast-path settlement')
     cd.add_argument('--out', help='output JSON report path (default: DIR/fit/decision-calibration.json)')
+    cd.add_argument('--attach-manifest', help='optional natlang.adapters.json path to attach decisionCalibration into')
+    cd.add_argument('--binding-key', help='definition id/name key for --attach-manifest (default: program family)')
     cd.add_argument('--fast-threshold', type=float, default=0.85)
     cd.add_argument('--risk-thresholds', help='optional JSON map of {label: floor} forcing fallback')
     cd.add_argument('--min-temp', type=float, default=0.1)

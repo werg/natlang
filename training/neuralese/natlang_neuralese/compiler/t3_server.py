@@ -42,10 +42,12 @@ class CompiledSiteService:
         checkpoint: str | Path,
         base: str | Path,
         release_root: str | Path,
+        actor_store_dir: str | Path | None = None,
         device: str = 'cuda',
         dtype: str = 'bfloat16',
         writer=None,
         scoped_kb=None,
+        native_query_projector=None,
     ) -> 'CompiledSiteService':
         from ..serve import load_native_engine
         from ..serve.store import TensorStore
@@ -58,7 +60,8 @@ class CompiledSiteService:
             str(checkpoint), base=str(base), device=device,
             dtype=getattr(torch, dtype), training_state=False,
         )
-        engine.store = TensorStore(release_root / 'store')
+        # Share the serving actor's TensorStore when co-hosted so compiled .nzs + .nnt + basis artifacts are visible immediately.
+        engine.store = TensorStore(Path(actor_store_dir) if actor_store_dir else (release_root / 'store'))
         basis_module = None
         if saved.get('learn_basis') and saved.get('basis') is not None:
             basis_module = create_learned_compiler_basis(engine, config.targets, config.rank)
@@ -74,6 +77,7 @@ class CompiledSiteService:
         compiler = PerCallNeuralHKBCompiler(
             engine, head, adapter_id=adapter_id, release_root=release_root,
             writer=writer, scoped_kb=scoped_kb, basis_module=basis_module,
+            native_query_projector=native_query_projector,
         )
         return cls(
             compiler,
@@ -189,14 +193,39 @@ def main(argv=None):
     parser.add_argument('--checkpoint', type=Path, required=True, help='Base policy native checkpoint')
     parser.add_argument('--base', type=Path, required=True, help='Base HF model dir')
     parser.add_argument('--release-root', type=Path, required=True, help='Cache directory for compiled releases')
+    parser.add_argument('--actor-store-dir', type=Path, default=None, help='Shared serving actor TensorStore directory')
+    parser.add_argument('--scoped-kb', type=Path, default=None, help='Optional ScopedExperienceKB SQLite database')
+    parser.add_argument('--kb-admission-rows', type=Path, default=None, help='Pool rows JSONL for HeldAdmission check')
+    parser.add_argument('--native-query-projector', type=Path, default=None, help='Distilled native_query_projector.pt')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8775)
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--dtype', default='bfloat16')
     args = parser.parse_args(argv)
+    scoped_kb = None
+    nqp = None
+    if args.scoped_kb is not None:
+        from .hkb_bridge import HeldAdmission, ScopedExperienceKB
+        if args.kb_admission_rows is None:
+            raise SystemExit('--scoped-kb requires --kb-admission-rows for fail-closed HeldAdmission')
+        admission = HeldAdmission.from_rows(args.kb_admission_rows)
+        scoped_kb = ScopedExperienceKB(args.scoped_kb, admission=admission, readonly=True)
+    if args.native_query_projector is not None:
+        from .native_query import NativeQueryProjector
+        ckpt = torch.load(args.native_query_projector, map_location='cpu', weights_only=True)
+        nqp = NativeQueryProjector(
+            tap_dims=tuple(ckpt['tap_dims']),
+            key_dim=int(ckpt['key_dim']),
+            hidden_dim=int(ckpt['hidden_dim']),
+            tap_source=str(ckpt.get('tap_source', 'state')),
+            tap_names=tuple(ckpt.get('tap_names') or ()),
+        ).to(args.device)
+        nqp.load_state_dict(ckpt['state_dict'], strict=True)
+        nqp.eval()
     service = CompiledSiteService.from_t2_state(
         state_path=args.state, checkpoint=args.checkpoint, base=args.base,
-        release_root=args.release_root, device=args.device, dtype=args.dtype,
+        release_root=args.release_root, actor_store_dir=args.actor_store_dir,
+        device=args.device, dtype=args.dtype, scoped_kb=scoped_kb, native_query_projector=nqp,
     )
     server = make_http_server(service, host=args.host, port=args.port)
     print(json.dumps({'serving': f'http://{args.host}:{args.port}', 'mode': 'mode-p',

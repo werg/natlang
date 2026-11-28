@@ -39,6 +39,8 @@ sys.path[:0] = [str(REPO / 'training/neuralese'), str(REPO), str(REPO / 'scripts
 from scripts.rl_tasks.common import nl_file, slug, text_digest  # noqa: E402
 
 FRAMING = 'neuralese-helper'
+SEALED_FRAMING = 'neuralese-sealed-fanin'
+BULK_INPUT_KEYS = ('story', 'passage', 'documents', 'files', 'rows', 'sentences', 'items', 'paragraphs', 'text', 'content')
 
 # Families without a generator framing: (helper name, args, instruction, root note). Each note is about the call's own
 # inputs (span basis: input-specific content the consumer needs).
@@ -184,6 +186,45 @@ def variant(row, helper_name, helper_text, note):
     out['generation'] = {**(out.get('generation') or {}), 'variant_of': row['id'],
                          'variant_method': 'natlang.neuralese_variants/1: neuralese-helper framing of a pool task; '
                                            'inputs, oracle and reference unchanged'}
+    return out
+
+
+def sealed_fanin_variant(row, helper_name, helper_text, note, *, max_note_tokens=128):
+    """Information-bottleneck Neuralese variant (`neuralese-sealed-fanin`): enforces that the root obtains bulk
+    content strictly through the `Neuralese<string>` helper (bounded to `max_note_tokens`), sending clean pass-through
+    RL gradients from execution outcome straight into both consumer and producer weights."""
+    out = variant(row, helper_name, helper_text, note)
+    sem = out['semantics']
+    stem = sem['root'][:-3]
+    helper_path = f'{stem}/{helper_name}'
+    # Add explicit compact note budget to the helper body and bottleneck contract to the root body.
+    h_head, h_body = root_body(sem['files'][helper_path])
+    sem['files'][helper_path] = (
+        f'{h_head}\n{h_body.strip()}\n\n'
+        f'Keep this private Neuralese note compact (at most {int(max_note_tokens)} tokens), retaining only '
+        'task-decisive facts and exact identifiers needed by the caller.\n'
+    )
+    r_head, r_body = root_body(sem['files'][sem['root']])
+    bulk_present = [k for k in BULK_INPUT_KEYS if k in (sem.get('inputs') or {})]
+    bottleneck_note = (
+        f'Information-bottleneck contract: delegate reading raw bulk inputs ({", ".join(bulk_present) or "the source items"}) '
+        f'to {helper_name[:-3]} and compute the final return strictly from its Neuralese notes without quoting raw bulk text.'
+    )
+    sem['files'][sem['root']] = f'{r_head}\n{r_body.strip()}\n\n{bottleneck_note}\n'
+    cur = out['curriculum']
+    ext = cur.setdefault('external', {})
+    out['id'] = row['id'] + ':' + text_digest(row['id'] + '|' + SEALED_FRAMING)[:8]
+    ext.update(
+        framing=SEALED_FRAMING,
+        neuralese_bottleneck=True,
+        max_note_tokens=int(max_note_tokens),
+        sealed_inputs=bulk_present,
+    )
+    out['generation'] = {
+        **(out.get('generation') or {}),
+        'variant_of': row['id'],
+        'variant_method': 'natlang.neuralese_variants/2: sealed-fanin information bottleneck forcing producer->consumer Neuralese',
+    }
     return out
 
 

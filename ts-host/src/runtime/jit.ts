@@ -252,6 +252,9 @@ export function createHttpJitCompiler(
   siteId: string;
   resolvedHeaderText: string;
   partialArgsJson?: string;
+  messages?: readonly unknown[];
+  tools?: readonly unknown[];
+  queryText?: string;
 }) => Promise<{ adapterId: string | null; nativeStateId: string | null }> {
   const baseUrl = endpoint.replace(/\/+$/, '');
   const doFetch = options.fetchImpl ?? globalThis.fetch;
@@ -266,6 +269,9 @@ export function createHttpJitCompiler(
         body: JSON.stringify({
           site_id: args.siteId,
           header: args.resolvedHeaderText,
+          ...(args.messages ? { messages: args.messages } : {}),
+          ...(args.tools ? { tools: args.tools } : {}),
+          ...(args.queryText ? { query_text: args.queryText } : {}),
           ...(args.partialArgsJson ? { partial_args_json: args.partialArgsJson } : {}),
           ...(options.scopes ? { scopes: options.scopes } : {}),
           ...(options.excludeTasks ? { exclude_tasks: options.excludeTasks } : {}),

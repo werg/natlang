@@ -863,10 +863,17 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     maxSeconds: model.maxSeconds, contextTokens: definition.budget?.contextTokens ?? model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, decisionReadout: model.decisionReadout, decisionGeneration: model.decisionGeneration, decisionSamples: model.decisionSamples,
     guidance: model.guidance, promptRendering: model.promptRendering,
-    ...(compilerOpts?.compiledDecisions ? (() => {
-      const cal = compilerOpts.compiledDecisions.get(definition.id) ?? compilerOpts.compiledDecisions.get(definition.name);
+    ...(() => {
+      const fromOpts = compilerOpts?.compiledDecisions?.get(definition.id) ?? compilerOpts?.compiledDecisions?.get(definition.name);
+      let fromManifest: { temperature: number; fastThreshold: number; riskThresholds?: Readonly<Record<string, number>> } | undefined;
+      for (const binding of task.weights ?? []) {
+        const hit = binding.manifest.decisionCalibration?.[definition.id]
+          ?? binding.manifest.decisionCalibration?.[definition.name];
+        if (hit) { fromManifest = hit; break; }
+      }
+      const cal = fromOpts ?? fromManifest;
       return cal ? { compiledDecision: cal } : {};
-    })() : {}),
+    })(),
     ...(compilerOpts?.branchSearch ? { branchSearch: compilerOpts.branchSearch } : {}),
     ...(compilerOpts?.hoistContracts ? { hoistContracts: true } : {}),
     // Live events (plans/STREAMING.md §1.6): the call's model deltas, tagged with the call; nothing without a subscriber.
