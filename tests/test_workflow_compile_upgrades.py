@@ -462,3 +462,17 @@ def test_compiler_fixes_1_to_5(tmp_path):
         h_opt.step()
     loss1 = float(adapter_distillation_loss(head, init_vals, tgt_cores, hidden_taps=hidden_taps).item())
     assert loss1 < loss0 * 0.25
+
+    # Regression for P0 #4: project_factor_cores normalizes 'port.hf.' vs bare HF target names and fails closed on 0 matches.
+    prefixed_left = {f'port.hf.{k}': v for k, v in left_b.items()}
+    prefixed_right = {f'port.hf.{k}': v for k, v in right_b.items()}
+    prefixed_cores = project_factor_cores(str(tmp_path / 'win_lora'), prefixed_left, prefixed_right)
+    assert set(prefixed_cores.keys()) == set(prefixed_left.keys())
+    with pytest.raises(ValueError, match='matched 0 targets'):
+        project_factor_cores(str(tmp_path / 'win_lora'), {'bogus': torch.eye(4)}, {'bogus': torch.eye(4)})
+
+    # Regression for P0 #3: PplxWarmstartWriter does NOT shadow encode_experience_blocks with single-block shim.
+    import inspect
+    from natlang_neuralese.compiler.live_kb_writer import PplxWarmstartWriter
+    src = inspect.getsource(PplxWarmstartWriter.encode_experience_blocks)
+    assert 'writer_encoder.encode_blocks' in src

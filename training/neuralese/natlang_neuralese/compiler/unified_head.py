@@ -133,7 +133,7 @@ class UnifiedCompilerHead(nn.Module):
             dim=-1,
         )
         adapter_features = self.slot_to_adapter(slot_feat_in)  # [B, M, adapter_inp]
-        gates = (weights.float() / (0.1 + weights.float().clamp_min(0.0))) * valid.float()
+        gates = (weights.float() / (float(self.memory_bank.null_mass) + weights.float().clamp_min(0.0))) * valid.float()
         zero_prev = adapter_features.new_zeros(
             b, self.module_count, self.hkb_config.rank, self.hkb_config.rank
         )

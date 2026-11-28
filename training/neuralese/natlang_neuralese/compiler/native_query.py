@@ -12,13 +12,25 @@ import torch.nn.functional as F
 
 
 class NativeQueryProjector(nn.Module):
-    """3-tap FP32 SwiGLU projector mapping pooled LFM3 hidden taps -> normalized 128-d HKB query vector."""
+    """3-tap FP32 SwiGLU projector mapping pooled LFM3 taps -> normalized 128-d HKB query vector."""
 
-    def __init__(self, tap_dims: tuple[int, ...], *, key_dim: int = 128, hidden_dim: int = 512):
+    def __init__(
+        self,
+        tap_dims: tuple[int, ...],
+        *,
+        key_dim: int = 128,
+        hidden_dim: int = 512,
+        tap_source: str = 'state',
+        tap_names: tuple[str, ...] = (),
+    ):
         super().__init__()
         if not tap_dims or any(int(d) <= 0 for d in tap_dims):
             raise ValueError(f'tap_dims must be non-empty positive ints, got {tap_dims!r}')
+        if tap_source not in ('state', 'hidden'):
+            raise ValueError(f"tap_source must be 'state' or 'hidden', got {tap_source!r}")
         self.tap_dims = tuple(int(d) for d in tap_dims)
+        self.tap_source = str(tap_source)
+        self.tap_names = tuple(str(n) for n in tap_names)
         self.key_dim = int(key_dim)
         self.hidden_dim = int(hidden_dim)
         self.tap_norms = nn.ModuleList([nn.LayerNorm(d) for d in self.tap_dims])

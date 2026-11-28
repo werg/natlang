@@ -96,28 +96,34 @@ def init_header_state(engine, messages, tools, header):
 
 
 def site_graph(engine, messages, tools, reply, header, state_id, block_tokens, *, graph_id, source_groups, own,
-               mask_context=True):
+               mask_context=True, extra_state_ids=()):
     """One call as a single-node native graph row importing the header state at its position; the reply's tokens are
     the targets (prompt, tool output and the state are zero-weight context). ``own``: the reply is the student's own
     sample (a rollout) rather than a teacher's; its leading non-student tokens (``serve.targets.target_context_end``:
     a teacher's think block, empty or not, and lead-in, an own reply's unsampled empty think block) are context.
-    ``mask_context`` False (``run_t2 train --no-mask-non-student-context``) opts out."""
+    ``mask_context`` False (``run_t2 train --no-mask-non-student-context``) opts out.
+    ``extra_state_ids`` registers read-only episode ``native_state`` blocks imported alongside the header."""
     from ..serve.targets import target_context_end, target_items
     prompt, target = target_items(engine, place_header(messages, header, state_id), tools, reply)
     lead = (target_context_end(engine.tokenizer, reply, [value for _, value in target], own=own)
             if mask_context else 0)
     return items_graph(engine, prompt, target, state_id, block_tokens, graph_id=graph_id, source_groups=source_groups,
-                       context_lead=lead)
+                       context_lead=lead, extra_state_ids=extra_state_ids)
 
 
-def items_graph(engine, prompt, target, state_id, block_tokens, *, graph_id, source_groups, context_lead=0):
+def items_graph(engine, prompt, target, state_id, block_tokens, *, graph_id, source_groups, context_lead=0,
+                extra_state_ids=()):
     """The graph row of rendered items (``serve.targets`` items: ``('tok', id)`` and the state's ``('block', id)``);
     the first ``context_lead`` target tokens are zero-weight context."""
     from ..tune.soft import soft_items_to_node
     if not target:
         raise ValueError('the reply rendered no target tokens')
+    state_names = {state_id: STATE_NAME}
+    for bid in extra_state_ids or ():
+        if bid and bid != state_id:
+            state_names[str(bid)] = f'episode:{bid}'
     ids, weights, imports, external = soft_items_to_node(engine, prompt, target, prompt_weight=0.,
-                                                         state_names={state_id: STATE_NAME})
+                                                         state_names=state_names)
     if external[STATE_NAME]['token_count'] != block_tokens:
         raise ValueError('the imported state length differs from its block')
     start = len(ids) - len(target)
@@ -262,6 +268,19 @@ def create_learned_compiler_basis(engine, targets, rank, owner=None) -> LearnedB
     return LearnedBankBasis(svd, basis_id=basis_rec.id, adapter_id=adapter_rec.id)
 
 
+def _match_target_key(name: str, mapping: dict) -> str | None:
+    """Match target names across native ``port.hf.*`` and bare HF ``model.*`` conventions."""
+    if name in mapping:
+        return name
+    bare = name.removeprefix('port.hf.')
+    if bare in mapping:
+        return bare
+    prefixed = 'port.hf.' + bare
+    if prefixed in mapping:
+        return prefixed
+    return None
+
+
 def create_learned_compiler_basis_from_factors(
     engine,
     factor_dirs: list[str],
@@ -283,9 +302,10 @@ def create_learned_compiler_basis_from_factors(
     right: dict[str, torch.Tensor] = {}
     warmed = 0
     for name in target_list:
-        if name in sub.left_u and name in sub.right_v:
-            u = sub.left_u[name].float()
-            v = sub.right_v[name].float()
+        matched = _match_target_key(name, sub.left_u)
+        if matched is not None and matched in sub.right_v:
+            u = sub.left_u[matched].float()
+            v = sub.right_v[matched].float()
             fb_l = fallback.left[name].float()
             fb_r = fallback.right[name].float()
             if u.shape[0] == fb_l.shape[0] and v.shape[0] == fb_r.shape[0]:
@@ -302,6 +322,12 @@ def create_learned_compiler_basis_from_factors(
                 continue
         left[name] = fallback.left[name].float().clone()
         right[name] = fallback.right[name].float().clone()
+    if warmed == 0:
+        raise ValueError(
+            f'create_learned_compiler_basis_from_factors matched 0/{len(target_list)} targets '
+            f'(sample target={target_list[0] if target_list else None!r}, '
+            f'sample donor={next(iter(sub.left_u), None)!r})'
+        )
 
     shared = SharedBasis(
         dict(fallback.native_identity),
@@ -324,23 +350,30 @@ def project_factor_cores(
     left_basis: dict[str, torch.Tensor],
     right_basis: dict[str, torch.Tensor],
 ) -> dict[str, torch.Tensor]:
-    """Project a verified Mode-P LoRA export into ``(left_basis, right_basis)`` -> target cores ``C* = U^T (s B A) V``."""
+    """Project a verified Mode-P LoRA export into ``(left_basis, right_basis)`` -> target cores ``C* = pinv(U) (s B A) pinv(V)^T``."""
     from ..tune.low_dof import _load_factor_dir
 
     entries, _ = _load_factor_dir(factor_dir)
     cores: dict[str, torch.Tensor] = {}
     for name, (b, a, scale) in entries.items():
-        if name not in left_basis or name not in right_basis:
+        basis_key = _match_target_key(name, left_basis)
+        if basis_key is None or basis_key not in right_basis:
             continue
-        u = left_basis[name].detach().float().cpu()
-        v = right_basis[name].detach().float().cpu()
+        u = left_basis[basis_key].detach().float()
+        v = right_basis[basis_key].detach().float()
         if u.shape[0] != b.shape[0] or v.shape[0] != a.shape[1]:
             continue
-        # Least-squares core in possibly non-orthonormal learned basis: pinv(U) @ (s B A) @ pinv(V)^T
+        b_dev = b.to(device=u.device, dtype=torch.float32)
+        a_dev = a.to(device=u.device, dtype=torch.float32)
         u_pinv = torch.linalg.pinv(u)
         v_pinv_t = torch.linalg.pinv(v).transpose(0, 1)
-        core = float(scale) * ((u_pinv @ b) @ (a @ v_pinv_t))
-        cores[name] = core.reshape(-1).contiguous()
+        core = float(scale) * ((u_pinv @ b_dev) @ (a_dev @ v_pinv_t))
+        cores[basis_key] = core.reshape(-1).detach().cpu().contiguous()
+    if not cores:
+        raise ValueError(
+            f'project_factor_cores matched 0 targets from {factor_dir} '
+            f'(sample donor={next(iter(entries), None)!r}, sample basis={next(iter(left_basis), None)!r})'
+        )
     return cores
 
 

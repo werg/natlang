@@ -1084,11 +1084,11 @@ def grpo_program(args):
 
 
 def _lower_subspace_rollout_turns(row: dict, stats, states=None) -> list[dict]:
-    """Extract tokenized (prompt, sample) turns from either real grpo.py rollouts (via lower_rollout_turns)
+    """Extract tokenized (prompt, sample, imports) turns from either real grpo.py rollouts (via lower_rollout_turns)
     or pre-tokenized {'prompt_ids', 'sample_ids'} test rows."""
     raw_turns = row.get('turns') or ()
     pre = [
-        {'prompt': [int(x) for x in t['prompt_ids']], 'sample': [int(x) for x in t['sample_ids']]}
+        {'prompt': [int(x) for x in t['prompt_ids']], 'sample': [int(x) for x in t['sample_ids']], 'imports': []}
         for t in raw_turns
         if t.get('prompt_ids') and t.get('sample_ids')
     ]
@@ -1100,12 +1100,13 @@ def _lower_subspace_rollout_turns(row: dict, stats, states=None) -> list[dict]:
     rows = trainable_rows(calls, stats)
     out = []
     for r in rows:
-        if r.get('imports'):
-            continue  # pure-token turns for O(1)-VRAM subspace scoring
+        imps = list(r.get('imports') or ())
+        if imps and states is None:
+            continue
         p = [int(x) for x in r['prompt'].tolist()]
         s = [int(x) for x in r['sample'].tolist()]
         if p and s:
-            out.append({'prompt': p, 'sample': s})
+            out.append({'prompt': p, 'sample': s, 'imports': imps})
     return out
 
 
@@ -1122,7 +1123,9 @@ def adapt_subspace_cmd(args):
     from grpo import episode_training_reward
     from lower_rollout_turns import NativeStates
     from natlang_neuralese.rl.episode_files import read_rows
-    from natlang_neuralese.train.lfm3_fast import token_logprobs
+    from natlang_neuralese.train.lfm3_fast import hidden as lfm3_hidden
+    from natlang_neuralese.train.lfm3_fast import import_tensors as lfm3_import_tensors
+    from natlang_neuralese.train.lfm3_fast import linear_nll as lfm3_linear_nll
     from natlang_neuralese.train.lfm3_learner import AdapterSpec, LayerAdapterBundle, Lfm3Learner, LinearFactorLeaf
     from natlang_neuralese.tune.low_dof import (
         FactorSubspaceBasis,
@@ -1160,11 +1163,31 @@ def adapt_subspace_cmd(args):
     )
     device = learner.device
 
+    # Keep basis tensors resident on device once (eliminates per-turn CPU->GPU copies).
+    basis = FactorSubspaceBasis(
+        target_names=basis.target_names,
+        left_u={k: v.to(device=device, dtype=torch.float32) for k, v in basis.left_u.items()},
+        right_v={k: v.to(device=device, dtype=torch.float32) for k, v in basis.right_v.items()},
+        components={k: v.to(device=device, dtype=torch.float32) for k, v in basis.components.items()},
+        singular_values=basis.singular_values.to(device=device, dtype=torch.float32),
+        donors=basis.donors,
+    )
+
     def _turn_logp(turn: dict, adapters):
         p_ids = turn['prompt']
         s_ids = turn['sample']
         seq = torch.tensor(p_ids + s_ids, dtype=torch.long, device=device)
-        return token_logprobs(learner.model, seq, len(p_ids), adapters=adapters, trainable_rows=False).mean()
+        positions = torch.arange(len(p_ids) - 1, len(p_ids) + len(s_ids) - 1, dtype=torch.long, device=device)
+        targets = seq[len(p_ids):]
+        imports = None
+        if turn.get('imports') and states is not None:
+            imports = lfm3_import_tensors(
+                learner.model,
+                [(pos, states(bid)) for pos, bid in turn['imports']],
+                device=device,
+            )
+        h = lfm3_hidden(learner.model, seq, imports=imports, adapters=adapters, trainable_rows=False)
+        return (-lfm3_linear_nll(h[positions], learner.model.lm_head.weight, targets, trainable_rows=False)).mean()
 
     with torch.no_grad():
         for ep in examples:
@@ -1182,7 +1205,15 @@ def adapt_subspace_cmd(args):
             for idx, layer in enumerate(learner.model.model.layers)
         )
 
+    _eval_cache: dict[str, object] = {'key': None, 'bundles': None}
+
     def turn_logp_fn(coeffs: torch.Tensor, turn: dict):
+        if not torch.is_grad_enabled():
+            key = coeffs.detach().cpu().numpy().tobytes()
+            if _eval_cache['key'] != key:
+                _eval_cache['key'] = key
+                _eval_cache['bundles'] = _build_bundles(coeffs)
+            return _turn_logp(turn, _eval_cache['bundles'])
         return _turn_logp(turn, _build_bundles(coeffs))
 
     cfg = LowDofExecConfig(

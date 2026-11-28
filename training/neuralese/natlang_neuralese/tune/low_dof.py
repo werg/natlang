@@ -307,7 +307,8 @@ def export_subspace_factors(
 class LowDofExecConfig:
     steps: int = 24
     lr: float = 0.05
-    kl_beta: float = 0.01
+    kl_beta: float = 0.1
+    dlogp_clip: float = 2.0
     prox_lambda: float = 0.05
     clip_norm: float = 1.0
     eval_every: int = 4
@@ -379,9 +380,9 @@ def fit_subspace_execution(
     def _eval_objective(c_val: torch.Tensor, batch: list[dict]) -> tuple[torch.Tensor, float]:
         pol_lp, ref_lp = score_fn(c_val, batch)
         adv = _group_advantages(batch, pol_lp.device)
-        dlogp = pol_lp - ref_lp.detach()
+        dlogp = (pol_lp - ref_lp.detach()).clamp(-float(cfg.dlogp_clip), float(cfg.dlogp_clip))
         kl_k2 = 0.5 * dlogp.pow(2).mean()
-        # Higher is better: positive advantages increase log-prob ratio, penalized by k2 KL drift.
+        # Higher is better: bounded log-ratio advantage gain penalized by k2 KL drift.
         pg_score = (adv * dlogp).mean() - float(cfg.kl_beta) * kl_k2
         return pg_score, float(kl_k2.detach().item())
 
@@ -479,7 +480,7 @@ def fit_subspace_execution_accum(
         pol = torch.tensor(pol_vals, dtype=torch.float32)
         ref = torch.tensor(ref_vals, dtype=torch.float32)
         adv = _group_advantages(batch, pol.device)
-        dlogp = pol - ref
+        dlogp = (pol - ref).clamp(-float(cfg.dlogp_clip), float(cfg.dlogp_clip))
         kl_k2 = float((0.5 * dlogp.pow(2).mean()).item())
         score = float(((adv * dlogp).mean() - float(cfg.kl_beta) * 0.5 * dlogp.pow(2).mean()).item())
         return pol, adv, score, kl_k2
@@ -496,8 +497,11 @@ def fit_subspace_execution_accum(
         pol_sup, adv_sup, sup_score, sup_kl = _eval_no_grad(c, support)
         ref_sup = torch.tensor([float(ep['ref_lp']) for ep in support], dtype=torch.float32)
         n_sup = float(len(support))
-        # Exact d(-pg_score)/d(pol_lp_i) = (-adv_i + kl_beta * (pol_lp_i - ref_lp_i)) / N
-        ep_weights = (-adv_sup + float(cfg.kl_beta) * (pol_sup - ref_sup)) / n_sup
+        raw_d = pol_sup - ref_sup
+        clipped = raw_d.clamp(-float(cfg.dlogp_clip), float(cfg.dlogp_clip))
+        in_band = (raw_d.abs() < float(cfg.dlogp_clip)).float()
+        # Exact chain-rule d(-pg_score)/d(pol_lp_i) with straight-zero gradient outside [-dlogp_clip, +dlogp_clip]
+        ep_weights = in_band * (-adv_sup + float(cfg.kl_beta) * clipped) / n_sup
         for ep, w_ep in zip(support, ep_weights.tolist()):
             if abs(w_ep) < 1e-12:
                 continue

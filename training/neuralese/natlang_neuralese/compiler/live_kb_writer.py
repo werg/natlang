@@ -291,15 +291,6 @@ class PplxWarmstartWriter(nn.Module):
             fresh.extend(self.writer_encoder.value_head.parameters())
         return fresh
 
-    def encode_experience_blocks(self, engine, texts: list[str], *, max_tokens: int = 128, max_slots: int = 8):
-        """Multi-block interface parity with ``PplxWarmstartWriter`` (returns list of ``(keys [M, Dk], vals [M, Dv])``)."""
-        z, k = self.encode_experience_texts(engine, texts, max_tokens=max_tokens)
-        return [(k[i:i + 1], z[i:i + 1]) for i in range(len(texts))]
-
-    def encode_query_blocks(self, engine, texts: list[str], *, max_tokens: int = 128):
-        q = self.encode_query_texts(engine, texts, max_tokens=max_tokens)
-        return [q[i:i + 1] for i in range(len(texts))]
-
     def warm_parameters(self) -> list[nn.Parameter]:
         """Warm-started 000000002 ``H_key``/backbone & ``Q`` parameters trained at ``warm_lr`` (2e-5)."""
         fresh_ids = {id(p) for p in self.fresh_parameters()}

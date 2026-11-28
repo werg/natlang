@@ -83,8 +83,19 @@ class PerCallNeuralHKBCompiler:
         kb_hits = 0
         if self.scoped_kb is not None and req.scopes:
             if self.native_query_projector is not None:
+                if getattr(self.native_query_projector, 'tap_source', 'state') != 'state':
+                    raise ValueError(
+                        f"PerCallNeuralHKBCompiler feeds .nzs state taps, but native_query_projector expects "
+                        f"tap_source={self.native_query_projector.tap_source!r}"
+                    )
+                expected_names = getattr(self.native_query_projector, 'tap_names', ())
+                if expected_names and tuple(expected_names) != tuple(self.head.taps):
+                    raise ValueError(
+                        f'native_query_projector tap_names {expected_names} != head.taps {self.head.taps}'
+                    )
+                nqp_dev = next(self.native_query_projector.parameters()).device
                 init_vals = init_block_values(init_block)
-                taps = [init_vals[name].float().flatten(1)[None] for name in self.head.taps]
+                taps = [init_vals[name].to(device=nqp_dev, dtype=torch.float32).flatten(1)[None] for name in self.head.taps]
                 q_vec = self.native_query_projector(taps)[0].detach().cpu()
             else:
                 q_vec = self.writer.encode_query_texts(self.engine, [req.query_text or req.header])[0].detach().cpu()

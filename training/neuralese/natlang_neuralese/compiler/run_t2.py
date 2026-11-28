@@ -304,8 +304,27 @@ class Sites:
         self.cache.setdefault('part_states', {})
         self.graphs = {}
 
+    def _hydrate_episode_states(self, row):
+        """Ensure admitted episode ``native_state`` blocks live in ``engine.store`` before rendering or graph build."""
+        refs = row.get('native_state_refs') or ()
+        src_store = row.get('store_dir')
+        if not refs or not src_store:
+            return
+        from ..serve.store import read_native_state_file
+        src_root = Path(src_store)
+        for bid in refs:
+            if self.engine.store.get_native_state(bid) is not None:
+                continue
+            suffix = bid.split('_', 1)[1]
+            src_file = src_root / 'blocks' / suffix[:2] / f'{bid}.safetensors'
+            if not src_file.is_file():
+                raise FileNotFoundError(f'admitted native_state {bid} missing from {src_file}')
+            rec = read_native_state_file(src_file, bid)
+            self.engine.store.put_native_state(rec.load())
+
     def state(self, row):
         from .compiled_site import init_header_state
+        self._hydrate_episode_states(row)
         ident = self.cache['states'].get(row['site'])
         if ident is None or self.engine.store.get_native_state(ident) is None:
             ident = init_header_state(self.engine, row['messages'], row['tools'], row['header'])
@@ -317,6 +336,7 @@ class Sites:
         """The text state of one part of the header (its signature line or instructions body), written in the real
         call as the header's own state is (``init_header_state``)."""
         from .compiled_site import init_header_state
+        self._hydrate_episode_states(row)
         key = _sha(json.dumps([row['site'], text]))
         ident = self.cache['part_states'].get(key)
         if ident is None or self.engine.store.get_native_state(ident) is None:
@@ -338,7 +358,8 @@ class Sites:
             graph = site_graph(self.engine, row['messages'], row['tools'], row['target'], row['header'], state,
                                len(block.token_ids), graph_id='t2:' + row['key'],
                                source_groups=row['source_groups'] or [row['task_id']],
-                               own=row.get('source_kind') == 'rollout', mask_context=self.mask_context)
+                               own=row.get('source_kind') == 'rollout', mask_context=self.mask_context,
+                               extra_state_ids=row.get('native_state_refs') or ())
             self.graphs[row['key']] = {'graph': graph, 'state_id': state}
         return self.graphs[row['key']]
 
@@ -635,19 +656,21 @@ def _em_entry_drift_and_repro(
     e_qry_n = 0
 
     if peer_clusters:
+        from .live_kb_writer import _shares_closure
         cluster = rng.choice(peer_clusters)
-        # Partition strictly by task id so source, support batch, and query batch have zero task overlap.
-        by_task: dict[str, list[dict]] = {}
-        for row in cluster:
-            by_task.setdefault(str(row['task']), []).append(row)
-        task_ids = list(by_task.keys())
-        if len(task_ids) >= 3:
-            rng.shuffle(task_ids)
-            src_row = by_task[task_ids[0]][0]
-            remaining = task_ids[1:]
+        # Partition strictly by disjoint task_id AND disjoint source_groups (zero sibling leakage across gate).
+        shuffled = list(cluster)
+        rng.shuffle(shuffled)
+        disjoint: list[dict] = []
+        for cand in shuffled:
+            if not any(_shares_closure(cand, kept) for kept in disjoint):
+                disjoint.append(cand)
+        if len(disjoint) >= 3:
+            src_row = disjoint[0]
+            remaining = disjoint[1:]
             n_qry = max(1, min(int(query_batch), len(remaining) // 3 or 1))
-            qry_rows = [by_task[tid][0] for tid in remaining[:n_qry]]
-            sup_rows = [by_task[tid][0] for tid in remaining[n_qry:n_qry + max(1, int(support_batch))]]
+            qry_rows = remaining[:n_qry]
+            sup_rows = remaining[n_qry:n_qry + max(1, int(support_batch))]
             e_sup_n, e_qry_n = len(sup_rows), len(qry_rows)
 
             src_text = _experience_summary(src_row['header'], src_row['target'])
@@ -665,10 +688,10 @@ def _em_entry_drift_and_repro(
                 k0 = k_init[0].detach().float().to(device)
                 em_kb.add(ExperienceEntry(
                     record_id=rid, scope=scope, key=k0.cpu(), value=z0.cpu(),
-                    text=src_text, task_ids=(str(src_row['task']),), strength=1.0,
+                    text=src_text, task_ids=(str(src_row['task_id']),), strength=1.0,
                 ))
 
-            # E-step: freeze head/basis/writer, optimize ONLY z_entry across the support mini-batch, gate on query batch.
+            # E-step: freeze head/basis/writer, disable random kv/adapter dropout, optimize ONLY z_entry across support.
             with _frozen(head, basis_module, writer):
                 w_kb = torch.ones((1, 1), dtype=torch.float32, device=device)
                 v_kb = torch.ones((1, 1), dtype=torch.bool, device=device)
@@ -679,7 +702,7 @@ def _em_entry_drift_and_repro(
                         site_loss(
                             engine, head, sites.row(qr), adapter_id=adapter_id, init_block=sites.block(qr),
                             basis_module=basis_module, z_kb=z_vec.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb,
-                            kb_valid=v_kb, backward=False,
+                            kb_valid=v_kb, apply_dropout=False, backward=False,
                         )
                         for qr in qry_rows
                     ]
@@ -696,7 +719,7 @@ def _em_entry_drift_and_repro(
                         site_loss(
                             engine, head, sites.row(sr), adapter_id=adapter_id, init_block=sites.block(sr),
                             basis_module=basis_module, z_kb=z_opt.view(1, 1, -1), k_kb=k_fixed, w_kb=w_kb,
-                            kb_valid=v_kb, backward=True, scale=inv_sup,
+                            kb_valid=v_kb, apply_dropout=False, backward=True, scale=inv_sup,
                         )
                     if prox_lambda > 0.0:
                         (0.5 * float(prox_lambda) * (z_opt - z0).pow(2).sum()).backward()
@@ -766,6 +789,12 @@ def train(args):
     if saved is not None and saved.get('objective') != OBJECTIVE:
         raise ValueError(f"{state_path} was trained under objective {saved.get('objective')!r}, not {OBJECTIVE!r}: "
                          'start a new run directory')
+
+    if getattr(args, 'tap_source', 'state') == 'hidden':
+        raise NotImplementedError(
+            '--tap-source hidden is not yet wired into run_t2 Sites/site_loss (CompiledSiteHead supports hidden_taps; '
+            'use --tap-source state for run_t2 until LFM3 hidden-tap capture is added to Sites)'
+        )
 
     if saved is not None:
         config = CompiledSiteConfig.from_dict(saved['config'])
@@ -902,7 +931,7 @@ def train(args):
     if writer is not None and em_every > 0:
         from .hkb_bridge import HeldAdmission, ScopedExperienceKB
         em_kb_path = getattr(args, 'em_kb', None) or (run / 'em-kb.sqlite')
-        train_task_ids = frozenset(str(r['task']) for r in train_rows)
+        train_task_ids = frozenset(str(r['task_id']) for r in train_rows)
         em_kb = ScopedExperienceKB(
             em_kb_path,
             admission=HeldAdmission(known=train_task_ids, excluded=frozenset()),
@@ -912,7 +941,7 @@ def train(args):
         by_fam: dict[str, list[dict]] = {}
         for r in train_rows:
             by_fam.setdefault(str(r.get('family') or r['site']), []).append(r)
-        em_peer_clusters = [rows for rows in by_fam.values() if len({str(r['task']) for r in rows}) >= 3]
+        em_peer_clusters = [rows for rows in by_fam.values() if len({str(r['task_id']) for r in rows}) >= 3]
 
     distill_items: list[dict] = []
     distill_manifest = getattr(args, 'distill_adapters', None)
@@ -1007,16 +1036,21 @@ def train(args):
         if distill_items and distill_every > 0 and distill_weight > 0.0 and (step + 1) % distill_every == 0:
             from .compiled_site import adapter_distillation_loss, init_block_values, project_factor_cores
             item = rng.choice(distill_items)
-            # Match a train row with the target header or write its header state directly.
-            match = next((r for r in train_rows if r['header'] == item.get('header') or r.get('family') == item.get('family')), None)
-            if match is not None and basis_module is not None:
+            want_hdr = item.get('header')
+            want_fam = item.get('family')
+            matches = [
+                r for r in train_rows
+                if (want_hdr is not None and r.get('header') == want_hdr)
+                or (want_fam is not None and r.get('family') == want_fam)
+            ]
+            if matches and basis_module is not None:
+                match = rng.choice(matches)
                 left_b = {n: basis_module.left[n.replace('.', '__')].detach() for n in basis_module.targets}
                 right_b = {n: basis_module.right[n.replace('.', '__')].detach() for n in basis_module.targets}
                 tgt_cores = project_factor_cores(item['factor_dir'], left_b, right_b)
-                if tgt_cores:
-                    d_loss = adapter_distillation_loss(head, init_block_values(sites.block(match)), tgt_cores)
-                    (distill_weight * d_loss).backward()
-                    distill_loss_val = float(d_loss.detach().item())
+                d_loss = adapter_distillation_loss(head, init_block_values(sites.block(match)), tgt_cores)
+                (distill_weight * d_loss).backward()
+                distill_loss_val = float(d_loss.detach().item())
 
         em_report = None
         em_repro_pairs: list[tuple[str, str]] = []
