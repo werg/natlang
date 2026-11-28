@@ -337,6 +337,7 @@ class SglangEngine(Engine):
         return native_weights_identity(model)
 
     def bind_sglang(self, url, *, export_manifest, fork, adapter_slots=0, adapter_rank=32,
+                    shared_basis_path=None, shared_basis_slots=0,
                     projection='native', overlap_schedule=False, kv_cache_dtype='auto', kv_layout='full',
                     weight_dtype='bfloat16', max_running=None, warm_openings=None, track_input_end=False,
                     speculative=None, head_logits='bf16', tool_grammar=False, export_dir=None):
@@ -350,6 +351,10 @@ class SglangEngine(Engine):
         # Native adapters on SGLang (fork NatlangAdapters): `adapter_slots` resident stacks of summed rank
         # <= `adapter_rank` per module; the front assigns slots and never reassigns one while a request uses it.
         self.sglang_adapter_slots, self.sglang_adapter_rank = int(adapter_slots), int(adapter_rank)
+        self.sglang_shared_basis_path = str(shared_basis_path) if shared_basis_path else None
+        self.sglang_shared_basis_slots = int(shared_basis_slots) if shared_basis_path else 0
+        self._sb_slot_of, self._sb_slot_users, self._sb_slot_key = {}, {}, {}
+        self._sb_files, self._sb_clock = {}, 0
         targets = export_manifest.get('adapter_targets') or {}
         self.native_target_shapes = {name: tuple(target['shape']) for name, target in targets.items()} or None
         self.sglang_adapter_targets = targets
@@ -892,7 +897,10 @@ class SglangEngine(Engine):
         if 'adapters' in names:
             names.remove('adapters')
         if entries:
-            if not getattr(self, 'sglang_adapter_slots', 0) or not getattr(self, 'sglang_adapter_targets', None):
+            if self._is_shared_basis_entries(entries):
+                if not getattr(self, 'sglang_shared_basis_slots', 0):
+                    names.append('adapters')
+            elif not getattr(self, 'sglang_adapter_slots', 0) or not getattr(self, 'sglang_adapter_targets', None):
                 names.append('adapters')
             else:
                 try:
@@ -901,6 +909,63 @@ class SglangEngine(Engine):
                 except Exception:  # an invalid stack fails on the native engine with its exact error
                     names.append('adapters')
         return ', '.join(names) or None
+
+    @staticmethod
+    def _is_shared_basis_entries(entries) -> bool:
+        return bool(entries) and all(isinstance(e, dict) and e.get('shared_basis_cores') for e in entries)
+
+    def _sglang_shared_basis_file(self, entries):
+        """Pack summed shared-basis ``[R, R]`` cores ``{module}.C`` into a tiny safetensors file for SGLang."""
+        from ..common.hashing import canonical_json_sha256_hex
+        key = canonical_json_sha256_hex([
+            {'id': e.get('id'), 'path': str(e['shared_basis_cores']), 'scale': float(e.get('scale', 1.0))}
+            for e in entries
+        ])
+        known = self._sb_files.get(key)
+        if known is not None:
+            return known
+        import torch
+        from safetensors.torch import load_file, save_file
+        summed: dict[str, torch.Tensor] = {}
+        for entry in entries:
+            scale = float(entry.get('scale', 1.0))
+            tensors = load_file(str(entry['shared_basis_cores']))
+            for k, t in tensors.items():
+                if not k.endswith('.C'):
+                    continue
+                summed[k] = (summed[k] + t.float() * scale) if k in summed else (t.float() * scale)
+        path = os.path.join(self._sglang_scratch(), f'shared-core-{key}.safetensors')
+        if not os.path.exists(path):
+            tmp = f'{path}.{uuid.uuid4().hex}.partial'
+            save_file({k: v.contiguous() for k, v in summed.items()}, tmp)
+            os.replace(tmp, path)
+        self._sb_files[key] = (path, key)
+        return self._sb_files[key]
+
+    def _shared_basis_acquire(self, entries):
+        path, key = self._sglang_shared_basis_file(entries)
+        with self._adapter_condition:
+            while True:
+                slot = self._sb_slot_of.get(key)
+                if slot is None:
+                    free = [s for s in range(1, self.sglang_shared_basis_slots + 1) if not self._sb_slot_users.get(s)]
+                    if free:
+                        slot = min(free, key=lambda s: (s in self._sb_slot_key, self._sb_slot_key.get(s, ('', 0))[1]))
+                        old = self._sb_slot_key.get(slot)
+                        if old is not None:
+                            self._sb_slot_of.pop(old[0], None)
+                        self._sb_slot_of[key] = slot
+                if slot is not None:
+                    self._sb_clock += 1
+                    self._sb_slot_key[slot] = (key, self._sb_clock)
+                    self._sb_slot_users[slot] = self._sb_slot_users.get(slot, 0) + 1
+                    return {'slot': slot, 'id': key, 'path': path, 'mode': 'shared_basis'}
+                self._adapter_condition.wait()
+
+    def _shared_basis_release(self, spec):
+        with self._adapter_condition:
+            self._sb_slot_users[spec['slot']] -= 1
+            self._adapter_condition.notify_all()
 
     def _sglang_adapter_file(self, entries):
         """(path, largest module rank) of an adapter stack's summed low-rank factors in the fork's slot format."""
@@ -969,6 +1034,12 @@ class SglangEngine(Engine):
         entries = self._adapter_entries(request)
         if not entries:
             return work(None)
+        if self._is_shared_basis_entries(entries):
+            spec = self._shared_basis_acquire(entries)
+            try:
+                return work(spec)
+            finally:
+                self._shared_basis_release(spec)
         from ..model.native_adapters import bound_execution
         with bound_execution(self, entries):
             spec = self._adapter_acquire(entries)

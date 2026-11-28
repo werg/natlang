@@ -102,6 +102,11 @@ def build_parser():
                         help='largest summed adapter rank per SGLang module and slot (default: 32, raised to what '
                              "--adapter-release's stack needs: the fused qkv_proj of a rank-16 fit over every LFM3 "
                              'family sums to 48, which a smaller slot sends to the native engine)')
+    parser.add_argument('--sglang-shared-basis',
+                        help='optional shared-basis safetensors ({module}.U, {module}.V) for concurrent [R, R] C-core '
+                             'adapter slots on SGLang (requires NATLANG_SHARED_BASIS_BCA)')
+    parser.add_argument('--sglang-shared-basis-slots', type=int, default=0,
+                        help='concurrent [R, R] shared-basis core slots on SGLang (used when --sglang-shared-basis is set)')
     parser.add_argument('--sglang-projection', choices=('native', 'vendor'), default='vendor',
                         help="LFM3 projections on SGLang: the learner's invariant native kernel, or one fused vendor "
                              'BF16 GEMM (fp32 accumulate; the learner corrects the gap with importance weights)')
@@ -389,7 +394,9 @@ def attest_sglang_source(python, fork, pythonpath=''):
               # grammars (structural_tag) under --skip-tokenizer-init, continued across requests (natlang_grammar_prefix)
               'grammar_prefix': params.is_file() and 'NATLANG_GRAMMAR_PREFIX = True' in params.read_text(),
               # decode graph variants at one batch size share their attention wrappers (adapter slots replay safely)
-              'shared_graph_wrappers': params.is_file() and 'NATLANG_SHARED_GRAPH_WRAPPERS = True' in params.read_text()}
+              'shared_graph_wrappers': params.is_file() and 'NATLANG_SHARED_GRAPH_WRAPPERS = True' in params.read_text(),
+              # shared-basis B C A per-request adapter slots ({module}.U/.V resident once + per-slot [R, R] C)
+              'shared_basis_bca': params.is_file() and 'NATLANG_SHARED_BASIS_BCA = True' in params.read_text()}
     if actual != declared or dirty:
         print(json.dumps({'event': 'sglang_fork_differs_from_declared', **record}), file=sys.stderr, flush=True)
     return record
@@ -615,6 +622,13 @@ def launch_sglang(engine, args, checkpoint, release=None):
     env = {**os.environ, 'PYTHONPATH': backend_pythonpath, 'PATH': path, 'CUDA_HOME': cuda,
            'NATLANG_SGLANG_PROJECTION': args.sglang_projection, 'NATLANG_ADAPTER_SLOTS': str(args.sglang_adapter_slots),
            'NATLANG_ADAPTER_RANK': str(args.sglang_adapter_rank)}
+    sb_path = getattr(args, 'sglang_shared_basis', None)
+    sb_slots = int(getattr(args, 'sglang_shared_basis_slots', 0) or 0)
+    if sb_path and sb_slots > 0 and source.get('shared_basis_bca'):
+        env['NATLANG_SHARED_BASIS_PATH'] = str(Path(sb_path).resolve())
+        env['NATLANG_SHARED_BASIS_SLOTS'] = str(sb_slots)
+    else:
+        sb_path, sb_slots = None, 0
     if args.sglang_memory_saver:
         # torch_memory_saver refuses to start under expandable segments, which memory_ledger.py sets for every unit
         # ("TorchMemorySaver is disabled ... expandable_segments is not supported yet"): the engine allocates its pools
@@ -634,6 +648,7 @@ def launch_sglang(engine, args, checkpoint, release=None):
                        fork={**{key: fork[key] for key in ('repository', 'branch')}, 'commit': source['commit'],
                              'declared_commit': source['declared_commit'], 'dirty': source['dirty']},
                        adapter_slots=args.sglang_adapter_slots, adapter_rank=args.sglang_adapter_rank,
+                       shared_basis_path=sb_path, shared_basis_slots=sb_slots,
                        projection=args.sglang_projection, overlap_schedule=args.sglang_overlap_schedule,
                        kv_cache_dtype=args.sglang_kv_cache_dtype, kv_layout=layout, head_logits=args.sglang_head_logits,
                        weight_dtype=weight_dtype,
